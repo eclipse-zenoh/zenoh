@@ -1493,7 +1493,6 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.4",
- "serde",
  "smallvec",
  "zeroize",
 ]
@@ -2078,7 +2077,6 @@ dependencies = [
  "pkcs1",
  "pkcs8",
  "rand 0.8.4",
- "serde",
  "subtle",
  "zeroize",
 ]

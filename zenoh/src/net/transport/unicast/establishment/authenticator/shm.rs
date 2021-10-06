@@ -30,8 +30,8 @@ use zenoh_util::properties::config::*;
 use zenoh_util::zcheck;
 
 const WBUF_SIZE: usize = 64;
-const SHM_VERSION: ZInt = 1;
-const SHM_NAME: &str = "auth_shm";
+const SHM_VERSION: ZInt = 0;
+const SHM_NAME: &str = "shmauth";
 // Let's use a ZInt as a challenge
 const SHM_SIZE: usize = std::mem::size_of::<ZInt>();
 
@@ -127,6 +127,7 @@ impl ZBuf {
 /*          Authenticator            */
 /*************************************/
 pub struct SharedMemoryAuthenticator {
+    challenge: ZInt,
     // Rust guarantees that fields are dropped in the order of declaration.
     // Buffer needs to be dropped before the manager.
     buffer: SharedMemoryBuf,
@@ -147,6 +148,7 @@ impl SharedMemoryAuthenticator {
         slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
         SharedMemoryAuthenticator {
+            challenge,
             buffer,
             _manager,
             reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
@@ -175,6 +177,7 @@ impl SharedMemoryAuthenticator {
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
             let sma = SharedMemoryAuthenticator {
+                challenge,
                 buffer,
                 _manager,
                 reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
@@ -357,18 +360,17 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         }
 
-        let challenge: [u8; SHM_SIZE] = match init_ack_property.shm.as_slice().try_into() {
-            Ok(challenge) => challenge,
+        let bytes: [u8; SHM_SIZE] = match init_ack_property.shm.as_slice().try_into() {
+            Ok(bytes) => bytes,
             Err(e) => {
                 log::debug!("Peer {} can not operate over shared memory: {}", peer_id, e);
                 return Ok(PeerAuthenticatorOutput::new());
             }
         };
+        let challenge = ZInt::from_le_bytes(bytes);
 
         // Create the OpenSyn attachment
-        let open_syn_property = OpenSynProperty {
-            challenge: ZInt::from_le_bytes(challenge),
-        };
+        let open_syn_property = OpenSynProperty { challenge };
         // Encode the OpenSyn property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_open_syn_property_shm(&open_syn_property);
@@ -381,7 +383,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
         let mut res = PeerAuthenticatorOutput::new();
         res.properties.insert(prop)?;
-        if challenge == self.buffer.as_slice() {
+        if init_ack_property.challenge == self.challenge {
             res.transport.is_shm = true;
         }
         Ok(res)
@@ -403,15 +405,17 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 return Ok(PeerAuthenticatorOutput::new());
             }
         };
-        let open_syn_property = zbuf.read_open_syn_property_shm().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidMessage {
-                descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
-            })
-        })?;
+        let open_syn_property = match zbuf.read_open_syn_property_shm() {
+            Some(isa) => isa,
+            None => {
+                return zerror!(ZErrorKind::InvalidMessage {
+                    descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
+                });
+            }
+        };
 
         let mut res = PeerAuthenticatorOutput::new();
-        let challenge: [u8; SHM_SIZE] = open_syn_property.challenge.to_le_bytes();
-        if challenge == self.buffer.as_slice() {
+        if open_syn_property.challenge == self.challenge {
             res.transport.is_shm = true;
         }
         Ok(res)

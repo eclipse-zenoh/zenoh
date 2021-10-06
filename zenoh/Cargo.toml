@@ -85,7 +85,7 @@ quinn = { version = "0.7.2", optional = true }
 rand = "0.8.3"
 rcgen = { version = "0.8.9", optional = true }
 regex = "1"
-rsa = { git = "https://github.com/RustCrypto/RSA.git", features = ["serde"], optional = true }
+rsa = { git = "https://github.com/RustCrypto/RSA.git", optional = true }
 serde_json = "1.0"
 serde = "1.0.123"
 shared_memory = { version = "0.12.0", optional = true }
