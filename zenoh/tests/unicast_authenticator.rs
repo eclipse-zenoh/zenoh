@@ -14,7 +14,9 @@
 use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
+#[cfg(feature = "auth_usrpwd")]
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};

@@ -20,6 +20,7 @@ mod userpassword;
 
 use crate::net::link::{Link, Locator};
 use crate::net::protocol::core::{PeerId, Property, ZInt};
+#[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
 use async_std::sync::Arc;
 use async_trait::async_trait;
