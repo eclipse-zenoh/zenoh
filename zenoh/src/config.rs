@@ -213,6 +213,25 @@ validated_struct::validator! {
     }
 }
 
+#[test]
+fn config_deser() {
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        scouting: {
+          multicast: {
+            enabled: false,
+            autoconnect: "router"
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(*config.scouting().multicast().enabled(), Some(false))
+}
+
 impl Config {
     pub fn insert_json<K: AsRef<str>>(
         &mut self,
