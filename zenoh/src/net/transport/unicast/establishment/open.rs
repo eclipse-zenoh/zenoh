@@ -43,7 +43,7 @@ struct OpenInitSynOutput {
 async fn open_send_init_syn(
     manager: &TransportManager,
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
     let mut auth = PeerAuthenticatorOutput::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
@@ -88,7 +88,7 @@ struct OpenInitAckOutput {
 async fn open_recv_init_ack(
     manager: &TransportManager,
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
     input: OpenInitSynOutput,
 ) -> IResult<OpenInitAckOutput> {
     // Wait to read an InitAck
@@ -125,6 +125,9 @@ async fn open_recv_init_ack(
             ));
         }
     };
+
+    // Store the peer id associate do this link
+    auth_link.peer_id = Some(init_ack.pid);
 
     // Check if a transport is already open with the target peer
     let mut guard = zasynclock!(manager.state.unicast.opened);
@@ -331,7 +334,7 @@ async fn open_recv_open_ack(
 async fn open_stages(
     manager: &TransportManager,
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
 ) -> IResult<OpenAckOutput> {
     let output = open_send_init_syn(manager, link, auth_link).await?;
     let output = open_recv_init_ack(manager, link, auth_link, output).await?;
@@ -343,13 +346,13 @@ pub(crate) async fn open_link(
     manager: &TransportManager,
     link: &LinkUnicast,
 ) -> ZResult<TransportUnicast> {
-    let auth_link = AuthenticatedPeerLink {
+    let mut auth_link = AuthenticatedPeerLink {
         src: link.get_src(),
         dst: link.get_src(),
         peer_id: None,
     };
 
-    let res = open_stages(manager, link, &auth_link).await;
+    let res = open_stages(manager, link, &mut auth_link).await;
     let info = match res {
         Ok(v) => v,
         Err((e, reason)) => {

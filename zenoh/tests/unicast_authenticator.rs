@@ -22,6 +22,8 @@ use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{whatami, PeerId};
 use zenoh::net::protocol::proto::ZenohMessage;
+#[cfg(feature = "auth_pubkey")]
+use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "zero-copy")]
 use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
 #[cfg(feature = "auth_usrpwd")]
@@ -106,6 +108,198 @@ impl TransportEventHandler for SHClientAuthenticator {
     }
 }
 
+#[cfg(feature = "auth_pubkey")]
+async fn authenticator_public_key(endpoint: &EndPoint) {
+    /* [CLIENT] */
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+
+    /* [ROUTER] */
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
+    // Create the router transport manager
+    let peer_auth_router = Arc::new(PubKeyAuthenticator::new());
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::ROUTER)
+        .pid(router_id)
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]))
+                .build(),
+        )
+        .build(router_handler.clone());
+    let router_manager = TransportManager::new(config);
+
+    // Create the transport transport manager for the first client
+    let peer_auth_client01 = PubKeyAuthenticator::new();
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client01_id)
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]))
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client01_manager = TransportManager::new(config);
+
+    // Create the transport transport manager for the second client
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client02_id)
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .max_links(1)
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client02_manager = TransportManager::new(config);
+
+    // Create the transport transport manager for the third client
+    let peer_auth_client01_spoof = PubKeyAuthenticator::new();
+    let config = TransportManagerConfig::builder()
+        .whatami(whatami::CLIENT)
+        .pid(client01_id)
+        .unicast(
+            TransportManagerConfigUnicast::builder()
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01_spoof.into()]))
+                .build(),
+        )
+        .build(Arc::new(SHClientAuthenticator::default()));
+    let client01_spoof_manager = TransportManager::new(config);
+
+    /* [1] */
+    println!("\nTransport Authenticator PubKey [1a1]");
+    // Add the locator on the router
+    let res = router_manager.add_listener(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [1a1]: {:?}", res);
+    assert!(res.is_ok());
+    println!("Transport Authenticator PubKey [1a2]");
+    let locators = router_manager.get_listeners();
+    println!("Transport Authenticator PubKey [1a2]: {:?}", locators);
+    assert_eq!(locators.len(), 1);
+
+    /* [2] */
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [2a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [2a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert_eq!(c_ses1.get_links().unwrap().len(), 1);
+
+    /* [3] */
+    // Open a second transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [3a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [3a2]: {:?}", res);
+    assert!(res.is_ok());
+    assert_eq!(c_ses1.get_links().unwrap().len(), 2);
+
+    /* [4] */
+    // Close the session
+    println!("Transport Authenticator PubKey [4a1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator PubKey [4a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    /* [5] */
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [5a1]");
+    let res = client02_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [5a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
+    assert_eq!(c_ses2.get_links().unwrap().len(), 1);
+
+    /* [6] */
+    // Open a second transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator PubKey [6a1]");
+    let res = client02_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [6a2]: {:?}", res);
+    assert!(res.is_err());
+    assert_eq!(c_ses2.get_links().unwrap().len(), 1);
+
+    /* [7] */
+    // Close the session
+    println!("Transport Authenticator PubKey [7a1]");
+    let res = c_ses2.close().await;
+    println!("Transport Authenticator PubKey [7a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    /* [8] */
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [8a1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [8a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1_spoof = res.unwrap();
+    assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 1);
+
+    /* [9] */
+    // Open a second transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [9a1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [9a2]: {:?}", res);
+    assert!(res.is_ok());
+    assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
+
+    /* [10] */
+    // Close the session
+    println!("Transport Authenticator PubKey [10a1]");
+    let res = c_ses1_spoof.close().await;
+    println!("Transport Authenticator PubKey [10a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    /* [11] */
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [11a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [11a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert_eq!(c_ses1.get_links().unwrap().len(), 1);
+
+    /* [12] */
+    // Open a spoof transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator PubKey [12a1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [12a2]: {:?}", res);
+    assert!(res.is_err());
+
+    /* [13] */
+    // Close the session
+    println!("Transport Authenticator PubKey [13a1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator PubKey [13a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [14] */
+    // Perform clean up of the open locators
+    println!("Transport Authenticator UserPassword [14a1]");
+    let res = router_manager.del_listener(endpoint).await;
+    println!("Transport Authenticator UserPassword [14a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+}
+
 #[cfg(feature = "auth_usrpwd")]
 async fn authenticator_user_password(endpoint: &EndPoint) {
     /* [CLIENT] */
@@ -129,15 +323,13 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     lookup.insert(user01.clone().into(), password01.clone().into());
     lookup.insert(user03.clone().into(), password03.clone().into());
 
-    let peer_authenticator_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
+    let peer_auth_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router
-                    .clone()
-                    .into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]))
                 .build(),
         )
         .build(router_handler.clone());
@@ -145,7 +337,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the first client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client01 = UserPasswordAuthenticator::new(
+    let peer_auth_client01 = UserPasswordAuthenticator::new(
         lookup,
         Some((user01.clone().into(), password01.clone().into())),
     );
@@ -155,7 +347,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .pid(client01_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client01.into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -163,7 +355,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the second client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client02 = UserPasswordAuthenticator::new(
+    let peer_auth_client02 = UserPasswordAuthenticator::new(
         lookup,
         Some((user02.clone().into(), password02.clone().into())),
     );
@@ -172,7 +364,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .pid(client02_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client02.into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -180,7 +372,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the third client
     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-    let peer_authenticator_client03 = UserPasswordAuthenticator::new(
+    let peer_auth_client03 = UserPasswordAuthenticator::new(
         lookup,
         Some((user03.clone().into(), password03.clone().into())),
     );
@@ -189,7 +381,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .pid(client03_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client03.into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client03.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -240,7 +432,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     /* [6] */
     // Add client02 credentials on the router
-    let res = peer_authenticator_router
+    let res = peer_auth_router
         .add_user(user02.into(), password02.into())
         .await;
     assert!(res.is_ok());
@@ -291,26 +483,26 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
-    let peer_authenticator_router = SharedMemoryAuthenticator::new();
+    let peer_auth_router = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_router.into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.into()]))
                 .build(),
         )
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the first client
-    let peer_authenticator_client = SharedMemoryAuthenticator::new();
+    let peer_auth_client = SharedMemoryAuthenticator::new();
     let config = TransportManagerConfig::builder()
         .whatami(whatami::ROUTER)
         .pid(client_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_authenticator_client.into()]))
+                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client.into()]))
                 .build(),
         )
         .build(Arc::new(SHClientAuthenticator::default()));
@@ -355,6 +547,15 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     task::sleep(SLEEP).await;
 }
 
+async fn run(endpoint: &EndPoint) {
+    #[cfg(feature = "auth_pubkey")]
+    authenticator_public_key(endpoint).await;
+    #[cfg(feature = "auth_usrpwd")]
+    authenticator_user_password(endpoint).await;
+    #[cfg(feature = "zero-copy")]
+    authenticator_shared_memory(endpoint).await;
+}
+
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
@@ -363,12 +564,7 @@ fn authenticator_tcp() {
     });
 
     let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
-    task::block_on(async {
-        #[cfg(feature = "auth_usrpwd")]
-        authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint).await;
-    });
+    task::block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -379,12 +575,7 @@ fn authenticator_udp() {
     });
 
     let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
-    task::block_on(async {
-        #[cfg(feature = "auth_usrpwd")]
-        authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint).await;
-    });
+    task::block_on(run(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -398,12 +589,7 @@ fn authenticator_unix() {
     let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
         .unwrap();
-    task::block_on(async {
-        #[cfg(feature = "auth_usrpwd")]
-        authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint).await;
-    });
+    task::block_on(run(&endpoint));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
 }
@@ -499,12 +685,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
     endpoint.config = Some(Arc::new(config));
 
-    task::block_on(async {
-        #[cfg(feature = "auth_usrpwd")]
-        authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint).await;
-    });
+    task::block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -598,10 +779,5 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
     endpoint.config = Some(Arc::new(config));
 
-    task::block_on(async {
-        #[cfg(feature = "auth_usrpwd")]
-        authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
-        authenticator_shared_memory(&endpoint).await;
-    });
+    task::block_on(run(&endpoint));
 }

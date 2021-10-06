@@ -49,7 +49,7 @@ struct AcceptInitSynOutput {
 async fn accept_recv_init_syn(
     manager: &TransportManager,
     link: &LinkUnicast,
-    _auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
 ) -> IResult<AcceptInitSynOutput> {
     // Wait to read an InitSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
@@ -78,6 +78,23 @@ async fn accept_recv_init_syn(
             ));
         }
     };
+
+    // Store the peer id associate to this link
+    match auth_link.peer_id {
+        Some(pid) => {
+            if pid != init_syn.pid {
+                let e = format!(
+                    "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
+                    link, pid, init_syn.pid
+                );
+                return Err((
+                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    Some(tmsg::close_reason::INVALID),
+                ));
+            }
+        }
+        None => auth_link.peer_id = Some(init_syn.pid),
+    }
 
     // Check if we are allowed to open more links if the transport is established
     if let Some(t) = manager.get_transport_unicast(&init_syn.pid) {
@@ -516,7 +533,7 @@ async fn accept_finalize_transport(
 async fn accept_link_stages(
     manager: &TransportManager,
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
 ) -> IResult<AcceptInitTransportOutput> {
     let output = accept_recv_init_syn(manager, link, auth_link).await?;
     let output = accept_send_init_ack(manager, link, auth_link, output).await?;
@@ -537,7 +554,7 @@ async fn accept_transport_stages(
 pub(crate) async fn accept_link(
     manager: &TransportManager,
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
+    auth_link: &mut AuthenticatedPeerLink,
 ) -> ZResult<()> {
     let res = accept_link_stages(manager, link, auth_link).await;
     let output = match res {

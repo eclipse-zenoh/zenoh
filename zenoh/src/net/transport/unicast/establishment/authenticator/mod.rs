@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-// #[cfg(feature = "multilink")]
-// mod multilink;
+#[cfg(feature = "auth_pubkey")]
+mod pubkey;
 #[cfg(feature = "zero-copy")]
 mod shm;
 #[cfg(feature = "auth_usrpwd")]
@@ -22,11 +22,11 @@ use crate::net::link::{Link, Locator};
 use crate::net::protocol::core::{PeerId, Property, ZInt};
 #[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
+use crate::net::transport::unicast::establishment::{Cookie, EstablishmentProperties};
 use async_std::sync::Arc;
 use async_trait::async_trait;
-// #[cfg(feature = "multilink")]
-// pub use multilink::*;
-use crate::net::transport::unicast::establishment::{Cookie, EstablishmentProperties};
+#[cfg(feature = "auth_pubkey")]
+pub use pubkey::*;
 #[cfg(feature = "zero-copy")]
 pub use shm::*;
 use std::collections::HashSet;
@@ -155,13 +155,13 @@ impl PeerAuthenticator {
             }
         }
 
-        // #[cfg(feature = "multilink")]
-        // {
-        //     let mut res = MultiLinkAuthenticator::from_config(config).await?;
-        //     if let Some(pa) = res.take() {
-        //         pas.insert(pa.into());
-        //     }
-        // }
+        #[cfg(feature = "auth_pubkey")]
+        {
+            let mut res = PubKeyAuthenticator::from_config(config).await?;
+            if let Some(pa) = res.take() {
+                pas.insert(pa.into());
+            }
+        }
 
         Ok(pas)
     }

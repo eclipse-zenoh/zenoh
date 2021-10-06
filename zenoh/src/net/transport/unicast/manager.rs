@@ -186,6 +186,13 @@ impl TransportManagerConfigBuilderUnicast {
             self.peer_authenticator
                 .insert(SharedMemoryAuthenticator::new().into());
         }
+
+        #[cfg(feature = "auth_pubkey")]
+        if self.max_links > 1 {
+            self.peer_authenticator
+                .insert(PubKeyAuthenticator::new().into());
+        }
+
         TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
@@ -518,13 +525,13 @@ impl TransportManager {
         let c_incoming = self.state.unicast.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
-            let auth_link = AuthenticatedPeerLink {
+            let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src(),
                 dst: link.get_dst(),
                 peer_id,
             };
 
-            let res = super::establishment::accept::accept_link(&c_manager, &link, &auth_link)
+            let res = super::establishment::accept::accept_link(&c_manager, &link, &mut auth_link)
                 .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {

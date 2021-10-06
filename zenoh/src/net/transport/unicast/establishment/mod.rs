@@ -181,6 +181,7 @@ pub(super) async fn close_link(
         // Send the close message on the link
         let _ = link.write_transport_message(message).await;
     }
+
     // Close the link
     let _ = link.close().await;
     // Notify the authenticators
