@@ -37,8 +37,16 @@ impl TransportUnicastInner {
         #[cfg(feature = "stats")]
         match &msg.body {
             ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => self.stats.inc_tx_z_data_reply_msgs(1),
-                None => self.stats.inc_tx_z_data_msgs(1),
+                Some(_) => {
+                    self.stats.inc_tx_z_data_reply_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.readable());
+                }
+                None => {
+                    self.stats.inc_tx_z_data_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_payload_bytes(data.payload.readable());
+                }
             },
             ZenohBody::Unit(unit) => match unit.reply_context {
                 Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
