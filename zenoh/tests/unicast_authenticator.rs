@@ -205,6 +205,8 @@ async fn authenticator_public_key(endpoint: &EndPoint) {
     println!("Transport Authenticator PubKey [4a2]: {:?}", res);
     assert!(res.is_ok());
 
+    task::sleep(SLEEP).await;
+
     /* [5] */
     // Open a first transport from the client to the router
     // -> This should be accepted
@@ -230,6 +232,8 @@ async fn authenticator_public_key(endpoint: &EndPoint) {
     let res = c_ses2.close().await;
     println!("Transport Authenticator PubKey [7a2]: {:?}", res);
     assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
 
     /* [8] */
     // Open a first transport from the client to the router
@@ -260,6 +264,8 @@ async fn authenticator_public_key(endpoint: &EndPoint) {
     let res = c_ses1_spoof.close().await;
     println!("Transport Authenticator PubKey [10a2]: {:?}", res);
     assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
 
     /* [11] */
     // Open a first transport from the client to the router
