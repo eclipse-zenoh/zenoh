@@ -16,8 +16,10 @@ name = "zenoh-util"
 version = "0.5.0-dev"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
@@ -29,6 +31,7 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
+zenoh-macros = { path = "../zenoh-macros" }
 aes = "0.7.4"
 async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"

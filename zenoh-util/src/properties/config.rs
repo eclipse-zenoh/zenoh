@@ -11,7 +11,34 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
 use super::{IntKeyProperties, KeyTranscoder};
+use std::{borrow::Cow, collections::HashMap};
+pub use zenoh_macros::IntKeyMapLike;
+#[allow(clippy::result_unit_err)]
+pub trait IntKeyMapLike {
+    type Keys: IntoIterator<Item = u64>;
+    fn iget(&self, key: u64) -> Option<Cow<'_, str>>;
+    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()>;
+    fn ikeys(&self) -> Self::Keys;
+}
+
+impl IntKeyMapLike for HashMap<u64, String> {
+    type Keys = Vec<u64>;
+
+    fn iget(&self, key: u64) -> Option<Cow<'_, str>> {
+        self.get(&key).map(|f| Cow::Borrowed(f.as_ref()))
+    }
+
+    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()> {
+        self.insert(key, value.into());
+        Ok(())
+    }
+
+    fn ikeys(&self) -> Self::Keys {
+        self.keys().copied().collect()
+    }
+}
 
 mod consts {
     /// `"true"`
@@ -311,6 +338,7 @@ mod consts {
 
 pub use consts::*;
 
+/// A set of [`IntKeyProperties`] used to configure zenoh.
 pub type ConfigProperties = IntKeyProperties<ConfigTranscoder>;
 
 pub struct ConfigTranscoder;

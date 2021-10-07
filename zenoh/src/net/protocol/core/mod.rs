@@ -13,62 +13,243 @@
 //
 pub mod rname;
 
-use std::convert::TryInto;
-use std::convert::{From, TryFrom};
+use http_types::Mime;
+use std::borrow::Cow;
+use std::convert::{From, TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
-pub use uhlc::Timestamp;
+pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
+/// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
+/// A zenoh integer.
 pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
 // WhatAmI values
-pub type WhatAmI = whatami::Type;
+pub type WhatAmI = whatami::WhatAmI;
 
+/// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
-    use super::{ZError, ZErrorKind, ZInt, ZResult};
+    use super::ZInt;
 
-    pub type Type = ZInt;
+    #[repr(u8)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum WhatAmI {
+        Router = 1,
+        Peer = 1 << 1,
+        Client = 1 << 2,
+    }
+    impl std::str::FromStr for WhatAmI {
+        type Err = ();
 
-    pub const ROUTER: Type = 1; // 0x01
-    pub const PEER: Type = 1 << 1; // 0x02
-    pub const CLIENT: Type = 1 << 2; // 0x04
-                                     // b4-b13: Reserved
-
-    pub fn to_string(w: Type) -> String {
-        match w {
-            ROUTER => "Router".to_string(),
-            PEER => "Peer".to_string(),
-            CLIENT => "Client".to_string(),
-            i => i.to_string(),
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "router" => Ok(WhatAmI::Router),
+                "peer" => Ok(WhatAmI::Peer),
+                "client" => Ok(WhatAmI::Client),
+                _ => Err(()),
+            }
         }
     }
+    impl WhatAmI {
+        pub fn to_str(self) -> &'static str {
+            match self {
+                WhatAmI::Router => "router",
+                WhatAmI::Peer => "peer",
+                WhatAmI::Client => "client",
+            }
+        }
+        pub fn try_from(value: ZInt) -> Option<Self> {
+            const CLIENT: u64 = WhatAmI::Client as u64;
+            const ROUTER: u64 = WhatAmI::Router as u64;
+            const PEER: u64 = WhatAmI::Peer as u64;
+            match value {
+                CLIENT => Some(WhatAmI::Client),
+                ROUTER => Some(WhatAmI::Router),
+                PEER => Some(WhatAmI::Peer),
+                _ => None,
+            }
+        }
+    }
+    impl std::fmt::Display for WhatAmI {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.to_str())
+        }
+    }
+    impl serde::Serialize for WhatAmI {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(self.to_str())
+        }
+    }
+    pub struct WhatAmIVisitor;
+    impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
+        type Value = WhatAmI;
 
-    pub fn parse(m: &str) -> ZResult<Type> {
-        match m {
-            "peer" => Ok(PEER),
-            "client" => Ok(CLIENT),
-            "router" => Ok(ROUTER),
-            unknown => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: format!("{} is not a valid WhatAmI value", unknown)
-            }),
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("either 'router', 'client' or 'peer'")
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            v.parse()
+                .map_err(|_| serde::de::Error::unknown_variant(v, &["router", "client", "peer"]))
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for WhatAmI {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(WhatAmIVisitor)
+        }
+    }
+    impl From<WhatAmI> for ZInt {
+        fn from(w: WhatAmI) -> Self {
+            w as u64
+        }
+    }
+    use std::{num::NonZeroU8, ops::BitOr};
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct WhatAmIMatcher(pub NonZeroU8);
+    impl WhatAmIMatcher {
+        pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
+            let i = i.try_into().ok()?;
+            if 0 < i && i < 8 {
+                Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
+            } else {
+                None
+            }
+        }
+        pub fn matches(self, w: WhatAmI) -> bool {
+            (self.0.get() & w as u8) != 0
+        }
+        pub fn to_str(self) -> &'static str {
+            match self.0.get() {
+                2 => "peer",
+                4 => "client",
+                1 => "router",
+                3 => "router|peer",
+                6 => "client|peer",
+                5 => "client|router",
+                7 => "client|router|peer",
+                _ => "invalid_matcher",
+            }
+        }
+    }
+    impl std::str::FromStr for WhatAmIMatcher {
+        type Err = ();
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let mut inner = 0;
+            for s in s.split('|') {
+                match s.trim() {
+                    "router" => inner |= WhatAmI::Router as u8,
+                    "client" => inner |= WhatAmI::Client as u8,
+                    "peer" => inner |= WhatAmI::Peer as u8,
+                    _ => return Err(()),
+                }
+            }
+            Self::try_from(inner).ok_or(())
+        }
+    }
+    impl serde::Serialize for WhatAmIMatcher {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            serializer.serialize_str(self.to_str())
+        }
+    }
+    struct WhatAmIMatcherVisitor;
+    impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
+        type Value = WhatAmIMatcher;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter
+                .write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            v.parse().map_err(|_| {
+                serde::de::Error::invalid_value(
+                    serde::de::Unexpected::Str(v),
+                    &"a | separated list of whatami variants ('peer', 'client' or 'router')",
+                )
+            })
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_str(WhatAmIMatcherVisitor)
+        }
+    }
+    impl std::fmt::Display for WhatAmIMatcher {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.to_str())
+        }
+    }
+    impl From<WhatAmIMatcher> for u64 {
+        fn from(w: WhatAmIMatcher) -> u64 {
+            w.0.get() as u64
+        }
+    }
+    impl<T> BitOr<T> for WhatAmIMatcher
+    where
+        NonZeroU8: BitOr<T, Output = NonZeroU8>,
+    {
+        type Output = Self;
+        fn bitor(self, rhs: T) -> Self::Output {
+            WhatAmIMatcher(self.0 | rhs)
+        }
+    }
+    impl BitOr<WhatAmI> for WhatAmIMatcher {
+        type Output = Self;
+        fn bitor(self, rhs: WhatAmI) -> Self::Output {
+            self | rhs as u8
+        }
+    }
+    impl BitOr for WhatAmIMatcher {
+        type Output = Self;
+        fn bitor(self, rhs: Self) -> Self::Output {
+            self | rhs.0
+        }
+    }
+    impl BitOr for WhatAmI {
+        type Output = WhatAmIMatcher;
+        fn bitor(self, rhs: Self) -> Self::Output {
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8) })
+        }
+    }
+    impl From<WhatAmI> for WhatAmIMatcher {
+        fn from(w: WhatAmI) -> Self {
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8) })
         }
     }
 }
 
+/// A numerical Id mapped to a resource name with [`register_resource`](crate::Session::register_resource).
 pub type ResourceId = ZInt;
 
 pub const NO_RESOURCE_ID: ResourceId = 0;
 
+/// A resource key.
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if ResName{name} : id=0
@@ -77,14 +258,14 @@ pub const NO_RESOURCE_ID: ResourceId = 0;
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum ResKey {
-    RName(String),
+pub enum ResKey<'a> {
+    RName(Cow<'a, str>),
     RId(ResourceId),
-    RIdWithSuffix(ResourceId, String),
+    RIdWithSuffix(ResourceId, Cow<'a, str>),
 }
 use ResKey::*;
 
-impl ResKey {
+impl ResKey<'_> {
     #[inline(always)]
     pub fn rid(&self) -> ResourceId {
         match self {
@@ -108,9 +289,17 @@ impl ResKey {
             RName(_) | RIdWithSuffix(_, _) => false,
         }
     }
+
+    pub fn to_owned(&self) -> ResKey<'static> {
+        match self {
+            Self::RId(id) => ResKey::RId(*id),
+            Self::RName(s) => ResKey::RName(s.to_string().into()),
+            Self::RIdWithSuffix(id, s) => ResKey::RIdWithSuffix(*id, s.to_string().into()),
+        }
+    }
 }
 
-impl fmt::Debug for ResKey {
+impl fmt::Debug for ResKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RName(name) => write!(f, "{}", name),
@@ -120,62 +309,76 @@ impl fmt::Debug for ResKey {
     }
 }
 
-impl fmt::Display for ResKey {
+impl fmt::Display for ResKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
-impl From<ResourceId> for ResKey {
+impl<'a> From<&ResKey<'a>> for ResKey<'a> {
     #[inline]
-    fn from(rid: ResourceId) -> ResKey {
+    fn from(key: &ResKey<'a>) -> ResKey<'a> {
+        key.clone()
+    }
+}
+
+impl From<ResourceId> for ResKey<'_> {
+    #[inline]
+    fn from(rid: ResourceId) -> ResKey<'static> {
         RId(rid)
     }
 }
 
-impl From<&str> for ResKey {
+impl<'a> From<&'a str> for ResKey<'a> {
     #[inline]
-    fn from(name: &str) -> ResKey {
-        RName(name.to_string())
+    fn from(name: &'a str) -> ResKey<'a> {
+        RName(name.into())
     }
 }
 
-impl From<String> for ResKey {
+impl From<String> for ResKey<'_> {
     #[inline]
-    fn from(name: String) -> ResKey {
-        RName(name)
+    fn from(name: String) -> ResKey<'static> {
+        RName(name.into())
     }
 }
 
-impl From<(ResourceId, &str)> for ResKey {
+impl<'a> From<&'a String> for ResKey<'a> {
     #[inline]
-    fn from(tuple: (ResourceId, &str)) -> ResKey {
+    fn from(name: &'a String) -> ResKey<'a> {
+        RName(name.as_str().into())
+    }
+}
+
+impl<'a> From<(ResourceId, &'a str)> for ResKey<'a> {
+    #[inline]
+    fn from(tuple: (ResourceId, &'a str)) -> ResKey<'a> {
         if tuple.1.is_empty() {
             RId(tuple.0)
         } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.to_string())
+            RName(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1.to_string())
+            RIdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl From<(ResourceId, String)> for ResKey {
+impl From<(ResourceId, String)> for ResKey<'_> {
     #[inline]
-    fn from(tuple: (ResourceId, String)) -> ResKey {
+    fn from(tuple: (ResourceId, String)) -> ResKey<'static> {
         if tuple.1.is_empty() {
             RId(tuple.0)
         } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1)
+            RName(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1)
+            RIdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
+impl<'a> From<&'a ResKey<'a>> for (ResourceId, &'a str) {
     #[inline]
-    fn from(key: &'a ResKey) -> (ResourceId, &'a str) {
+    fn from(key: &'a ResKey<'a>) -> (ResourceId, &'a str) {
         match key {
             RId(rid) => (*rid, ""),
             RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as u64)
@@ -184,12 +387,267 @@ impl<'a> From<&'a ResKey> for (ResourceId, &'a str) {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+/// The encoding of a zenoh [`Value`](crate::Value).
+///
+/// A zenoh encoding is a [`Mime`](http_types::Mime) type represented, for wire efficiency,
+/// as an integer prefix (that maps to a string) and a string suffix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Encoding {
+    pub prefix: ZInt,
+    pub suffix: Cow<'static, str>,
+}
+
+mod encoding {
+    lazy_static! {
+        pub(super) static ref MIMES: [&'static str; 21] = [
+            /*  0 */ "",
+            /*  1 */ "application/octet-stream",
+            /*  2 */ "application/custom", // non iana standard
+            /*  3 */ "text/plain",
+            /*  4 */ "application/properties", // non iana standard
+            /*  5 */ "application/json", // if not readable from casual users
+            /*  6 */ "application/sql",
+            /*  7 */ "application/integer", // non iana standard
+            /*  8 */ "application/float", // non iana standard
+            /*  9 */ "application/xml", // if not readable from casual users (RFC 3023, section 3)
+            /* 10 */ "application/xhtml+xml",
+            /* 11 */ "application/x-www-form-urlencoded",
+            /* 12 */ "text/json", // non iana standard - if readable from casual users
+            /* 13 */ "text/html",
+            /* 14 */ "text/xml", // if readable from casual users (RFC 3023, section 3)
+            /* 15 */ "text/css",
+            /* 16 */ "text/csv",
+            /* 17 */ "text/javascript",
+            /* 18 */ "image/jpeg",
+            /* 19 */ "image/png",
+            /* 20 */ "image/gif",
+        ];
+    }
+}
+
+impl Encoding {
+    pub const EMPTY: Encoding = Encoding {
+        prefix: 0,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_OCTET_STREAM: Encoding = Encoding {
+        prefix: 1,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_CUSTOM: Encoding = Encoding {
+        prefix: 2,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_PLAIN: Encoding = Encoding {
+        prefix: 3,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const STRING: Encoding = Encoding::TEXT_PLAIN;
+    pub const APP_PROPERTIES: Encoding = Encoding {
+        prefix: 4,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_JSON: Encoding = Encoding {
+        prefix: 5,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_SQL: Encoding = Encoding {
+        prefix: 6,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_INTEGER: Encoding = Encoding {
+        prefix: 7,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_FLOAT: Encoding = Encoding {
+        prefix: 8,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_XML: Encoding = Encoding {
+        prefix: 9,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_XHTML_XML: Encoding = Encoding {
+        prefix: 10,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const APP_X_WWW_FORM_URLENCODED: Encoding = Encoding {
+        prefix: 11,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_JSON: Encoding = Encoding {
+        prefix: 12,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_HTML: Encoding = Encoding {
+        prefix: 13,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_XML: Encoding = Encoding {
+        prefix: 14,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_CSS: Encoding = Encoding {
+        prefix: 15,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_CSV: Encoding = Encoding {
+        prefix: 16,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const TEXT_JAVASCRIPT: Encoding = Encoding {
+        prefix: 17,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const IMG_JPG: Encoding = Encoding {
+        prefix: 18,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const IMG_PNG: Encoding = Encoding {
+        prefix: 19,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+    pub const IMG_GIF: Encoding = Encoding {
+        prefix: 20,
+        suffix: std::borrow::Cow::Borrowed(""),
+    };
+
+    /// Converts the given encoding to [`Mime`](http_types::Mime).
+    pub fn to_mime(&self) -> ZResult<Mime> {
+        if self.prefix == 0 {
+            Mime::from_str(self.suffix.as_ref()).map_err(|e| {
+                ZError::new(
+                    ZErrorKind::Other {
+                        descr: e.to_string(),
+                    },
+                    file!(),
+                    line!(),
+                    None,
+                )
+            })
+        } else if self.prefix <= encoding::MIMES.len() as ZInt {
+            Mime::from_str(&format!(
+                "{}{}",
+                &encoding::MIMES[self.prefix as usize],
+                self.suffix
+            ))
+            .map_err(|e| {
+                ZError::new(
+                    ZErrorKind::Other {
+                        descr: e.to_string(),
+                    },
+                    file!(),
+                    line!(),
+                    None,
+                )
+            })
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: format!("Unknown encoding prefix {}", self.prefix)
+            })
+        }
+    }
+
+    /// Sets the suffix of this encoding.
+    pub fn with_suffix<IntoCowStr>(mut self, suffix: IntoCowStr) -> Self
+    where
+        IntoCowStr: Into<Cow<'static, str>>,
+    {
+        self.suffix = suffix.into();
+        self
+    }
+
+    /// Returns `true`if the string representation of this encoding starts with
+    /// the string representation of ther given encoding.
+    pub fn starts_with(&self, encoding: &Encoding) -> bool {
+        (self.prefix == encoding.prefix && self.suffix.starts_with(encoding.suffix.as_ref()))
+            || self.to_string().starts_with(&encoding.to_string())
+    }
+}
+
+impl fmt::Display for Encoding {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.prefix > 0 && self.prefix < encoding::MIMES.len() as ZInt {
+            write!(
+                f,
+                "{}{}",
+                &encoding::MIMES[self.prefix as usize],
+                self.suffix
+            )
+        } else {
+            write!(f, "{}", self.suffix)
+        }
+    }
+}
+
+impl From<&'static str> for Encoding {
+    fn from(s: &'static str) -> Self {
+        for (i, v) in encoding::MIMES.iter().enumerate() {
+            if i != 0 && s.starts_with(v) {
+                return Encoding {
+                    prefix: i as u64,
+                    suffix: s.split_at(v.len()).1.into(),
+                };
+            }
+        }
+        Encoding {
+            prefix: 0,
+            suffix: s.into(),
+        }
+    }
+}
+
+impl<'a> From<String> for Encoding {
+    fn from(s: String) -> Self {
+        for (i, v) in encoding::MIMES.iter().enumerate() {
+            if i != 0 && s.starts_with(v) {
+                return Encoding {
+                    prefix: i as u64,
+                    suffix: s.split_at(v.len()).1.to_string().into(),
+                };
+            }
+        }
+        Encoding {
+            prefix: 0,
+            suffix: s.into(),
+        }
+    }
+}
+
+impl<'a> From<Mime> for Encoding {
+    fn from(m: Mime) -> Self {
+        Encoding::from(&m)
+    }
+}
+
+impl<'a> From<&Mime> for Encoding {
+    fn from(m: &Mime) -> Self {
+        Encoding::from(m.essence().to_string())
+    }
+}
+
+impl From<ZInt> for Encoding {
+    fn from(i: ZInt) -> Self {
+        Encoding {
+            prefix: i,
+            suffix: "".into(),
+        }
+    }
+}
+
+impl Default for Encoding {
+    fn default() -> Self {
+        Encoding::EMPTY
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
 }
 
+/// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
 pub struct PeerId {
     size: usize,
@@ -388,6 +846,7 @@ impl fmt::Display for ConduitSnList {
     }
 }
 
+/// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ConduitSn {
     pub reliable: ZInt,
@@ -403,6 +862,7 @@ impl Default for ConduitSn {
     }
 }
 
+/// The kind of congestion control.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum CongestionControl {
@@ -416,6 +876,7 @@ impl Default for CongestionControl {
     }
 }
 
+/// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum SubMode {
@@ -423,6 +884,14 @@ pub enum SubMode {
     Pull,
 }
 
+impl Default for SubMode {
+    #[inline]
+    fn default() -> Self {
+        SubMode::Push
+    }
+}
+
+/// A time period.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Period {
     pub origin: ZInt,
@@ -440,9 +909,24 @@ pub struct SubInfo {
 impl Default for SubInfo {
     fn default() -> SubInfo {
         SubInfo {
-            reliability: Reliability::Reliable,
-            mode: SubMode::Push,
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
             period: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryableInfo {
+    pub complete: ZInt,
+    pub distance: ZInt,
+}
+
+impl Default for QueryableInfo {
+    fn default() -> QueryableInfo {
+        QueryableInfo {
+            complete: 1,
+            distance: 0,
         }
     }
 }
@@ -453,6 +937,7 @@ pub mod queryable {
     pub const EVAL: super::ZInt = 0x04;
 }
 
+/// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[repr(u8)]
 pub enum ConsolidationMode {
@@ -461,6 +946,8 @@ pub enum ConsolidationMode {
     Full,
 }
 
+/// The kind of consolidation that should be applied on replies to a [`get`](crate::Session::get)
+/// at different stages of the reply process.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryConsolidation {
     pub first_routers: ConsolidationMode,
@@ -488,12 +975,15 @@ impl Default for QueryConsolidation {
     }
 }
 
+/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
-    Complete { n: ZInt },
     All,
+    AllComplete,
     None,
+    #[cfg(feature = "complete_n")]
+    Complete(ZInt),
 }
 
 impl Default for Target {
@@ -502,6 +992,7 @@ impl Default for Target {
     }
 }
 
+/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
     pub kind: ZInt,

@@ -96,6 +96,8 @@ impl Default for ZBufInner {
 /*************************************/
 /*              ZBUF                 */
 /*************************************/
+/// A zenoh buffer.
+///
 /// [`ZBuf`][ZBuf] is a buffer that contains one or more [`ZSlice`][ZSlice]s. It is used
 /// to efficiently send and receive data in zenoh. It provides transparent usage for
 /// both network and shared memory operations through a simple API.
@@ -108,7 +110,7 @@ impl Default for ZBufInner {
 ///
 /// Example for creating a data buffer:
 /// ```
-/// use zenoh::net::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
 /// let zbuf: ZBuf = vec![0u8; 16].into();
@@ -130,7 +132,7 @@ impl Default for ZBufInner {
 /// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contigous in memory.
 ///
 /// ```
-/// use zenoh::net::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// let zslice: ZSlice = vec![0u8; 16].into();
@@ -154,7 +156,7 @@ impl Default for ZBufInner {
 /// dealing with shared memory access or with large data that has been likely fragmented on the network.
 ///
 /// ```
-/// use zenoh::net::protocol::io::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// let zslice: ZSlice = vec![0u8; 16].into();
 ///
@@ -435,11 +437,11 @@ impl ZBuf {
         true
     }
 
-    // Read all the bytes from 'self' and add those to 'dest'
-    #[inline(always)]
-    pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
-        self.read_into_zbuf(dest, self.readable())
-    }
+    // // Read all the bytes from 'self' and add those to 'dest'
+    // #[inline(always)]
+    // pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
+    //     self.read_into_zbuf(dest, self.readable())
+    // }
 
     // Read a subslice of current slice
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
@@ -916,11 +918,11 @@ mod tests {
         assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
         // test drain_into_zbuf
-        buf1.reset();
-        println!("[10] {:?}", buf1);
-        let mut dest = ZBuf::new();
-        assert!(buf1.drain_into_zbuf(&mut dest));
-        assert_eq!(buf1.readable(), 0);
-        assert_eq!(buf1.len(), dest.readable());
+        // buf1.reset();
+        // println!("[10] {:?}", buf1);
+        // let mut dest = ZBuf::new();
+        // assert!(buf1.drain_into_zbuf(&mut dest));
+        // assert_eq!(buf1.readable(), 0);
+        // assert_eq!(buf1.len(), dest.readable());
     }
 }

@@ -16,6 +16,7 @@ use super::{
     PeerAuthenticatorTrait,
 };
 use super::{PeerId, Property, WBuf, ZBuf, ZInt};
+use crate::config::Config;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::{Arc, Mutex};
 use async_trait::async_trait;
@@ -24,7 +25,6 @@ use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaP
 use std::collections::{HashMap, HashSet};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::PseudoRng;
-use zenoh_util::properties::config::*;
 use zenoh_util::zasynclock;
 
 const WBUF_SIZE: usize = 64;
@@ -228,7 +228,7 @@ impl PubKeyAuthenticator {
         Ok(())
     }
 
-    pub async fn from_config(_config: &ConfigProperties) -> ZResult<Option<PubKeyAuthenticator>> {
+    pub async fn from_config(_config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
         // @TODO: support config
         Ok(None)
     }

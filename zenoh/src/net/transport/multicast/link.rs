@@ -13,10 +13,12 @@
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::io::{ZBuf, ZSlice};
+use super::protocol::proto::TransportMessage;
 use super::transport::TransportMulticastInner;
+#[cfg(feature = "stats")]
+use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
 use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
-use crate::net::protocol::proto::TransportMessage;
 use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;
@@ -110,7 +112,15 @@ impl TransportLinkMulticast {
             let c_link = self.inner.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
-                let res = tx_task(pipeline, c_link.clone(), config, initial_sns).await;
+                let res = tx_task(
+                    pipeline,
+                    c_link.clone(),
+                    config,
+                    initial_sns,
+                    #[cfg(feature = "stats")]
+                    c_transport.stats.clone(),
+                )
+                .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -193,6 +203,7 @@ async fn tx_task(
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
     mut next_sns: Vec<ConduitSn>,
+    #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
         Pull((SerializationBatch, usize)),
@@ -229,13 +240,19 @@ async fn tx_task(
         {
             Action::Pull((batch, priority)) => {
                 // Send the buffer on the link
-                let _ = link.write_all(batch.as_bytes()).await?;
+                let bytes = batch.as_bytes();
+                let _ = link.write_all(bytes).await?;
                 // Keep track of next SNs
                 if let Some(sn) = batch.sn.reliable {
                     next_sns[priority].reliable = sn.next;
                 }
                 if let Some(sn) = batch.sn.best_effort {
                     next_sns[priority].best_effort = sn.next;
+                }
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(batch.stats.t_msgs);
+                    stats.inc_tx_bytes(bytes.len());
                 }
                 // Reinsert the batch into the queue
                 pipeline.refill(batch, priority);
@@ -249,7 +266,7 @@ async fn tx_task(
                     assert_eq!(next_sns.len(), 1);
                     ConduitSnList::Plain(next_sns[0])
                 };
-                let message = TransportMessage::make_join(
+                let mut message = TransportMessage::make_join(
                     config.version,
                     config.whatami,
                     config.pid,
@@ -258,7 +275,15 @@ async fn tx_task(
                     initial_sns,
                     attachment,
                 );
-                link.write_transport_message(message).await?;
+
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.write_transport_message(&mut message).await?;
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(1);
+                    stats.inc_tx_bytes(n);
+                }
+
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
@@ -271,7 +296,24 @@ async fn tx_task(
                 // Drain the transmission pipeline and write remaining bytes on the wire
                 let mut batches = pipeline.drain();
                 for (b, _) in batches.drain(..) {
-                    let _ = link.write_all(b.as_bytes()).await?;
+                    let _ = link
+                        .write_all(b.as_bytes())
+                        .timeout(config.join_interval)
+                        .await
+                        .map_err(|_| {
+                            let e = format!(
+                                "{}: flush failed after {} ms",
+                                link,
+                                config.join_interval.as_millis()
+                            );
+                            zerror2!(ZErrorKind::IoError { descr: e })
+                        })??;
+
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_tx_t_msgs(b.stats.t_msgs);
+                        stats.inc_tx_bytes(b.len());
+                    }
                 }
                 break;
             }
@@ -325,13 +367,21 @@ async fn rx_task(
                     return zerror!(ZErrorKind::IoError { descr: e });
                 }
 
+                #[cfg(feature = "stats")]
+                transport.stats.inc_rx_bytes(n);
+
                 // Add the received bytes to the ZBuf for deserialization
                 zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
                     match zbuf.read_transport_message() {
-                        Some(msg) => transport.receive_message(msg, &loc)?,
+                        Some(msg) => {
+                            #[cfg(feature = "stats")]
+                            transport.stats.inc_rx_t_msgs(1);
+
+                            transport.receive_message(msg, &loc)?
+                        }
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });

@@ -21,7 +21,7 @@ use std::thread;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -143,7 +143,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -162,7 +162,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client01_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -175,7 +175,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the second client
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client02_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -188,7 +188,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the third client
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client03_id)
         .unicast(
             TransportManagerConfigUnicast::builder()
@@ -278,7 +278,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_router_manager = router_manager.clone();
     let res = task::spawn_blocking(move || {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
+        let key = ResKey::RName("/test".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),

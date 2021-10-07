@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, Property, ZInt, ZINT_MAX_BYTES};
+use super::core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
 #[cfg(feature = "zero-copy")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "zero-copy")]
@@ -253,6 +253,25 @@ impl ZBuf {
         let value = self.read_bytes_array()?;
         Some(Property { key, value })
     }
+
+    pub fn read_timestamp(&mut self) -> Option<Timestamp> {
+        let time = self.read_zint_as_u64()?;
+        let size = self.read_zint_as_usize()?;
+        if size > (uhlc::ID::MAX_SIZE) {
+            log::trace!(
+                "Reading a Timestamp's ID size that exceed {} bytes: {}",
+                uhlc::ID::MAX_SIZE,
+                size
+            );
+            return None;
+        }
+        let mut id = [0u8; PeerId::MAX_SIZE];
+        if self.read_bytes(&mut id[..size]) {
+            Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
+        } else {
+            None
+        }
+    }
 }
 
 macro_rules! write_zint {
@@ -379,5 +398,10 @@ impl WBuf {
 
     fn write_property(&mut self, p: &Property) -> bool {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
+    }
+
+    pub fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
+        self.write_u64_as_zint(tstamp.get_time().as_u64())
+            && self.write_bytes_array(tstamp.get_id().as_slice())
     }
 }

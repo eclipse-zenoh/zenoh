@@ -44,17 +44,17 @@ env_logger = "0.9.0"
 
 
 [[example]]
-name = "zn_query_sub"
-path = "examples/zenoh-net/zn_query_sub.rs"
+name = "z_query_sub"
+path = "examples/z_query_sub.rs"
 
 [[example]]
-name = "zn_pub_cache"
-path = "examples/zenoh-net/zn_pub_cache.rs"
+name = "z_pub_cache"
+path = "examples/z_pub_cache.rs"
 
 [[example]]
-name = "zn_member"
-path = "examples/zenoh-net/zn_member.rs"
+name = "z_member"
+path = "examples/z_member.rs"
 
 [[example]]
-name = "zn_view_size"
-path = "examples/zenoh-net/zn_view_size.rs"
+name = "z_view_size"
+path = "examples/z_view_size.rs"

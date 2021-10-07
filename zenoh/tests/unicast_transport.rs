@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -146,7 +146,12 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn open_transport(
     endpoints: &[EndPoint],
-) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
+) -> (
+    TransportManager,
+    Arc<SHRouter>,
+    TransportManager,
+    TransportUnicast,
+) {
     // Define client and router IDs
     let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
     let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -158,7 +163,7 @@ async fn open_transport(
         .build();
     let config = TransportManagerConfig::builder()
         .pid(router_id)
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build(router_handler.clone());
     let router_manager = TransportManager::new(config);
@@ -168,7 +173,7 @@ async fn open_transport(
         .max_links(endpoints.len())
         .build();
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClient::default()));
@@ -200,7 +205,12 @@ async fn open_transport(
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Return the handlers
-    (router_manager, router_handler, client_transport)
+    (
+        router_manager,
+        router_handler,
+        client_manager,
+        client_transport,
+    )
 }
 
 async fn close_transport(
@@ -246,7 +256,7 @@ async fn single_run(
     msg_size: usize,
 ) {
     // Create the message to send
-    let key = ResKey::RName("/test".to_string());
+    let key = ResKey::RName("/test".into());
     let payload = ZBuf::from(vec![0u8; msg_size]);
     let data_info = None;
     let routing_context = None;
@@ -297,9 +307,23 @@ async fn single_run(
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            let (router_manager, router_handler, client_transport) =
+            #[allow(unused_variables)] // Used when stats feature is enabled
+            let (router_manager, router_handler, client_manager, client_transport) =
                 open_transport(endpoints).await;
             single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
+
+            #[cfg(feature = "stats")]
+            {
+                let c_stats = client_transport.get_stats().unwrap();
+                println!("\tClient: {:?}", c_stats,);
+                let r_stats = router_manager
+                    .get_transport_unicast(&client_manager.config.pid)
+                    .unwrap()
+                    .get_stats()
+                    .unwrap();
+                println!("\tRouter: {:?}", r_stats);
+            }
+
             close_transport(router_manager, client_transport, endpoints).await;
         }
     }

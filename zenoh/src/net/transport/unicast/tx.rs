@@ -11,6 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "stats")]
+use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportUnicastInner;
 use zenoh_util::zread;
@@ -25,8 +27,35 @@ impl TransportUnicastInner {
                 // block for fairly long time
                 drop($guard);
                 $pipeline.push_zenoh_message($msg);
+
                 return;
             };
+        }
+
+        #[cfg(feature = "stats")]
+        self.stats.inc_tx_z_msgs(1);
+        #[cfg(feature = "stats")]
+        match &msg.body {
+            ZenohBody::Data(data) => match data.reply_context {
+                Some(_) => {
+                    self.stats.inc_tx_z_data_reply_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.readable());
+                }
+                None => {
+                    self.stats.inc_tx_z_data_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_payload_bytes(data.payload.readable());
+                }
+            },
+            ZenohBody::Unit(unit) => match unit.reply_context {
+                Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
+                None => self.stats.inc_tx_z_unit_msgs(1),
+            },
+            ZenohBody::Pull(_) => self.stats.inc_tx_z_pull_msgs(1),
+            ZenohBody::Query(_) => self.stats.inc_tx_z_query_msgs(1),
+            ZenohBody::Declare(_) => self.stats.inc_tx_z_declare_msgs(1),
+            ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
         let guard = zread!(self.links);

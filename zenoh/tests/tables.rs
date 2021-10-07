@@ -16,8 +16,8 @@ use std::convert::TryInto;
 use uhlc::HLC;
 use zenoh::net::protocol::core::rname::intersect;
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, Reliability,
-    ResKey, SubInfo, SubMode, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -29,19 +29,19 @@ use zenoh_util::zlock;
 fn base_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
-    declare_resource(
+    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    register_resource(
         &mut tables,
         &mut face.upgrade().unwrap(),
         1,
         0,
         "/one/two/three",
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face.upgrade().unwrap(),
         2,
@@ -124,13 +124,13 @@ fn match_test() {
 
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
     for (i, rname) in rnames.iter().enumerate() {
-        declare_resource(
+        register_resource(
             &mut tables,
             &mut face.upgrade().unwrap(),
             i.try_into().unwrap(),
@@ -159,23 +159,23 @@ fn match_test() {
 fn clean_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
     assert!(face0.upgrade().is_some());
 
     // --------------
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
     let optres1 =
         Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
@@ -188,29 +188,29 @@ fn clean_test() {
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/**");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/**");
     let optres3 = Resource::get_resource(tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
 
-    undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_resource(&mut tables, &mut face0.upgrade().unwrap(), 1);
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_resource(&mut tables, &mut face0.upgrade().unwrap(), 2);
     assert!(!res1.upgrade().is_some());
     assert!(!res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3);
+    unregister_resource(&mut tables, &mut face0.upgrade().unwrap(), 3);
     assert!(!res1.upgrade().is_some());
     assert!(!res2.upgrade().is_some());
     assert!(!res3.upgrade().is_some());
 
     // --------------
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
     let optres1 =
         Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -264,13 +264,13 @@ fn clean_test() {
     assert!(!res2.upgrade().is_some());
     assert!(!res3.upgrade().is_some());
 
-    undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_resource(&mut tables, &mut face0.upgrade().unwrap(), 1);
     assert!(!res1.upgrade().is_some());
     assert!(!res2.upgrade().is_some());
     assert!(!res3.upgrade().is_some());
 
     // --------------
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2, 0, "/todrop3");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 2, 0, "/todrop3");
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -287,12 +287,12 @@ fn clean_test() {
     forget_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3");
     assert!(res1.upgrade().is_some());
 
-    undeclare_resource(&mut tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_resource(&mut tables, &mut face0.upgrade().unwrap(), 2);
     assert!(!res1.upgrade().is_some());
 
     // --------------
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/todrop4");
-    declare_resource(&mut tables, &mut face0.upgrade().unwrap(), 4, 0, "/todrop5");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/todrop4");
+    register_resource(&mut tables, &mut face0.upgrade().unwrap(), 4, 0, "/todrop5");
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -333,7 +333,7 @@ fn clean_test() {
 }
 
 pub struct ClientPrimitives {
-    data: std::sync::Mutex<Option<ResKey>>,
+    data: std::sync::Mutex<Option<ResKey<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
 }
 
@@ -360,7 +360,7 @@ impl ClientPrimitives {
     fn get_name(&self, reskey: &ResKey) -> String {
         let mapping = self.mapping.lock().unwrap();
         match reskey {
-            ResKey::RName(name) => name.clone(),
+            ResKey::RName(name) => name.to_string(),
             ResKey::RId(id) => mapping.get(id).unwrap().clone(),
             ResKey::RIdWithSuffix(id, suffix) => {
                 [&mapping.get(id).unwrap()[..], &suffix[..]].concat()
@@ -408,10 +408,17 @@ impl Primitives for ClientPrimitives {
         &self,
         _reskey: &ResKey,
         _kind: ZInt,
+        _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_queryable(
+        &self,
+        _reskey: &ResKey,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
+    }
 
     fn send_data(
         &self,
@@ -422,13 +429,13 @@ impl Primitives for ClientPrimitives {
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
-        *zlock!(self.data) = Some(reskey.clone());
+        *zlock!(self.data) = Some(reskey.to_owned());
     }
 
     fn send_query(
         &self,
         _reskey: &ResKey,
-        _predicate: &str,
+        _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: QueryConsolidation,
@@ -464,7 +471,7 @@ impl Primitives for ClientPrimitives {
 fn client_test() {
     let mut tables = Tables::new(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         Some(Arc::new(HLC::default())),
     );
     let sub_info = SubInfo {
@@ -476,17 +483,17 @@ fn client_test() {
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives0.clone(),
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         11,
         0,
         "/test/client",
     );
-    primitives0.decl_resource(11, &ResKey::RName("/test/client".to_string()));
+    primitives0.decl_resource(11, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -494,29 +501,29 @@ fn client_test() {
         "/**",
         &sub_info,
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         12,
         11,
         "/z1_pub1",
     );
-    primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".to_string()));
+    primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".into()));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives1.clone(),
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face1.upgrade().unwrap(),
         21,
         0,
         "/test/client",
     );
-    primitives1.decl_resource(21, &ResKey::RName("/test/client".to_string()));
+    primitives1.decl_resource(21, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
@@ -524,29 +531,29 @@ fn client_test() {
         "/**",
         &sub_info,
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face1.upgrade().unwrap(),
         22,
         21,
         "/z2_pub1",
     );
-    primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".to_string()));
+    primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".into()));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
         PeerId::new(0, [0; 16]),
-        whatami::CLIENT,
+        WhatAmI::Client,
         primitives2.clone(),
     );
-    declare_resource(
+    register_resource(
         &mut tables,
         &mut face2.upgrade().unwrap(),
         31,
         0,
         "/test/client",
     );
-    primitives2.decl_resource(31, &ResKey::RName("/test/client".to_string()));
+    primitives2.decl_resource(31, &ResKey::RName("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),

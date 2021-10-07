@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, ResKey, SubInfo,
-    WhatAmI, ZInt,
+    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -34,8 +34,8 @@ pub struct FaceState {
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
-    pub(super) local_qabls: HashMap<Arc<Resource>, ZInt>,
-    pub(super) remote_qabls: HashSet<Arc<Resource>>,
+    pub(super) local_qabls: HashMap<(Arc<Resource>, ZInt), QueryableInfo>,
+    pub(super) remote_qabls: HashSet<(Arc<Resource>, ZInt)>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
 }
@@ -81,6 +81,74 @@ impl FaceState {
         }
         id
     }
+
+    pub(super) fn get_router(
+        &self,
+        tables: &Tables,
+        routing_context: Option<RoutingContext>,
+    ) -> Option<PeerId> {
+        match routing_context {
+            Some(routing_context) => {
+                match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
+                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                        Some(router) => Some(*router),
+                        None => {
+                            log::error!(
+                                "Received router declaration with unknown routing context id {}",
+                                routing_context.tree_id
+                            );
+                            None
+                        }
+                    },
+                    None => {
+                        log::error!(
+                            "Could not find corresponding link in routers network for {}",
+                            self
+                        );
+                        None
+                    }
+                }
+            }
+            None => {
+                log::error!("Received router declaration with no routing context");
+                None
+            }
+        }
+    }
+
+    pub(super) fn get_peer(
+        &self,
+        tables: &Tables,
+        routing_context: Option<RoutingContext>,
+    ) -> Option<PeerId> {
+        match routing_context {
+            Some(routing_context) => {
+                match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
+                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                        Some(router) => Some(*router),
+                        None => {
+                            log::error!(
+                                "Received peer declaration with unknown routing context id {}",
+                                routing_context.tree_id
+                            );
+                            None
+                        }
+                    },
+                    None => {
+                        log::error!(
+                            "Could not find corresponding link in peers network for {}",
+                            self
+                        );
+                        None
+                    }
+                }
+            }
+            None => {
+                log::error!("Received peer declaration with no routing context");
+                None
+            }
+        }
+    }
 }
 
 impl fmt::Display for FaceState {
@@ -99,12 +167,12 @@ impl Primitives for Face {
     fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
-        declare_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
+        register_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
     }
 
     fn forget_resource(&self, rid: ZInt) {
         let mut tables = zwrite!(self.tables);
-        undeclare_resource(&mut tables, &mut self.state.clone(), rid);
+        unregister_resource(&mut tables, &mut self.state.clone(), rid);
     }
 
     fn decl_subscriber(
@@ -116,25 +184,8 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(router) => *router,
-                        None => {
-                            log::error!(
-                                "Received router subscription with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = self.state.get_router(&tables, routing_context) {
                     declare_router_subscription(
                         &mut tables,
                         &mut self.state.clone(),
@@ -144,32 +195,11 @@ impl Primitives for Face {
                         router,
                     )
                 }
-
-                None => {
-                    log::error!("Received router subscription with no routing context");
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(peer) => *peer,
-                        None => {
-                            log::error!(
-                                "Received peer subscription with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
                     declare_peer_subscription(
                         &mut tables,
                         &mut self.state.clone(),
@@ -179,11 +209,7 @@ impl Primitives for Face {
                         peer,
                     )
                 }
-
-                None => {
-                    log::error!("Received peer subscription with no routing context");
-                }
-            },
+            }
             _ => declare_client_subscription(
                 &mut tables,
                 &mut self.state.clone(),
@@ -198,25 +224,8 @@ impl Primitives for Face {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(router) => *router,
-                        None => {
-                            log::error!(
-                                "Received router forget subscription with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = self.state.get_router(&tables, routing_context) {
                     forget_router_subscription(
                         &mut tables,
                         &mut self.state.clone(),
@@ -225,32 +234,11 @@ impl Primitives for Face {
                         &router,
                     )
                 }
-
-                None => {
-                    log::error!("Received router forget subscription with no routing context");
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(peer) => *peer,
-                        None => {
-                            log::error!(
-                                "Received peer forget subscription with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
                     forget_peer_subscription(
                         &mut tables,
                         &mut self.state.clone(),
@@ -259,11 +247,7 @@ impl Primitives for Face {
                         &peer,
                     )
                 }
-
-                None => {
-                    log::error!("Received peer forget subscription with no routing context");
-                }
-            },
+            }
             _ => forget_client_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix),
         }
     }
@@ -272,159 +256,97 @@ impl Primitives for Face {
 
     fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
 
-    fn decl_queryable(&self, reskey: &ResKey, kind: ZInt, routing_context: Option<RoutingContext>) {
+    fn decl_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        qabl_info: &QueryableInfo,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(router) => *router,
-                        None => {
-                            log::error!(
-                                "Received router queryable with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = self.state.get_router(&tables, routing_context) {
                     declare_router_queryable(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
                         kind,
+                        qabl_info,
                         router,
                     )
                 }
-
-                None => {
-                    log::error!("Received router queryable with no routing context");
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(peer) => *peer,
-                        None => {
-                            log::error!(
-                                "Received peer queryable with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
                     declare_peer_queryable(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
                         kind,
+                        qabl_info,
                         peer,
                     )
                 }
-
-                None => {
-                    log::error!("Received peer queryable with no routing context");
-                }
-            },
+            }
             _ => declare_client_queryable(
                 &mut tables,
                 &mut self.state.clone(),
                 prefixid,
                 suffix,
                 kind,
+                qabl_info,
             ),
         }
     }
 
-    fn forget_queryable(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        reskey: &ResKey,
+        kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    ) {
         let (prefixid, suffix) = reskey.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
-            (whatami::ROUTER, whatami::ROUTER) => match routing_context {
-                Some(routing_context) => {
-                    let router = match tables
-                        .routers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(router) => *router,
-                        None => {
-                            log::error!(
-                                "Received router forget queryable with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = self.state.get_router(&tables, routing_context) {
                     forget_router_queryable(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
+                        kind,
                         &router,
                     )
                 }
-
-                None => {
-                    log::error!("Received router forget queryable with no routing context");
-                }
-            },
-            (whatami::ROUTER, whatami::PEER)
-            | (whatami::PEER, whatami::ROUTER)
-            | (whatami::PEER, whatami::PEER) => match routing_context {
-                Some(routing_context) => {
-                    let peer = match tables
-                        .peers_net
-                        .as_ref()
-                        .unwrap()
-                        .get_link(self.state.link_id)
-                        .get_pid(&routing_context.tree_id)
-                    {
-                        Some(peer) => *peer,
-                        None => {
-                            log::error!(
-                                "Received peer forget queryable with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            return;
-                        }
-                    };
-
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
                     forget_peer_queryable(
                         &mut tables,
                         &mut self.state.clone(),
                         prefixid,
                         suffix,
+                        kind,
                         &peer,
                     )
                 }
-
-                None => {
-                    log::error!("Received peer forget queryable with no routing context");
-                }
-            },
-            _ => forget_client_queryable(&mut tables, &mut self.state.clone(), prefixid, suffix),
+            }
+            _ => forget_client_queryable(
+                &mut tables,
+                &mut self.state.clone(),
+                prefixid,
+                suffix,
+                kind,
+            ),
         }
     }
 
@@ -454,7 +376,7 @@ impl Primitives for Face {
     fn send_query(
         &self,
         reskey: &ResKey,
-        predicate: &str,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
@@ -467,7 +389,7 @@ impl Primitives for Face {
             &self.state,
             prefixid,
             suffix,
-            predicate,
+            value_selector,
             qid,
             target,
             consolidation,

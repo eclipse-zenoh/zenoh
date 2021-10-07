@@ -15,6 +15,8 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
+#[cfg(feature = "stats")]
+use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};
 use crate::net::transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -90,6 +92,9 @@ pub(crate) struct TransportMulticastInner {
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
     // The timer for peer leases
     pub(super) timer: Arc<Timer>,
+    // Transport statistics
+    #[cfg(feature = "stats")]
+    pub(super) stats: Arc<TransportMulticastStatsAtomic>,
 }
 
 pub(crate) struct TransportMulticastConfig {
@@ -127,6 +132,8 @@ impl TransportMulticastInner {
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
             timer: Arc::new(Timer::new()),
+            #[cfg(feature = "stats")]
+            stats: Arc::new(TransportMulticastStatsAtomic::default()),
         };
 
         let mut w_guard = zwrite!(ti.link);

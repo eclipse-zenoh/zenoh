@@ -16,7 +16,6 @@ use async_std::path::PathBuf;
 use std::fmt;
 use std::str::FromStr;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -91,7 +90,7 @@ impl fmt::Display for LocatorUnixSocketStream {
 pub struct LocatorConfigUnixSocketStream;
 
 impl LocatorConfigUnixSocketStream {
-    pub fn from_config(_config: &ConfigProperties) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }

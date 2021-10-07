@@ -16,25 +16,19 @@ use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use http_types::Method;
-use runtime::Runtime;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::net::*;
-use zenoh::{Change, Selector, Value};
+use zenoh::net::runtime::Runtime;
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::Session;
 use zenoh_plugin_trait::prelude::*;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
 const DEFAULT_HTTP_PORT: &str = "8000";
-
-const SSE_SUB_INFO: SubInfo = SubInfo {
-    reliability: Reliability::Reliable,
-    mode: SubMode::Push,
-    period: None,
-};
 
 fn parse_http_port(arg: &str) -> String {
     match arg.split(':').count() {
@@ -48,61 +42,40 @@ fn parse_http_port(arg: &str) -> String {
     }
 }
 
-fn get_kind_str(sample: &Sample) -> String {
-    let kind = match &sample.data_info {
-        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
-        None => data_kind::DEFAULT,
-    };
-    data_kind::to_string(kind)
-}
-
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
-    use Value::*;
-
-    match value {
-        Raw(_, _)
-        | Custom {
-            encoding_descr: _,
-            data: _,
-        } => {
-            // encode value as a String, possibly encoding as base64
-            let (_, _, s) = value.encode_to_string();
-            format!(r#""{}""#, s)
-        }
-        StringUtf8(s) => {
+    match &value.encoding {
+        p if p.starts_with(&Encoding::STRING) => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(s);
-            js.to_string()
+            serde_json::json!(value.to_string()).to_string()
         }
-        Properties(p) => {
+        p if p.starts_with(&Encoding::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(*p);
-            js.to_string()
+            serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        Json(s) => s,
-        Integer(i) => format!(r#"{}"#, i),
-        Float(f) => format!(r#"{}"#, f),
+        p if p.starts_with(&Encoding::APP_JSON) => value.to_string(),
+        p if p.starts_with(&Encoding::APP_INTEGER) || p.starts_with(&Encoding::APP_FLOAT) => {
+            value.to_string()
+        }
+        _ => {
+            format!(r#""{}""#, value.to_string())
+        }
     }
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let res_name = sample.res_name.clone();
-    if let Ok(change) = Change::from_sample(sample, true) {
-        let (encoding, value) = match change.value {
-            Some(v) => (v.encoding_descr(), value_to_json(v)),
-            None => ("None".to_string(), r#""""#.to_string()),
-        };
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            change.path, value, encoding, change.timestamp
-        )
-    } else {
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            res_name, "ERROR: Failed to decode Sample", "Unkown", "None"
-        )
-    }
+    let encoding = sample.value.encoding.to_string();
+    format!(
+        r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
+        sample.res_name,
+        value_to_json(sample.value),
+        encoding,
+        if let Some(ts) = sample.timestamp {
+            ts.to_string()
+        } else {
+            "None".to_string()
+        }
+    )
 }
 
 async fn to_json(results: ReplyReceiver) -> String {
@@ -118,7 +91,7 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.res_name,
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
 
@@ -131,26 +104,12 @@ async fn to_html(results: ReplyReceiver) -> String {
     format!("<dl>\n{}\n</dl>\n", values)
 }
 
-fn enc_from_mime(mime: Option<Mime>) -> ZInt {
-    use zenoh::net::encoding::*;
-    match mime {
-        Some(mime) => match from_str(mime.essence()) {
-            Ok(encoding) => encoding,
-            _ => match mime.basetype() {
-                "text" => TEXT_PLAIN,
-                &_ => APP_OCTET_STREAM,
-            },
-        },
-        None => APP_OCTET_STREAM,
-    }
-}
-
-fn method_to_kind(method: Method) -> ZInt {
+fn method_to_kind(method: Method) -> SampleKind {
     match method {
-        Method::Put => data_kind::PUT,
-        Method::Patch => data_kind::PATCH,
-        Method::Delete => data_kind::DELETE,
-        _ => data_kind::DEFAULT,
+        Method::Put => SampleKind::Put,
+        Method::Patch => SampleKind::Patch,
+        Method::Delete => SampleKind::Delete,
+        _ => SampleKind::default(),
     }
 }
 
@@ -210,24 +169,6 @@ impl Plugin for RestPlugin {
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     log::trace!("Incoming GET request: {:?}", req);
-    // Reconstruct Selector from req.url() (no easier way...)
-    let url = req.url();
-    let mut s = String::with_capacity(url.as_str().len());
-    s.push_str(url.path());
-    if let Some(q) = url.query() {
-        s.push('?');
-        s.push_str(q);
-    }
-    let selector = match Selector::try_from(s) {
-        Ok(sel) => sel,
-        Err(e) => {
-            return Ok(response(
-                StatusCode::BadRequest,
-                Mime::from_str("text/plain").unwrap(),
-                &e.to_string(),
-            ))
-        }
-    };
 
     let first_accept = match req.header("accept") {
         Some(accept) => accept[0]
@@ -245,7 +186,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let resource = path_to_resource(req.url().path(), &req.state().1);
+                let resource = path_to_resource(req.url().path(), &req.state().1).to_owned();
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
@@ -253,17 +194,12 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&resource, &SSE_SUB_INFO)
-                        .await
-                        .unwrap();
+                    let mut sub = req.state().0.subscribe(&resource).await.unwrap();
                     loop {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
-                                .send(&get_kind_str(&sample), sample_to_json(sample), None)
+                                .send(&sample.kind.to_string(), sample_to_json(sample), None)
                                 .await
                             {
                                 log::warn!("Error sending data from the SSE stream: {}", e);
@@ -279,7 +215,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.undeclare().await {
+                            if let Err(e) = sub.unregister().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;
@@ -290,7 +226,14 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             },
         ))
     } else {
-        let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+        let url = req.url();
+        let resource = path_to_resource(url.path(), &req.state().1);
+        let query_part = url.query().map(|q| format!("?{}", q));
+        let selector = if let Some(q) = &query_part {
+            KeyedSelector::from(resource).with_value_selector(q)
+        } else {
+            resource.into()
+        };
         let consolidation = if selector.has_time_range() {
             QueryConsolidation::none()
         } else {
@@ -299,12 +242,8 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         match req
             .state()
             .0
-            .query(
-                &resource,
-                &selector.predicate,
-                QueryTarget::default(),
-                consolidation,
-            )
+            .get(&selector)
+            .consolidation(consolidation)
             .await
         {
             Ok(receiver) => {
@@ -336,16 +275,15 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     match req.body_bytes().await {
         Ok(bytes) => {
             let resource = path_to_resource(req.url().path(), &req.state().1);
+            let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
+
+            // @TODO: Define the right congestion control value
             match req
                 .state()
                 .0
-                .write_ext(
-                    &resource,
-                    bytes.into(),
-                    enc_from_mime(req.content_type()),
-                    method_to_kind(req.method()),
-                    CongestionControl::Drop, // @TODO: Define the right congestion control value
-                )
+                .put(&resource, bytes)
+                .encoding(encoding)
+                .kind(method_to_kind(req.method()))
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -404,7 +342,7 @@ pub async fn run(runtime: Runtime, port: String) {
     }
 }
 
-fn path_to_resource(path: &str, pid: &str) -> ResKey {
+fn path_to_resource<'a>(path: &'a str, pid: &str) -> ResKey<'a> {
     if path == "/@/router/local" {
         ResKey::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {

@@ -17,7 +17,7 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -38,14 +38,14 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
         .pid(router_id)
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()));
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()));
@@ -73,7 +73,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Create the message to send, this would trigger the transport closure
-    let key = ResKey::RName("/test".to_string());
+    let key = ResKey::RName("/test".into());
     let payload = ZBuf::from(vec![0u8; msg_size]);
     let data_info = None;
     let routing_context = None;

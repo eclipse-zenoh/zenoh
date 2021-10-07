@@ -17,16 +17,17 @@ use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use zenoh::net::utils::resource_name;
-use zenoh::net::Sample;
-use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
+use zenoh::prelude::*;
+use zenoh::properties::properties_to_json_value;
+use zenoh::time::Timestamp;
+use zenoh::utils::resource_name;
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
     // For now admin status is static and only contains a PROP_BACKEND_TYPE entry
     let properties = Properties::from(&[(PROP_BACKEND_TYPE, "memory")][..]);
-    let admin_status = utils::properties_to_json_value(&properties);
+    let admin_status = properties_to_json_value(&properties);
     Ok(Box::new(MemoryBackend { admin_status }))
 }
 
@@ -120,7 +121,7 @@ struct MemoryStorage {
 
 impl MemoryStorage {
     async fn new(properties: Properties) -> ZResult<MemoryStorage> {
-        let admin_status = utils::properties_to_json_value(&properties);
+        let admin_status = properties_to_json_value(&properties);
 
         Ok(MemoryStorage {
             admin_status,
@@ -151,21 +152,12 @@ impl Storage for MemoryStorage {
         self.admin_status.clone()
     }
 
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
+    async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
         trace!("on_sample for {}", sample.res_name);
-        let (kind, timestamp) = if let Some(ref info) = sample.data_info {
-            (
-                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
-                match &info.timestamp {
-                    Some(ts) => *ts,
-                    None => utils::new_reception_timestamp(),
-                },
-            )
-        } else {
-            (ChangeKind::Put, utils::new_reception_timestamp())
-        };
-        match kind {
-            ChangeKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
+        sample.ensure_timestamp();
+        let timestamp = sample.timestamp.unwrap();
+        match sample.kind {
+            SampleKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -192,7 +184,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
                     // NOTE: even if path is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
@@ -224,7 +216,7 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            ChangeKind::Patch => {
+            SampleKind::Patch => {
                 warn!("Received PATCH for {}: not yet supported", sample.res_name);
             }
         }
@@ -232,15 +224,16 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        trace!("on_query for {}", query.res_name());
-        if !query.res_name().contains('*') {
-            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(query.res_name()) {
+        trace!("on_query for {}", query.key_selector());
+        if !query.key_selector().contains('*') {
+            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(query.key_selector())
+            {
                 query.reply(sample.clone()).await;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if resource_name::intersect(query.res_name(), &sample.res_name) {
+                    if resource_name::intersect(query.key_selector(), &sample.res_name) {
                         let s: Sample = sample.clone();
                         query.reply(s).await;
                     }

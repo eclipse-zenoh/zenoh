@@ -57,7 +57,7 @@ macro_rules! zgetbatch {
                     drop(refill_guard);
                     // Yield this thread to not spin the msg pusher
                     thread::yield_now();
-                    return;
+                    return false;
                 }
 
                 // Drop the stage_in and refill guards and wait for the batches to be available
@@ -65,14 +65,14 @@ macro_rules! zgetbatch {
 
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
-                    return;
+                    return false;
                 }
 
                 refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
 
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
-                    return;
+                    return false;
                 }
 
                 $stage_in = zlock!($self.stage_in[$priority]);
@@ -300,7 +300,11 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_transport_message(&self, message: TransportMessage, priority: Priority) {
+    pub(crate) fn push_transport_message(
+        &self,
+        mut message: TransportMessage,
+        priority: Priority,
+    ) -> bool {
         // Check it is a valid conduit
         let priority = if self.is_qos() { priority as usize } else { 0 };
         let mut in_guard = zlock!(self.stage_in[priority]);
@@ -309,10 +313,10 @@ impl TransmissionPipeline {
             () => {
                 // Get the current serialization batch
                 let batch = zgetbatch!(self, priority, in_guard, false);
-                if batch.serialize_transport_message(&message) {
+                if batch.serialize_transport_message(&mut message) {
                     self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
-                    return;
+                    return true;
                 }
             };
         }
@@ -339,10 +343,12 @@ impl TransmissionPipeline {
             "Transport message dropped because it can not be fragmented: {:?}",
             message
         );
+
+        false
     }
 
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, mut message: ZenohMessage) {
+    pub(crate) fn push_zenoh_message(&self, mut message: ZenohMessage) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let priority = if self.is_qos() {
             message.channel.priority as usize
@@ -364,14 +370,11 @@ impl TransmissionPipeline {
                 // Get the current serialization batch. Drop the message
                 // if no batches are available
                 let batch = zgetbatch!(self, priority, in_guard, message.is_droppable());
-                if batch.serialize_zenoh_message(
-                    &message,
-                    message.channel.priority,
-                    &mut ch_guard.sn,
-                ) {
+                let mp = message.channel.priority;
+                if batch.serialize_zenoh_message(&mut message, mp, &mut ch_guard.sn) {
                     self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
-                    return;
+                    return true;
                 }
             };
         }
@@ -397,16 +400,16 @@ impl TransmissionPipeline {
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        self.fragment_zenoh_message(message, priority, ch_guard, in_guard);
+        self.fragment_zenoh_message(message, priority, ch_guard, in_guard)
     }
 
     fn fragment_zenoh_message(
         &self,
-        message: ZenohMessage,
+        mut message: ZenohMessage,
         priority: usize,
         channel: MutexGuard<'_, TransportChannelTx>,
         stage_in: MutexGuard<'_, StageIn>,
-    ) {
+    ) -> bool {
         // Assign the stage_in to in_guard to avoid lifetime warnings
         let mut ch_guard = channel;
         let mut in_guard = stage_in;
@@ -414,7 +417,7 @@ impl TransmissionPipeline {
         // Take the expandable buffer and serialize the totality of the message
         let mut fragbuf = in_guard.fragbuf.take().unwrap();
         fragbuf.clear();
-        fragbuf.write_zenoh_message(&message);
+        fragbuf.write_zenoh_message(&mut message);
 
         // Fragment the whole message
         let mut to_write = fragbuf.len();
@@ -453,6 +456,8 @@ impl TransmissionPipeline {
         }
         // Reinsert the fragbuf
         in_guard.fragbuf = Some(fragbuf);
+
+        true
     }
 
     pub(crate) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
@@ -646,7 +651,7 @@ mod tests {
     fn tx_pipeline_flow() {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let data_info = None;
             let routing_context = None;
@@ -775,7 +780,7 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
@@ -887,7 +892,7 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
+            let key = ResKey::RName("test".into());
             let payload = ZBuf::from(vec![0u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
@@ -1020,7 +1025,7 @@ mod tests {
                     c_size.store(*size, Ordering::Release);
 
                     // Send reliable messages
-                    let key = ResKey::RName("/pipeline/thr".to_string());
+                    let key = ResKey::RName("/pipeline/thr".into());
                     let payload = ZBuf::from(vec![0u8; *size]);
                     let channel = Channel {
                         priority: Priority::Control,

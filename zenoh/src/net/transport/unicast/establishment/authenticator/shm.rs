@@ -15,6 +15,7 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
     PeerAuthenticatorTrait,
 };
+use crate::config::Config;
 use crate::net::protocol::core::{PeerId, Property, ZInt};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
@@ -26,7 +27,6 @@ use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::PseudoRng;
-use zenoh_util::properties::config::*;
 use zenoh_util::zcheck;
 
 const WBUF_SIZE: usize = 64;
@@ -155,10 +155,8 @@ impl SharedMemoryAuthenticator {
         }
     }
 
-    pub async fn from_config(
-        config: &ConfigProperties,
-    ) -> ZResult<Option<SharedMemoryAuthenticator>> {
-        let is_shm: bool = zparse!(config.get_or(&ZN_SHM_KEY, ZN_SHM_DEFAULT))?;
+    pub async fn from_config(config: &Config) -> ZResult<Option<SharedMemoryAuthenticator>> {
+        let is_shm: bool = config.zero_copy().unwrap_or(true);
         if is_shm {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();

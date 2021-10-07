@@ -117,7 +117,10 @@ pub(crate) trait LinkUnicastTrait: Send + Sync {
 }
 
 impl LinkUnicast {
-    pub(crate) async fn write_transport_message(&self, msg: TransportMessage) -> ZResult<()> {
+    pub(crate) async fn write_transport_message(
+        &self,
+        msg: &mut TransportMessage,
+    ) -> ZResult<usize> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         if self.is_streamed() {
@@ -125,7 +128,7 @@ impl LinkUnicast {
             wbuf.write_bytes(&[0u8, 0u8]);
         }
         // Serialize the message
-        wbuf.write_transport_message(&msg);
+        wbuf.write_transport_message(msg);
         if self.is_streamed() {
             // Write the length on the first 16 bits
             let length: u16 = wbuf.len() as u16 - 2;
@@ -136,7 +139,9 @@ impl LinkUnicast {
         wbuf.copy_into_slice(&mut buffer[..]);
 
         // Send the message on the link
-        self.0.write_all(&buffer).await
+        let _ = self.0.write_all(&buffer).await?;
+
+        Ok(buffer.len())
     }
 
     pub(crate) async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
@@ -241,15 +246,20 @@ pub(crate) trait LinkMulticastTrait: Send + Sync {
 }
 
 impl LinkMulticast {
-    pub(crate) async fn write_transport_message(&self, msg: TransportMessage) -> ZResult<()> {
+    pub(crate) async fn write_transport_message(
+        &self,
+        msg: &mut TransportMessage,
+    ) -> ZResult<usize> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_transport_message(&msg);
+        wbuf.write_transport_message(msg);
         let mut buffer = vec![0u8; wbuf.len()];
         wbuf.copy_into_slice(&mut buffer[..]);
 
         // Send the message on the link
-        self.0.write_all(&buffer).await
+        let _ = self.0.write_all(&buffer).await;
+
+        Ok(buffer.len())
     }
 
     //     pub(crate) async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {

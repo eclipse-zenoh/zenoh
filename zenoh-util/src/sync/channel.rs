@@ -15,13 +15,70 @@ use std::time::{Duration, Instant};
 
 pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 
+/// A trait that mimics the [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver).
+///
+/// Most structs implementing this trait in zenoh also implement the [`Stream`](async_std::stream::Stream)
+/// trait so that values can be accessed synchronously or asynchronously.
 pub trait Receiver<T> {
+    /// Attempts to wait for a value on this receiver, returning an error if the
+    /// corresponding channel has hung up.
+    ///
+    /// This function will always block the current thread if there is no data
+    /// available and it's possible for more data to be sent (at least one sender
+    /// still exists). Once a message is sent to the corresponding sender,
+    /// this receiver will wake up and return that message.
+    ///
+    /// If the corresponding sender has disconnected, or it disconnects while
+    /// this call is blocking, this call will wake up and return [`Err`] to
+    /// indicate that no more messages can ever be received on this channel.
+    /// However, since channels are buffered, messages sent before the disconnect
+    /// will still be properly received.
     fn recv(&self) -> Result<T, RecvError>;
 
+    /// Attempts to return a pending value on this receiver without blocking.
+    ///
+    /// This method will never block the caller in order to wait for data to
+    /// become available. Instead, this will always return immediately with a
+    /// possible option of pending data on the channel.
+    ///
+    /// This is useful for a flavor of "optimistic check" before deciding to
+    /// block on a receiver.
+    ///
+    /// Compared with [`recv`], this function has two failure cases instead of one
+    /// (one for disconnection, one for an empty buffer).
+    ///
+    /// [`recv`]: Self::recv
     fn try_recv(&self) -> Result<T, TryRecvError>;
 
+    /// Attempts to wait for a value on this receiver, returning an error if the
+    /// corresponding channel has hung up, or if it waits more than `timeout`.
+    ///
+    /// This function will always block the current thread if there is no data
+    /// available and it's possible for more data to be sent (at least one sender
+    /// still exists). Once a message is sent to the corresponding sender,
+    /// this receiver will wake up and return that
+    /// message.
+    ///
+    /// If the corresponding sender has disconnected, or it disconnects while
+    /// this call is blocking, this call will wake up and return [`Err`] to
+    /// indicate that no more messages can ever be received on this channel.
+    /// However, since channels are buffered, messages sent before the disconnect
+    /// will still be properly received.
     fn recv_timeout(&self, timeout: Duration) -> Result<T, RecvTimeoutError>;
 
+    /// Attempts to wait for a value on this receiver, returning an error if the
+    /// corresponding channel has hung up, or if `deadline` is reached.
+    ///
+    /// This function will always block the current thread if there is no data
+    /// available and it's possible for more data to be sent. Once a message is
+    /// sent to the corresponding sender, then this
+    /// receiver will wake up and return that message.
+    ///
+    /// If the corresponding sender has disconnected, or it disconnects while
+    /// this call is blocking, this call will wake up and return [`Err`] to
+    /// indicate that no more messages can ever be received on this channel.
+    /// However, since channels are buffered, messages sent before the disconnect
+    /// will still be properly received.
     fn recv_deadline(&self, deadline: Instant) -> Result<T, RecvTimeoutError>;
 }
 
@@ -88,6 +145,13 @@ macro_rules! zreceiver{
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
                 use futures_lite::StreamExt;
                 self.stream.poll_next(cx)
+            }
+        }
+
+        impl$(<$( $lt ),+>)? futures::stream::FusedStream for $struct_name$(<$( $lt ),+>)? {
+            #[inline(always)]
+            fn is_terminated(&self) -> bool {
+                self.stream.is_terminated()
             }
         }
 

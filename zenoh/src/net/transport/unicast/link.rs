@@ -16,6 +16,8 @@ use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
+#[cfg(feature = "stats")]
+use super::TransportUnicastStatsAtomic;
 use crate::net::link::LinkUnicast;
 use async_std::prelude::*;
 use async_std::task;
@@ -87,7 +89,14 @@ impl TransportLinkUnicast {
             let c_link = self.inner.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
-                let res = tx_task(pipeline, c_link.clone(), keep_alive).await;
+                let res = tx_task(
+                    pipeline,
+                    c_link.clone(),
+                    keep_alive,
+                    #[cfg(feature = "stats")]
+                    c_transport.stats.clone(),
+                )
+                .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -170,13 +179,22 @@ async fn tx_task(
     pipeline: Arc<TransmissionPipeline>,
     link: LinkUnicast,
     keep_alive: Duration,
+    #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
 ) -> ZResult<()> {
     loop {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {
                 Some((batch, priority)) => {
                     // Send the buffer on the link
-                    let _ = link.write_all(batch.as_bytes()).await?;
+                    let bytes = batch.as_bytes();
+                    let _ = link.write_all(bytes).await?;
+
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_tx_t_msgs(batch.stats.t_msgs);
+                        stats.inc_tx_bytes(bytes.len());
+                    }
+
                     // Reinsert the batch into the queue
                     pipeline.refill(batch, priority);
                 }
@@ -202,6 +220,12 @@ async fn tx_task(
                 let e = format!("{}: flush failed after {} ms", link, keep_alive.as_millis());
                 zerror2!(ZErrorKind::IoError { descr: e })
             })??;
+
+        #[cfg(feature = "stats")]
+        {
+            stats.inc_tx_t_msgs(b.stats.t_msgs);
+            stats.inc_tx_bytes(b.len());
+        }
     }
 
     Ok(())
@@ -260,9 +284,17 @@ async fn rx_task_stream(
             Action::Read(n) => {
                 zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
+                #[cfg(feature = "stats")]
+                transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
+
                 while zbuf.can_read() {
                     match zbuf.read_transport_message() {
-                        Some(msg) => transport.receive_message(msg, &link)?,
+                        Some(msg) => {
+                            #[cfg(feature = "stats")]
+                            transport.stats.inc_rx_t_msgs(1);
+
+                            transport.receive_message(msg, &link)?
+                        }
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });
@@ -328,13 +360,21 @@ async fn rx_task_dgram(
                     return zerror!(ZErrorKind::IoError { descr: e });
                 }
 
+                #[cfg(feature = "stats")]
+                transport.stats.inc_rx_bytes(n);
+
                 // Add the received bytes to the ZBuf for deserialization
                 zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
                     match zbuf.read_transport_message() {
-                        Some(msg) => transport.receive_message(msg, &link)?,
+                        Some(msg) => {
+                            #[cfg(feature = "stats")]
+                            transport.stats.inc_rx_t_msgs(1);
+
+                            transport.receive_message(msg, &link)?
+                        }
                         None => {
                             let e = format!("{}: decoding error", link);
                             return zerror!(ZErrorKind::IoError { descr: e });

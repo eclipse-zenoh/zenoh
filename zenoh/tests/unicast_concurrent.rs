@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, ResKey, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -108,7 +108,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         .max_links(endpoint01.len() + endpoint02.len())
         .build();
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::PEER)
+        .whatami(WhatAmI::Peer)
         .pid(peer_id01)
         .unicast(unicast)
         .build(peer_sh01.clone());
@@ -120,7 +120,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         .max_links(endpoint01.len() + endpoint02.len())
         .build();
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::PEER)
+        .whatami(WhatAmI::Peer)
         .pid(peer_id02)
         .unicast(unicast)
         .build(peer_sh02.clone());
@@ -187,7 +187,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let key = ResKey::RName("/test02".to_string());
+        let key = ResKey::RName("/test02".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),
@@ -297,7 +297,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let key = ResKey::RName("/test02".to_string());
+        let key = ResKey::RName("/test02".into());
         let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),

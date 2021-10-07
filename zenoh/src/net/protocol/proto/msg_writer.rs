@@ -76,12 +76,16 @@ impl WBuf {
     /*************************************/
     /*            TRANSPORT              */
     /*************************************/
-    pub fn write_transport_message(&mut self, msg: &TransportMessage) -> bool {
+    #[allow(clippy::let_and_return)]
+    pub fn write_transport_message(&mut self, msg: &mut TransportMessage) -> bool {
+        #[cfg(feature = "stats")]
+        let start_written = self.len();
+
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
 
-        match &msg.body {
+        let res = match &mut msg.body {
             TransportBody::Frame(frame) => self.write_frame(frame),
             TransportBody::Scout(scout) => self.write_scout(scout),
             TransportBody::Hello(hello) => self.write_hello(hello),
@@ -96,20 +100,28 @@ impl WBuf {
             TransportBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
             TransportBody::Ping(ping) => self.write_ping(ping),
             TransportBody::Pong(pong) => self.write_pong(pong),
+        };
+
+        #[cfg(feature = "stats")]
+        {
+            let stop_written = self.len();
+            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
         }
+
+        res
     }
 
-    fn write_frame(&mut self, frame: &Frame) -> bool {
+    fn write_frame(&mut self, frame: &mut Frame) -> bool {
         if frame.channel.priority != Priority::default() {
             zcheck!(self.write_deco_priority(frame.channel.priority))
         }
 
         zcheck!(self.write(frame.header()));
         zcheck!(self.write_zint(frame.sn));
-        match &frame.payload {
+        match &mut frame.payload {
             FramePayload::Fragment { buffer, .. } => self.write_zslice(buffer.clone()),
             FramePayload::Messages { messages } => {
-                for m in messages.iter() {
+                for m in messages.iter_mut() {
                     zcheck!(self.write_zenoh_message(m));
                 }
                 true
@@ -120,7 +132,7 @@ impl WBuf {
     fn write_scout(&mut self, scout: &Scout) -> bool {
         zcheck!(self.write(scout.header()));
         match scout.what {
-            Some(w) => self.write_zint(w),
+            Some(w) => self.write_zint(w.into()),
             None => true,
         }
     }
@@ -131,8 +143,8 @@ impl WBuf {
             zcheck!(self.write_peerid(pid));
         }
         if let Some(w) = hello.whatami {
-            if w != whatami::ROUTER {
-                zcheck!(self.write_zint(w));
+            if w != WhatAmI::Router {
+                zcheck!(self.write_zint(w.into()));
             }
         }
         if let Some(locs) = hello.locators.as_ref() {
@@ -148,7 +160,7 @@ impl WBuf {
             zcheck!(self.write_zint(init_syn.options()));
         }
         zcheck!(self.write(init_syn.version));
-        zcheck!(self.write_zint(init_syn.whatami));
+        zcheck!(self.write_zint(init_syn.whatami.into()));
         zcheck!(self.write_peerid(&init_syn.pid));
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
@@ -161,7 +173,7 @@ impl WBuf {
         if init_ack.has_options() {
             zcheck!(self.write_zint(init_ack.options()));
         }
-        zcheck!(self.write_zint(init_ack.whatami));
+        zcheck!(self.write_zint(init_ack.whatami.into()));
         zcheck!(self.write_peerid(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
@@ -199,7 +211,7 @@ impl WBuf {
             zcheck!(self.write_zint(join.options()));
         }
         zcheck!(self.write(join.version));
-        zcheck!(self.write_zint(join.whatami));
+        zcheck!(self.write_zint(join.whatami.into()));
         zcheck!(self.write_peerid(&join.pid));
         if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
@@ -271,7 +283,11 @@ impl WBuf {
     /*************************************/
     /*              ZENOH                */
     /*************************************/
-    pub fn write_zenoh_message(&mut self, msg: &ZenohMessage) -> bool {
+    #[allow(clippy::let_and_return)]
+    pub fn write_zenoh_message(&mut self, msg: &mut ZenohMessage) -> bool {
+        #[cfg(feature = "stats")]
+        let start_written = self.len();
+
         if let Some(attachment) = msg.attachment.as_ref() {
             zcheck!(self.write_deco_attachment(attachment));
         }
@@ -282,7 +298,7 @@ impl WBuf {
             zcheck!(self.write_deco_priority(msg.channel.priority));
         }
 
-        match &msg.body {
+        let res = match &msg.body {
             ZenohBody::Data(data) => self.write_data(data),
             ZenohBody::Declare(declare) => self.write_declare(declare),
             ZenohBody::Unit(unit) => self.write_unit(unit),
@@ -291,7 +307,15 @@ impl WBuf {
             ZenohBody::LinkStateList(link_state_list) => {
                 self.write_link_state_list(link_state_list)
             }
+        };
+
+        #[cfg(feature = "stats")]
+        {
+            let stop_written = self.len();
+            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
         }
+
+        res
     }
 
     #[inline(always)]
@@ -342,8 +366,9 @@ impl WBuf {
         if let Some(kind) = info.kind {
             zcheck!(self.write_zint(kind));
         }
-        if let Some(enc) = info.encoding {
-            zcheck!(self.write_zint(enc));
+        if let Some(enc) = info.encoding.as_ref() {
+            zcheck!(self.write_zint(enc.prefix));
+            zcheck!(self.write_string(enc.suffix.as_ref()));
         }
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
@@ -360,7 +385,13 @@ impl WBuf {
         if let Some(sn) = info.first_router_sn {
             zcheck!(self.write_zint(sn));
         }
+        true
+    }
 
+    #[inline(always)]
+    fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool {
+        zcheck!(self.write_zint(info.complete));
+        zcheck!(self.write_zint(info.distance));
         true
     }
 
@@ -399,13 +430,16 @@ impl WBuf {
                 let header = q.header();
                 zcheck!(self.write(header));
                 zcheck!(self.write_reskey(&q.key));
+                zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
-                    zcheck!(self.write_zint(q.kind))
+                    zcheck!(self.write_queryable_info(&q.info));
                 }
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                self.write(fq.header()) && self.write_reskey(&fq.key)
+                zcheck!(self.write(fq.header()) && self.write_reskey(&fq.key));
+                zcheck!(self.write_zint(fq.kind));
+                true
             }
         }
     }
@@ -448,7 +482,7 @@ impl WBuf {
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write(query.header()));
         zcheck!(self.write_reskey(&query.key));
-        zcheck!(self.write_string(&query.predicate));
+        zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));
@@ -472,8 +506,8 @@ impl WBuf {
         if let Some(pid) = link_state.pid.as_ref() {
             zcheck!(self.write_peerid(pid));
         }
-        if let Some(whatami) = link_state.whatami.as_ref() {
-            zcheck!(self.write_zint(*whatami));
+        if let Some(&whatami) = link_state.whatami.as_ref() {
+            zcheck!(self.write_zint(whatami.into()));
         }
         if let Some(locators) = link_state.locators.as_ref() {
             zcheck!(self.write_locators(locators));
@@ -495,9 +529,11 @@ impl WBuf {
         #![allow(clippy::unnecessary_cast)]
         match target {
             Target::BestMatching => self.write_zint(0 as ZInt),
-            Target::Complete { n } => self.write_zint(1 as ZInt) && self.write_zint(*n),
-            Target::All => self.write_zint(2 as ZInt),
+            Target::All => self.write_zint(1 as ZInt),
+            Target::AllComplete => self.write_zint(2 as ZInt),
             Target::None => self.write_zint(3 as ZInt),
+            #[cfg(feature = "complete_n")]
+            Target::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
         }
     }
 
@@ -515,10 +551,5 @@ impl WBuf {
                 | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)
                 | (WBuf::write_consolidation_mode(consolidation.reception)),
         )
-    }
-
-    fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
-        self.write_u64_as_zint(tstamp.get_time().as_u64())
-            && self.write_bytes_array(tstamp.get_id().as_slice())
     }
 }

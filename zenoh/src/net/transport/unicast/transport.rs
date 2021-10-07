@@ -19,6 +19,8 @@ use super::common::{
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
+#[cfg(feature = "stats")]
+use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
@@ -70,6 +72,9 @@ pub(crate) struct TransportUnicastInner {
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // The transport can do shm
     pub(super) is_shm: bool,
+    // Transport statistics
+    #[cfg(feature = "stats")]
+    pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
 pub(crate) struct TransportUnicastConfig {
@@ -141,6 +146,8 @@ impl TransportUnicastInner {
             callback: Arc::new(RwLock::new(None)),
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm: config.is_shm,
+            #[cfg(feature = "stats")]
+            stats: Arc::new(TransportUnicastStatsAtomic::default()),
         }
     }
 

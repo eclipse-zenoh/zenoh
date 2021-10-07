@@ -22,7 +22,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, ResKey, WhatAmI};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
@@ -31,7 +31,7 @@ mod tests {
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh::net::CongestionControl;
+    use zenoh::publisher::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
@@ -136,7 +136,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
             .unicast(
                 TransportManagerConfigUnicast::builder()
@@ -151,7 +151,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
             .unicast(
                 TransportManagerConfigUnicast::builder()
@@ -166,7 +166,7 @@ mod tests {
         // Create a peer manager with zero-copy authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_net01)
             .build(peer_net01_handler.clone());
         let peer_net01_manager = TransportManager::new(config);
@@ -225,7 +225,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -282,7 +282,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = ResKey::RName("/test".into());
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),

@@ -53,8 +53,8 @@ zenoh = { path = "../../zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 
 [[example]]
-name = "zn_serve_sse"
-path = "examples/zenoh-net/zn_serve_sse.rs"
+name = "z_serve_sse"
+path = "examples/z_serve_sse.rs"
 
 [package.metadata.deb]
 name = "zenoh-plugin-rest"

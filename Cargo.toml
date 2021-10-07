@@ -17,6 +17,7 @@ members = [
   "zenoh",
   "zenoh-util",
   "zenoh-ext",
+  "zenoh-macros",
   "plugins/zenoh-plugin-trait",
   "plugins/example-plugin",
   "plugins/zenoh-plugin-rest",
@@ -25,13 +26,13 @@ members = [
 ]
 
 [profile.dev]
-debug=true
+debug = true
 opt-level = 0
 
 
 [profile.release]
-debug=false   # If you want debug symbol in release mode, set the env variable: RUSTFLAGS=-g
-lto="fat"
-codegen-units=1
-opt-level=3
-panic="abort"
+debug = false     # If you want debug symbol in release mode, set the env variable: RUSTFLAGS=-g
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"

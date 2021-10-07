@@ -201,7 +201,7 @@ async fn accept_send_init_ack(
 
     // Send the cookie
     let cookie: ZSlice = encrypted.into();
-    let message = TransportMessage::make_init_ack(
+    let mut message = TransportMessage::make_init_ack(
         whatami,
         apid,
         sn_resolution,
@@ -212,7 +212,7 @@ async fn accept_send_init_ack(
 
     // Send the message on the link
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -444,14 +444,14 @@ async fn accept_send_open_ack(
     input: AcceptInitTransportOutput,
 ) -> ZResult<AcceptOpenAckOutput> {
     // Build OpenAck message
-    let message = TransportMessage::make_open_ack(
+    let mut message = TransportMessage::make_open_ack(
         manager.config.unicast.lease,
         input.initial_sn,
         input.open_ack_attachment,
     );
 
     // Send the message on the link
-    let _ = link.write_transport_message(message).await?;
+    let _ = link.write_transport_message(&mut message).await?;
 
     let output = AcceptOpenAckOutput {
         transport: input.transport,

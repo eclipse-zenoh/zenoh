@@ -18,6 +18,7 @@ mod shm;
 #[cfg(feature = "auth_usrpwd")]
 mod userpassword;
 
+use crate::config::Config;
 use crate::net::link::{Link, Locator};
 use crate::net::protocol::core::{PeerId, Property, ZInt};
 #[cfg(feature = "auth_usrpwd")]
@@ -36,7 +37,6 @@ use std::ops::Deref;
 #[cfg(feature = "auth_usrpwd")]
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
-use zenoh_util::properties::config::*;
 
 /*************************************/
 /*              LINK                 */
@@ -51,7 +51,7 @@ pub struct LinkAuthenticator(Arc<dyn LinkUnicastAuthenticatorTrait + Send + Sync
 
 impl LinkAuthenticator {
     pub(crate) async fn from_config(
-        _config: &ConfigProperties,
+        _config: &crate::config::Config,
     ) -> ZResult<HashSet<LinkAuthenticator>> {
         Ok(HashSet::new())
     }
@@ -134,9 +134,7 @@ pub enum PeerAuthenticatorId {
 pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
-    pub(crate) async fn from_config(
-        config: &ConfigProperties,
-    ) -> ZResult<HashSet<PeerAuthenticator>> {
+    pub(crate) async fn from_config(config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
 
         #[cfg(feature = "auth_usrpwd")]

@@ -116,7 +116,7 @@ impl Cookie {
 
         let mut wbuf = WBuf::new(64, false);
 
-        zwrite!(wbuf.write_zint(self.whatami));
+        zwrite!(wbuf.write_zint(self.whatami.into()));
         zwrite!(wbuf.write_peerid(&self.pid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
         zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
@@ -142,7 +142,11 @@ impl Cookie {
 
         let mut zbuf = ZBuf::from(decrypted);
 
-        let whatami = zread!(zbuf.read_zint());
+        let whatami = WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| {
+            zerror2!(ZErrorKind::InvalidMessage {
+                descr: "Invalid Cookie".to_string()
+            })
+        })?;
         let pid = zread!(zbuf.read_peerid());
         let sn_resolution = zread!(zbuf.read_zint());
         let is_qos = zread!(zbuf.read()) == 1;
@@ -177,9 +181,9 @@ pub(super) async fn close_link(
         let peer_id = Some(manager.config.pid);
         let link_only = true;
         let attachment = None;
-        let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
+        let mut message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
         // Send the close message on the link
-        let _ = link.write_transport_message(message).await;
+        let _ = link.write_transport_message(&mut message).await;
     }
 
     // Close the link

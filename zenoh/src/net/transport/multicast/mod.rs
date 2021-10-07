@@ -19,6 +19,8 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
+#[cfg(feature = "stats")]
+use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::ZInt;
 use super::protocol::proto::{tmsg, ZenohMessage};
@@ -30,6 +32,46 @@ use std::sync::{Arc, Weak};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror2;
+
+/*************************************/
+/*              STATS                */
+/*************************************/
+#[cfg(feature = "stats")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "stats")]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "stats")]
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TransportMulticastStats {
+        pub tx_t_msgs,
+        pub tx_z_msgs,
+        pub tx_z_data_msgs,
+        pub tx_z_data_payload_bytes,
+        pub tx_z_data_reply_msgs,
+        pub tx_z_data_reply_payload_bytes,
+        pub tx_z_pull_msgs,
+        pub tx_z_query_msgs,
+        pub tx_z_declare_msgs,
+        pub tx_z_linkstate_msgs,
+        pub tx_z_unit_msgs,
+        pub tx_z_unit_reply_msgs,
+        pub tx_bytes,
+        pub rx_t_msgs,
+        pub rx_z_msgs,
+        pub rx_z_data_msgs,
+        pub rx_z_data_payload_bytes,
+        pub rx_z_data_reply_msgs,
+        pub rx_z_data_reply_payload_bytes,
+        pub rx_z_pull_msgs,
+        pub rx_z_query_msgs,
+        pub rx_z_declare_msgs,
+        pub rx_z_linkstate_msgs,
+        pub rx_z_unit_msgs,
+        pub rx_z_unit_reply_msgs,
+        pub rx_bytes,
+    }
+}
 
 /*************************************/
 /*       TRANSPORT MULTICAST         */
@@ -102,6 +144,11 @@ impl TransportMulticast {
     #[inline(always)]
     pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
         self.schedule(message)
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn get_stats(&self) -> ZResult<TransportMulticastStats> {
+        Ok(self.get_transport()?.stats.snapshot())
     }
 }
 

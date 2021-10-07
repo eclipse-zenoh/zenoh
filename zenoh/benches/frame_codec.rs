@@ -31,8 +31,8 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let res_key_set = [
         ResKey::RId(1),
-        ResKey::RName("/frame/bench".to_string()),
-        ResKey::RIdWithSuffix(1, "/frame/bench".to_string()),
+        ResKey::RName("/frame/bench".into()),
+        ResKey::RIdWithSuffix(1, "/frame/bench".into()),
     ];
 
     for p in &pld {
@@ -46,7 +46,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let congestion_control = CongestionControl::default();
             let info = None;
 
-            let msg = ZenohMessage::make_data(
+            let mut msg = ZenohMessage::make_data(
                 res_key,
                 payload,
                 channel,
@@ -59,7 +59,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             let mut wbuf = WBuf::new(batch_size, true);
             let mut num = 0;
-            while wbuf.write_zenoh_message(&msg) {
+            while wbuf.write_zenoh_message(&mut msg) {
                 num += 1;
             }
             drop(wbuf);
@@ -86,7 +86,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             let congestion_control = CongestionControl::default();
                             let info = None;
 
-                            let msg = ZenohMessage::make_data(
+                            let mut msg = ZenohMessage::make_data(
                                 res_key,
                                 payload,
                                 channel,
@@ -96,7 +96,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                                 None,
                                 None,
                             );
-                            wbuf.write_zenoh_message(&msg);
+                            wbuf.write_zenoh_message(&mut msg);
                             drop(msg);
                         }
                     })
@@ -120,7 +120,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             None,
                         );
                         for _ in 0..num {
-                            wbuf.write_zenoh_message(&msg);
+                            wbuf.write_zenoh_message(&mut msg);
                         }
                     })
                 },
@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             None,
                         );
                         for _ in 0..num {
-                            wbuf.write_zenoh_message(&msg);
+                            wbuf.write_zenoh_message(&mut msg);
                         }
                     })
                 },
@@ -160,7 +160,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     wbuf.write_frame_header(channel.priority, channel.reliability, 1, None, None);
 
                     for _ in 0..num {
-                        wbuf.write_zenoh_message(&msg);
+                        wbuf.write_zenoh_message(&mut msg);
                     }
 
                     let mut zbuf = ZBuf::from(&wbuf);
@@ -182,7 +182,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     wbuf.write_frame_header(channel.priority, channel.reliability, 1, None, None);
 
                     for _ in 0..num {
-                        wbuf.write_zenoh_message(&msg);
+                        wbuf.write_zenoh_message(&mut msg);
                     }
 
                     let mut zbuf = ZBuf::from(&wbuf);

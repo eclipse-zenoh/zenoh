@@ -55,7 +55,7 @@ async fn open_send_init_syn(
     }
 
     // Build and send the InitSyn message
-    let message = TransportMessage::make_init_syn(
+    let mut message = TransportMessage::make_init_syn(
         manager.config.version,
         manager.config.whatami,
         manager.config.pid,
@@ -64,7 +64,7 @@ async fn open_send_init_syn(
         attachment_from_properties(&auth.properties).ok(),
     );
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
@@ -232,14 +232,14 @@ async fn open_send_open_syn(
 ) -> IResult<OpenOpenSynOutput> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let message = TransportMessage::make_open_syn(
+    let mut message = TransportMessage::make_open_syn(
         lease,
         input.initial_sn_tx,
         input.cookie,
         input.open_syn_attachment,
     );
     let _ = link
-        .write_transport_message(message)
+        .write_transport_message(&mut message)
         .await
         .map_err(|e| (e, None))?;
 
