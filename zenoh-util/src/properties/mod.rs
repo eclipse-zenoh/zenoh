@@ -76,6 +76,16 @@ impl<T: KeyTranscoder> fmt::Debug for IntKeyProperties<T> {
     }
 }
 
+impl<T: KeyTranscoder> From<IntKeyProperties<T>> for HashMap<String, String> {
+    fn from(props: IntKeyProperties<T>) -> Self {
+        props
+            .0
+            .into_iter()
+            .filter_map(|(k, v)| T::decode(k).map(|k| (k, v)))
+            .collect()
+    }
+}
+
 impl<T: KeyTranscoder> From<HashMap<u64, String>> for IntKeyProperties<T> {
     fn from(map: HashMap<u64, String>) -> Self {
         Self(map, PhantomData)

@@ -153,9 +153,11 @@ fn main() {
             Config::default()
         };
 
-        config
-            .set_mode(Some(zenoh::config::WhatAmI::Router))
-            .unwrap();
+        if config.mode().is_none() {
+            config
+                .set_mode(Some(zenoh::config::WhatAmI::Router))
+                .unwrap();
+        }
 
         config
             .peers
@@ -183,14 +185,30 @@ fn main() {
                 }),
         );
 
-        config
-            .set_add_timestamp(Some(!args.is_present("no-timestamp")))
-            .unwrap();
-        config
-            .scouting
-            .multicast
-            .set_enabled(Some(!args.is_present("no-multicast-scouting")))
-            .unwrap();
+        match (
+            config.add_timestamp().is_none(),
+            args.is_present("no-timestamp"),
+        ) {
+            (_, true) => {
+                config.set_add_timestamp(Some(false)).unwrap();
+            }
+            (true, false) => {
+                config.set_add_timestamp(Some(true)).unwrap();
+            }
+            (false, false) => {}
+        };
+        match (
+            config.scouting.multicast.enabled().is_none(),
+            args.is_present("no-multicast-scouting"),
+        ) {
+            (_, true) => {
+                config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            }
+            (true, false) => {
+                config.scouting.multicast.set_enabled(Some(true)).unwrap();
+            }
+            (false, false) => {}
+        };
 
         for json in args.values_of("cfg").unwrap_or_default() {
             if let Some((key, value)) = json.split_once(':') {

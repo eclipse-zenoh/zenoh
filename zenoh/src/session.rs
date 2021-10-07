@@ -203,18 +203,18 @@ impl Session {
         }
     }
 
-    pub(super) fn new<C: std::convert::TryInto<Config, Error = Config> + Send + 'static>(
+    pub(super) fn new<C: std::convert::TryInto<Config> + Send + 'static>(
         config: C,
-    ) -> impl ZFuture<Output = ZResult<Session>> {
+    ) -> impl ZFuture<Output = ZResult<Session>>
+    where
+        <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
+    {
         zpinbox(async {
             let config: Config = match config.try_into() {
                 Ok(c) => c,
                 Err(e) => {
                     return zerror!(ZErrorKind::Other {
-                        descr: format!(
-                            "invalid configuration {}",
-                            serde_json::to_string(&e).unwrap()
-                        )
+                        descr: format!("invalid configuration {:?}", &e)
                     })
                 }
             };

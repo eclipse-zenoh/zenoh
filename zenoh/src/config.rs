@@ -29,7 +29,7 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_util::properties::config::*;
-use zenoh_util::properties::IntKeyProperties;
+use zenoh_util::properties::{IntKeyProperties, Properties};
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -85,7 +85,6 @@ fn config_keys() {
     dbg!(c.ikeys());
     dbg!(c.keys());
 }
-
 validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
@@ -214,6 +213,25 @@ validated_struct::validator! {
     }
 }
 
+#[test]
+fn config_deser() {
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        scouting: {
+          multicast: {
+            enabled: false,
+            autoconnect: "router"
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(*config.scouting().multicast().enabled(), Some(false))
+}
+
 impl Config {
     pub fn insert_json<K: AsRef<str>>(
         &mut self,
@@ -283,8 +301,13 @@ impl Config {
     }
 }
 
+impl std::fmt::Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
 #[test]
-#[ignore]
 fn config_from_json() {
     use validated_struct::ValidatedMap;
     let from_str = |s| serde_json::Deserializer::from_str(s);
@@ -322,14 +345,14 @@ impl<T: ValidatedMap> Notifier<T> {
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         {
-            self.inner.subscribers.lock().unwrap().push(tx);
+            zlock!(self.inner.subscribers).push(tx);
         }
         rx
     }
     pub fn notify<K: AsRef<str>>(&self, key: K) {
         let key: Arc<str> = Arc::from(key.as_ref());
         let mut marked = Vec::new();
-        let mut guard = self.inner.subscribers.lock().unwrap();
+        let mut guard = zlock!(self.inner.subscribers);
         for (i, sub) in guard.iter().enumerate() {
             if sub.send(key.clone()).is_err() {
                 marked.push(i)
@@ -341,7 +364,7 @@ impl<T: ValidatedMap> Notifier<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        self.inner.inner.lock().unwrap()
+        zlock!(self.inner.inner)
     }
 
     pub fn insert<'d, D: serde::Deserializer<'d>, K: AsRef<str>>(
@@ -354,7 +377,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, value)?;
         }
         self.notify(key);
@@ -371,7 +394,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, &mut serde_json::Deserializer::from_str(value))?;
         }
         self.notify(key);
@@ -388,7 +411,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, &mut json5::Deserializer::from_str(value)?)?;
         }
         self.notify(key);
@@ -396,7 +419,7 @@ impl<T: ValidatedMap> Notifier<T> {
     }
 
     pub fn get<'a, K: AsRef<str>>(&'a self, key: K) -> Result<GetGuard<'a, T>, GetError> {
-        let guard: MutexGuard<'a, T> = self.inner.inner.lock().unwrap();
+        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
         // Safety: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
@@ -426,7 +449,6 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
 
 impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
     type Error = Config;
-
     fn try_from(value: &'a HashMap<ZInt, String>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
@@ -441,9 +463,32 @@ impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
     }
 }
 
+impl TryFrom<HashMap<ZInt, String>> for Config {
+    type Error = Config;
+    fn try_from(value: HashMap<ZInt, String>) -> Result<Self, Self::Error> {
+        let mut s: Self = Default::default();
+        let mut merge_error = false;
+        for (key, value) in value {
+            s.iset(key, value).is_err().then(|| merge_error = true);
+        }
+        if merge_error || s.validate_rec() {
+            Ok(s)
+        } else {
+            Err(s)
+        }
+    }
+}
+
+impl TryFrom<Properties> for Config {
+    type Error = Config;
+    fn try_from(value: Properties) -> Result<Self, Self::Error> {
+        let props: IntKeyProperties<ConfigTranscoder> = value.into();
+        Config::try_from(props)
+    }
+}
+
 impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
     type Error = Config;
-
     fn try_from(value: &'a IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;
@@ -460,7 +505,6 @@ impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
 
 impl TryFrom<IntKeyProperties<ConfigTranscoder>> for Config {
     type Error = Config;
-
     fn try_from(value: IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
         let mut s: Self = Default::default();
         let mut merge_error = false;

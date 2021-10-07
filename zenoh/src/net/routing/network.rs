@@ -655,15 +655,15 @@ impl Network {
         });
 
         for tree_root_idx in &indexes {
-            let (distances, path) =
-                petgraph::algo::bellman_ford(&self.graph, *tree_root_idx).unwrap();
+            let paths = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx).unwrap();
 
             if tree_root_idx.index() == 0 {
-                self.distances = distances;
+                self.distances = paths.distances;
             }
 
             if log::log_enabled!(log::Level::Debug) {
-                let ps: Vec<Option<String>> = path
+                let ps: Vec<Option<String>> = paths
+                    .predecessors
                     .iter()
                     .enumerate()
                     .map(|(is, o)| {
@@ -679,10 +679,10 @@ impl Network {
                 log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
             }
 
-            self.trees[tree_root_idx.index()].parent = path[self.idx.index()];
+            self.trees[tree_root_idx.index()].parent = paths.predecessors[self.idx.index()];
 
             for idx in &indexes {
-                if let Some(parent_idx) = path[idx.index()] {
+                if let Some(parent_idx) = paths.predecessors[idx.index()] {
                     if parent_idx == self.idx {
                         self.trees[tree_root_idx.index()].childs.push(*idx);
                     }
@@ -704,7 +704,7 @@ impl Network {
                 {
                     let mut direction = None;
                     let mut current = *destination;
-                    while let Some(parent) = path[current.index()] {
+                    while let Some(parent) = paths.predecessors[current.index()] {
                         if parent == self.idx {
                             direction = Some(current);
                             break;
