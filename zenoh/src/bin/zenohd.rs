@@ -224,7 +224,6 @@ fn main() {
         }
 
         log::debug!("Config: {:?}", &config);
-        assert_eq!(*config.scouting().multicast().enabled(), Some(false));
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {
             Ok(runtime) => runtime,
