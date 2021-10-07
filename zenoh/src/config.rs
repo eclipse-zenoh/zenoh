@@ -345,14 +345,14 @@ impl<T: ValidatedMap> Notifier<T> {
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         {
-            self.inner.subscribers.lock().unwrap().push(tx);
+            zlock!(self.inner.subscribers).push(tx);
         }
         rx
     }
     pub fn notify<K: AsRef<str>>(&self, key: K) {
         let key: Arc<str> = Arc::from(key.as_ref());
         let mut marked = Vec::new();
-        let mut guard = self.inner.subscribers.lock().unwrap();
+        let mut guard = zlock!(self.inner.subscribers);
         for (i, sub) in guard.iter().enumerate() {
             if sub.send(key.clone()).is_err() {
                 marked.push(i)
@@ -364,7 +364,7 @@ impl<T: ValidatedMap> Notifier<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        self.inner.inner.lock().unwrap()
+        zlock!(self.inner.inner)
     }
 
     pub fn insert<'d, D: serde::Deserializer<'d>, K: AsRef<str>>(
@@ -377,7 +377,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, value)?;
         }
         self.notify(key);
@@ -394,7 +394,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, &mut serde_json::Deserializer::from_str(value))?;
         }
         self.notify(key);
@@ -411,7 +411,7 @@ impl<T: ValidatedMap> Notifier<T> {
     {
         let key = key.as_ref();
         {
-            let mut guard = self.inner.inner.lock().unwrap();
+            let mut guard = zlock!(self.inner.inner);
             guard.insert(key, &mut json5::Deserializer::from_str(value)?)?;
         }
         self.notify(key);
@@ -419,7 +419,7 @@ impl<T: ValidatedMap> Notifier<T> {
     }
 
     pub fn get<'a, K: AsRef<str>>(&'a self, key: K) -> Result<GetGuard<'a, T>, GetError> {
-        let guard: MutexGuard<'a, T> = self.inner.inner.lock().unwrap();
+        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
         // Safety: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
