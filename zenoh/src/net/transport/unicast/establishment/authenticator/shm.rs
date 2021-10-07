@@ -15,7 +15,7 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use crate::config::Config;
-use crate::net::protocol::core::{PeerId, Property, ZInt};
+use crate::net::protocol::core::{PeerId, ZInt};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
@@ -205,30 +205,26 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<Option<Property>> {
+    ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
             shm: self.buffer.info.serialize().unwrap().into(),
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
-        let zbuf: ZBuf = wbuf.into();
+        let attachment: ZBuf = wbuf.into();
 
-        let prop = Property {
-            key: self.id() as ZInt,
-            value: zbuf.to_vec(),
-        };
-        Ok(Some(prop))
+        Ok(Some(attachment.to_vec()))
     }
 
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
         cookie: &Cookie,
-        property: Option<Property>,
-    ) -> ZResult<(Option<Property>, Option<Property>)> {
+        property: Option<Vec<u8>>,
+    ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
         let mut zbuf: ZBuf = match property {
-            Some(p) => p.value.into(),
+            Some(p) => p.into(),
             None => {
                 log::debug!("Peer {} did not express interest in SHM", cookie.pid);
                 return Ok((None, None));
@@ -283,13 +279,9 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_shm(&init_ack_property);
-        let zbuf: ZBuf = wbuf.into();
+        let attachment: ZBuf = wbuf.into();
 
-        let prop = Property {
-            key: self.id() as ZInt,
-            value: zbuf.to_vec(),
-        };
-        Ok((Some(prop), None))
+        Ok((Some(attachment.to_vec()), None))
     }
 
     async fn handle_init_ack(
@@ -297,10 +289,10 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
         _sn_resolution: ZInt,
-        property: Option<Property>,
-    ) -> ZResult<Option<Property>> {
+        property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
         let mut zbuf: ZBuf = match property {
-            Some(p) => p.value.into(),
+            Some(p) => p.into(),
             None => {
                 log::debug!("Peer {} did not express interest in shared memory", peer_id);
                 return Ok(None);
@@ -345,12 +337,9 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             // Encode the OpenSyn property
             let mut wbuf = WBuf::new(WBUF_SIZE, false);
             wbuf.write_open_syn_property_shm(&open_syn_property);
-            let zbuf: ZBuf = wbuf.into();
-            let prop = Property {
-                key: self.id() as ZInt,
-                value: zbuf.to_vec(),
-            };
-            Ok(Some(prop))
+            let attachment: ZBuf = wbuf.into();
+
+            Ok(Some(attachment.to_vec()))
         } else {
             zerror!(ZErrorKind::SharedMemory {
                 descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
@@ -362,11 +351,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         &self,
         link: &AuthenticatedPeerLink,
         _cookie: &Cookie,
-        property: (Option<Property>, Option<Property>),
-    ) -> ZResult<Option<Property>> {
+        property: (Option<Vec<u8>>, Option<Vec<u8>>),
+    ) -> ZResult<Option<Vec<u8>>> {
         let (attachment, _cookie) = property;
         let mut zbuf: ZBuf = match attachment {
-            Some(p) => p.value.into(),
+            Some(p) => p.into(),
             None => {
                 log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
                 return Ok(None);
@@ -390,8 +379,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _property: Option<Property>,
-    ) -> ZResult<Option<Property>> {
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 

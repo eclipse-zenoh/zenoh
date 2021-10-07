@@ -15,7 +15,7 @@ use super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
+use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{
     tmsg, Attachment, Close, OpenAck, TransportBody, TransportMessage,
@@ -50,7 +50,12 @@ async fn open_send_init_syn(
             .await
             .map_err(|e| (e, None))?;
         if let Some(att) = att.take() {
-            ps_attachment.insert(att).map_err(|e| (e, None))?;
+            ps_attachment
+                .insert(Property {
+                    key: pa.id().into(),
+                    value: att,
+                })
+                .map_err(|e| (e, None))?;
         }
     }
 
@@ -180,7 +185,7 @@ async fn open_recv_init_ack(
                 auth_link,
                 &init_ack.pid,
                 sn_resolution,
-                init_ack_properties.remove(pa.id() as ZInt),
+                init_ack_properties.remove(pa.id().into()).map(|x| x.value),
             )
             .await;
 
@@ -204,7 +209,12 @@ async fn open_recv_init_ack(
 
         let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         if let Some(att) = att.take() {
-            ps_attachment.insert(att).map_err(|e| (e, None))?;
+            ps_attachment
+                .insert(Property {
+                    key: pa.id().into(),
+                    value: att,
+                })
+                .map_err(|e| (e, None))?;
         }
     }
 
@@ -331,7 +341,10 @@ async fn open_recv_open_ack(
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
         let _ = pa
-            .handle_open_ack(auth_link, opean_ack_properties.remove(pa.id() as ZInt))
+            .handle_open_ack(
+                auth_link,
+                opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
+            )
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     }

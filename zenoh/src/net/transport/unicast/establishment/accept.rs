@@ -16,7 +16,7 @@ use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{Cookie, EstablishmentProperties};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
+use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{
     tmsg, Attachment, Close, OpenSyn, TransportBody, TransportMessage,
@@ -171,31 +171,40 @@ async fn accept_send_init_ack(
 
     // Build the attachment
     let mut ps_attachment = EstablishmentProperties::new();
-    let mut properties_cookie = EstablishmentProperties::new();
+    let mut ps_cookie = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
         let (mut att, mut cke) = pa
             .handle_init_syn(
                 auth_link,
                 &cookie,
-                input.init_syn_properties.remove(pa.id() as ZInt),
+                input
+                    .init_syn_properties
+                    .remove(pa.id().into())
+                    .map(|x| x.value),
             )
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        if let Some(ps) = att.take() {
-            ps_attachment.insert(ps).map_err(|e| (e, None))?;
+        if let Some(att) = att.take() {
+            ps_attachment
+                .insert(Property {
+                    key: pa.id().into(),
+                    value: att,
+                })
+                .map_err(|e| (e, None))?;
         }
-        if let Some(ps) = cke.take() {
-            properties_cookie.insert(ps).map_err(|e| (e, None))?;
+        if let Some(cke) = cke.take() {
+            ps_cookie
+                .insert(Property {
+                    key: pa.id().into(),
+                    value: cke,
+                })
+                .map_err(|e| (e, None))?;
         }
     }
     let attachment = attachment_from_properties(&ps_attachment).ok();
 
     let encrypted = cookie
-        .encrypt(
-            &manager.cipher,
-            &mut *zasynclock!(manager.prng),
-            properties_cookie,
-        )
+        .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng), ps_cookie)
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Compute and store cookie hash
@@ -307,7 +316,7 @@ async fn accept_recv_open_syn(
     }
 
     // Decrypt the cookie with the cyper
-    let (cookie, mut properties_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
+    let (cookie, mut ps_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Validate with the peer authenticators
@@ -326,8 +335,8 @@ async fn accept_recv_open_syn(
                 auth_link,
                 &cookie,
                 (
-                    open_syn_properties.remove(pa.id() as ZInt),
-                    properties_cookie.remove(pa.id() as ZInt),
+                    open_syn_properties.remove(pa.id().into()).map(|x| x.value),
+                    ps_cookie.remove(pa.id().into()).map(|x| x.value),
                 ),
             )
             .await;
@@ -352,7 +361,12 @@ async fn accept_recv_open_syn(
 
         let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
         if let Some(att) = att.take() {
-            ps_attachment.insert(att).map_err(|e| (e, None))?;
+            ps_attachment
+                .insert(Property {
+                    key: pa.id().into(),
+                    value: att,
+                })
+                .map_err(|e| (e, None))?;
         }
     }
 

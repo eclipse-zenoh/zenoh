@@ -20,7 +20,7 @@ mod userpassword;
 
 use crate::config::Config;
 use crate::net::link::{Link, Locator};
-use crate::net::protocol::core::{PeerId, Property, ZInt};
+use crate::net::protocol::core::{PeerId, ZInt};
 #[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
 use crate::net::transport::unicast::establishment::Cookie;
@@ -130,6 +130,12 @@ pub enum PeerAuthenticatorId {
     PublicKey = 3,
 }
 
+impl Into<ZInt> for PeerAuthenticatorId {
+    fn into(self) -> ZInt {
+        self as ZInt
+    }
+}
+
 #[derive(Clone)]
 pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
@@ -218,7 +224,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
-    ) -> ZResult<Option<Property>>;
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Return the attachment to be included in the InitAck message to be sent
     /// in response of the authenticated InitSyn.
@@ -234,8 +240,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         cookie: &Cookie,
-        property: Option<Property>,
-    ) -> ZResult<(Option<Property>, Option<Property>)>; // (Attachment, Cookie)
+        property: Option<Vec<u8>>,
+    ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)>; // (Attachment, Cookie)
 
     /// Return the attachment to be included in the OpenSyn message to be sent
     /// in response of the authenticated InitAck.
@@ -254,8 +260,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
         sn_resolution: ZInt,
-        property: Option<Property>,
-    ) -> ZResult<Option<Property>>;
+        property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Return the attachment to be included in the OpenAck message to be sent
     /// in response of the authenticated OpenSyn.
@@ -271,8 +277,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         cookie: &Cookie,
-        property: (Option<Property>, Option<Property>), // (Attachment, Cookie)
-    ) -> ZResult<Option<Property>>;
+        property: (Option<Vec<u8>>, Option<Vec<u8>>), // (Attachment, Cookie)
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
     ///
@@ -284,8 +290,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     async fn handle_open_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        property: Option<Property>,
-    ) -> ZResult<Option<Property>>;
+        property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -325,7 +331,7 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<Option<Property>> {
+    ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
@@ -333,8 +339,8 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _cookie: &Cookie,
-        _property: Option<Property>,
-    ) -> ZResult<(Option<Property>, Option<Property>)> {
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
         Ok((None, None))
     }
 
@@ -343,8 +349,8 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
-        _property: Option<Property>,
-    ) -> ZResult<Option<Property>> {
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
@@ -352,16 +358,16 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _cookie: &Cookie,
-        _property: (Option<Property>, Option<Property>),
-    ) -> ZResult<Option<Property>> {
+        _property: (Option<Vec<u8>>, Option<Vec<u8>>),
+    ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _property: Option<Property>,
-    ) -> ZResult<Option<Property>> {
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
