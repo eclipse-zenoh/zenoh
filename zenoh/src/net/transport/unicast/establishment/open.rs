@@ -11,9 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::authenticator::{
-    AuthenticatedPeerLink, AuthenticatedPeerTransport, PeerAuthenticatorOutput,
-};
+use super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
@@ -22,6 +20,7 @@ use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{
     tmsg, Attachment, Close, OpenAck, TransportBody, TransportMessage,
 };
+use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::unicast::manager::Opened;
 use crate::net::transport::{TransportManager, TransportPeer};
@@ -38,20 +37,21 @@ type IResult<T> = Result<T, IError>;
 /*************************************/
 struct OpenInitSynOutput {
     sn_resolution: ZInt,
-    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_send_init_syn(
     manager: &TransportManager,
     link: &LinkUnicast,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> IResult<OpenInitSynOutput> {
-    let mut auth = PeerAuthenticatorOutput::new();
+    let mut ps_attachment = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
-        let ps = pa
+        let mut att = pa
             .get_init_syn_properties(auth_link, &manager.config.pid)
             .await
             .map_err(|e| (e, None))?;
-        auth = auth.merge(ps).map_err(|e| (e, None))?;
+        if let Some(att) = att.take() {
+            ps_attachment.insert(att).map_err(|e| (e, None))?;
+        }
     }
 
     // Build and send the InitSyn message
@@ -61,7 +61,7 @@ async fn open_send_init_syn(
         manager.config.pid,
         manager.config.sn_resolution,
         manager.config.unicast.is_qos,
-        attachment_from_properties(&auth.properties).ok(),
+        attachment_from_properties(&ps_attachment).ok(),
     );
     let _ = link
         .write_transport_message(&mut message)
@@ -70,7 +70,6 @@ async fn open_send_init_syn(
 
     let output = OpenInitSynOutput {
         sn_resolution: manager.config.sn_resolution,
-        auth_transport: auth.transport,
     };
     Ok(output)
 }
@@ -80,10 +79,10 @@ struct OpenInitAckOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     is_qos: bool,
+    is_shm: bool,
     initial_sn_tx: ZInt,
     cookie: ZSlice,
     open_syn_attachment: Option<Attachment>,
-    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_recv_init_ack(
     manager: &TransportManager,
@@ -166,28 +165,47 @@ async fn open_recv_init_ack(
         (sn_resolution, initial_sn_tx, false)
     };
 
-    let init_ack_properties = match msg.attachment.take() {
+    let mut init_ack_properties = match msg.attachment.take() {
         Some(att) => {
             properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => EstablishmentProperties::new(),
     };
 
-    let mut auth = PeerAuthenticatorOutput {
-        transport: input.auth_transport,
-        properties: EstablishmentProperties::new(),
-    };
+    let mut is_shm = false;
+    let mut ps_attachment = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
-        let ps = pa
+        let mut att = pa
             .handle_init_ack(
                 auth_link,
                 &init_ack.pid,
                 sn_resolution,
-                &init_ack_properties,
+                init_ack_properties.remove(pa.id() as ZInt),
             )
-            .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        auth = auth.merge(ps).map_err(|e| (e, None))?;
+            .await;
+
+        #[cfg(feature = "zero-copy")]
+        if pa.id() == PeerAuthenticatorId::Shm {
+            // Check if SHM has been validated from the other side
+            att = match att {
+                Ok(att) => {
+                    is_shm = att.is_some();
+                    Ok(att)
+                }
+                Err(e) => match e.get_kind() {
+                    ZErrorKind::SharedMemory { .. } => {
+                        is_shm = false;
+                        Ok(None)
+                    }
+                    _ => Err(e),
+                },
+            };
+        }
+
+        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        if let Some(att) = att.take() {
+            ps_attachment.insert(att).map_err(|e| (e, None))?;
+        }
     }
 
     if !is_opened {
@@ -208,10 +226,10 @@ async fn open_recv_init_ack(
         whatami: init_ack.whatami,
         sn_resolution,
         is_qos: init_ack.is_qos,
+        is_shm,
         initial_sn_tx,
         cookie: init_ack.cookie,
-        open_syn_attachment: attachment_from_properties(&auth.properties).ok(),
-        auth_transport: auth.transport,
+        open_syn_attachment: attachment_from_properties(&ps_attachment).ok(),
     };
     Ok(output)
 }
@@ -222,7 +240,7 @@ struct OpenOpenSynOutput {
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
     is_qos: bool,
-    auth_transport: AuthenticatedPeerTransport,
+    is_shm: bool,
 }
 async fn open_send_open_syn(
     manager: &TransportManager,
@@ -249,7 +267,7 @@ async fn open_send_open_syn(
         sn_resolution: input.sn_resolution,
         initial_sn_tx: input.initial_sn_tx,
         is_qos: input.is_qos,
-        auth_transport: input.auth_transport,
+        is_shm: input.is_shm,
     };
     Ok(output)
 }
@@ -259,10 +277,10 @@ struct OpenAckOutput {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     is_qos: bool,
+    is_shm: bool,
     initial_sn_tx: ZInt,
     initial_sn_rx: ZInt,
     lease: Duration,
-    auth_transport: AuthenticatedPeerTransport,
 }
 async fn open_recv_open_ack(
     manager: &TransportManager,
@@ -305,7 +323,7 @@ async fn open_recv_open_ack(
         }
     };
 
-    let opean_ack_properties = match msg.attachment.take() {
+    let mut opean_ack_properties = match msg.attachment.take() {
         Some(att) => {
             properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
@@ -313,7 +331,7 @@ async fn open_recv_open_ack(
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
         let _ = pa
-            .handle_open_ack(auth_link, &opean_ack_properties)
+            .handle_open_ack(auth_link, opean_ack_properties.remove(pa.id() as ZInt))
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     }
@@ -323,10 +341,10 @@ async fn open_recv_open_ack(
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
         is_qos: input.is_qos,
+        is_shm: input.is_shm,
         initial_sn_tx: input.initial_sn_tx,
         initial_sn_rx,
         lease,
-        auth_transport: input.auth_transport,
     };
     Ok(output)
 }
@@ -367,8 +385,8 @@ pub(crate) async fn open_link(
         sn_resolution: info.sn_resolution,
         initial_sn_tx: info.initial_sn_tx,
         initial_sn_rx: info.initial_sn_rx,
-        is_shm: info.auth_transport.is_shm,
         is_qos: info.is_qos,
+        is_shm: info.is_shm,
     };
     let res = manager.init_transport_unicast(config);
     let transport = match res {
@@ -411,7 +429,7 @@ pub(crate) async fn open_link(
                         pid: info.pid,
                         whatami: info.whatami,
                         is_qos: info.is_qos,
-                        is_shm: info.auth_transport.is_shm,
+                        is_shm: info.is_shm,
                         links: vec![Link::from(link)],
                     };
                     // Notify the transport handler that there is a new transport and get back a callback

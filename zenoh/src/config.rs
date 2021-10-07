@@ -15,8 +15,8 @@
 //! Properties to pass to [`open`](super::open) and [`scout`](super::scout) functions as configuration
 //! and associated constants.
 
-pub use crate::net::protocol::core::{whatami, WhatAmI};
-use crate::net::{link::Locator, protocol::core::ZInt};
+use crate::net::link::Locator;
+pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
 use std::{
     any::Any,
     borrow::Cow,
@@ -283,7 +283,8 @@ impl Config {
     }
 }
 
-// #[test]
+#[test]
+#[ignore]
 fn config_from_json() {
     use validated_struct::ValidatedMap;
     let from_str = |s| serde_json::Deserializer::from_str(s);

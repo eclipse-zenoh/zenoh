@@ -62,11 +62,11 @@ impl EstablishmentProperties {
         Ok(())
     }
 
-    pub(crate) fn merge(mut self, mut other: Self) -> ZResult<Self> {
-        for p in other.0.drain(..) {
-            self.insert(p)?;
-        }
-        Ok(Self(self.0))
+    pub(crate) fn remove(&mut self, key: ZInt) -> Option<Property> {
+        self.0
+            .iter()
+            .position(|x| x.key == key)
+            .map(|i| self.0.remove(i))
     }
 }
 
@@ -100,11 +100,15 @@ pub struct Cookie {
     sn_resolution: ZInt,
     is_qos: bool,
     nonce: ZInt,
-    properties: EstablishmentProperties,
 }
 
 impl Cookie {
-    pub(super) fn encrypt(self, cipher: &BlockCipher, prng: &mut PseudoRng) -> ZResult<Vec<u8>> {
+    pub(super) fn encrypt(
+        self,
+        cipher: &BlockCipher,
+        prng: &mut PseudoRng,
+        properties: EstablishmentProperties,
+    ) -> ZResult<Vec<u8>> {
         macro_rules! zwrite {
             ($op:expr) => {
                 if !$op {
@@ -121,14 +125,17 @@ impl Cookie {
         zwrite!(wbuf.write_zint(self.sn_resolution));
         zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
         zwrite!(wbuf.write_zint(self.nonce));
-        zwrite!(wbuf.write_properties(self.properties.as_slice()));
+        zwrite!(wbuf.write_properties(properties.as_slice()));
 
         let serialized = ZBuf::from(wbuf).to_vec();
         let encrypted = cipher.encrypt(serialized, prng);
         Ok(encrypted)
     }
 
-    pub(super) fn decrypt(bytes: Vec<u8>, cipher: &BlockCipher) -> ZResult<Cookie> {
+    pub(super) fn decrypt(
+        bytes: Vec<u8>,
+        cipher: &BlockCipher,
+    ) -> ZResult<(Cookie, EstablishmentProperties)> {
         macro_rules! zread {
             ($op:expr) => {
                 $op.ok_or_else(|| {
@@ -164,9 +171,8 @@ impl Cookie {
             sn_resolution,
             is_qos,
             nonce,
-            properties,
         };
-        Ok(cookie)
+        Ok((cookie, properties))
     }
 }
 

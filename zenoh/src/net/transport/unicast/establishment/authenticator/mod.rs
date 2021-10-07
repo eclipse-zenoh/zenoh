@@ -23,7 +23,7 @@ use crate::net::link::{Link, Locator};
 use crate::net::protocol::core::{PeerId, Property, ZInt};
 #[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::transport::unicast::establishment::{Cookie, EstablishmentProperties};
+use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
@@ -125,9 +125,9 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
 #[repr(u8)]
 pub enum PeerAuthenticatorId {
     Reserved = 0,
-    Shm = 2,
-    MultiLink = 3,
-    UserPassword = 4,
+    Shm = 1,
+    UserPassword = 2,
+    PublicKey = 3,
 }
 
 #[derive(Clone)]
@@ -136,6 +136,14 @@ pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 impl PeerAuthenticator {
     pub(crate) async fn from_config(config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            let mut res = PubKeyAuthenticator::from_config(config).await?;
+            if let Some(pa) = res.take() {
+                pas.insert(pa.into());
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -148,14 +156,6 @@ impl PeerAuthenticator {
         #[cfg(feature = "zero-copy")]
         {
             let mut res = SharedMemoryAuthenticator::from_config(config).await?;
-            if let Some(pa) = res.take() {
-                pas.insert(pa.into());
-            }
-        }
-
-        #[cfg(feature = "auth_pubkey")]
-        {
-            let mut res = PubKeyAuthenticator::from_config(config).await?;
             if let Some(pa) = res.take() {
                 pas.insert(pa.into());
             }
@@ -201,53 +201,9 @@ impl fmt::Display for AuthenticatedPeerLink {
     }
 }
 
-// Authenticated peer transport
-pub struct AuthenticatedPeerTransport {
-    pub is_shm: bool,
-}
-
-impl AuthenticatedPeerTransport {
-    pub fn merge(self, other: Self) -> Self {
-        Self {
-            is_shm: self.is_shm || other.is_shm,
-        }
-    }
-}
-
-impl Default for AuthenticatedPeerTransport {
-    fn default() -> Self {
-        Self { is_shm: false }
-    }
-}
-
-pub struct PeerAuthenticatorOutput {
-    pub(crate) properties: EstablishmentProperties,
-    pub(crate) transport: AuthenticatedPeerTransport,
-}
-
-impl PeerAuthenticatorOutput {
-    pub fn new() -> Self {
-        Self {
-            properties: EstablishmentProperties::new(),
-            transport: AuthenticatedPeerTransport::default(),
-        }
-    }
-    pub fn merge(mut self, other: Self) -> ZResult<Self> {
-        self.properties = self.properties.merge(other.properties)?;
-        self.transport = self.transport.merge(other.transport);
-
-        Ok(self)
-    }
-}
-
-impl Default for PeerAuthenticatorOutput {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[async_trait]
 pub trait PeerAuthenticatorTrait: Send + Sync {
+    /// Return the ID of this authenticator.
     fn id(&self) -> PeerAuthenticatorId;
 
     /// Return the attachment to be included in the InitSyn message.
@@ -262,7 +218,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput>;
+    ) -> ZResult<Option<Property>>;
 
     /// Return the attachment to be included in the InitAck message to be sent
     /// in response of the authenticated InitSyn.
@@ -272,14 +228,14 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     ///
     /// * `cookie`          - The Cookie containing the internal state
     ///
-    /// * `properties`      - The optional [`Property`][Property] included in the InitSyn message
+    /// * `property`        - The optional [`Property`][Property] included in the InitSyn message
     ///
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        cookie: &mut Cookie,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        cookie: &Cookie,
+        property: Option<Property>,
+    ) -> ZResult<(Option<Property>, Option<Property>)>; // (Attachment, Cookie)
 
     /// Return the attachment to be included in the OpenSyn message to be sent
     /// in response of the authenticated InitAck.
@@ -298,8 +254,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
         sn_resolution: ZInt,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        property: Option<Property>,
+    ) -> ZResult<Option<Property>>;
 
     /// Return the attachment to be included in the OpenAck message to be sent
     /// in response of the authenticated OpenSyn.
@@ -314,9 +270,9 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
         cookie: &Cookie,
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        property: (Option<Property>, Option<Property>), // (Attachment, Cookie)
+    ) -> ZResult<Option<Property>>;
 
     /// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
     ///
@@ -328,8 +284,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     async fn handle_open_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        property: Option<Property>,
+    ) -> ZResult<Option<Property>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -369,17 +325,17 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_init_syn(
         &self,
         _link: &AuthenticatedPeerLink,
-        _cookie: &mut Cookie,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _cookie: &Cookie,
+        _property: Option<Property>,
+    ) -> ZResult<(Option<Property>, Option<Property>)> {
+        Ok((None, None))
     }
 
     async fn handle_init_ack(
@@ -387,26 +343,26 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_open_syn(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
         _cookie: &Cookie,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _property: (Option<Property>, Option<Property>),
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}

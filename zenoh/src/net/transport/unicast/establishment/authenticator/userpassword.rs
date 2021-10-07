@@ -12,8 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
-    PeerAuthenticatorTrait,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use super::{Locator, PeerId, Property, WBuf, ZBuf, ZInt};
 use crate::net::transport::unicast::establishment::Cookie;
@@ -223,11 +222,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let mut res = PeerAuthenticatorOutput::new();
+    ) -> ZResult<Option<Property>> {
         // If credentials are not configured, don't initiate the USRPWD authentication
         if self.credentials.is_none() {
-            return Ok(res);
+            return Ok(None);
         }
 
         let init_syn_property = InitSynProperty {
@@ -241,21 +239,17 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
-        res.properties.push(prop);
-        Ok(res)
+        Ok(Some(prop))
     }
 
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        cookie: &mut Cookie,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let res = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
-        let mut zbuf: ZBuf = match res {
-            Some(p) => p.value.clone().into(),
+        cookie: &Cookie,
+        property: Option<Property>,
+    ) -> ZResult<(Option<Property>, Option<Property>)> {
+        let mut zbuf: ZBuf = match property {
+            Some(p) => p.value.into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
                     descr: format!("Received InitSyn with no attachment on link: {}", link),
@@ -285,14 +279,12 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
         let zbuf: ZBuf = wbuf.into();
-        let prop = Property {
+        let att = Property {
             key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
 
-        let mut res = PeerAuthenticatorOutput::new();
-        res.properties.push(prop);
-        Ok(res)
+        Ok((Some(att), None))
     }
 
     async fn handle_init_ack(
@@ -300,20 +292,16 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let mut res = PeerAuthenticatorOutput::new();
+        property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
         // If credentials are not configured, don't continue the USRPWD authentication
         let credentials = match self.credentials.as_ref() {
             Some(cr) => cr,
-            None => return Ok(res),
+            None => return Ok(None),
         };
 
-        let tmp = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
-        let mut zbuf: ZBuf = match tmp {
-            Some(p) => p.value.clone().into(),
+        let mut zbuf: ZBuf = match property {
+            Some(p) => p.value.into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
                     descr: format!("Received InitAck with no attachment on link: {}", link),
@@ -345,21 +333,19 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             key: PeerAuthenticatorId::UserPassword as ZInt,
             value: zbuf.to_vec(),
         };
-        res.properties.push(prop);
-        Ok(res)
+
+        Ok(Some(prop))
     }
 
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
         cookie: &Cookie,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let res = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::UserPassword as ZInt);
-        let mut zbuf: ZBuf = match res {
-            Some(p) => p.value.clone().into(),
+        property: (Option<Property>, Option<Property>),
+    ) -> ZResult<Option<Property>> {
+        let (attachment, _cookie) = property;
+        let mut zbuf: ZBuf = match attachment {
+            Some(p) => p.value.into(),
             None => {
                 return zerror!(ZErrorKind::InvalidMessage {
                     descr: format!("Received OpenSyn with no attachment on link: {}", link),
@@ -374,7 +360,6 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 });
             }
         };
-
         let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
             Some(password) => password.clone(),
             None => {
@@ -418,15 +403,15 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             }
         }
 
-        Ok(PeerAuthenticatorOutput::new())
+        Ok(None)
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {

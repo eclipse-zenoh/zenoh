@@ -12,8 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorOutput,
-    PeerAuthenticatorTrait,
+    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use super::{PeerId, Property, WBuf, ZBuf, ZInt};
 use crate::config::Config;
@@ -243,15 +242,14 @@ impl Default for PubKeyAuthenticator {
 #[async_trait]
 impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     fn id(&self) -> PeerAuthenticatorId {
-        PeerAuthenticatorId::MultiLink
+        PeerAuthenticatorId::PublicKey
     }
 
     async fn get_init_syn_properties(
         &self,
         link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let mut output = PeerAuthenticatorOutput::new();
+    ) -> ZResult<Option<Property>> {
         let init_syn_property = InitSynProperty {
             version: MULTILINK_VERSION,
             alice_pubkey: self.pub_key.clone(),
@@ -266,30 +264,24 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
         let zbuf: ZBuf = wbuf.into();
         let prop = Property {
-            key: PeerAuthenticatorId::MultiLink as ZInt,
+            key: self.id() as ZInt,
             value: zbuf.to_vec(),
         };
 
-        output.properties.push(prop);
-
-        Ok(output)
+        Ok(Some(prop))
     }
 
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        cookie: &mut Cookie,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let res = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::MultiLink as ZInt);
-
-        match res {
+        cookie: &Cookie,
+        property: Option<Property>,
+    ) -> ZResult<(Option<Property>, Option<Property>)> {
+        match property {
             // The connecting zenoh peer wants to do multilink
-            Some(mlp) => {
+            Some(pk) => {
                 // Decode the multilink attachment
-                let mut zbuf: ZBuf = mlp.value.clone().into();
+                let mut zbuf: ZBuf = pk.value.clone().into();
 
                 let init_syn_property =
                     zbuf.read_init_syn_property_multilink().ok_or_else(|| {
@@ -368,24 +360,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     nonce_encrypted_with_alice_pubkey,
                 };
 
-                // Encode the InitAck property
-                let mut wbuf = WBuf::new(WBUF_SIZE, false);
-                let res = wbuf.write_init_ack_property_multilink(&init_ack_property);
-                if !res {
-                    let e = format!("Failed to serialize InitAck on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
-                }
-
-                let zbuf: ZBuf = wbuf.into();
-                let prop = Property {
-                    key: PeerAuthenticatorId::MultiLink as ZInt,
-                    value: zbuf.to_vec(),
-                };
-
-                // Encode the attachment
-                let mut output = PeerAuthenticatorOutput::new();
-                output.properties.insert(prop)?;
-
                 // Store the public key in the cookie
                 let mut wbuf = WBuf::new(WBUF_SIZE, false);
                 let res = wbuf.write_rsa_pub_key(&init_syn_property.alice_pubkey);
@@ -395,13 +369,25 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 }
 
                 let zbuf: ZBuf = wbuf.into();
-                let prop = Property {
-                    key: PeerAuthenticatorId::MultiLink as ZInt,
+                let cookie = Property {
+                    key: self.id() as ZInt,
                     value: zbuf.to_vec(),
                 };
-                cookie.properties.insert(prop)?;
 
-                Ok(output)
+                // Encode the InitAck property
+                let mut wbuf = WBuf::new(WBUF_SIZE, false);
+                let res = wbuf.write_init_ack_property_multilink(&init_ack_property);
+                if !res {
+                    let e = format!("Failed to serialize InitAck on link: {}", link);
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                }
+                let zbuf: ZBuf = wbuf.into();
+                let attachment = Property {
+                    key: self.id() as ZInt,
+                    value: zbuf.to_vec(),
+                };
+
+                Ok((Some(attachment), Some(cookie)))
             }
             // The connecting zenoh peer does not want to do multilink
             None => {
@@ -421,7 +407,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 }
 
                 // No properties need to be included in the InitAck attachment
-                Ok(PeerAuthenticatorOutput::new())
+                Ok((None, None))
             }
         }
     }
@@ -431,86 +417,73 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let res = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::MultiLink as ZInt);
+        property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
+        let pk = match property {
+            Some(pk) => pk,
+            None => return Ok(None),
+        };
 
-        let mut output = PeerAuthenticatorOutput::new();
-        if let Some(mlp) = res {
-            let mut zbuf: ZBuf = mlp.value.clone().into();
-            let init_ack_property = zbuf.read_init_ack_property_multilink().ok_or_else(|| {
-                let e = format!("Received invalid InitSyn on link: {}", link);
-                zerror2!(ZErrorKind::InvalidMessage { descr: e })
+        let mut zbuf: ZBuf = pk.value.clone().into();
+        let init_ack_property = zbuf.read_init_ack_property_multilink().ok_or_else(|| {
+            let e = format!("Received invalid InitSyn on link: {}", link);
+            zerror2!(ZErrorKind::InvalidMessage { descr: e })
+        })?;
+
+        let nonce = self
+            .prv_key
+            .decrypt(
+                PaddingScheme::PKCS1v15Encrypt,
+                init_ack_property
+                    .nonce_encrypted_with_alice_pubkey
+                    .as_slice(),
+            )
+            .map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: e.to_string()
+                })
             })?;
 
-            let nonce = self
-                .prv_key
-                .decrypt(
-                    PaddingScheme::PKCS1v15Encrypt,
-                    init_ack_property
-                        .nonce_encrypted_with_alice_pubkey
-                        .as_slice(),
-                )
-                .map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: e.to_string()
-                    })
-                })?;
+        // Create the OpenSyn attachment
+        let mut guard = zasynclock!(self.state);
+        let nonce_encrypted_with_bob_pubkey = init_ack_property
+            .bob_pubkey
+            .encrypt(&mut guard.prng, PaddingScheme::PKCS1v15Encrypt, &nonce[..])
+            .map_err(|e| {
+                zerror2!(ZErrorKind::Other {
+                    descr: e.to_string()
+                })
+            })?;
+        drop(guard);
 
-            // Create the OpenSyn attachment
-            let mut guard = zasynclock!(self.state);
-            let nonce_encrypted_with_bob_pubkey = init_ack_property
-                .bob_pubkey
-                .encrypt(&mut guard.prng, PaddingScheme::PKCS1v15Encrypt, &nonce[..])
-                .map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: e.to_string()
-                    })
-                })?;
-            drop(guard);
+        let open_syn_property = OpenSynProperty {
+            nonce_encrypted_with_bob_pubkey,
+        };
 
-            let open_syn_property = OpenSynProperty {
-                nonce_encrypted_with_bob_pubkey,
-            };
-
-            // Encode the OpenSyn property
-            let mut wbuf = WBuf::new(WBUF_SIZE, false);
-            let res = wbuf.write_open_syn_property_multilink(&open_syn_property);
-            if !res {
-                let e = format!("Failed to serialize OpenSyn on link: {}", link);
-                return zerror!(ZErrorKind::InvalidMessage { descr: e });
-            }
-
-            let zbuf: ZBuf = wbuf.into();
-            let prop = Property {
-                key: PeerAuthenticatorId::MultiLink as ZInt,
-                value: zbuf.to_vec(),
-            };
-
-            output.properties.insert(prop)?;
+        // Encode the OpenSyn property
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        let res = wbuf.write_open_syn_property_multilink(&open_syn_property);
+        if !res {
+            let e = format!("Failed to serialize OpenSyn on link: {}", link);
+            return zerror!(ZErrorKind::InvalidMessage { descr: e });
         }
 
-        Ok(output)
+        let zbuf: ZBuf = wbuf.into();
+        let attachment = Property {
+            key: self.id() as ZInt,
+            value: zbuf.to_vec(),
+        };
+
+        Ok(Some(attachment))
     }
 
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
         cookie: &Cookie,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        let att = properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::MultiLink as ZInt);
-
-        let cke = cookie
-            .properties
-            .iter()
-            .find(|p| p.key == PeerAuthenticatorId::MultiLink as ZInt);
-
-        match (att, cke) {
+        property: (Option<Property>, Option<Property>),
+    ) -> ZResult<Option<Property>> {
+        match property {
             (Some(att), Some(cke)) => {
                 let mut zbuf: ZBuf = att.value.clone().into();
                 let open_syn_property =
@@ -576,15 +549,15 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             }
         }
 
-        Ok(PeerAuthenticatorOutput::new())
+        Ok(None)
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::new())
+        _property: Option<Property>,
+    ) -> ZResult<Option<Property>> {
+        Ok(None)
     }
 
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {

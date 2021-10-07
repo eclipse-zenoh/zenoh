@@ -11,9 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::authenticator::{
-    AuthenticatedPeerLink, AuthenticatedPeerTransport, PeerAuthenticatorOutput,
-};
+use super::authenticator::{AuthenticatedPeerLink, PeerAuthenticatorId};
 use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{Cookie, EstablishmentProperties};
 use super::{TransportConfigUnicast, TransportUnicast};
@@ -143,14 +141,12 @@ async fn accept_recv_init_syn(
 }
 
 // Send an InitAck
-struct AcceptInitAckOutput {
-    auth_transport: AuthenticatedPeerTransport,
-}
+struct AcceptInitAckOutput {}
 async fn accept_send_init_ack(
     manager: &TransportManager,
     link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
-    input: AcceptInitSynOutput,
+    mut input: AcceptInitSynOutput,
 ) -> IResult<AcceptInitAckOutput> {
     // Compute the minimum SN Resolution
     let agreed_sn_resolution = manager.config.sn_resolution.min(input.sn_resolution);
@@ -165,34 +161,41 @@ async fn accept_send_init_ack(
     };
 
     // Create the cookie
-    let mut cookie = Cookie {
+    let cookie = Cookie {
         whatami: input.whatami,
         pid: input.pid,
         sn_resolution: agreed_sn_resolution,
         is_qos: input.is_qos,
         nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
-        properties: EstablishmentProperties::new(),
     };
 
     // Build the attachment
-    let mut auth_peer = PeerAuthenticatorOutput::new();
+    let mut ps_attachment = EstablishmentProperties::new();
+    let mut properties_cookie = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
-        let att = pa
-            .handle_init_syn(auth_link, &mut cookie, &input.init_syn_properties)
+        let (mut att, mut cke) = pa
+            .handle_init_syn(
+                auth_link,
+                &cookie,
+                input.init_syn_properties.remove(pa.id() as ZInt),
+            )
             .await
             .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        auth_peer = auth_peer.merge(att).map_err(|e| (e, None))?;
+        if let Some(ps) = att.take() {
+            ps_attachment.insert(ps).map_err(|e| (e, None))?;
+        }
+        if let Some(ps) = cke.take() {
+            properties_cookie.insert(ps).map_err(|e| (e, None))?;
+        }
     }
-    let attachment = if auth_peer.properties.is_empty() {
-        None
-    } else {
-        let att = attachment_from_properties(&auth_peer.properties)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        Some(att)
-    };
+    let attachment = attachment_from_properties(&ps_attachment).ok();
 
     let encrypted = cookie
-        .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng))
+        .encrypt(
+            &manager.cipher,
+            &mut *zasynclock!(manager.prng),
+            properties_cookie,
+        )
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Compute and store cookie hash
@@ -216,9 +219,7 @@ async fn accept_send_init_ack(
         .await
         .map_err(|e| (e, None))?;
 
-    let output = AcceptInitAckOutput {
-        auth_transport: auth_peer.transport,
-    };
+    let output = AcceptInitAckOutput {};
     Ok(output)
 }
 
@@ -227,14 +228,14 @@ struct AcceptOpenSynOutput {
     cookie: Cookie,
     initial_sn: ZInt,
     lease: Duration,
+    is_shm: bool,
     open_ack_attachment: Option<Attachment>,
-    auth_transport: AuthenticatedPeerTransport,
 }
 async fn accept_recv_open_syn(
     manager: &TransportManager,
     link: &LinkUnicast,
     auth_link: &AuthenticatedPeerLink,
-    input: AcceptInitAckOutput,
+    _input: AcceptInitAckOutput,
 ) -> IResult<AcceptOpenSynOutput> {
     // Wait to read an OpenSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
@@ -306,36 +307,61 @@ async fn accept_recv_open_syn(
     }
 
     // Decrypt the cookie with the cyper
-    let cookie = Cookie::decrypt(encrypted, &manager.cipher)
+    let (cookie, mut properties_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Validate with the peer authenticators
-    let open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
+    let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
         Some(att) => {
             properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         }
         None => EstablishmentProperties::new(),
     };
-    let mut auth = PeerAuthenticatorOutput {
-        transport: input.auth_transport,
-        properties: EstablishmentProperties::new(),
-    };
+
+    let mut is_shm = false;
+    let mut ps_attachment = EstablishmentProperties::new();
     for pa in manager.config.unicast.peer_authenticator.iter() {
-        let ps = pa
-            .handle_open_syn(auth_link, &open_syn_properties, &cookie)
-            .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        auth = auth
-            .merge(ps)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = pa
+            .handle_open_syn(
+                auth_link,
+                &cookie,
+                (
+                    open_syn_properties.remove(pa.id() as ZInt),
+                    properties_cookie.remove(pa.id() as ZInt),
+                ),
+            )
+            .await;
+
+        #[cfg(feature = "zero-copy")]
+        if pa.id() == PeerAuthenticatorId::Shm {
+            // Check if SHM has been validated from the other side
+            att = match att {
+                Ok(att) => {
+                    is_shm = true;
+                    Ok(att)
+                }
+                Err(e) => match e.get_kind() {
+                    ZErrorKind::SharedMemory { .. } => {
+                        is_shm = false;
+                        Ok(None)
+                    }
+                    _ => Err(e),
+                },
+            };
+        }
+
+        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        if let Some(att) = att.take() {
+            ps_attachment.insert(att).map_err(|e| (e, None))?;
+        }
     }
 
     let output = AcceptOpenSynOutput {
         cookie,
         initial_sn: open_syn_initial_sn,
         lease: open_syn_lease,
-        open_ack_attachment: attachment_from_properties(&auth.properties).ok(),
-        auth_transport: auth.transport,
+        is_shm,
+        open_ack_attachment: attachment_from_properties(&ps_attachment).ok(),
     };
     Ok(output)
 }
@@ -404,7 +430,7 @@ async fn accept_init_transport(
         sn_resolution: input.cookie.sn_resolution,
         initial_sn_tx: open_ack_initial_sn,
         initial_sn_rx: input.initial_sn,
-        is_shm: input.auth_transport.is_shm,
+        is_shm: input.is_shm,
         is_qos: input.cookie.is_qos,
     };
     let transport = manager
