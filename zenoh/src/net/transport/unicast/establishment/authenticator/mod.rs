@@ -130,9 +130,9 @@ pub enum PeerAuthenticatorId {
     PublicKey = 3,
 }
 
-impl Into<ZInt> for PeerAuthenticatorId {
-    fn into(self) -> ZInt {
-        self as ZInt
+impl From<PeerAuthenticatorId> for ZInt {
+    fn from(pa: PeerAuthenticatorId) -> ZInt {
+        pa as ZInt
     }
 }
 

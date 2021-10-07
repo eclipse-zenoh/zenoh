@@ -43,7 +43,7 @@ pub struct TransportManagerConfigUnicast {
 
 impl Default for TransportManagerConfigUnicast {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().build().unwrap()
     }
 }
 
@@ -173,7 +173,7 @@ impl TransportManagerConfigBuilderUnicast {
     }
 
     #[allow(unused_mut)]
-    pub fn build(mut self) -> TransportManagerConfigUnicast {
+    pub fn build(mut self) -> ZResult<TransportManagerConfigUnicast> {
         #[cfg(feature = "zero-copy")]
         if self.is_shm
             && !self
@@ -186,12 +186,21 @@ impl TransportManagerConfigBuilderUnicast {
         }
 
         #[cfg(feature = "auth_pubkey")]
-        if self.max_links > 1 {
+        if self.max_links > 1
+            && !self
+                .peer_authenticator
+                .iter()
+                .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
+        {
             self.peer_authenticator
-                .insert(PubKeyAuthenticator::new().into());
+                .insert(PubKeyAuthenticator::default().into());
+        }
+        #[cfg(not(feature = "auth_pubkey"))]
+        {
+            self = self.max_links(1);
         }
 
-        TransportManagerConfigUnicast {
+        let tmcu = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
@@ -203,7 +212,8 @@ impl TransportManagerConfigBuilderUnicast {
             is_qos: self.is_qos,
             #[cfg(feature = "zero-copy")]
             is_shm: self.is_shm,
-        }
+        };
+        Ok(tmcu)
     }
 }
 

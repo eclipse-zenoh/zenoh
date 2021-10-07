@@ -89,9 +89,11 @@ async fn openclose_transport(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(2)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
@@ -106,9 +108,11 @@ async fn openclose_transport(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(2)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(Arc::new(SHClientOpenClose::new()));
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
@@ -119,9 +123,11 @@ async fn openclose_transport(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(1)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(Arc::new(SHClientOpenClose::new()));
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
     let client02_manager = TransportManager::new(config);
 
     /* [1] */

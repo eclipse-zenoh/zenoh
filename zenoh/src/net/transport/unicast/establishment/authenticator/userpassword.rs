@@ -15,6 +15,7 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use super::{Locator, PeerId, WBuf, ZBuf, ZInt};
+use crate::config::Config;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
@@ -177,9 +178,7 @@ impl UserPasswordAuthenticator {
         Ok(())
     }
 
-    pub async fn from_config(
-        config: &crate::config::Config,
-    ) -> ZResult<Option<UserPasswordAuthenticator>> {
+    pub async fn from_config(config: &Config) -> ZResult<Option<UserPasswordAuthenticator>> {
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         if let Some(dict) = config.user_password_dictionary() {
             let content = fs::read_to_string(dict).await.map_err(|e| {

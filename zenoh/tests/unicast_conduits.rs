@@ -177,14 +177,16 @@ async fn open_transport(
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
-        .build(Arc::new(SHClient::default()));
+        .build(Arc::new(SHClient::default()))
+        .unwrap();
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router

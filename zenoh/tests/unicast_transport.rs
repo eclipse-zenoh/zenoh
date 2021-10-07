@@ -160,23 +160,27 @@ async fn open_transport(
     let router_handler = Arc::new(SHRouter::default());
     let unicast = TransportManagerConfigUnicast::builder()
         .max_links(endpoints.len())
-        .build();
+        .build()
+        .unwrap();
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let unicast = TransportManagerConfigUnicast::builder()
         .max_links(endpoints.len())
-        .build();
+        .build()
+        .unwrap();
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient::default()));
+        .build(Arc::new(SHClient::default()))
+        .unwrap();
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router

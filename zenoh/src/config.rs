@@ -210,6 +210,21 @@ validated_struct::validator! {
         defrag_buffer_size: Option<usize>,
         #[intkey(ZN_QOS_KEY, into = bool_to_cowstr, from = bool_from_str)]
         qos: Option<bool>,
+        #[serde(default)]
+        pub auth_pubkey: PubKeyConf {
+            #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
+            public_key_pem: Option<String>,
+            #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
+            private_key_pem: Option<String>,
+            #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+            public_key_file: Option<String>,
+            #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+            private_key_file: Option<String>,
+            #[intkey(ZN_AUTH_RSA_KEY_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
+            key_size: Option<usize>,
+            #[intkey(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+            known_keys_file: Option<String>,
+        },
     }
 }
 

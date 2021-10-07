@@ -168,8 +168,8 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> TransportManagerConfig {
-        TransportManagerConfig {
+    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManagerConfig> {
+        let tmc = TransportManagerConfig {
             version: self.version,
             pid: self.pid,
             whatami: self.whatami,
@@ -181,7 +181,8 @@ impl TransportManagerConfigBuilder {
             multicast: self.multicast,
             endpoint: self.endpoint,
             handler,
-        }
+        };
+        Ok(tmc)
     }
 
     pub async fn from_config(
@@ -214,7 +215,7 @@ impl TransportManagerConfigBuilder {
             TransportManagerConfigUnicast::builder()
                 .from_config(properties)
                 .await?
-                .build(),
+                .build()?,
         );
 
         Ok(self)

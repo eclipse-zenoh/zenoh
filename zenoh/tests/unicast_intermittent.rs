@@ -149,9 +149,11 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(3)
                 .max_links(1)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
@@ -168,9 +170,11 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(1)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(Arc::new(SHClientStable::new(counter.clone())));
+        .build(Arc::new(SHClientStable::new(counter.clone())))
+        .unwrap();
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
@@ -181,9 +185,11 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(1)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(Arc::new(SHClientIntermittent::default()));
+        .build(Arc::new(SHClientIntermittent::default()))
+        .unwrap();
     let client02_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the third client
@@ -194,9 +200,11 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             TransportManagerConfigUnicast::builder()
                 .max_sessions(1)
                 .max_links(1)
-                .build(),
+                .build()
+                .unwrap(),
         )
-        .build(Arc::new(SHClientIntermittent::default()));
+        .build(Arc::new(SHClientIntermittent::default()))
+        .unwrap();
     let client03_manager = TransportManager::new(config);
 
     /* [1] */

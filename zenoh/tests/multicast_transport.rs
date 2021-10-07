@@ -140,7 +140,8 @@ mod tests {
         let config = TransportManagerConfig::builder()
             .pid(peer01_id)
             .whatami(WhatAmI::Peer)
-            .build(peer01_handler.clone());
+            .build(peer01_handler.clone())
+            .unwrap();
         let peer01_manager = TransportManager::new(config);
 
         // Create the peer02 transport manager
@@ -148,7 +149,8 @@ mod tests {
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer02_id)
-            .build(peer02_handler.clone());
+            .build(peer02_handler.clone())
+            .unwrap();
         let peer02_manager = TransportManager::new(config);
 
         // Create an empty transport with the peer01

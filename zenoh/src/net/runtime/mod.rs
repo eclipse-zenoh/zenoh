@@ -117,7 +117,7 @@ impl Runtime {
             .version(version)
             .whatami(whatami)
             .pid(pid)
-            .build(handler.clone());
+            .build(handler.clone())?;
 
         let config = Notifier::new(config);
 

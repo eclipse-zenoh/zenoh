@@ -143,9 +143,11 @@ mod tests {
                     .peer_authenticator(HashSet::from_iter(vec![
                         SharedMemoryAuthenticator::new().into()
                     ]))
-                    .build(),
+                    .build()
+                    .unwrap(),
             )
-            .build(peer_shm01_handler.clone());
+            .build(peer_shm01_handler.clone())
+            .unwrap();
         let peer_shm01_manager = TransportManager::new(config);
 
         // Create a peer manager with zero-copy authenticator enabled
@@ -158,9 +160,11 @@ mod tests {
                     .peer_authenticator(HashSet::from_iter(vec![
                         SharedMemoryAuthenticator::new().into()
                     ]))
-                    .build(),
+                    .build()
+                    .unwrap(),
             )
-            .build(peer_shm02_handler.clone());
+            .build(peer_shm02_handler.clone())
+            .unwrap();
         let peer_shm02_manager = TransportManager::new(config);
 
         // Create a peer manager with zero-copy authenticator disabled
@@ -168,7 +172,8 @@ mod tests {
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_net01)
-            .build(peer_net01_handler.clone());
+            .build(peer_net01_handler.clone())
+            .unwrap();
         let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer

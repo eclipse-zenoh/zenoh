@@ -20,10 +20,13 @@ use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use rand::SeedableRng;
+use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::PseudoRng;
+use zenoh_util::properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_util::zasynclock;
 
 const WBUF_SIZE: usize = 64;
@@ -181,23 +184,12 @@ pub struct PubKeyAuthenticator {
 }
 
 impl PubKeyAuthenticator {
-    pub fn new() -> PubKeyAuthenticator {
-        let mut prng = PseudoRng::from_entropy();
-        let bits = 512;
-        let prv_key = RsaPrivateKey::new(&mut prng, bits)
-            .map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Failed to create Rsa Private Key: {}", e)
-                })
-            })
-            .unwrap(); // @TODO: avoid unwrap
-        let pub_key = RsaPublicKey::from(&prv_key);
-
+    pub fn new(pub_key: RsaPublicKey, prv_key: RsaPrivateKey) -> PubKeyAuthenticator {
         PubKeyAuthenticator {
             pub_key,
             prv_key,
             state: Mutex::new(InnerState {
-                prng,
+                prng: PseudoRng::from_entropy(),
                 known_keys: None,
                 authenticated: HashMap::new(),
             }),
@@ -227,15 +219,115 @@ impl PubKeyAuthenticator {
         Ok(())
     }
 
-    pub async fn from_config(_config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
-        // @TODO: support config
+    pub async fn from_config(config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
+        let c = config.auth_pubkey();
+
+        // First, check if PEM keys are provided
+        match (c.public_key_pem(), c.private_key_pem()) {
+            (Some(public), Some(private)) => {
+                let pub_key = RsaPublicKey::from_pkcs1_pem(public).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Rsa Public Key: {}", e)
+                    })
+                })?;
+                let prv_key = RsaPrivateKey::from_pkcs1_pem(private).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Rsa Private Key: {}", e)
+                    })
+                })?;
+                return Ok(Some(Self::new(pub_key, prv_key)));
+            }
+            (Some(_), None) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Missing Rsa Private Key: PEM".to_string()
+                })
+            }
+            (None, Some(_)) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Missing Rsa Public Key: PEM".to_string()
+                });
+            }
+            (None, None) => {}
+        }
+
+        // Second, check if PEM files are provided
+        match (c.public_key_file(), c.private_key_file()) {
+            (Some(public), Some(private)) => {
+                let path = Path::new(public);
+                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Rsa Public Key: {}", e)
+                    })
+                })?;
+                let path = Path::new(private);
+                let prv_key = RsaPrivateKey::read_pkcs1_pem_file(path).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: format!("Rsa Private Key: {}", e)
+                    })
+                })?;
+                return Ok(Some(Self::new(pub_key, prv_key)));
+            }
+            (Some(_), None) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Missing Rsa Private Key: file".to_string()
+                })
+            }
+            (None, Some(_)) => {
+                return zerror!(ZErrorKind::Other {
+                    descr: "Missing Rsa Public Key: file".to_string()
+                });
+            }
+            (None, None) => {}
+        }
+
+        // No keys are defined, generate a random one to support multilink if needed
+        if let Some(n) = config.link().max_number() {
+            if *n > 1 {
+                let mut prng = PseudoRng::from_entropy();
+                let bits = match c.key_size() {
+                    Some(ks) => *ks,
+                    None => zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).unwrap(),
+                };
+                let prv_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
+                    zerror2!(ZErrorKind::Other {
+                        descr: e.to_string()
+                    })
+                })?;
+                let pub_key = RsaPublicKey::from(&prv_key);
+
+                let pa = PubKeyAuthenticator {
+                    pub_key,
+                    prv_key,
+                    state: Mutex::new(InnerState {
+                        prng,
+                        known_keys: None,
+                        authenticated: HashMap::new(),
+                    }),
+                };
+                return Ok(Some(pa));
+            }
+        }
+
         Ok(None)
     }
 }
 
 impl Default for PubKeyAuthenticator {
     fn default() -> Self {
-        Self::new()
+        let mut prng = PseudoRng::from_entropy();
+        let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).unwrap();
+        let prv_key = RsaPrivateKey::new(&mut prng, bits).unwrap();
+        let pub_key = RsaPublicKey::from(&prv_key);
+
+        PubKeyAuthenticator {
+            pub_key,
+            prv_key,
+            state: Mutex::new(InnerState {
+                prng,
+                known_keys: None,
+                authenticated: HashMap::new(),
+            }),
+        }
     }
 }
 

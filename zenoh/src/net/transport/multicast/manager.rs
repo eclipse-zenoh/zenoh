@@ -33,7 +33,7 @@ pub struct TransportManagerConfigMulticast {
 
 impl Default for TransportManagerConfigMulticast {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().build().unwrap()
     }
 }
 
@@ -112,14 +112,15 @@ impl TransportManagerConfigBuilderMulticast {
         Ok(self)
     }
 
-    pub fn build(self) -> TransportManagerConfigMulticast {
-        TransportManagerConfigMulticast {
+    pub fn build(self) -> ZResult<TransportManagerConfigMulticast> {
+        let tmcm = TransportManagerConfigMulticast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
-        }
+        };
+        Ok(tmcm)
     }
 }
 

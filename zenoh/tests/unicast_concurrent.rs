@@ -106,24 +106,28 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let peer_sh01 = Arc::new(SHPeer::new());
     let unicast = TransportManagerConfigUnicast::builder()
         .max_links(endpoint01.len() + endpoint02.len())
-        .build();
+        .build()
+        .unwrap();
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Peer)
         .pid(peer_id01)
         .unicast(unicast)
-        .build(peer_sh01.clone());
+        .build(peer_sh01.clone())
+        .unwrap();
     let peer01_manager = TransportManager::new(config);
 
     // Create the peer01 transport manager
     let peer_sh02 = Arc::new(SHPeer::new());
     let unicast = TransportManagerConfigUnicast::builder()
         .max_links(endpoint01.len() + endpoint02.len())
-        .build();
+        .build()
+        .unwrap();
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Peer)
         .pid(peer_id02)
         .unicast(unicast)
-        .build(peer_sh02.clone());
+        .build(peer_sh02.clone())
+        .unwrap();
     let peer02_manager = TransportManager::new(config);
 
     // Barrier to synchronize the two tasks
