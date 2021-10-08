@@ -205,7 +205,7 @@ pub mod zmsg {
         pub mod info {
             use super::ZInt;
 
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             pub const SLICED: ZInt = 1 << 0; // 0x01
             pub const KIND: ZInt = 1 << 1; // 0x02
             pub const ENCODING: ZInt = 1 << 2; // 0x04
@@ -360,7 +360,7 @@ impl Header for Attachment {
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
         let mut header = tmsg::id::ATTACHMENT;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if self.buffer.has_shminfo() {
             header |= tmsg::flag::Z;
         }
@@ -529,7 +529,7 @@ impl Priority {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub sliced: bool,
     pub kind: Option<ZInt>,
     pub encoding: Option<Encoding>,
@@ -549,7 +549,7 @@ impl DataInfo {
 impl Default for DataInfo {
     fn default() -> DataInfo {
         DataInfo {
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             sliced: false,
             kind: None,
             encoding: None,
@@ -565,7 +565,7 @@ impl Default for DataInfo {
 impl Options for DataInfo {
     fn options(&self) -> ZInt {
         let mut options = 0;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if self.sliced {
             options |= zmsg::data::info::SLICED;
         }
@@ -596,11 +596,11 @@ impl Options for DataInfo {
     fn has_options(&self) -> bool {
         macro_rules! sliced {
             ($info:expr) => {{
-                #[cfg(feature = "zero-copy")]
+                #[cfg(feature = "shared-memory")]
                 {
                     $info.sliced
                 }
-                #[cfg(not(feature = "zero-copy"))]
+                #[cfg(not(feature = "shared-memory"))]
                 {
                     false
                 }

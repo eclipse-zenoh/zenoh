@@ -229,7 +229,7 @@ impl TransportMulticastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         // Multicast transports do not support SHM for the time being
         let res = message.map_to_shmbuf(self.manager.shmr.clone());
@@ -240,7 +240,7 @@ impl TransportMulticastInner {
         self.schedule_first_fit(message);
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     pub(crate) fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message);
     }

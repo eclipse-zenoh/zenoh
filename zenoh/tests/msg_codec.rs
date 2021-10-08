@@ -238,7 +238,7 @@ fn gen_data_info() -> DataInfo {
             suffix: "".into()
         }),
         timestamp: option_gen!(gen_timestamp()),
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         sliced: false,
         source_id: option_gen!(gen_pid()),
         source_sn: option_gen!(gen!(ZInt)),

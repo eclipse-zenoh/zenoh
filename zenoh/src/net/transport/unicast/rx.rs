@@ -60,7 +60,7 @@ impl TransportUnicastInner {
         let callback = zread!(self.callback).clone();
         match callback.as_ref() {
             Some(callback) => {
-                #[cfg(feature = "zero-copy")]
+                #[cfg(feature = "shared-memory")]
                 let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
                 callback.handle_message(msg)
             }
@@ -147,7 +147,7 @@ impl TransportUnicastInner {
                 }
                 guard.defrag.push(sn, buffer)?;
                 if is_final {
-                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
                         let e = format!("Transport: {}. Defragmentation error.", self.pid);
                         zerror2!(ZErrorKind::InvalidMessage { descr: e })

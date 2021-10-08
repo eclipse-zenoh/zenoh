@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod shm;
 mod userpassword;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::protocol;
 use super::protocol::core::{PeerId, Property, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
@@ -23,7 +23,7 @@ use crate::config::Config;
 use crate::net::link::{Link, Locator};
 use async_std::sync::Arc;
 use async_trait::async_trait;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 pub use shm::*;
 use std::collections::HashSet;
 use std::fmt;
@@ -135,7 +135,7 @@ impl PeerAuthenticator {
             pas.insert(pa.into());
         }
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             let mut res = SharedMemoryAuthenticator::from_config(config).await?;
             if let Some(pa) = res.take() {

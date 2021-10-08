@@ -12,18 +12,18 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::SharedMemoryBufInfo;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use crate::net::link::Locator;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh_util::zerror;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod zslice {
     pub(crate) mod kind {
         pub(crate) const RAW: u8 = 0;
@@ -53,7 +53,7 @@ macro_rules! read_zint {
     };
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl SharedMemoryBufInfo {
     pub fn serialize(&self) -> ZResult<Vec<u8>> {
         bincode::serialize(self).map_err(|e| {
@@ -176,7 +176,7 @@ impl ZBuf {
         self.read_zslice(len)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn read_shminfo(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
@@ -198,7 +198,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
         let num = self.read_zint_as_usize()?;
@@ -223,7 +223,7 @@ impl ZBuf {
     }
 
     // Same as read_bytes_array but 0 copy on ZBuf.
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf> {
         if !sliced {
@@ -233,7 +233,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
     pub fn read_zbuf(&mut self) -> Option<ZBuf> {
         self.read_zbuf_flat()
@@ -345,7 +345,7 @@ impl WBuf {
         self.write_zbuf_slices(zbuf)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn write_zbuf_sliced(&mut self, zbuf: &ZBuf) -> bool {
         zcheck!(self.write_usize_as_zint(zbuf.zslices_num()));
@@ -362,7 +362,7 @@ impl WBuf {
         true
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool {
         if !sliced {
@@ -372,7 +372,7 @@ impl WBuf {
         }
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
     pub fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool {
         self.write_zbuf_flat(zbuf)

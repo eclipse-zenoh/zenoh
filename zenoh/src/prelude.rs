@@ -22,14 +22,14 @@
 //! use zenoh::prelude::*;
 //! ```
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
 use crate::net::protocol::proto::DataInfo;
 use crate::queryable::Query;
 use crate::time::{new_reception_timestamp, Timestamp};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use async_std::sync::Arc;
 use regex::Regex;
 use std::convert::TryFrom;
@@ -177,7 +177,7 @@ impl From<ZBuf> for Value {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
         Value {
@@ -187,7 +187,7 @@ impl From<Arc<SharedMemoryBuf>> for Value {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
         Value {
@@ -197,7 +197,7 @@ impl From<Box<SharedMemoryBuf>> for Value {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
         Value {
@@ -430,7 +430,7 @@ impl Sample {
             kind: None,
             encoding: Some(self.value.encoding),
             timestamp: self.timestamp,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             sliced: false,
             source_id: self.source_info.source_id,
             source_sn: self.source_info.source_sn,

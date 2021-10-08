@@ -20,7 +20,7 @@ use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
 use zenoh::net::transport::unicast::authenticator::UserPasswordAuthenticator;
 use zenoh::net::transport::{
@@ -278,7 +278,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     task::sleep(SLEEP).await;
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
     /* [CLIENT] */
     let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -361,7 +361,7 @@ fn authenticator_tcp() {
     let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         authenticator_shared_memory(&endpoint).await;
     });
 }
@@ -376,7 +376,7 @@ fn authenticator_udp() {
     let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
     task::block_on(async {
         authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         authenticator_shared_memory(&endpoint).await;
     });
 }
@@ -394,7 +394,7 @@ fn authenticator_unix() {
         .unwrap();
     task::block_on(async {
         authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         authenticator_shared_memory(&endpoint).await;
     });
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
@@ -494,7 +494,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     task::block_on(async {
         authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         authenticator_shared_memory(&endpoint).await;
     });
 }
@@ -592,7 +592,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     task::block_on(async {
         authenticator_user_password(&endpoint).await;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         authenticator_shared_memory(&endpoint).await;
     });
 }

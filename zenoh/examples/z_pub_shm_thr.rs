@@ -45,7 +45,7 @@ async fn main() {
 }
 
 fn parse_args() -> (Properties, usize, usize) {
-    let args = App::new("zenoh zero-copy throughput pub example")
+    let args = App::new("zenoh shared-memory throughput pub example")
         .arg(
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
                 .default_value("32"),

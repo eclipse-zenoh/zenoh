@@ -42,9 +42,9 @@ transport_tls = ["async-rustls"]
 transport_udp = []
 transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_unixsock-stream = ["nix"]
-zero-copy = ["bincode", "shared_memory"]
+shared-memory = ["bincode", "shared_memory"]
 default = [
-    "zero-copy",
+    "shared-memory",
     "transport_tcp",
     "transport_udp",
     "transport_tls",
@@ -144,7 +144,7 @@ path = "examples/z_pub.rs"
 [[example]]
 name = "z_pub_shm"
 path = "examples/z_pub_shm.rs"
-required-features = ["zero-copy"]
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_sub"
@@ -177,7 +177,7 @@ path = "examples/z_sub_thr.rs"
 [[example]]
 name = "z_pub_shm_thr"
 path = "examples/z_pub_shm_thr.rs"
-required-features = ["zero-copy"]
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_ping"

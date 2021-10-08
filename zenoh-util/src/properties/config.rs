@@ -177,7 +177,7 @@ mod consts {
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_KEY: u64 = 0x50;
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 
-    /// Indicates if the zero-copy features should be used.
+    /// Indicates if the shared-memory features should be used.
     /// String key : `"shm"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.

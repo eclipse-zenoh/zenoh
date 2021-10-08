@@ -425,7 +425,7 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         let res = if self.is_shm {
             message.map_to_shminfo()
@@ -439,7 +439,7 @@ impl TransportUnicastInner {
         self.schedule_first_fit(message);
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     pub(crate) fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message);
     }

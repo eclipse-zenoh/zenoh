@@ -13,7 +13,7 @@
 //
 use super::multicast::manager::{TransportManagerConfigMulticast, TransportManagerStateMulticast};
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
 use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
@@ -25,7 +25,7 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
@@ -258,7 +258,7 @@ pub struct TransportManager {
     pub(crate) state: Arc<TransportManagerState>,
     pub(crate) prng: AsyncArc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
 }
 
@@ -275,7 +275,7 @@ impl TransportManager {
             state: Arc::new(TransportManagerState::default()),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
         }
     }

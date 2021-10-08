@@ -40,7 +40,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
                 let info = Some(DataInfo {
-                    #[cfg(feature = "zero-copy")]
+                    #[cfg(feature = "shared-memory")]
                     sliced: false,
                     kind: Some(0),
                     encoding: Some(Encoding::default()),
@@ -93,7 +93,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let res_key = ResKey::RIdWithSuffix(18, "/com/acme/sensors/temp".into());
     let info = Some(DataInfo {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         sliced: false,
         kind: Some(0),
         encoding: Some(Encoding::default()),
