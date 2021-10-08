@@ -142,16 +142,16 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(3);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(3)
-                .max_links(1)
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast.build().unwrap())
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
@@ -163,46 +163,46 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(3);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast.build().unwrap())
         .build(Arc::new(SHClientStable::new(counter.clone())))
         .unwrap();
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast.build().unwrap())
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
     let client02_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the third client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client03_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast.build().unwrap())
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
     let client03_manager = TransportManager::new(config);
@@ -344,6 +344,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     .timeout(TIMEOUT)
     .await
     .unwrap();
+
     // Stop the tasks
     c2_handle.cancel().await;
     c3_handle.cancel().await;

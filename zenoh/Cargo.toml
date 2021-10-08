@@ -39,19 +39,21 @@ auth_pubkey = ["rsa", "num-traits"]
 auth_usrpwd = []
 complete_n = []
 stats = []
+transport_multilink = ["auth_pubkey"]
+transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_tcp = []
 transport_tls = ["async-rustls"]
 transport_udp = []
-transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_unixsock-stream = ["nix"]
 zero-copy = ["bincode", "shared_memory"]
 default = [
     "auth_pubkey",
     "auth_usrpwd",
-    "transport_tcp",
-    "transport_udp",
-    "transport_tls",
+    "transport_multilink",
     "transport_quic",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
     "transport_unixsock-stream",
     "zero-copy",
 ]

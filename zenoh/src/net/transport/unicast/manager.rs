@@ -33,6 +33,7 @@ pub struct TransportManagerConfigUnicast {
     pub open_timeout: Duration,
     pub open_pending: usize,
     pub max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     pub is_qos: bool,
     #[cfg(feature = "zero-copy")]
@@ -59,6 +60,7 @@ pub struct TransportManagerConfigBuilderUnicast {
     pub(super) open_timeout: Duration,
     pub(super) open_pending: usize,
     pub(super) max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
     #[cfg(feature = "zero-copy")]
@@ -75,6 +77,7 @@ impl Default for TransportManagerConfigBuilderUnicast {
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
             max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
             #[cfg(feature = "zero-copy")]
@@ -111,6 +114,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
+    #[cfg(feature = "transport_multilink")]
     pub fn max_links(mut self, max_links: usize) -> Self {
         self.max_links = max_links;
         self
@@ -156,6 +160,7 @@ impl TransportManagerConfigBuilderUnicast {
         if let Some(v) = properties.max_sessions() {
             self = self.max_sessions(*v);
         }
+        #[cfg(feature = "transport_multilink")]
         if let Some(v) = properties.link().max_number() {
             self = self.max_links(*v);
         }
@@ -174,6 +179,16 @@ impl TransportManagerConfigBuilderUnicast {
 
     #[allow(unused_mut)]
     pub fn build(mut self) -> ZResult<TransportManagerConfigUnicast> {
+        #[cfg(feature = "auth_pubkey")]
+        if !self
+            .peer_authenticator
+            .iter()
+            .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
+        {
+            self.peer_authenticator
+                .insert(PubKeyAuthenticator::init()?.into());
+        }
+
         #[cfg(feature = "zero-copy")]
         if self.is_shm
             && !self
@@ -185,33 +200,19 @@ impl TransportManagerConfigBuilderUnicast {
                 .insert(SharedMemoryAuthenticator::new().into());
         }
 
-        #[cfg(feature = "auth_pubkey")]
-        if self.max_links > 1
-            && !self
-                .peer_authenticator
-                .iter()
-                .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
-        {
-            self.peer_authenticator
-                .insert(PubKeyAuthenticator::default().into());
-        }
-        #[cfg(not(feature = "auth_pubkey"))]
-        {
-            self = self.max_links(1);
-        }
-
         let tmcu = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
             open_pending: self.open_pending,
             max_sessions: self.max_sessions,
+            #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
-            peer_authenticator: self.peer_authenticator,
-            link_authenticator: self.link_authenticator,
             is_qos: self.is_qos,
             #[cfg(feature = "zero-copy")]
             is_shm: self.is_shm,
+            peer_authenticator: self.peer_authenticator,
+            link_authenticator: self.link_authenticator,
         };
         Ok(tmcu)
     }

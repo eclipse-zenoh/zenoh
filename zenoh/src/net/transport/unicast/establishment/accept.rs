@@ -96,12 +96,15 @@ async fn accept_recv_init_syn(
 
     // Check if we are allowed to open more links if the transport is established
     if let Some(t) = manager.get_transport_unicast(&init_syn.pid) {
+        let t = t
+            .get_transport()
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+
         // Check if we have reached maximum number of links for this transport
-        let links = t.get_transport().map_err(|e| (e, None))?.get_links();
-        if links.len() >= manager.config.unicast.max_links {
+        if !t.can_add_link(link) {
             let e = format!(
-                "Rejecting InitSyn on {} because of maximum links ({}) limit reached for peer: {}",
-                manager.config.unicast.max_links, link, init_syn.pid
+                "Rejecting InitSyn on {} because of max num links for peer: {}",
+                link, init_syn.pid
             );
             return Err((
                 zerror2!(ZErrorKind::InvalidMessage { descr: e }),

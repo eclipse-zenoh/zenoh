@@ -196,6 +196,32 @@ impl PubKeyAuthenticator {
         }
     }
 
+    pub fn init() -> ZResult<PubKeyAuthenticator> {
+        let mut prng = PseudoRng::from_entropy();
+        let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).map_err(|e| {
+            zerror2!(ZErrorKind::Other {
+                descr: e.to_string()
+            })
+        })?;
+        let prv_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
+            zerror2!(ZErrorKind::Other {
+                descr: e.to_string()
+            })
+        })?;
+        let pub_key = RsaPublicKey::from(&prv_key);
+
+        let pka = PubKeyAuthenticator {
+            pub_key,
+            prv_key,
+            state: Mutex::new(InnerState {
+                prng,
+                known_keys: None,
+                authenticated: HashMap::new(),
+            }),
+        };
+        Ok(pka)
+    }
+
     pub async fn add_key(&self, key: RsaPublicKey) -> ZResult<()> {
         let mut guard = zasynclock!(self.state);
         match guard.known_keys.as_mut() {
@@ -309,25 +335,6 @@ impl PubKeyAuthenticator {
         }
 
         Ok(None)
-    }
-}
-
-impl Default for PubKeyAuthenticator {
-    fn default() -> Self {
-        let mut prng = PseudoRng::from_entropy();
-        let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).unwrap();
-        let prv_key = RsaPrivateKey::new(&mut prng, bits).unwrap();
-        let pub_key = RsaPublicKey::from(&prv_key);
-
-        PubKeyAuthenticator {
-            pub_key,
-            prv_key,
-            state: Mutex::new(InnerState {
-                prng,
-                known_keys: None,
-                authenticated: HashMap::new(),
-            }),
-        }
     }
 }
 

@@ -246,7 +246,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    async fn single_run(
+    async fn test_transport(
         peer01: &TransportMulticastPeer,
         peer02: &TransportMulticastPeer,
         channel: Channel,
@@ -301,22 +301,26 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
+    async fn run_single(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
+        let (peer01, peer02) = open_transport(endpoint).await;
+        test_transport(&peer01, &peer02, channel, msg_size).await;
+
+        #[cfg(feature = "stats")]
+        {
+            let stats = peer01.transport.get_stats().unwrap();
+            println!("\tPeer 01: {:?}", stats);
+            let stats = peer02.transport.get_stats().unwrap();
+            println!("\tPeer 02: {:?}", stats);
+        }
+
+        close_transport(peer01, peer02, endpoint).await;
+    }
+
     async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
         for e in endpoints.iter() {
             for ch in channel.iter() {
                 for ms in msg_size.iter() {
-                    let (peer01, peer02) = open_transport(e).await;
-                    single_run(&peer01, &peer02, *ch, *ms).await;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        let stats = peer01.transport.get_stats().unwrap();
-                        println!("\tPeer 01: {:?}", stats);
-                        let stats = peer02.transport.get_stats().unwrap();
-                        println!("\tPeer 02: {:?}", stats);
-                    }
-
-                    close_transport(peer01, peer02, e).await;
+                    run_single(e, *ch, *ms).await;
                 }
             }
         }
