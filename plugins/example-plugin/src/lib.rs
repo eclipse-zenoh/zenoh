@@ -96,13 +96,13 @@ async fn run(runtime: Runtime, selector: ResKey<'_>, flag: Arc<AtomicBool>) {
 
     while flag.load(Relaxed) {
         select!(
-            sample = sub.receiver().next().fuse() => {
+            sample = sub.receiver().next() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.res_name, sample.value);
                 stored.insert(sample.res_name.clone(), sample);
             },
 
-            query = queryable.receiver().next().fuse() => {
+            query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (rname, sample) in stored.iter() {

@@ -106,12 +106,12 @@ pub(crate) async fn start_storage(
         loop {
             select!(
                 // on query on storage_admin
-                query = storage_admin.receiver().next().fuse() => {
+                query = storage_admin.receiver().next() => {
                     let query = query.unwrap();
                     query.reply_async(Sample::new(admin_path.to_string(), storage.get_admin_status().await)).await;
                 },
                 // on sample for path_expr
-                sample = storage_sub.receiver().next().fuse() => {
+                sample = storage_sub.receiver().next() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
                         interceptor.read().await.on_sample(sample.unwrap()).await
@@ -124,7 +124,7 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on query on path_expr
-                query = storage_queryable.receiver().next().fuse() => {
+                query = storage_queryable.receiver().next() => {
                     let q = query.unwrap();
                     // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor

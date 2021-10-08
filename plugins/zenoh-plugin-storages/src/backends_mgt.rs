@@ -84,13 +84,13 @@ pub(crate) async fn start_backend(
         loop {
             select!(
                 // on query on backend_admin
-                query = backend_admin.receiver().next().fuse() => {
+                query = backend_admin.receiver().next() => {
                     let query = query.unwrap();
                     query.reply_async(Sample::new(admin_path.to_string(), backend.get_admin_status().await)).await;
                 },
 
                 // on sample for storages_admin
-                sample = storages_admin.receiver().next().fuse() => {
+                sample = storages_admin.receiver().next() => {
                     let sample = sample.unwrap();
                     trace!("{} received change for {}", admin_path, sample.res_name);
                     match sample.kind {
