@@ -1071,9 +1071,9 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> Getter<'a>
+    pub fn get<'a, 'b, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> Getter<'a, 'b>
     where
-        IntoKeyedSelector: Into<KeyedSelector<'a>>,
+        IntoKeyedSelector: Into<KeyedSelector<'b>>,
     {
         Getter {
             session: self,
