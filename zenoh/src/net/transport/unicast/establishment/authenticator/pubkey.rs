@@ -306,34 +306,6 @@ impl PubKeyAuthenticator {
             (None, None) => {}
         }
 
-        // No keys are defined, generate a random one to support multilink if needed
-        if let Some(n) = config.link().max_number() {
-            if *n > 1 {
-                let mut prng = PseudoRng::from_entropy();
-                let bits = match c.key_size() {
-                    Some(ks) => *ks,
-                    None => zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).unwrap(),
-                };
-                let prv_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: e.to_string()
-                    })
-                })?;
-                let pub_key = RsaPublicKey::from(&prv_key);
-
-                let pa = PubKeyAuthenticator {
-                    pub_key,
-                    prv_key,
-                    state: Mutex::new(InnerState {
-                        prng,
-                        known_keys: None,
-                        authenticated: HashMap::new(),
-                    }),
-                };
-                return Ok(Some(pa));
-            }
-        }
-
         Ok(None)
     }
 }
