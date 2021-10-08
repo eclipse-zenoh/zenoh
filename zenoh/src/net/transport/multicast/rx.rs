@@ -60,7 +60,7 @@ impl TransportMulticastInner {
             ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
         }
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
         peer.handler.handle_message(msg)
     }
@@ -98,7 +98,7 @@ impl TransportMulticastInner {
                 }
                 guard.defrag.push(sn, buffer)?;
                 if is_final {
-                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
                         let e = format!(
                             "Transport {}: {}. Defragmentation error.",

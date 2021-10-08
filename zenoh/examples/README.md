@@ -144,7 +144,7 @@
 
 ### z_pub_shm & z_sub_shm
 
-   A pub/sub example involving the zero-copy feature based on shared memory.
+   A pub/sub example involving the shared-memory feature based on shared memory.
 
    Typical Subscriber usage:
    ```bash
@@ -193,9 +193,9 @@
 
 ### z_pub_shm_thr & z_sub_shm_thr
 
-   Pub/Sub throughput test involving the zero-copy feature based on shared memory.
+   Pub/Sub throughput test involving the shared-memory feature based on shared memory.
    This example allows to perform throughput measurements between a pubisher performing
-   put operations with the zero-copy feature and a subscriber receiving notifications
+   put operations with the shared-memory feature and a subscriber receiving notifications
    of those puts.
 
    Typical Subscriber usage:

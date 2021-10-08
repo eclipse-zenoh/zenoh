@@ -189,7 +189,7 @@ async fn open_recv_init_ack(
             )
             .await;
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if pa.id() == PeerAuthenticatorId::Shm {
             // Check if SHM has been validated from the other side
             att = match att {

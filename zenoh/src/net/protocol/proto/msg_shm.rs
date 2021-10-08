@@ -11,16 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::io::SharedMemoryReader;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::msg::*;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh_util::core::ZResult;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 macro_rules! unset_sliced {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
@@ -33,7 +33,7 @@ macro_rules! unset_sliced {
     };
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 macro_rules! set_sliced {
     ($msg:expr, $data_info:expr) => {
         match $data_info {
@@ -53,7 +53,7 @@ macro_rules! set_sliced {
     };
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl ZenohMessage {
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
@@ -97,7 +97,7 @@ impl ZenohMessage {
 }
 
 #[allow(dead_code)]
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl TransportMessage {
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;

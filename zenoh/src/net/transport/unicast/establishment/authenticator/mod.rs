@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "auth_pubkey")]
 mod pubkey;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod shm;
 #[cfg(feature = "auth_usrpwd")]
 mod userpassword;
@@ -28,7 +28,7 @@ use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
 pub use pubkey::*;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 pub use shm::*;
 use std::collections::HashSet;
 use std::fmt;
@@ -159,7 +159,7 @@ impl PeerAuthenticator {
             }
         }
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             let mut res = SharedMemoryAuthenticator::from_config(config).await?;
             if let Some(pa) = res.take() {

@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod tests {
     use async_std::prelude::*;
     use async_std::task;
@@ -133,7 +133,7 @@ mod tests {
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
 
-        // Create a peer manager with zero-copy authenticator enabled
+        // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
@@ -150,7 +150,7 @@ mod tests {
             .unwrap();
         let peer_shm01_manager = TransportManager::new(config);
 
-        // Create a peer manager with zero-copy authenticator enabled
+        // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
@@ -167,7 +167,7 @@ mod tests {
             .unwrap();
         let peer_shm02_manager = TransportManager::new(config);
 
-        // Create a peer manager with zero-copy authenticator disabled
+        // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
@@ -361,7 +361,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    #[cfg(all(feature = "transport_tcp", feature = "zero-copy"))]
+    #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
     #[test]
     fn transport_tcp_shm() {
         env_logger::init();

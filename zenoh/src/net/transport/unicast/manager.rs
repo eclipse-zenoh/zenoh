@@ -36,7 +36,7 @@ pub struct TransportManagerConfigUnicast {
     #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     pub is_qos: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
     pub peer_authenticator: HashSet<PeerAuthenticator>,
     pub link_authenticator: HashSet<LinkAuthenticator>,
@@ -63,7 +63,7 @@ pub struct TransportManagerConfigBuilderUnicast {
     #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
     pub(super) link_authenticator: HashSet<LinkAuthenticator>,
@@ -80,7 +80,7 @@ impl Default for TransportManagerConfigBuilderUnicast {
             #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
             peer_authenticator: HashSet::new(),
             link_authenticator: HashSet::new(),
@@ -135,7 +135,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub fn shm(mut self, is_shm: bool) -> Self {
         self.is_shm = is_shm;
         self
@@ -167,7 +167,7 @@ impl TransportManagerConfigBuilderUnicast {
         if let Some(v) = properties.qos() {
             self = self.qos(*v);
         }
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if let Some(v) = properties.zero_copy() {
             self = self.shm(*v);
         }
@@ -189,7 +189,7 @@ impl TransportManagerConfigBuilderUnicast {
                 .insert(PubKeyAuthenticator::init()?.into());
         }
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if self.is_shm
             && !self
                 .peer_authenticator
@@ -209,7 +209,7 @@ impl TransportManagerConfigBuilderUnicast {
             #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
             is_qos: self.is_qos,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
             peer_authenticator: self.peer_authenticator,
             link_authenticator: self.link_authenticator,

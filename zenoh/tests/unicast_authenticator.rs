@@ -24,7 +24,7 @@ use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
 // #[cfg(feature = "auth_pubkey")]
 // use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
 #[cfg(feature = "auth_usrpwd")]
 use zenoh::net::transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
@@ -500,7 +500,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     task::sleep(SLEEP).await;
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
     /* [CLIENT] */
     let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
@@ -582,7 +582,7 @@ async fn run(endpoint: &EndPoint) {
     authenticator_public_key(endpoint).await;
     #[cfg(feature = "auth_usrpwd")]
     authenticator_user_password(endpoint).await;
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     authenticator_shared_memory(endpoint).await;
 }
 

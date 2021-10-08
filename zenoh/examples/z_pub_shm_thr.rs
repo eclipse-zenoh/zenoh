@@ -11,18 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use clap::{App, Arg};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::buf::SharedMemoryManager;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::prelude::ResKey::*;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::prelude::*;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::publisher::CongestionControl;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -50,17 +50,17 @@ async fn main() {
     }
 }
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(not(feature = "shared-memory"))]
 fn main() {
     println!(
-        "Please, enable zero-copy feature by rebuilding as follows:\
-            \n\n\t$ cargo build --release --features \"zero-copy\"\n"
+        "Please, enable shared-memory feature by rebuilding as follows:\
+            \n\n\t$ cargo build --release --features \"shared-memory\"\n"
     );
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 fn parse_args() -> (Properties, usize, usize) {
-    let args = App::new("zenoh zero-copy throughput pub example")
+    let args = App::new("zenoh shared-memory throughput pub example")
         .arg(
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
                 .default_value("32"),

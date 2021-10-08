@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
 use std::convert::AsRef;
 use std::fmt;
@@ -20,10 +20,10 @@ use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use zenoh_util::collections::RecyclingObject;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh_util::core::ZResult;
 
 /*************************************/
@@ -33,9 +33,9 @@ use zenoh_util::core::ZResult;
 pub enum ZSliceBuffer {
     NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     ShmInfo(Arc<Vec<u8>>),
 }
 
@@ -44,9 +44,9 @@ impl ZSliceBuffer {
         match self {
             Self::NetSharedBuffer(buf) => buf,
             Self::NetOwnedBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmInfo(buf) => buf.as_slice(),
         }
     }
@@ -59,11 +59,11 @@ impl ZSliceBuffer {
                 &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
             }
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => {
                 (&mut (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf))).as_mut_slice()
             }
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmInfo(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
         }
     }
@@ -175,21 +175,21 @@ impl<'a> From<&IoSlice<'a>> for ZSliceBuffer {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZSliceBuffer {
     fn from(buf: Arc<SharedMemoryBuf>) -> Self {
         Self::ShmBuffer(buf)
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZSliceBuffer {
     fn from(buf: Box<SharedMemoryBuf>) -> Self {
         Self::ShmBuffer(buf.into())
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZSliceBuffer {
     fn from(buf: SharedMemoryBuf) -> Self {
         Self::ShmBuffer(buf.into())
@@ -263,7 +263,7 @@ impl ZSlice {
     pub fn get_kind(&self) -> ZSliceKind {
         match &self.buf {
             ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
         }
     }
@@ -277,7 +277,7 @@ impl ZSlice {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
@@ -305,7 +305,7 @@ impl ZSlice {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         match &self.buf {
@@ -472,7 +472,7 @@ impl<'a> From<&IoSlice<'a>> for ZSlice {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZSlice {
     fn from(buf: Arc<SharedMemoryBuf>) -> Self {
         let len = buf.len();
@@ -480,7 +480,7 @@ impl From<Arc<SharedMemoryBuf>> for ZSlice {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZSlice {
     fn from(buf: Box<SharedMemoryBuf>) -> Self {
         let len = buf.len();
@@ -488,7 +488,7 @@ impl From<Box<SharedMemoryBuf>> for ZSlice {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZSlice {
     fn from(buf: SharedMemoryBuf) -> Self {
         let len = buf.len();

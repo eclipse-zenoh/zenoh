@@ -11,17 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::shm::{SharedMemoryBuf, SharedMemoryReader};
 use super::ZSlice;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh_util::core::ZResult;
 
 /*************************************/
@@ -174,9 +174,9 @@ impl Default for ZBufInner {
 pub struct ZBuf {
     slices: ZBufInner,
     pos: ZBufPos,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     has_shminfo: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     has_shmbuf: bool,
 }
 
@@ -185,9 +185,9 @@ impl ZBuf {
         ZBuf {
             slices: ZBufInner::default(),
             pos: ZBufPos::default(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             has_shminfo: false,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             has_shmbuf: false,
         }
     }
@@ -199,7 +199,7 @@ impl ZBuf {
 
     #[inline]
     pub fn add_zslice(&mut self, slice: ZSlice) {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         match &slice.buf {
             ZSliceBuffer::ShmInfo(_) => self.has_shminfo = true,
             ZSliceBuffer::ShmBuffer(_) => self.has_shmbuf = true,
@@ -455,7 +455,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         if !self.has_shminfo() {
@@ -484,7 +484,7 @@ impl ZBuf {
         Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         if !self.has_shmbuf() {
@@ -513,13 +513,13 @@ impl ZBuf {
         Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub(crate) fn has_shminfo(&self) -> bool {
         self.has_shminfo
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub(crate) fn has_shmbuf(&self) -> bool {
         self.has_shmbuf
@@ -546,7 +546,7 @@ impl fmt::Debug for ZBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         macro_rules! zsliceprint {
             ($slice:expr) => {
-                #[cfg(feature = "zero-copy")]
+                #[cfg(feature = "shared-memory")]
                 {
                     match $slice.buf {
                         ZSliceBuffer::NetSharedBuffer(_) => write!(f, " BUF:")?,
@@ -555,7 +555,7 @@ impl fmt::Debug for ZBuf {
                         ZSliceBuffer::ShmInfo(_) => write!(f, " SHM_INFO:")?,
                     }
                 }
-                #[cfg(not(feature = "zero-copy"))]
+                #[cfg(not(feature = "shared-memory"))]
                 {
                     write!(f, " BUF:")?;
                 }
@@ -725,7 +725,7 @@ impl PartialEq for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Arc<SharedMemoryBuf>) -> ZBuf {
         let mut zbuf = ZBuf::new();
@@ -734,7 +734,7 @@ impl From<Arc<SharedMemoryBuf>> for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Box<SharedMemoryBuf>) -> ZBuf {
         let mut zbuf = ZBuf::new();
@@ -743,7 +743,7 @@ impl From<Box<SharedMemoryBuf>> for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZBuf {
     fn from(smb: SharedMemoryBuf) -> ZBuf {
         let mut zbuf = ZBuf::new();

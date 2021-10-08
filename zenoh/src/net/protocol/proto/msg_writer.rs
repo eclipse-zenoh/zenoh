@@ -20,12 +20,12 @@ impl WBuf {
     #[inline(always)]
     fn write_deco_attachment(&mut self, attachment: &Attachment) -> bool {
         zcheck!(self.write(attachment.header()));
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             self.write_zbuf(&attachment.buffer, attachment.buffer.has_shminfo())
         }
 
-        #[cfg(not(feature = "zero-copy"))]
+        #[cfg(not(feature = "shared-memory"))]
         {
             self.write_zbuf(&attachment.buffer)
         }
@@ -327,22 +327,22 @@ impl WBuf {
         zcheck!(self.write(data.header()));
         zcheck!(self.write_reskey(&data.key));
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         let mut sliced = false;
 
         if let Some(data_info) = data.data_info.as_ref() {
             zcheck!(self.write_data_info(data_info));
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             {
                 sliced = data_info.sliced
             }
         }
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             self.write_zbuf(&data.payload, sliced)
         }
-        #[cfg(not(feature = "zero-copy"))]
+        #[cfg(not(feature = "shared-memory"))]
         {
             self.write_zbuf(&data.payload)
         }

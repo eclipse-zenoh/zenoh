@@ -11,23 +11,23 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use async_std::task::sleep;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use clap::{App, Arg};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::time::Duration;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::buf::SharedMemoryManager;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use zenoh::prelude::*;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 const N: usize = 10;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 const K: u32 = 3;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initiate logging
@@ -105,17 +105,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[cfg(not(feature = "zero-copy"))]
+#[cfg(not(feature = "shared-memory"))]
 fn main() {
     println!(
-        "Please, enable zero-copy feature by rebuilding as follows:\
-            \n\n\t$ cargo build --release --features \"zero-copy\"\n"
+        "Please, enable shared-memory feature by rebuilding as follows:\
+            \n\n\t$ cargo build --release --features \"shared-memory\"\n"
     );
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 fn parse_args() -> (Properties, String, String) {
-    let args = App::new("zenoh zero-copy pub example")
+    let args = App::new("zenoh shared-memory pub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),

@@ -25,13 +25,13 @@ impl ZBuf {
     #[allow(unused_variables)]
     #[inline(always)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             let buffer = self.read_zbuf(imsg::has_flag(header, tmsg::flag::Z))?;
             Some(Attachment { buffer })
         }
 
-        #[cfg(not(feature = "zero-copy"))]
+        #[cfg(not(feature = "shared-memory"))]
         {
             let buffer = self.read_zbuf()?;
             Some(Attachment { buffer })
@@ -482,12 +482,12 @@ impl ZBuf {
 
         let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         let mut sliced = false;
 
         let data_info = if imsg::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             {
                 sliced = di.sliced;
             }
@@ -496,9 +496,9 @@ impl ZBuf {
             None
         };
 
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         let payload = self.read_zbuf(sliced)?;
-        #[cfg(not(feature = "zero-copy"))]
+        #[cfg(not(feature = "shared-memory"))]
         let payload = self.read_zbuf()?;
 
         let body = ZenohBody::Data(Data {
@@ -531,7 +531,7 @@ impl ZBuf {
         let mut info = DataInfo::new();
 
         let options = self.read_zint()?;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }

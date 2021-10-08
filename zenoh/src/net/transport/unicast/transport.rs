@@ -438,7 +438,7 @@ impl TransportUnicastInner {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         {
             let res = if self.is_shm {
                 message.map_to_shminfo()

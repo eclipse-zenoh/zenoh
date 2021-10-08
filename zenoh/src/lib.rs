@@ -108,11 +108,11 @@ pub mod buf {
     /// A writable bytes buffer.
     pub use super::net::protocol::io::WBuf;
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub use super::net::protocol::io::SharedMemoryBuf;
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub use super::net::protocol::io::SharedMemoryBufInfo;
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub use super::net::protocol::io::SharedMemoryManager;
 }
 
