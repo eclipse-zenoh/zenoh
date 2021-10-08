@@ -230,28 +230,43 @@ impl<'a> QueryingSubscriber<'a> {
     /// Issue a new query using the configured resource key and value_selector.
     #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
-        self.query_on(
-            &self.conf.query_reskey.clone(),
-            &self.conf.query_value_selector.clone(),
+        self.query_on_selector(
+            KeyedSelector {
+                key_selector: self.conf.query_reskey.clone(),
+                value_selector: &self.conf.query_value_selector.clone(),
+            },
             self.conf.query_target.clone(),
             self.conf.query_consolidation.clone(),
         )
     }
 
     /// Issue a new query on the specified resource key and value_selector.
-    pub fn query_on(
+    #[inline]
+    pub fn query_on<'c, IntoKeyedSelector>(
         &mut self,
-        reskey: &ResKey,
-        value_selector: &str,
+        selector: IntoKeyedSelector,
+        target: QueryTarget,
+        consolidation: QueryConsolidation,
+    ) -> impl ZFuture<Output = ZResult<()>>
+    where
+        IntoKeyedSelector: Into<KeyedSelector<'c>>,
+    {
+        self.query_on_selector(selector.into(), target, consolidation)
+    }
+
+    #[inline]
+    fn query_on_selector(
+        &mut self,
+        selector: KeyedSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.receiver.state);
-        log::debug!("Start query on {}?{}", reskey, value_selector);
+        log::debug!("Start query on {}", selector);
         match self
             .conf
             .session
-            .get(&KeyedSelector::from(reskey).with_value_selector(value_selector))
+            .get(selector)
             .target(target)
             .consolidation(consolidation)
             .wait()
