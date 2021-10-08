@@ -47,7 +47,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            sample = subscriber.receiver().next().fuse() => {
+            sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.to_vec()));

@@ -26,7 +26,7 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Session;
-use zenoh_util::zwrite;
+use zenoh_util::{zread, zwrite};
 
 use super::PublicationCache;
 
@@ -292,6 +292,14 @@ impl Stream for QueryingSubscriberReceiver {
     }
 }
 
+impl futures::stream::FusedStream for QueryingSubscriberReceiver {
+    #[inline(always)]
+    fn is_terminated(&self) -> bool {
+        let state = &mut zread!(self.state);
+        state.is_terminated()
+    }
+}
+
 impl Receiver<Sample> for QueryingSubscriberReceiver {
     fn recv(&self) -> Result<Sample, RecvError> {
         let state = &mut zwrite!(self.state);
@@ -391,6 +399,13 @@ impl Stream for InnerState {
             // otherwise, take from merge_queue
             Poll::Ready(Some(mself.merge_queue.pop().unwrap()))
         }
+    }
+}
+
+impl futures::stream::FusedStream for InnerState {
+    #[inline(always)]
+    fn is_terminated(&self) -> bool {
+        self.replies_recv_queue.is_empty() && self.subscriber_recv.is_terminated()
     }
 }
 
