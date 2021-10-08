@@ -137,6 +137,7 @@ pub mod whatami {
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct WhatAmIMatcher(pub NonZeroZInt);
+
     impl WhatAmIMatcher {
         pub fn try_from<T: std::convert::TryInto<ZInt>>(i: T) -> Option<Self> {
             let i = i.try_into().ok()?;

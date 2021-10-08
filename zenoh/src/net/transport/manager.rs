@@ -61,7 +61,8 @@ use zenoh_util::zparse;
 ///
 /// // Create the default TransportManager
 /// let config = TransportManagerConfig::builder()
-///         .build(Arc::new(MySH::default()));
+///         .build(Arc::new(MySH::default()))
+///         .unwrap();
 /// let manager = TransportManager::new(config);
 ///
 /// // Create the TransportManager with custom configuration
@@ -73,14 +74,16 @@ use zenoh_util::zparse;
 ///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports
 ///         .max_sessions(5)    // Allow max 5 transports open
 ///         .max_links(2)       // Allow max 2 links per transport
-///         .build();
+///         .build()
+///         .unwrap();
 /// let config = TransportManagerConfig::builder()
 ///         .pid(PeerId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
-///         .build(Arc::new(MySH::default()));
+///         .build(Arc::new(MySH::default()))
+///         .unwrap();
 /// let manager = TransportManager::new(config);
 /// ```
 
