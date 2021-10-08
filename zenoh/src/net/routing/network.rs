@@ -266,7 +266,7 @@ impl Network {
             hasher.write(self.graph[idx1].pid.as_slice());
             hasher.write(self.graph[idx2].pid.as_slice());
         }
-        let weight = 100.0 + ((hasher.finish() as u32) as f64) / std::u32::MAX as f64;
+        let weight = 100.0 + ((hasher.finish() as u32) as f64) / u32::MAX as f64;
         self.graph.update_edge(idx1, idx2, weight);
     }
 

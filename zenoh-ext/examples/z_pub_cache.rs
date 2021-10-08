@@ -38,7 +38,7 @@ async fn main() {
     }
     let _publisher = publisher_builder.await.unwrap();
 
-    for idx in 0..std::u32::MAX {
+    for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Put Data ('{}': '{}')", rid, buf);
