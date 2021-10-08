@@ -22,11 +22,14 @@
 //! use zenoh::prelude::*;
 //! ```
 
-use crate::buf::{SharedMemoryBuf, ZBuf};
+#[cfg(feature = "zero-copy")]
+use crate::buf::SharedMemoryBuf;
+use crate::buf::ZBuf;
 use crate::data_kind;
 use crate::net::protocol::proto::DataInfo;
 use crate::queryable::Query;
 use crate::time::{new_reception_timestamp, Timestamp};
+#[cfg(feature = "zero-copy")]
 use async_std::sync::Arc;
 use regex::Regex;
 use std::convert::TryFrom;
