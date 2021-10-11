@@ -76,7 +76,7 @@ impl Default for TransportManagerConfigBuilderUnicast {
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
             #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
@@ -157,7 +157,7 @@ impl TransportManagerConfigBuilderUnicast {
         if let Some(v) = properties.transport().unicast().open_pending() {
             self = self.open_pending(*v);
         }
-        if let Some(v) = properties.transport().max_sessions() {
+        if let Some(v) = properties.transport().unicast().max_sessions() {
             self = self.max_sessions(*v);
         }
         #[cfg(feature = "transport_multilink")]

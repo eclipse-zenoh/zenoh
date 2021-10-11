@@ -162,8 +162,6 @@ validated_struct::validator! {
         pub transport: TransportConf {
             #[intkey(ZN_SEQ_NUM_RESOLUTION_KEY, into = u64_to_cowstr, from = u64_from_str)]
             sequence_number_resolution: Option<ZInt>,
-            #[intkey(ZN_MAX_SESSIONS_KEY, into = usize_to_cowstr, from = usize_from_str)]
-            max_sessions: Option<usize>,
             #[intkey(ZN_QOS_KEY, into = bool_to_cowstr, from = bool_from_str)]
             qos: Option<bool>,
             #[serde(default)]
@@ -173,6 +171,8 @@ validated_struct::validator! {
                 open_timeout: Option<ZInt>,
                 #[intkey(ZN_OPEN_INCOMING_PENDING_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 open_pending: Option<usize>,
+                #[intkey(ZN_MAX_SESSIONS_UNICAST_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                max_sessions: Option<usize>,
                 #[intkey(ZN_MAX_LINKS_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 max_links: Option<usize>,
             },
@@ -181,6 +181,8 @@ validated_struct::validator! {
                 /// Link keep-alive duration in milliseconds
                 #[intkey(ZN_JOIN_INTERVAL_KEY, into = u64_to_cowstr, from = u64_from_str)]
                 join_interval: Option<ZInt>,
+                #[intkey(ZN_MAX_SESSIONS_MULTICAST_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                max_sessions: Option<usize>,
             },
             #[serde(default)]
             pub link: TransportLinkConf {

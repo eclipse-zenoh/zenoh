@@ -57,7 +57,7 @@ impl Default for TransportManagerConfigBuilderMulticast {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
             join_interval: Duration::from_millis(zparse!(ZN_JOIN_INTERVAL_DEFAULT).unwrap()),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_MULTICAST_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
         }
     }
@@ -102,7 +102,7 @@ impl TransportManagerConfigBuilderMulticast {
         if let Some(v) = properties.transport().multicast().join_interval() {
             self = self.join_interval(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.transport().max_sessions() {
+        if let Some(v) = properties.transport().multicast().max_sessions() {
             self = self.max_sessions(*v);
         }
         if let Some(v) = properties.transport().qos() {

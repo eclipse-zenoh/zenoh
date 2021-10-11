@@ -271,13 +271,13 @@ mod consts {
     pub const ZN_BATCH_SIZE_STR: &str = "batch_size";
     pub const ZN_BATCH_SIZE_DEFAULT: &str = "65535";
 
-    /// Configures the maximum number of simultaneous open sessions.
-    /// String key : `"max_sessions"`.
+    /// Configures the maximum number of simultaneous open unicast sessions.
+    /// String key : `"max_sessions_unicast"`.
     /// Accepted values : `<unsigned integer>`.
     /// Default value : `1024`.
-    pub const ZN_MAX_SESSIONS_KEY: u64 = 0x70;
-    pub const ZN_MAX_SESSIONS_STR: &str = "max_sessions";
-    pub const ZN_MAX_SESSIONS_DEFAULT: &str = "1024";
+    pub const ZN_MAX_SESSIONS_UNICAST_KEY: u64 = 0x70;
+    pub const ZN_MAX_SESSIONS_UNICAST_STR: &str = "max_sessions_unicast";
+    pub const ZN_MAX_SESSIONS_UNICAST_DEFAULT: &str = "1024";
 
     /// Configures the maximum number of links per open session.
     /// String key : `"max_links"`.
@@ -371,6 +371,14 @@ mod consts {
     /// Accepted values : `<file path>`.
     pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY: u64 = 0x83;
     pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR: &str = "auth_rsa_known_keys_file";
+
+    /// Configures the maximum number of simultaneous open unicast sessions.
+    /// String key : `"max_sessions_unicast"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `1024`.
+    pub const ZN_MAX_SESSIONS_MULTICAST_KEY: u64 = 0x84;
+    pub const ZN_MAX_SESSIONS_MULTICAST_STR: &str = "max_sessions_multicast";
+    pub const ZN_MAX_SESSIONS_MULTICAST_DEFAULT: &str = "1024";
 }
 
 pub use consts::*;
@@ -413,7 +421,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_OPEN_INCOMING_PENDING_STR => Some(ZN_OPEN_INCOMING_PENDING_KEY),
             ZN_PEER_ID_STR => Some(ZN_PEER_ID_KEY),
             ZN_BATCH_SIZE_STR => Some(ZN_BATCH_SIZE_KEY),
-            ZN_MAX_SESSIONS_STR => Some(ZN_MAX_SESSIONS_KEY),
+            ZN_MAX_SESSIONS_UNICAST_STR => Some(ZN_MAX_SESSIONS_UNICAST_KEY),
             ZN_MAX_LINKS_STR => Some(ZN_MAX_LINKS_KEY),
             ZN_VERSION_STR => Some(ZN_VERSION_KEY),
             ZN_QOS_STR => Some(ZN_QOS_KEY),
@@ -427,6 +435,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY),
             ZN_AUTH_RSA_KEY_SIZE_STR => Some(ZN_AUTH_RSA_KEY_SIZE_KEY),
             ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY),
+            ZN_MAX_SESSIONS_MULTICAST_STR => Some(ZN_MAX_SESSIONS_MULTICAST_KEY),
             _ => None,
         }
     }
@@ -467,6 +476,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_OPEN_INCOMING_PENDING_KEY => Some(ZN_OPEN_INCOMING_PENDING_STR.to_string()),
             ZN_PEER_ID_KEY => Some(ZN_PEER_ID_STR.to_string()),
             ZN_BATCH_SIZE_KEY => Some(ZN_BATCH_SIZE_STR.to_string()),
+            ZN_MAX_SESSIONS_UNICAST_KEY => Some(ZN_MAX_SESSIONS_UNICAST_STR.to_string()),
             ZN_MAX_LINKS_KEY => Some(ZN_MAX_LINKS_STR.to_string()),
             ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
             ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
@@ -480,6 +490,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR.to_string()),
             ZN_AUTH_RSA_KEY_SIZE_KEY => Some(ZN_AUTH_RSA_KEY_SIZE_STR.to_string()),
             ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR.to_string()),
+            ZN_MAX_SESSIONS_MULTICAST_KEY => Some(ZN_MAX_SESSIONS_MULTICAST_STR.to_string()),
             _ => None,
         }
     }
