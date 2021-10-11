@@ -19,7 +19,7 @@ use super::protocol::{
     proto::{DataInfo, RoutingContext},
 };
 use super::routing::face::Face;
-use super::transport::Primitives;
+use super::transport::{Primitives, TransportUnicast};
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;
@@ -40,7 +40,11 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, Encoding)> + Send + Sync>;
+type Handler = Box<
+    dyn for<'a> Fn(&'a AdminContext, &'a ResKey<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
+        + Send
+        + Sync,
+>;
 
 pub struct AdminSpace {
     pid: PeerId,
@@ -58,15 +62,21 @@ impl AdminSpace {
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
             root_path.clone(),
-            Arc::new(Box::new(|context| router_data(context).boxed())),
+            Arc::new(Box::new(|context, key, args| {
+                router_data(context, key, args).boxed()
+            })),
         );
         handlers.insert(
             [&root_path, "/linkstate/routers"].concat(),
-            Arc::new(Box::new(|context| linkstate_routers_data(context).boxed())),
+            Arc::new(Box::new(|context, key, args| {
+                linkstate_routers_data(context, key, args).boxed()
+            })),
         );
         handlers.insert(
             [&root_path, "/linkstate/peers"].concat(),
-            Arc::new(Box::new(|context| linkstate_peers_data(context).boxed())),
+            Arc::new(Box::new(|context, key, args| {
+                linkstate_peers_data(context, key, args).boxed()
+            })),
         );
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
@@ -213,10 +223,13 @@ impl Primitives for AdminSpace {
             None => error!("Unknown ResKey!!"),
         };
 
+        let reskey = reskey.to_owned();
+        let value_selector = value_selector.to_string();
+
         // router is not re-entrant
         task::spawn(async move {
             for (path, handler) in matching_handlers {
-                let (payload, encoding) = handler(&context).await;
+                let (payload, encoding) = handler(&context, &reskey, &value_selector).await;
                 let mut data_info = DataInfo::new();
                 data_info.encoding = Some(encoding);
 
@@ -272,7 +285,11 @@ impl Primitives for AdminSpace {
     }
 }
 
-pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
+pub async fn router_data(
+    context: &AdminContext,
+    _key: &ResKey<'_>,
+    #[allow(unused_variables)] selector: &str,
+) -> (ZBuf, Encoding) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -296,29 +313,40 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
         .collect();
 
     // transports info
-    #[cfg(feature = "stats")]
-    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport| {
-        json!({
+    let transport_to_json = |transport: &TransportUnicast| {
+        #[allow(unused_mut)]
+        let mut json = json!({
             "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
             ),
-            "stats": transport.get_stats().map_or_else(|_| json!({}), |p| json!(p)),
-        })
-    }).collect();
-    #[cfg(not(feature = "stats"))]
-    let transports: Vec<serde_json::Value> = transport_mgr.get_transports().iter().map(|transport| {
-        json!({
-            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
-            "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
-            "links": transport.get_links().map_or_else(
-                |_| Vec::new(),
-                |links| links.iter().map(|link| link.dst.to_string()).collect()
-            ),
-        })
-    }).collect();
+        });
+        #[cfg(feature = "stats")]
+        {
+            use std::convert::TryFrom;
+            let stats = crate::prelude::ValueSelector::try_from(selector)
+                .ok()
+                .map(|s| s.properties.get("stats").map(|v| v == "true"))
+                .flatten()
+                .unwrap_or(false);
+            if stats {
+                json.as_object_mut().unwrap().insert(
+                    "stats".to_string(),
+                    transport
+                        .get_stats()
+                        .map_or_else(|_| json!({}), |p| json!(p)),
+                );
+            }
+        }
+        json
+    };
+    let transports: Vec<serde_json::Value> = transport_mgr
+        .get_transports()
+        .iter()
+        .map(transport_to_json)
+        .collect();
 
     let json = json!({
         "pid": context.pid_str,
@@ -331,7 +359,11 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, Encoding) {
     (ZBuf::from(json.to_string().as_bytes()), Encoding::APP_JSON)
 }
 
-pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) {
+pub async fn linkstate_routers_data(
+    context: &AdminContext,
+    _key: &ResKey<'_>,
+    _args: &str,
+) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
@@ -341,7 +373,11 @@ pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, Encoding) 
     res
 }
 
-pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, Encoding) {
+pub async fn linkstate_peers_data(
+    context: &AdminContext,
+    _key: &ResKey<'_>,
+    _args: &str,
+) -> (ZBuf, Encoding) {
     (
         ZBuf::from(
             context

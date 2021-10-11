@@ -34,7 +34,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            query = queryable.receiver().next().fuse() => {
+            query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 query.reply(Sample::new(path.clone(), value.clone()));

@@ -152,6 +152,7 @@ path = "examples/z_pub.rs"
 [[example]]
 name = "z_pub_shm"
 path = "examples/z_pub_shm.rs"
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_sub"
@@ -184,6 +185,7 @@ path = "examples/z_sub_thr.rs"
 [[example]]
 name = "z_pub_shm_thr"
 path = "examples/z_pub_shm_thr.rs"
+required-features = ["shared-memory"]
 
 [[example]]
 name = "z_ping"

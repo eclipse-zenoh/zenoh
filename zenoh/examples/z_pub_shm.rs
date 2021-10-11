@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+<<<<<<< HEAD
 #[cfg(feature = "shared-memory")]
 use async_std::task::sleep;
 #[cfg(feature = "shared-memory")]
@@ -28,6 +29,17 @@ const N: usize = 10;
 const K: u32 = 3;
 
 #[cfg(feature = "shared-memory")]
+=======
+use async_std::task::sleep;
+use clap::{App, Arg};
+use std::time::Duration;
+use zenoh::buf::SharedMemoryManager;
+use zenoh::prelude::*;
+
+const N: usize = 10;
+const K: u32 = 3;
+
+>>>>>>> upstream/apis-merge
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initiate logging
@@ -105,6 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+<<<<<<< HEAD
 #[cfg(not(feature = "shared-memory"))]
 fn main() {
     println!(
@@ -114,6 +127,8 @@ fn main() {
 }
 
 #[cfg(feature = "shared-memory")]
+=======
+>>>>>>> upstream/apis-merge
 fn parse_args() -> (Properties, String, String) {
     let args = App::new("zenoh shared-memory pub example")
         .arg(
