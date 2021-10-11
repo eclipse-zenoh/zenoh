@@ -89,6 +89,10 @@ validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
     Config {
+        #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
+        version: Option<u8>,
+        #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
+        peer_id: Option<String>,
         /// The node's mode (router, peer or client)
         #[intkey(ZN_MODE_KEY, into = whatami_to_cowstr, from = whatami_from_str)]
         mode: Option<whatami::WhatAmI>,
@@ -100,15 +104,6 @@ validated_struct::validator! {
         #[serde(default)]
         #[intkey(ZN_LISTENER_KEY, into = locvec_to_cowstr, from = locvec_from_str)]
         pub listeners: Vec<Locator>,
-        /// The configuration of authentification.
-        /// A password implies a username is required.
-        #[serde(default)]
-        user: UserConf {
-            #[intkey(ZN_USER_KEY, into = string_to_cowstr, from = string_from_str)]
-            name: Option<String>,
-            #[intkey(ZN_PASSWORD_KEY, into = string_to_cowstr, from = string_from_str)]
-            password: Option<String>,
-        } where (user_conf_validator),
         #[serde(default)]
         pub scouting: ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing
@@ -119,7 +114,7 @@ validated_struct::validator! {
             delay: Option<f64>,
             /// How multicast should behave
             #[serde(default)]
-            pub multicast: MulticastConf {
+            pub multicast: ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not
                 #[intkey(ZN_MULTICAST_SCOUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
                 enabled: Option<bool>,
@@ -146,23 +141,9 @@ validated_struct::validator! {
         /// Whether the link state protocol should be enabled
         #[intkey(ZN_LINK_STATE_KEY, into = bool_to_cowstr, from = bool_from_str)]
         link_state: Option<bool>,
-        /// The path to a file containing the user password dictionary
-        #[intkey(ZN_USER_PASSWORD_DICTIONARY_KEY, into = string_to_cowstr, from = string_from_str)]
-        user_password_dictionary: Option<String>,
         /// Whether peers should connect to each other upon discovery (through multicast or gossip)
         #[intkey(ZN_PEERS_AUTOCONNECT_KEY, into = bool_to_cowstr, from = bool_from_str)]
         peers_autoconnect: Option<bool>,
-        #[serde(default)]
-        pub tls: TLSConf {
-            #[intkey(ZN_TLS_SERVER_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
-            server_private_key: Option<String>,
-            #[intkey(ZN_TLS_SERVER_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
-            server_certificate: Option<String>,
-            #[intkey(ZN_TLS_ROOT_CA_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
-            root_ca_certificate: Option<String>,
-        },
-        #[intkey(ZN_SHM_KEY, into = bool_to_cowstr, from = bool_from_str)]
-        zero_copy: Option<bool>,
         /// Whether local writes/queries should reach local subscribers/queryables
         #[intkey(ZN_LOCAL_ROUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
         local_routing: Option<bool>,
@@ -175,58 +156,89 @@ validated_struct::validator! {
             #[intkey(ZN_JOIN_PUBLICATIONS_KEY, into = commastringvec_to_cowstr, from = commastringvec_from_str)]
             publications: Vec<String>,
         },
+        #[intkey(ZN_SHM_KEY, into = bool_to_cowstr, from = bool_from_str)]
+        shared_memory: Option<bool>,
         #[serde(default)]
-        pub link: LinkConf {
-            /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
-            #[intkey(ZN_LINK_LEASE_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            lease: Option<ZInt>,
-            /// Link keep-alive duration in milliseconds
-            #[intkey(ZN_LINK_KEEP_ALIVE_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            keep_alive: Option<ZInt>,
-            /// Link keep-alive duration in milliseconds
-            #[intkey(ZN_JOIN_INTERVAL_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            join_interval: Option<ZInt>,
-            /// Timeout in milliseconds when opening a link
-            #[intkey(ZN_OPEN_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
-            open_timeout: Option<ZInt>,
-            /// Receiving buffer size for each link
-            #[intkey(ZN_LINK_RX_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
-            rx_buff_size: Option<usize>,
-            #[intkey(ZN_MAX_LINKS_KEY, into = usize_to_cowstr, from = usize_from_str)]
-            max_number: Option<usize>
-        },
-        #[intkey(ZN_SEQ_NUM_RESOLUTION_KEY, into = u64_to_cowstr, from = u64_from_str)]
-        sequence_number_resolution: Option<ZInt>,
-        #[intkey(ZN_OPEN_INCOMING_PENDING_KEY, into = usize_to_cowstr, from = usize_from_str)]
-        open_pending: Option<usize>,
-        #[intkey(ZN_MAX_SESSIONS_KEY, into = usize_to_cowstr, from = usize_from_str)]
-        max_sessions: Option<usize>,
-        #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
-        version: Option<u8>,
-        #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
-        peer_id: Option<String>,
-        #[intkey(ZN_BATCH_SIZE_KEY, into = u16_to_cowstr, from = u16_from_str)]
-        batch_size: Option<u16>,
-        /// Maximum size of the defragmentation buffer at receiver end.
-        /// Fragmented messages that are larger than the configured size will be dropped.
-        #[intkey(ZN_DEFRAG_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
-        defrag_buffer_size: Option<usize>,
-        #[intkey(ZN_QOS_KEY, into = bool_to_cowstr, from = bool_from_str)]
-        qos: Option<bool>,
-        #[serde(default)]
-        pub auth_pubkey: PubKeyConf {
-            #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
-            public_key_pem: Option<String>,
-            #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
-            private_key_pem: Option<String>,
-            #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
-            public_key_file: Option<String>,
-            #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
-            private_key_file: Option<String>,
-            #[intkey(ZN_AUTH_RSA_KEY_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
-            key_size: Option<usize>,
-            #[intkey(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
-            known_keys_file: Option<String>,
+        pub transport: TransportConf {
+            #[intkey(ZN_SEQ_NUM_RESOLUTION_KEY, into = u64_to_cowstr, from = u64_from_str)]
+            sequence_number_resolution: Option<ZInt>,
+            #[intkey(ZN_MAX_SESSIONS_KEY, into = usize_to_cowstr, from = usize_from_str)]
+            max_sessions: Option<usize>,
+            #[intkey(ZN_QOS_KEY, into = bool_to_cowstr, from = bool_from_str)]
+            qos: Option<bool>,
+            #[serde(default)]
+            pub unicast: TransportUnicastConf {
+                /// Timeout in milliseconds when opening a link
+                #[intkey(ZN_OPEN_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
+                open_timeout: Option<ZInt>,
+                #[intkey(ZN_OPEN_INCOMING_PENDING_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                open_pending: Option<usize>,
+                #[intkey(ZN_MAX_LINKS_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                max_links: Option<usize>,
+            },
+            #[serde(default)]
+            pub multicast: TransportMulticastConf {
+                /// Link keep-alive duration in milliseconds
+                #[intkey(ZN_JOIN_INTERVAL_KEY, into = u64_to_cowstr, from = u64_from_str)]
+                join_interval: Option<ZInt>,
+            },
+            #[serde(default)]
+            pub link: TransportLinkConf {
+                #[intkey(ZN_BATCH_SIZE_KEY, into = u16_to_cowstr, from = u16_from_str)]
+                batch_size: Option<u16>,
+                /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
+                #[intkey(ZN_LINK_LEASE_KEY, into = u64_to_cowstr, from = u64_from_str)]
+                lease: Option<ZInt>,
+                /// Link keep-alive duration in milliseconds
+                #[intkey(ZN_LINK_KEEP_ALIVE_KEY, into = u64_to_cowstr, from = u64_from_str)]
+                keep_alive: Option<ZInt>,
+                /// Receiving buffer size for each link
+                #[intkey(ZN_LINK_RX_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                rx_buff_size: Option<usize>,
+                /// Maximum size of the defragmentation buffer at receiver end.
+                /// Fragmented messages that are larger than the configured size will be dropped.
+                #[intkey(ZN_DEFRAG_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                defrag_buffer_size: Option<usize>,
+                #[serde(default)]
+                pub tls: TLSConf {
+                    #[intkey(ZN_TLS_SERVER_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
+                    server_private_key: Option<String>,
+                    #[intkey(ZN_TLS_SERVER_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    server_certificate: Option<String>,
+                    #[intkey(ZN_TLS_ROOT_CA_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    root_ca_certificate: Option<String>,
+                },
+            },
+            #[serde(default)]
+            pub auth: AuthConf {
+                /// The configuration of authentification.
+                /// A password implies a username is required.
+                #[serde(default)]
+                pub usrpwd: UserConf {
+                    #[intkey(ZN_USER_KEY, into = string_to_cowstr, from = string_from_str)]
+                    user: Option<String>,
+                    #[intkey(ZN_PASSWORD_KEY, into = string_to_cowstr, from = string_from_str)]
+                    password: Option<String>,
+                    /// The path to a file containing the user password dictionary
+                    #[intkey(ZN_USER_PASSWORD_DICTIONARY_KEY, into = string_to_cowstr, from = string_from_str)]
+                    dictionary_file: Option<String>,
+                } where (user_conf_validator),
+                #[serde(default)]
+                pub pubkey: PubKeyConf {
+                    #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
+                    public_key_pem: Option<String>,
+                    #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
+                    private_key_pem: Option<String>,
+                    #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    public_key_file: Option<String>,
+                    #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    private_key_file: Option<String>,
+                    #[intkey(ZN_AUTH_RSA_KEY_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
+                    key_size: Option<usize>,
+                    #[intkey(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    known_keys_file: Option<String>,
+                },
+            },
         },
     }
 }
@@ -330,7 +342,9 @@ fn config_from_json() {
     use validated_struct::ValidatedMap;
     let from_str = |s| serde_json::Deserializer::from_str(s);
     let mut config = Config::from_deserializer(&mut from_str(r#"{}"#)).unwrap();
-    config.insert("link/lease", &mut from_str("168")).unwrap();
+    config
+        .insert("transport/link/lease", &mut from_str("168"))
+        .unwrap();
     dbg!(std::mem::size_of_val(&config));
     println!("{}", serde_json::to_string_pretty(&config).unwrap());
 }
@@ -562,7 +576,7 @@ impl From<Config> for ConfigProperties {
 }
 
 fn user_conf_validator(u: &UserConf) -> bool {
-    !(u.password().is_some() && u.name().is_none())
+    (u.password().is_none() && u.user().is_none()) || (u.password().is_some() && u.user().is_some())
 }
 
 fn whatami_to_cowstr(w: &Option<whatami::WhatAmI>) -> Option<Cow<str>> {

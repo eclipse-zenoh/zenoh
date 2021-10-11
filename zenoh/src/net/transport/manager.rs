@@ -205,16 +205,16 @@ impl TransportManagerConfigBuilder {
         if let Some(v) = properties.mode() {
             self = self.whatami(*v);
         }
-        if let Some(v) = properties.sequence_number_resolution() {
+        if let Some(v) = properties.transport().sequence_number_resolution() {
             self = self.sn_resolution(*v);
         }
-        if let Some(v) = properties.batch_size() {
+        if let Some(v) = properties.transport().link().batch_size() {
             self = self.batch_size(*v);
         }
-        if let Some(v) = properties.defrag_buffer_size() {
+        if let Some(v) = properties.transport().link().defrag_buffer_size() {
             self = self.defrag_buff_size(*v);
         }
-        if let Some(v) = properties.link().rx_buff_size() {
+        if let Some(v) = properties.transport().link().rx_buff_size() {
             self = self.link_rx_buff_size(*v);
         }
         self = self.endpoint(LocatorConfig::from_config(properties)?);

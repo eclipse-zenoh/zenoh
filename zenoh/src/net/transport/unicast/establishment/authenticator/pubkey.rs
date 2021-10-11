@@ -246,7 +246,7 @@ impl PubKeyAuthenticator {
     }
 
     pub async fn from_config(config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
-        let c = config.auth_pubkey();
+        let c = config.transport().auth().pubkey();
 
         // @TODO: support PubKey keys import
 

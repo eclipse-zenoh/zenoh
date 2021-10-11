@@ -13,6 +13,7 @@
 //
 use super::config::*;
 use super::*;
+use crate::config::Config;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
@@ -123,22 +124,23 @@ impl fmt::Display for LocatorTls {
 pub struct LocatorConfigTls;
 
 impl LocatorConfigTls {
-    pub fn from_config(config: &crate::config::Config) -> ZResult<Option<Properties>> {
+    pub fn from_config(config: &Config) -> ZResult<Option<Properties>> {
         let mut properties = Properties::default();
 
-        if let Some(tls_ca_certificate) = config.tls().root_ca_certificate() {
+        let c = config.transport().link().tls();
+        if let Some(tls_ca_certificate) = c.root_ca_certificate() {
             properties.insert(
                 TLS_ROOT_CA_CERTIFICATE_FILE.into(),
                 tls_ca_certificate.into(),
             );
         }
-        if let Some(tls_server_private_key) = config.tls().server_private_key() {
+        if let Some(tls_server_private_key) = c.server_private_key() {
             properties.insert(
                 TLS_SERVER_PRIVATE_KEY_FILE.into(),
                 tls_server_private_key.into(),
             );
         }
-        if let Some(tls_server_certificate) = config.tls().server_certificate() {
+        if let Some(tls_server_certificate) = c.server_certificate() {
             properties.insert(
                 TLS_SERVER_CERTIFICATE_FILE.into(),
                 tls_server_certificate.into(),

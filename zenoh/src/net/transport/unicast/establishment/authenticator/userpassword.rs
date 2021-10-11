@@ -179,8 +179,10 @@ impl UserPasswordAuthenticator {
     }
 
     pub async fn from_config(config: &Config) -> ZResult<Option<UserPasswordAuthenticator>> {
+        let c = config.transport().auth().usrpwd();
+
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-        if let Some(dict) = config.user_password_dictionary() {
+        if let Some(dict) = c.dictionary_file() {
             let content = fs::read_to_string(dict).await.map_err(|e| {
                 zerror2!(ZErrorKind::Other {
                     descr: format!("Invalid user-password dictionary file: {}", e)
@@ -195,8 +197,8 @@ impl UserPasswordAuthenticator {
         }
 
         let mut credentials: Option<(Vec<u8>, Vec<u8>)> = None;
-        if let Some(user) = config.user().name() {
-            if let Some(password) = config.user().password() {
+        if let Some(user) = c.user() {
+            if let Some(password) = c.password() {
                 log::debug!("User and password have been configured");
                 credentials = Some((user.to_string().into(), password.to_string().into()));
             }

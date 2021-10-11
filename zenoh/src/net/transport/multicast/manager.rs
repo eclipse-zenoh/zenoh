@@ -93,19 +93,19 @@ impl TransportManagerConfigBuilderMulticast {
         mut self,
         properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilderMulticast> {
-        if let Some(v) = properties.link().lease() {
+        if let Some(v) = properties.transport().link().lease() {
             self = self.lease(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().keep_alive() {
+        if let Some(v) = properties.transport().link().keep_alive() {
             self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().join_interval() {
+        if let Some(v) = properties.transport().multicast().join_interval() {
             self = self.join_interval(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.max_sessions() {
+        if let Some(v) = properties.transport().max_sessions() {
             self = self.max_sessions(*v);
         }
-        if let Some(v) = properties.qos() {
+        if let Some(v) = properties.transport().qos() {
             self = self.qos(*v);
         }
 

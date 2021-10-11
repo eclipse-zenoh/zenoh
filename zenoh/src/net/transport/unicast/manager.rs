@@ -145,30 +145,30 @@ impl TransportManagerConfigBuilderUnicast {
         mut self,
         properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
-        if let Some(v) = properties.link().lease() {
+        if let Some(v) = properties.transport().link().lease() {
             self = self.lease(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().keep_alive() {
+        if let Some(v) = properties.transport().link().keep_alive() {
             self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().open_timeout() {
+        if let Some(v) = properties.transport().unicast().open_timeout() {
             self = self.open_timeout(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.open_pending() {
+        if let Some(v) = properties.transport().unicast().open_pending() {
             self = self.open_pending(*v);
         }
-        if let Some(v) = properties.max_sessions() {
+        if let Some(v) = properties.transport().max_sessions() {
             self = self.max_sessions(*v);
         }
         #[cfg(feature = "transport_multilink")]
-        if let Some(v) = properties.link().max_number() {
+        if let Some(v) = properties.transport().unicast().max_links() {
             self = self.max_links(*v);
         }
-        if let Some(v) = properties.qos() {
+        if let Some(v) = properties.transport().qos() {
             self = self.qos(*v);
         }
         #[cfg(feature = "shared-memory")]
-        if let Some(v) = properties.zero_copy() {
+        if let Some(v) = properties.shared_memory() {
             self = self.shm(*v);
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
