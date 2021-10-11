@@ -11,25 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-<<<<<<< HEAD
-#[cfg(feature = "shared-memory")]
-use async_std::task::sleep;
-#[cfg(feature = "shared-memory")]
-use clap::{App, Arg};
-#[cfg(feature = "shared-memory")]
-use std::time::Duration;
-#[cfg(feature = "shared-memory")]
-use zenoh::buf::SharedMemoryManager;
-#[cfg(feature = "shared-memory")]
-use zenoh::prelude::*;
-
-#[cfg(feature = "shared-memory")]
-const N: usize = 10;
-#[cfg(feature = "shared-memory")]
-const K: u32 = 3;
-
-#[cfg(feature = "shared-memory")]
-=======
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
@@ -39,7 +20,6 @@ use zenoh::prelude::*;
 const N: usize = 10;
 const K: u32 = 3;
 
->>>>>>> upstream/apis-merge
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initiate logging
@@ -117,18 +97,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-<<<<<<< HEAD
-#[cfg(not(feature = "shared-memory"))]
-fn main() {
-    println!(
-        "Please, enable shared-memory feature by rebuilding as follows:\
-            \n\n\t$ cargo build --release --features \"shared-memory\"\n"
-    );
-}
-
-#[cfg(feature = "shared-memory")]
-=======
->>>>>>> upstream/apis-merge
 fn parse_args() -> (Properties, String, String) {
     let args = App::new("zenoh shared-memory pub example")
         .arg(

@@ -11,27 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-<<<<<<< HEAD
-#[cfg(feature = "shared-memory")]
-use clap::{App, Arg};
-#[cfg(feature = "shared-memory")]
-use zenoh::buf::SharedMemoryManager;
-#[cfg(feature = "shared-memory")]
-use zenoh::prelude::ResKey::*;
-#[cfg(feature = "shared-memory")]
-use zenoh::prelude::*;
-#[cfg(feature = "shared-memory")]
-use zenoh::publisher::CongestionControl;
-
-#[cfg(feature = "shared-memory")]
-=======
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
 use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
->>>>>>> upstream/apis-merge
 #[async_std::main]
 async fn main() {
     // initiate logging
@@ -59,18 +44,6 @@ async fn main() {
     }
 }
 
-<<<<<<< HEAD
-#[cfg(not(feature = "shared-memory"))]
-fn main() {
-    println!(
-        "Please, enable shared-memory feature by rebuilding as follows:\
-            \n\n\t$ cargo build --release --features \"shared-memory\"\n"
-    );
-}
-
-#[cfg(feature = "shared-memory")]
-=======
->>>>>>> upstream/apis-merge
 fn parse_args() -> (Properties, usize, usize) {
     let args = App::new("zenoh shared-memory throughput pub example")
         .arg(
