@@ -32,7 +32,6 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[cfg(feature = "shared-memory")]
 use async_std::sync::Arc;
 use regex::Regex;
-use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
 
