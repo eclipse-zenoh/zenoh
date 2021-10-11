@@ -229,7 +229,7 @@ impl SharedMemoryReader {
                     info.shm_manager, e
                 );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemoryError { descr: e })
+                zerror!(ZErrorKind::SharedMemory { descr: e })
             }
         }
     }
@@ -254,7 +254,7 @@ impl SharedMemoryReader {
             None => {
                 let e = format!("Unable to find shared memory segment: {}", info.shm_manager);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemoryError { descr: e })
+                zerror!(ZErrorKind::SharedMemory { descr: e })
             }
         }
     }
@@ -316,13 +316,13 @@ impl SharedMemoryManager {
             Err(ShmemError::LinkExists) => {
                 log::trace!("SharedMemory already exists, opening it");
                 ShmemConf::new().flink(path.clone()).open().map_err(|e| {
-                    zerror2!(ZErrorKind::SharedMemoryError {
+                    zerror2!(ZErrorKind::SharedMemory {
                         descr: format!("Unable to open SharedMemoryManager: {}", e)
                     })
                 })?
             }
             Err(e) => {
-                return zerror!(ZErrorKind::SharedMemoryError {
+                return zerror!(ZErrorKind::SharedMemory {
                     descr: format!("Unable to open SharedMemoryManager: {}", e)
                 })
             }

@@ -35,20 +35,26 @@ readme = "README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
+auth_pubkey = ["rsa", "num-traits"]
+auth_usrpwd = []
 complete_n = []
+shared-memory = ["bincode", "shared_memory"]
 stats = []
+transport_multilink = ["auth_pubkey"]
+transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_tcp = []
 transport_tls = ["async-rustls"]
 transport_udp = []
-transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_unixsock-stream = ["nix"]
-shared-memory = ["bincode", "shared_memory"]
 default = [
+    "auth_pubkey",
+    "auth_usrpwd",
     "shared-memory",
-    "transport_tcp",
-    "transport_udp",
-    "transport_tls",
+    "transport_multilink",
     "transport_quic",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
     "transport_unixsock-stream",
 ]
 
@@ -77,7 +83,8 @@ json5 = "0.4.1"
 lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4"
-nix = { version = "0.22.0", optional = true }
+nix = { version = "0.23.0", optional = true }
+num-traits = { version = "0.2.14", optional = true }
 ordered-float = "2.5.1"
 paste = "1.0"
 petgraph = "0.6.0"
@@ -85,6 +92,7 @@ quinn = { version = "0.7.2", optional = true }
 rand = "0.8.3"
 rcgen = { version = "0.8.9", optional = true }
 regex = "1"
+rsa = { git = "https://github.com/RustCrypto/RSA.git", optional = true }
 serde_json = "1.0"
 serde = "1.0.123"
 shared_memory = { version = "0.12.0", optional = true }

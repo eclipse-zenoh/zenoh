@@ -282,10 +282,10 @@ mod consts {
     /// Configures the maximum number of links per open session.
     /// String key : `"max_links"`.
     /// Accepted values : `<unsigned integer>`.
-    /// Default value : `4`.
+    /// Default value : `2`.
     pub const ZN_MAX_LINKS_KEY: u64 = 0x71;
     pub const ZN_MAX_LINKS_STR: &str = "max_links";
-    pub const ZN_MAX_LINKS_DEFAULT: &str = "4";
+    pub const ZN_MAX_LINKS_DEFAULT: &str = "2";
 
     /// Configures the zenoh version.
     /// String key : `"version"`.
@@ -334,6 +334,43 @@ mod consts {
     pub const ZN_MULTICAST_IPV6_ADDRESS_KEY: u64 = 0x77;
     pub const ZN_MULTICAST_IPV6_ADDRESS_STR: &str = "multicast_ipv6_address";
     pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7447";
+
+    /// The public RSA key.
+    /// String key : `"auth_rsa_public_key_pem"`.
+    /// Accepted values : `<RSA key in PEM format>`.
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY: u64 = 0x78;
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR: &str = "auth_rsa_public_key_pem";
+
+    /// The private RSA key.
+    /// String key : `"auth_rsa_private_key_pem"`.
+    /// Accepted values : `<RSA key in PEM format>`.
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY: u64 = 0x79;
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR: &str = "auth_rsa_private_key_pem";
+
+    /// The public RSA key.
+    /// String key : `"auth_rsa_public_key_pem"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY: u64 = 0x80;
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR: &str = "auth_rsa_public_key_file";
+
+    /// The private RSA key.
+    /// String key : `"auth_rsa_private_key_pem"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY: u64 = 0x81;
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR: &str = "auth_rsa_private_key_file";
+
+    /// The default RSA key size.
+    /// String key : `"auth_rsa_key_size"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_AUTH_RSA_KEY_SIZE_KEY: u64 = 0x82;
+    pub const ZN_AUTH_RSA_KEY_SIZE_STR: &str = "auth_rsa_key_size";
+    pub const ZN_AUTH_RSA_KEY_SIZE_DEFAULT: &str = "512";
+
+    /// The list of known RSA public keys.
+    /// String key : `"auth_rsa_known_keys_file"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY: u64 = 0x83;
+    pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR: &str = "auth_rsa_known_keys_file";
 }
 
 pub use consts::*;
@@ -384,6 +421,12 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_DEFRAG_BUFF_SIZE_STR => Some(ZN_DEFRAG_BUFF_SIZE_KEY),
             ZN_LINK_RX_BUFF_SIZE_STR => Some(ZN_LINK_RX_BUFF_SIZE_KEY),
             ZN_MULTICAST_IPV6_ADDRESS_STR => Some(ZN_MULTICAST_IPV6_ADDRESS_KEY),
+            ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR => Some(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY),
+            ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR => Some(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY),
+            ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR => Some(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY),
+            ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY),
+            ZN_AUTH_RSA_KEY_SIZE_STR => Some(ZN_AUTH_RSA_KEY_SIZE_KEY),
+            ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY),
             _ => None,
         }
     }
@@ -431,6 +474,12 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_DEFRAG_BUFF_SIZE_KEY => Some(ZN_DEFRAG_BUFF_SIZE_STR.to_string()),
             ZN_LINK_RX_BUFF_SIZE_KEY => Some(ZN_LINK_RX_BUFF_SIZE_STR.to_string()),
             ZN_MULTICAST_IPV6_ADDRESS_KEY => Some(ZN_MULTICAST_IPV6_ADDRESS_STR.to_string()),
+            ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY => Some(ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR.to_string()),
+            ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY => Some(ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR.to_string()),
+            ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY => Some(ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR.to_string()),
+            ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR.to_string()),
+            ZN_AUTH_RSA_KEY_SIZE_KEY => Some(ZN_AUTH_RSA_KEY_SIZE_STR.to_string()),
+            ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR.to_string()),
             _ => None,
         }
     }

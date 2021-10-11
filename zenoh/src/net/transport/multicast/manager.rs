@@ -14,12 +14,12 @@
 use super::super::TransportManager;
 use super::transport::TransportMulticastInner;
 use super::*;
+use crate::config::Config;
 use crate::net::link::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
 use zenoh_util::{zerror, zlock, zparse};
 
@@ -33,7 +33,7 @@ pub struct TransportManagerConfigMulticast {
 
 impl Default for TransportManagerConfigMulticast {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().build().unwrap()
     }
 }
 
@@ -91,35 +91,36 @@ impl TransportManagerConfigBuilderMulticast {
 
     pub async fn from_config(
         mut self,
-        properties: &ConfigProperties,
+        properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilderMulticast> {
-        if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
-            self = self.lease(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.link().lease() {
+            self = self.lease(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
-            self = self.keep_alive(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.link().keep_alive() {
+            self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_JOIN_INTERVAL_KEY) {
-            self = self.join_interval(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.link().join_interval() {
+            self = self.join_interval(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
-            self = self.max_sessions(zparse!(v)?);
+        if let Some(v) = properties.max_sessions() {
+            self = self.max_sessions(*v);
         }
-        if let Some(v) = properties.get(&ZN_QOS_KEY) {
-            self = self.qos(zparse!(v)?);
+        if let Some(v) = properties.qos() {
+            self = self.qos(*v);
         }
 
         Ok(self)
     }
 
-    pub fn build(self) -> TransportManagerConfigMulticast {
-        TransportManagerConfigMulticast {
+    pub fn build(self) -> ZResult<TransportManagerConfigMulticast> {
+        let tmcm = TransportManagerConfigMulticast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
-        }
+        };
+        Ok(tmcm)
     }
 }
 

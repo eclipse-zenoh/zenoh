@@ -158,25 +158,33 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
-    let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(endpoints.len())
-        .build();
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder();
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(endpoints.len());
+    }
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
-    let unicast = TransportManagerConfigUnicast::builder()
-        .max_links(endpoints.len())
-        .build();
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder();
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(endpoints.len());
+    }
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient::default()));
+        .build(Arc::new(SHClient::default()))
+        .unwrap();
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
@@ -249,7 +257,7 @@ async fn close_transport(
     task::sleep(SLEEP).await;
 }
 
-async fn single_run(
+async fn test_transport(
     router_handler: Arc<SHRouter>,
     client_transport: TransportUnicast,
     channel: Channel,
@@ -304,27 +312,47 @@ async fn single_run(
     task::sleep(SLEEP).await;
 }
 
+async fn run_single(endpoints: &[EndPoint], channel: Channel, msg_size: usize) {
+    #[allow(unused_variables)] // Used when stats feature is enabled
+    let (router_manager, router_handler, client_manager, client_transport) =
+        open_transport(endpoints).await;
+
+    test_transport(
+        router_handler.clone(),
+        client_transport.clone(),
+        channel,
+        msg_size,
+    )
+    .await;
+
+    #[cfg(feature = "stats")]
+    {
+        let c_stats = client_transport.get_stats().unwrap();
+        println!("\tClient: {:?}", c_stats,);
+        let r_stats = router_manager
+            .get_transport_unicast(&client_manager.config.pid)
+            .unwrap()
+            .get_stats()
+            .unwrap();
+        println!("\tRouter: {:?}", r_stats);
+    }
+
+    close_transport(router_manager, client_transport, endpoints).await;
+}
+
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
+    #[cfg(feature = "transport_multilink")]
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            #[allow(unused_variables)] // Used when stats feature is enabled
-            let (router_manager, router_handler, client_manager, client_transport) =
-                open_transport(endpoints).await;
-            single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
-
-            #[cfg(feature = "stats")]
-            {
-                let c_stats = client_transport.get_stats().unwrap();
-                println!("\tClient: {:?}", c_stats,);
-                let r_stats = router_manager
-                    .get_transport_unicast(&client_manager.config.pid)
-                    .unwrap()
-                    .get_stats()
-                    .unwrap();
-                println!("\tRouter: {:?}", r_stats);
+            run_single(endpoints, *ch, *ms).await;
+        }
+    }
+    #[cfg(not(feature = "transport_multilink"))]
+    for ch in channel.iter() {
+        for ms in msg_size.iter() {
+            for i in 0..endpoints.len() {
+                run_single(&endpoints[i..i + 1], *ch, *ms).await;
             }
-
-            close_transport(router_manager, client_transport, endpoints).await;
         }
     }
 }
@@ -420,7 +448,11 @@ fn transport_unicast_unix_only() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
 
-#[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
+#[cfg(all(
+    feature = "transport_multilink",
+    feature = "transport_tcp",
+    feature = "transport_udp"
+))]
 #[test]
 fn transport_unicast_tcp_udp() {
     task::block_on(async {
@@ -450,6 +482,7 @@ fn transport_unicast_tcp_udp() {
 }
 
 #[cfg(all(
+    feature = "transport_multilink",
     feature = "transport_tcp",
     feature = "transport_unixsock-stream",
     target_family = "unix"
@@ -487,6 +520,7 @@ fn transport_unicast_tcp_unix() {
 }
 
 #[cfg(all(
+    feature = "transport_multilink",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
     target_family = "unix"
@@ -524,6 +558,7 @@ fn transport_unicast_udp_unix() {
 }
 
 #[cfg(all(
+    feature = "transport_multilink",
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",

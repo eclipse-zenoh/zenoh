@@ -90,8 +90,8 @@
 //!         self.admin_status.clone()
 //!     }
 //!
-//!     // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!         // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!         // extract Timestamp from sample
 //!         sample.ensure_timestamp();
 //!         let timestamp = sample.timestamp.take().unwrap();

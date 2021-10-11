@@ -70,7 +70,7 @@ pub enum ZErrorKind {
         origin_encoding: String,
         target_encoding: String,
     },
-    SharedMemoryError {
+    SharedMemory {
         descr: String,
     },
 }
@@ -121,7 +121,7 @@ impl fmt::Display for ZErrorKind {
                 "Failed to transcode Value from {} to {}",
                 origin_encoding, target_encoding
             ),
-            ZErrorKind::SharedMemoryError { descr } => write!(f, "Shared Memory error ({})", descr),
+            ZErrorKind::SharedMemory { descr } => write!(f, "Shared Memory error ({})", descr),
         }
     }
 }

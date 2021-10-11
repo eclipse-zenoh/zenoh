@@ -388,11 +388,12 @@ impl WBuf {
         true
     }
 
-    pub fn write_properties(&mut self, props: &[Property]) {
-        self.write_usize_as_zint(props.len());
+    pub fn write_properties(&mut self, props: &[Property]) -> bool {
+        zcheck!(self.write_usize_as_zint(props.len()));
         for p in props {
-            self.write_property(p);
+            zcheck!(self.write_property(p));
         }
+        true
     }
 
     fn write_property(&mut self, p: &Property) -> bool {
