@@ -38,13 +38,13 @@ pub fn get_keys_prefix(key_selector: &str) -> &str {
         .unwrap_or(key_selector)
 }
 
-/// Given a key selector and a prefix (usually returned from [`get_keys_prefix()`]) that is stripped from the paths to store,
-/// this operation returns a list of key selectors allowing to match all the keys corresponding to the full paths that would have match
+/// Given a key selector and a prefix (usually returned from [`get_keys_prefix()`]) that is stripped from the keys to store,
+/// this operation returns a list of key selectors allowing to match all the keys corresponding to the full keys that would have match
 /// the given key selector.
 ///
 /// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
 /// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_selector`](zenoh::prelude::Selector::key_selector) in a list of key selectors
-/// that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
+/// that will match all the relevant stored keys (that correspond to keys stripped from the prefix).
 ///
 /// # See also
 /// [`get_keys_prefix()`]
@@ -107,7 +107,7 @@ pub fn get_sub_key_selectors<'a>(key_selector: &'a str, prefix: &str) -> Vec<&'a
 }
 
 #[test]
-fn test_get_sub_path_exprs() {
+fn test_get_sub_key_exprs() {
     assert_eq!(
         ["**"],
         get_sub_key_selectors("/demo/example/test/**", "/demo/example/test/").as_slice()

@@ -132,12 +132,12 @@ impl MemoryStorage {
 }
 
 impl MemoryStorage {
-    async fn schedule_cleanup(&self, path: String) -> TimedHandle {
+    async fn schedule_cleanup(&self, key: String) -> TimedHandle {
         let event = TimedEvent::once(
             Instant::now() + Duration::from_millis(CLEANUP_TIMEOUT_MS),
             TimedCleanup {
                 map: self.map.clone(),
-                path,
+                key,
             },
         );
         let handle = event.get_handle();
@@ -186,7 +186,7 @@ impl Storage for MemoryStorage {
             },
             SampleKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
                 Entry::Vacant(v) => {
-                    // NOTE: even if path is not known yet, we need to store the removal time:
+                    // NOTE: even if key is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
                     // we must drop the put.
                     let cleanup_handle = self.schedule_cleanup(sample.res_name.clone()).await;
@@ -255,12 +255,12 @@ const CLEANUP_TIMEOUT_MS: u64 = 5000;
 
 struct TimedCleanup {
     map: Arc<RwLock<HashMap<String, StoredValue>>>,
-    path: String,
+    key: String,
 }
 
 #[async_trait]
 impl Timed for TimedCleanup {
     async fn run(&mut self) {
-        self.map.write().await.remove(&self.path);
+        self.map.write().await.remove(&self.key);
     }
 }
