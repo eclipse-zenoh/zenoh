@@ -11,12 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::multicast::manager::{TransportManagerConfigMulticast, TransportManagerStateMulticast};
+use super::multicast::manager::{
+    TransportManagerConfigBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
 use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
-use super::unicast::manager::{TransportManagerConfigUnicast, TransportManagerStateUnicast};
+use super::unicast::manager::{
+    TransportManagerConfigBuilderUnicast, TransportManagerConfigUnicast,
+    TransportManagerStateUnicast,
+};
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use crate::config::Config;
@@ -73,9 +79,7 @@ use zenoh_util::zparse;
 ///         .open_timeout(Duration::from_secs(1))
 ///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports
 ///         .max_sessions(5)    // Allow max 5 transports open
-///         .max_links(2)       // Allow max 2 links per transport
-///         .build()
-///         .unwrap();
+///         .max_links(2);      // Allow max 2 links per transport
 /// let config = TransportManagerConfig::builder()
 ///         .pid(PeerId::rand())
 ///         .whatami(WhatAmI::Peer)
@@ -115,8 +119,8 @@ pub struct TransportManagerConfigBuilder {
     batch_size: u16,
     defrag_buff_size: usize,
     link_rx_buff_size: usize,
-    unicast: TransportManagerConfigUnicast,
-    multicast: TransportManagerConfigMulticast,
+    unicast: TransportManagerConfigBuilderUnicast,
+    multicast: TransportManagerConfigBuilderMulticast,
     endpoint: HashMap<LocatorProtocol, Properties>,
 }
 
@@ -161,12 +165,12 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn unicast(mut self, unicast: TransportManagerConfigUnicast) -> Self {
+    pub fn unicast(mut self, unicast: TransportManagerConfigBuilderUnicast) -> Self {
         self.unicast = unicast;
         self
     }
 
-    pub fn multicast(mut self, multicast: TransportManagerConfigMulticast) -> Self {
+    pub fn multicast(mut self, multicast: TransportManagerConfigBuilderMulticast) -> Self {
         self.multicast = multicast;
         self
     }
@@ -180,8 +184,8 @@ impl TransportManagerConfigBuilder {
             batch_size: self.batch_size,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buff_size: self.link_rx_buff_size,
-            unicast: self.unicast,
-            multicast: self.multicast,
+            unicast: self.unicast.build()?,
+            multicast: self.multicast.build()?,
             endpoint: self.endpoint,
             handler,
         };
@@ -217,8 +221,12 @@ impl TransportManagerConfigBuilder {
         self = self.unicast(
             TransportManagerConfigUnicast::builder()
                 .from_config(properties)
-                .await?
-                .build()?,
+                .await?,
+        );
+        self = self.multicast(
+            TransportManagerConfigMulticast::builder()
+                .from_config(properties)
+                .await?,
         );
 
         Ok(self)
@@ -236,8 +244,8 @@ impl Default for TransportManagerConfigBuilder {
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             endpoint: HashMap::new(),
-            unicast: TransportManagerConfigUnicast::default(),
-            multicast: TransportManagerConfigMulticast::default(),
+            unicast: TransportManagerConfigUnicast::builder(),
+            multicast: TransportManagerConfigMulticast::builder(),
         }
     }
 }

@@ -183,6 +183,9 @@ validated_struct::validator! {
             /// Link keep-alive duration in milliseconds
             #[intkey(ZN_LINK_KEEP_ALIVE_KEY, into = u64_to_cowstr, from = u64_from_str)]
             keep_alive: Option<ZInt>,
+            /// Link keep-alive duration in milliseconds
+            #[intkey(ZN_JOIN_INTERVAL_KEY, into = u64_to_cowstr, from = u64_from_str)]
+            join_interval: Option<ZInt>,
             /// Timeout in milliseconds when opening a link
             #[intkey(ZN_OPEN_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
             open_timeout: Option<ZInt>,

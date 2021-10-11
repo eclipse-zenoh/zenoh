@@ -91,7 +91,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
@@ -110,7 +110,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClientOpenClose::new()))
         .unwrap();
     let client01_manager = TransportManager::new(config);
@@ -125,7 +125,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClientOpenClose::new()))
         .unwrap();
     let client02_manager = TransportManager::new(config);

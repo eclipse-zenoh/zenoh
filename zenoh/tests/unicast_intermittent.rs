@@ -151,7 +151,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
@@ -172,7 +172,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClientStable::new(counter.clone())))
         .unwrap();
     let client01_manager = TransportManager::new(config);
@@ -187,7 +187,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
     let client02_manager = TransportManager::new(config);
@@ -202,7 +202,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client03_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
     let client03_manager = TransportManager::new(config);

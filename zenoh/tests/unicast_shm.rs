@@ -135,34 +135,28 @@ mod tests {
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
+        let unicast =
+            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::new().into(),
+            ]));
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
-            .unicast(
-                TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(HashSet::from_iter(vec![
-                        SharedMemoryAuthenticator::new().into()
-                    ]))
-                    .build()
-                    .unwrap(),
-            )
+            .unicast(unicast)
             .build(peer_shm01_handler.clone())
             .unwrap();
         let peer_shm01_manager = TransportManager::new(config);
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
+        let unicast =
+            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::new().into(),
+            ]));
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
-            .unicast(
-                TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(HashSet::from_iter(vec![
-                        SharedMemoryAuthenticator::new().into()
-                    ]))
-                    .build()
-                    .unwrap(),
-            )
+            .unicast(unicast)
             .build(peer_shm02_handler.clone())
             .unwrap();
         let peer_shm02_manager = TransportManager::new(config);

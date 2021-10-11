@@ -167,7 +167,7 @@ async fn open_transport(
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
@@ -182,7 +182,7 @@ async fn open_transport(
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
-        .unicast(unicast.build().unwrap())
+        .unicast(unicast)
         .build(Arc::new(SHClient::default()))
         .unwrap();
     let client_manager = TransportManager::new(config);

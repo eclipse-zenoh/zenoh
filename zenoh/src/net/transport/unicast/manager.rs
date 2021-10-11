@@ -70,8 +70,8 @@ pub struct TransportManagerConfigBuilderUnicast {
 }
 
 impl Default for TransportManagerConfigBuilderUnicast {
-    fn default() -> TransportManagerConfigBuilderUnicast {
-        TransportManagerConfigBuilderUnicast {
+    fn default() -> Self {
+        Self {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),

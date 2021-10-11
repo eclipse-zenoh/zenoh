@@ -179,15 +179,15 @@ struct InnerState {
 
 pub struct PubKeyAuthenticator {
     pub_key: RsaPublicKey,
-    prv_key: RsaPrivateKey,
+    pri_key: RsaPrivateKey,
     state: Mutex<InnerState>,
 }
 
 impl PubKeyAuthenticator {
-    pub fn new(pub_key: RsaPublicKey, prv_key: RsaPrivateKey) -> PubKeyAuthenticator {
+    pub fn new(pub_key: RsaPublicKey, pri_key: RsaPrivateKey) -> PubKeyAuthenticator {
         PubKeyAuthenticator {
             pub_key,
-            prv_key,
+            pri_key,
             state: Mutex::new(InnerState {
                 prng: PseudoRng::from_entropy(),
                 known_keys: None,
@@ -203,16 +203,16 @@ impl PubKeyAuthenticator {
                 descr: e.to_string()
             })
         })?;
-        let prv_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
+        let pri_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
             zerror2!(ZErrorKind::Other {
                 descr: e.to_string()
             })
         })?;
-        let pub_key = RsaPublicKey::from(&prv_key);
+        let pub_key = RsaPublicKey::from(&pri_key);
 
         let pka = PubKeyAuthenticator {
             pub_key,
-            prv_key,
+            pri_key,
             state: Mutex::new(InnerState {
                 prng,
                 known_keys: None,
@@ -248,6 +248,8 @@ impl PubKeyAuthenticator {
     pub async fn from_config(config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
         let c = config.auth_pubkey();
 
+        // @TODO: support PubKey keys import
+
         // First, check if PEM keys are provided
         match (c.public_key_pem(), c.private_key_pem()) {
             (Some(public), Some(private)) => {
@@ -256,12 +258,12 @@ impl PubKeyAuthenticator {
                         descr: format!("Rsa Public Key: {}", e)
                     })
                 })?;
-                let prv_key = RsaPrivateKey::from_pkcs1_pem(private).map_err(|e| {
+                let pri_key = RsaPrivateKey::from_pkcs1_pem(private).map_err(|e| {
                     zerror2!(ZErrorKind::Other {
                         descr: format!("Rsa Private Key: {}", e)
                     })
                 })?;
-                return Ok(Some(Self::new(pub_key, prv_key)));
+                return Ok(Some(Self::new(pub_key, pri_key)));
             }
             (Some(_), None) => {
                 return zerror!(ZErrorKind::Other {
@@ -286,12 +288,12 @@ impl PubKeyAuthenticator {
                     })
                 })?;
                 let path = Path::new(private);
-                let prv_key = RsaPrivateKey::read_pkcs1_pem_file(path).map_err(|e| {
+                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path).map_err(|e| {
                     zerror2!(ZErrorKind::Other {
                         descr: format!("Rsa Private Key: {}", e)
                     })
                 })?;
-                return Ok(Some(Self::new(pub_key, prv_key)));
+                return Ok(Some(Self::new(pub_key, pri_key)));
             }
             (Some(_), None) => {
                 return zerror!(ZErrorKind::Other {
@@ -488,7 +490,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         })?;
 
         let nonce = self
-            .prv_key
+            .pri_key
             .decrypt(
                 PaddingScheme::PKCS1v15Encrypt,
                 init_ack_property
@@ -546,7 +548,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     })?;
 
                 let mut nonce_bytes: ZBuf = self
-                    .prv_key
+                    .pri_key
                     .decrypt(
                         PaddingScheme::PKCS1v15Encrypt,
                         open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),

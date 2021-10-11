@@ -13,6 +13,8 @@
 //
 use async_std::sync::Arc;
 use async_std::task;
+#[cfg(feature = "auth_pubkey")]
+use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 use std::any::Any;
 #[cfg(feature = "auth_usrpwd")]
 use std::collections::HashMap;
@@ -22,8 +24,8 @@ use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
-// #[cfg(feature = "auth_pubkey")]
-// use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
+#[cfg(feature = "auth_pubkey")]
+use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]
 use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
 #[cfg(feature = "auth_usrpwd")]
@@ -108,214 +110,398 @@ impl TransportEventHandler for SHClientAuthenticator {
     }
 }
 
-#[cfg(feature = "auth_pubkey")]
-async fn authenticator_public_key(_endpoint: &EndPoint) {
-    // RsaPublicKey { n: BigUint { data: [13854569197451851669, 17694260563073856544, 7177042759546308301, 5448683402327741903, 11613381432655861382, 18176980596997491973, 1643934184321650053, 14058391388315639667] }, e: BigUint { data: [65537] } }
-    // RsaPrivateKey { pubkey_components: RsaPublicKey { n: BigUint { data: [13854569197451851669, 17694260563073856544, 7177042759546308301, 5448683402327741903, 11613381432655861382, 18176980596997491973, 1643934184321650053, 14058391388315639667] }, e: BigUint { data: [65537] } }, d: BigUint { data: [7447105889854916609, 7706984235858323390, 543010913175397935, 7281429826252030630, 12421727492480610771, 4477469312556402117, 2280913078553678180, 4995955497411710146] }, primes: [BigUint { data: [17614414467766477461, 9408422114921960360, 16178501485145592533, 15900752384880489729] }, BigUint { data: [18016786655892160769, 9145900177685724685, 14952227153430670259, 16309388496288445361] }], precomputed: Some(PrecomputedValues { dp: BigUint { data: [10531729316280232829, 13306510626894743537, 6366538247360590135, 14546433453400518207] }, dq: BigUint { data: [16800401846487837953, 8325141234391518337, 16850505700991737475, 7656107803047347628] }, qinv: BigInt { sign: Plus, data: BigUint { data: [4923901714057849726, 9020674298733315867, 3753418685796228084, 10488744668634804796] } }, crt_values: [] }) }
+#[cfg(feature = "transport_multilink")]
+async fn authenticator_multilink(endpoint: &EndPoint) {
+    // Create the router transport manager
+    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
+    let n = BigUint::from_bytes_le(&[
+        0x31, 0xd1, 0xfc, 0x7e, 0x70, 0x5f, 0xd7, 0xe3, 0xcc, 0xa4, 0xca, 0xcb, 0x38, 0x84, 0x2f,
+        0xf5, 0x88, 0xaa, 0x4b, 0xbc, 0x2f, 0x74, 0x59, 0x49, 0xa9, 0xb9, 0x1a, 0x4d, 0x1c, 0x93,
+        0xbc, 0xc7, 0x02, 0xd0, 0xe0, 0x0f, 0xa7, 0x68, 0xeb, 0xef, 0x9b, 0xf9, 0x4f, 0xdc, 0xe3,
+        0x40, 0x5a, 0x3c, 0x8f, 0x20, 0xf4, 0x2c, 0x90, 0x1c, 0x70, 0x56, 0x9b, 0xae, 0x44, 0x17,
+        0xca, 0x85, 0x60, 0xb5,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let router_pub_key = RsaPublicKey::new(n, e).unwrap();
 
-    // RsaPublicKey { n: BigUint { data: [17473122527927429655, 16298871317093084869, 4940340869122128330, 2037748821152051721, 10824600817118707509, 14372565566066002801, 9302684737608554218, 13585081155721536499] }, e: BigUint { data: [65537] } }
-    // RsaPrivateKey { pubkey_components: RsaPublicKey { n: BigUint { data: [17473122527927429655, 16298871317093084869, 4940340869122128330, 2037748821152051721, 10824600817118707509, 14372565566066002801, 9302684737608554218, 13585081155721536499] }, e: BigUint { data: [65537] } }, d: BigUint { data: [7456242084992586705, 18367601275490331694, 4117193244150050720, 3458731659176767144, 16862346202955676289, 3838642081251794606, 11708402587340966852, 12835732415652058884] }, primes: [BigUint { data: [17316650767328074763, 6012558276658106095, 16039307155668761347, 14079877292100419224] }, BigUint { data: [13821189690405627301, 6948065444946967995, 13329837469803163478, 17798487167268861554] }], precomputed: Some(PrecomputedValues { dp: BigUint { data: [5577060041868571123, 1089772660824360317, 17092006454431308196, 1616660460855023187] }, dq: BigUint { data: [18056483174682837301, 12519384622875629877, 1184699978395139147, 5511157057622213521] }, qinv: BigInt { sign: Plus, data: BigUint { data: [14761750939420702040, 12499151064593160523, 13006945694343633768, 1488704957604081267] } }, crt_values: [] }) }
+    let n = BigUint::from_bytes_le(&[
+        0x31, 0xd1, 0xfc, 0x7e, 0x70, 0x5f, 0xd7, 0xe3, 0xcc, 0xa4, 0xca, 0xcb, 0x38, 0x84, 0x2f,
+        0xf5, 0x88, 0xaa, 0x4b, 0xbc, 0x2f, 0x74, 0x59, 0x49, 0xa9, 0xb9, 0x1a, 0x4d, 0x1c, 0x93,
+        0xbc, 0xc7, 0x02, 0xd0, 0xe0, 0x0f, 0xa7, 0x68, 0xeb, 0xef, 0x9b, 0xf9, 0x4f, 0xdc, 0xe3,
+        0x40, 0x5a, 0x3c, 0x8f, 0x20, 0xf4, 0x2c, 0x90, 0x1c, 0x70, 0x56, 0x9b, 0xae, 0x44, 0x17,
+        0xca, 0x85, 0x60, 0xb5,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let d = BigUint::from_bytes_le(&[
+        0xc1, 0xd1, 0xc1, 0x0f, 0xbe, 0xa7, 0xe6, 0x18, 0x98, 0x3c, 0xf8, 0x26, 0x74, 0xc0, 0xc7,
+        0xef, 0xf9, 0x38, 0x95, 0x75, 0x40, 0x45, 0xd4, 0x0d, 0x27, 0xec, 0x4c, 0xcd, 0x81, 0xf9,
+        0xf4, 0x69, 0x36, 0x99, 0x95, 0x97, 0xd0, 0xc8, 0x43, 0xac, 0xbb, 0x3e, 0x8f, 0xfb, 0x97,
+        0x53, 0xdb, 0x92, 0x12, 0xc5, 0xc0, 0x50, 0x83, 0xb2, 0x04, 0x25, 0x79, 0xeb, 0xa7, 0x32,
+        0x84, 0xbb, 0xc6, 0x35,
+    ]);
+    let primes = vec![
+        BigUint::from_bytes_le(&[
+            0xb9, 0x17, 0xd3, 0x45, 0x0a, 0x8e, 0xf7, 0x41, 0xaf, 0x75, 0xe3, 0x7f, 0xe9, 0x3c,
+            0x10, 0x28, 0x24, 0x0a, 0x95, 0x32, 0xc0, 0xcb, 0x23, 0x60, 0x6e, 0x2d, 0xb8, 0x2e,
+            0x96, 0x78, 0x21, 0xdf,
+        ]),
+        BigUint::from_bytes_le(&[
+            0x39, 0x51, 0xd3, 0xf3, 0xfe, 0xd1, 0x81, 0xd3, 0xc3, 0x2b, 0x49, 0x65, 0x3a, 0x44,
+            0x41, 0x31, 0xa7, 0x38, 0x8b, 0xd9, 0x18, 0xc7, 0x41, 0x8c, 0x86, 0x0b, 0x65, 0x2d,
+            0x18, 0x78, 0x18, 0xd0,
+        ]),
+    ];
+    let router_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let peer_auth_router = Arc::new(PubKeyAuthenticator::new(router_pub_key, router_pri_key));
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(2)
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]));
+    let config = TransportManagerConfig::builder()
+        .whatami(WhatAmI::Router)
+        .pid(router_id)
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
+    let router_manager = TransportManager::new(config);
 
-    // RsaPublicKey { n: BigUint { data: [3686350342620908375, 8545614685518232883, 14215578824320109297, 16675002711059108518, 16155907951513455499, 11414564319314822353, 17175189137638047078, 15995100422626709276] }, e: BigUint { data: [65537] } }
-    // RsaPrivateKey { pubkey_components: RsaPublicKey { n: BigUint { data: [3686350342620908375, 8545614685518232883, 14215578824320109297, 16675002711059108518, 16155907951513455499, 11414564319314822353, 17175189137638047078, 15995100422626709276] }, e: BigUint { data: [65537] } }, d: BigUint { data: [4556826134197859009, 3562961612395979568, 14586344940073008745, 16160937605978972348, 9093301098868660612, 14414478351979291262, 12038776970606293352, 3041502379827792712] }, primes: [BigUint { data: [12846697277240834759, 1500159518305670828, 3217625493990706223, 17581557268255462034] }, BigUint { data: [935854861169810161, 8446685943269626472, 10690214627302603441, 16782217833583043577] }], precomputed: Some(PrecomputedValues { dp: BigUint { data: [14187687900726169745, 154247825920773355, 18444916654681770889, 5294560542079890728] }, dq: BigUint { data: [12618408670020134257, 188422378886325779, 10863583501584294867, 3923285463605685500] }, qinv: BigInt { sign: Plus, data: BigUint { data: [17432429445919805588, 9736632911158649548, 13805301904022454805, 8934107280997551563] } }, crt_values: [] }) }
+    // Create the transport transport manager for the client 01
+    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
-    // RsaPublicKey { n: BigUint { data: [16383961692702960071, 12438583860330527170, 1058179066964940137, 11677588414324440620, 15783156963962073405, 2595157166562914867, 3869258657212364853, 13529756005834192120] }, e: BigUint { data: [65537] } }
-    // RsaPrivateKey { pubkey_components: RsaPublicKey { n: BigUint { data: [16383961692702960071, 12438583860330527170, 1058179066964940137, 11677588414324440620, 15783156963962073405, 2595157166562914867, 3869258657212364853, 13529756005834192120] }, e: BigUint { data: [65537] } }, d: BigUint { data: [3327746175160399905, 4754389458571766303, 18445880705045551384, 6483221579223935667, 3221262248421972271, 15396530501593367425, 9073637640712678817, 7529858256508481062] }, primes: [BigUint { data: [13268502174880840607, 11414023979431771042, 12088498362166724207, 15430067556460481771] }, BigUint { data: [9871421612426305753, 12157523347948669706, 14109055328688991186, 16174909507435072059] }], precomputed: Some(PrecomputedValues { dp: BigUint { data: [15588907300746335631, 11357825803605464791, 9138345614797710638, 15040177999820743031] }, dq: BigUint { data: [1760081535143795225, 17218762781349774384, 9017324801166990592, 10612894757605864376] }, qinv: BigInt { sign: Plus, data: BigUint { data: [9522232260123452820, 14787968413756624855, 436611369251140883, 10574616638065942359] } }, crt_values: [] }) }
+    let n = BigUint::from_bytes_le(&[
+        0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95, 0xca,
+        0xb4, 0x5d, 0x17, 0x3d, 0x14, 0xdd, 0xbb, 0x16, 0x4a, 0x49, 0xeb, 0x43, 0x27, 0x79, 0x3e,
+        0x75, 0x67, 0xd6, 0xf6, 0x7f, 0xe7, 0xbf, 0xb5, 0x1d, 0xf6, 0x27, 0x80, 0xca, 0x26, 0x35,
+        0xa2, 0xc5, 0x4c, 0x96, 0x50, 0xaa, 0x9f, 0xf4, 0x47, 0xbe, 0x06, 0x9c, 0xd1, 0xec, 0xfd,
+        0x1e, 0x81, 0xe9, 0xc4,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let client01_pub_key = RsaPublicKey::new(n, e).unwrap();
 
-    // /* [CLIENT] */
-    // let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    // let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+    let n = BigUint::from_bytes_le(&[
+        0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95, 0xca,
+        0xb4, 0x5d, 0x17, 0x3d, 0x14, 0xdd, 0xbb, 0x16, 0x4a, 0x49, 0xeb, 0x43, 0x27, 0x79, 0x3e,
+        0x75, 0x67, 0xd6, 0xf6, 0x7f, 0xe7, 0xbf, 0xb5, 0x1d, 0xf6, 0x27, 0x80, 0xca, 0x26, 0x35,
+        0xa2, 0xc5, 0x4c, 0x96, 0x50, 0xaa, 0x9f, 0xf4, 0x47, 0xbe, 0x06, 0x9c, 0xd1, 0xec, 0xfd,
+        0x1e, 0x81, 0xe9, 0xc4,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let d = BigUint::from_bytes_le(&[
+        0x15, 0xe1, 0x93, 0xda, 0x75, 0xcb, 0x76, 0x40, 0xce, 0x70, 0x6f, 0x0f, 0x62, 0xe1, 0x58,
+        0xa5, 0x53, 0x7b, 0x17, 0x63, 0x71, 0x70, 0x2d, 0x0d, 0xc5, 0xce, 0xcd, 0xb4, 0x26, 0xe0,
+        0x22, 0x3d, 0xd4, 0x04, 0x88, 0x51, 0x24, 0x34, 0x01, 0x9c, 0x94, 0x01, 0x47, 0x49, 0x86,
+        0xe3, 0x2f, 0x3b, 0x65, 0x5c, 0xcc, 0x0b, 0x8a, 0x00, 0x93, 0x26, 0x79, 0xbb, 0x18, 0xab,
+        0x94, 0x4b, 0x52, 0x99,
+    ]);
+    let primes = vec![
+        BigUint::from_bytes_le(&[
+            0x87, 0x9c, 0xbd, 0x9c, 0xbf, 0xd5, 0xb7, 0xc2, 0x73, 0x16, 0x44, 0x3f, 0x67, 0x90,
+            0xaa, 0xab, 0xfe, 0x20, 0xac, 0x7d, 0xe9, 0xc4, 0xb9, 0xfb, 0x12, 0xab, 0x09, 0x35,
+            0xec, 0xf5, 0x9f, 0xe1,
+        ]),
+        BigUint::from_bytes_le(&[
+            0xf7, 0xa2, 0xc1, 0x81, 0x63, 0xe1, 0x1c, 0x39, 0xe4, 0x7b, 0xbf, 0x56, 0xd5, 0x35,
+            0xc3, 0xd1, 0x11, 0xf9, 0x1f, 0x42, 0x4e, 0x3e, 0xe7, 0xc9, 0xa2, 0x3c, 0x98, 0x08,
+            0xaa, 0xf9, 0x6b, 0xdf,
+        ]),
+    ];
+    let client01_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let peer_auth_client01 = PubKeyAuthenticator::new(client01_pub_key, client01_pri_key);
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(2)
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]));
+    let config = TransportManagerConfig::builder()
+        .whatami(WhatAmI::Client)
+        .pid(client01_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
+    let client01_manager = TransportManager::new(config);
 
-    // /* [ROUTER] */
-    // let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    // let router_handler = Arc::new(SHRouterAuthenticator::new());
-    // // Create the router transport manager
-    // let peer_auth_router = Arc::new(PubKeyAuthenticator::new());
-    // let config = TransportManagerConfig::builder()
-    //     .whatami(WhatAmI::Router)
-    //     .pid(router_id)
-    //     .unicast(
-    //         TransportManagerConfigUnicast::builder()
-    //             .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]))
-    //             .build(),
-    //     )
-    //     .build(router_handler.clone());
-    // let router_manager = TransportManager::new(config);
+    // Create the transport transport manager for the client 02
+    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
 
-    // // Create the transport transport manager for the first client
-    // let peer_auth_client01 = PubKeyAuthenticator::new();
-    // let config = TransportManagerConfig::builder()
-    //     .whatami(WhatAmI::Client)
-    //     .pid(client01_id)
-    //     .unicast(
-    //         TransportManagerConfigUnicast::builder()
-    //             .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]))
-    //             .build(),
-    //     )
-    //     .build(Arc::new(SHClientAuthenticator::default()));
-    // let client01_manager = TransportManager::new(config);
+    let n = BigUint::from_bytes_le(&[
+        0xd1, 0x36, 0xcf, 0x94, 0xda, 0x04, 0x7e, 0x9f, 0x53, 0x39, 0xb8, 0x7b, 0x53, 0x3a, 0xe6,
+        0xa4, 0x0e, 0x6c, 0xf0, 0x92, 0x5d, 0xd9, 0x1d, 0x84, 0xc3, 0x10, 0xab, 0x8f, 0x7d, 0xe8,
+        0xf4, 0xff, 0x79, 0xae, 0x00, 0x25, 0xfc, 0xaf, 0x0c, 0x0f, 0x05, 0xc7, 0xa3, 0xfd, 0x31,
+        0x9a, 0xd3, 0x79, 0x0f, 0x44, 0xa6, 0x1c, 0x19, 0x61, 0xed, 0xb0, 0x27, 0x99, 0x53, 0x23,
+        0x50, 0xad, 0x67, 0xcf,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let client02_pub_key = RsaPublicKey::new(n, e).unwrap();
 
-    // // Create the transport transport manager for the second client
-    // let config = TransportManagerConfig::builder()
-    //     .whatami(WhatAmI::Client)
-    //     .pid(client02_id)
-    //     .unicast(
-    //         TransportManagerConfigUnicast::builder()
-    //             .max_links(1)
-    //             .build(),
-    //     )
-    //     .build(Arc::new(SHClientAuthenticator::default()));
-    // let client02_manager = TransportManager::new(config);
+    let n = BigUint::from_bytes_le(&[
+        0xd1, 0x36, 0xcf, 0x94, 0xda, 0x04, 0x7e, 0x9f, 0x53, 0x39, 0xb8, 0x7b, 0x53, 0x3a, 0xe6,
+        0xa4, 0x0e, 0x6c, 0xf0, 0x92, 0x5d, 0xd9, 0x1d, 0x84, 0xc3, 0x10, 0xab, 0x8f, 0x7d, 0xe8,
+        0xf4, 0xff, 0x79, 0xae, 0x00, 0x25, 0xfc, 0xaf, 0x0c, 0x0f, 0x05, 0xc7, 0xa3, 0xfd, 0x31,
+        0x9a, 0xd3, 0x79, 0x0f, 0x44, 0xa6, 0x1c, 0x19, 0x61, 0xed, 0xb0, 0x27, 0x99, 0x53, 0x23,
+        0x50, 0xad, 0x67, 0xcf,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let d = BigUint::from_bytes_le(&[
+        0x01, 0xe4, 0xe9, 0x20, 0x20, 0x8c, 0x17, 0xd3, 0xea, 0xd0, 0x1f, 0xfa, 0x25, 0x5c, 0xaf,
+        0x5d, 0x19, 0xa4, 0x2a, 0xbc, 0x62, 0x5e, 0x2c, 0x63, 0x4f, 0x6e, 0x30, 0x07, 0x7c, 0x04,
+        0x72, 0xc9, 0x57, 0x3d, 0xe0, 0x59, 0x33, 0x8a, 0x36, 0x02, 0x5d, 0xa6, 0x81, 0x4e, 0x27,
+        0x82, 0xce, 0x95, 0x85, 0xd4, 0xa3, 0x9b, 0x5e, 0x2a, 0x04, 0xa8, 0x9d, 0x74, 0x25, 0x70,
+        0xf4, 0x37, 0x7d, 0x27,
+    ]);
+    let primes = vec![
+        BigUint::from_bytes_le(&[
+            0x31, 0x55, 0x19, 0x90, 0xf4, 0xb5, 0x76, 0xed, 0xa4, 0x2e, 0x52, 0x37, 0x16, 0xd5,
+            0xef, 0x0b, 0xcb, 0x00, 0x10, 0xea, 0xff, 0x4f, 0xfe, 0x04, 0xf4, 0x44, 0xac, 0x24,
+            0xfc, 0x68, 0x02, 0xe4,
+        ]),
+        BigUint::from_bytes_le(&[
+            0xa1, 0x13, 0xee, 0xe0, 0xe2, 0x98, 0x4e, 0x0b, 0x90, 0x11, 0x73, 0x87, 0xa2, 0x54,
+            0x8c, 0x5c, 0xe7, 0x03, 0x4b, 0xbf, 0x26, 0xfc, 0xb4, 0xba, 0xf9, 0xf9, 0x03, 0x84,
+            0xb9, 0xbc, 0xdd, 0xe8,
+        ]),
+    ];
+    let client02_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
 
-    // // Create the transport transport manager for the third client
-    // let peer_auth_client01_spoof = PubKeyAuthenticator::new();
-    // let config = TransportManagerConfig::builder()
-    //     .whatami(WhatAmI::Client)
-    //     .pid(client01_id)
-    //     .unicast(
-    //         TransportManagerConfigUnicast::builder()
-    //             .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01_spoof.into()]))
-    //             .build(),
-    //     )
-    //     .build(Arc::new(SHClientAuthenticator::default()));
-    // let client01_spoof_manager = TransportManager::new(config);
+    let peer_auth_client02 = PubKeyAuthenticator::new(client02_pub_key, client02_pri_key);
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(2)
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]));
+    let config = TransportManagerConfig::builder()
+        .whatami(WhatAmI::Client)
+        .pid(client02_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
+    let client02_manager = TransportManager::new(config);
 
-    // /* [1] */
-    // println!("\nTransport Authenticator PubKey [1a1]");
-    // // Add the locator on the router
-    // let res = router_manager.add_listener(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [1a1]: {:?}", res);
-    // assert!(res.is_ok());
-    // println!("Transport Authenticator PubKey [1a2]");
-    // let locators = router_manager.get_listeners();
-    // println!("Transport Authenticator PubKey [1a2]: {:?}", locators);
-    // assert_eq!(locators.len(), 1);
+    // Create the transport transport manager for the third client
+    let client01_spoof_id = client01_id;
 
-    // /* [2] */
-    // // Open a first transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [2a1]");
-    // let res = client01_manager.open_transport(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [2a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // let c_ses1 = res.unwrap();
-    // assert_eq!(c_ses1.get_links().unwrap().len(), 1);
+    let n = BigUint::from_bytes_le(&[
+        0x19, 0x01, 0x60, 0xf9, 0x1b, 0xd5, 0x2f, 0x1d, 0xb9, 0x16, 0xb5, 0xe4, 0xe3, 0x89, 0x7d,
+        0x94, 0xa7, 0x82, 0x2f, 0xa7, 0xab, 0xec, 0xf2, 0xc2, 0x31, 0xf4, 0xf9, 0x66, 0x97, 0x6a,
+        0x98, 0xf7, 0x02, 0x00, 0x0f, 0x51, 0xe4, 0xe4, 0x19, 0x29, 0xb6, 0x95, 0x1b, 0xb1, 0x2e,
+        0x86, 0x2b, 0x99, 0x7f, 0x4e, 0x5a, 0x84, 0x44, 0xf3, 0xaa, 0xb3, 0xbf, 0x6c, 0xb5, 0xd4,
+        0x05, 0x37, 0x33, 0xc2,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let client01_spoof_pub_key = RsaPublicKey::new(n, e).unwrap();
 
-    // /* [3] */
-    // // Open a second transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [3a1]");
-    // let res = client01_manager.open_transport(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [3a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // assert_eq!(c_ses1.get_links().unwrap().len(), 2);
+    let n = BigUint::from_bytes_le(&[
+        0x19, 0x01, 0x60, 0xf9, 0x1b, 0xd5, 0x2f, 0x1d, 0xb9, 0x16, 0xb5, 0xe4, 0xe3, 0x89, 0x7d,
+        0x94, 0xa7, 0x82, 0x2f, 0xa7, 0xab, 0xec, 0xf2, 0xc2, 0x31, 0xf4, 0xf9, 0x66, 0x97, 0x6a,
+        0x98, 0xf7, 0x02, 0x00, 0x0f, 0x51, 0xe4, 0xe4, 0x19, 0x29, 0xb6, 0x95, 0x1b, 0xb1, 0x2e,
+        0x86, 0x2b, 0x99, 0x7f, 0x4e, 0x5a, 0x84, 0x44, 0xf3, 0xaa, 0xb3, 0xbf, 0x6c, 0xb5, 0xd4,
+        0x05, 0x37, 0x33, 0xc2,
+    ]);
+    let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+    let d = BigUint::from_bytes_le(&[
+        0x01, 0xef, 0x77, 0x79, 0x99, 0xf7, 0xa7, 0x14, 0x0f, 0x61, 0xc6, 0xca, 0x3e, 0x14, 0xfa,
+        0x52, 0x6a, 0xbc, 0x94, 0x2a, 0xb1, 0x7e, 0x3a, 0x57, 0xd1, 0x85, 0x62, 0xa4, 0xd0, 0xf5,
+        0x40, 0x6a, 0x0f, 0xb3, 0x59, 0xec, 0x7d, 0xbd, 0xac, 0xcf, 0x28, 0x5c, 0xa1, 0x11, 0x40,
+        0xfa, 0x84, 0x4a, 0x54, 0xd1, 0x7f, 0x44, 0xc8, 0xce, 0xb2, 0x21, 0x63, 0xd0, 0xc4, 0x02,
+        0x55, 0x0a, 0x3a, 0x12,
+    ]);
+    let primes = vec![
+        BigUint::from_bytes_le(&[
+            0xe1, 0x93, 0xce, 0x13, 0x6e, 0xf4, 0xb9, 0xb8, 0xea, 0xdc, 0xc9, 0x83, 0xcb, 0xe5,
+            0x7d, 0x2b, 0x2f, 0x4e, 0xef, 0x75, 0x1f, 0x10, 0x4b, 0x6e, 0xbe, 0xf1, 0xc3, 0x61,
+            0x33, 0x71, 0x65, 0xce,
+        ]),
+        BigUint::from_bytes_le(&[
+            0x39, 0x94, 0x43, 0x4f, 0xd3, 0x74, 0x27, 0x94, 0xc7, 0x1b, 0x0f, 0xbb, 0x2b, 0xd4,
+            0x9b, 0xf9, 0xe7, 0xfc, 0x47, 0x63, 0x44, 0x28, 0xa7, 0x81, 0x20, 0x91, 0x8e, 0xcf,
+            0x5d, 0x66, 0xdf, 0xf0,
+        ]),
+    ];
+    let client01_spoof_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
 
-    // /* [4] */
-    // // Close the session
-    // println!("Transport Authenticator PubKey [4a1]");
-    // let res = c_ses1.close().await;
-    // println!("Transport Authenticator PubKey [4a2]: {:?}", res);
-    // assert!(res.is_ok());
+    let peer_auth_client01_spoof =
+        PubKeyAuthenticator::new(client01_spoof_pub_key, client01_spoof_pri_key);
+    let unicast = TransportManagerConfigUnicast::builder()
+        .max_links(2)
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01_spoof.into()]));
+    let config = TransportManagerConfig::builder()
+        .whatami(WhatAmI::Client)
+        .pid(client01_spoof_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
+    let client01_spoof_manager = TransportManager::new(config);
 
-    // task::sleep(SLEEP).await;
+    /* [1] */
+    println!("\nTransport Authenticator PubKey [1a1]");
+    // Add the locator on the router
+    let res = router_manager.add_listener(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [1a1]: {:?}", res);
+    assert!(res.is_ok());
+    println!("Transport Authenticator PubKey [1a2]");
+    let locators = router_manager.get_listeners();
+    println!("Transport Authenticator PubKey [1a2]: {:?}", locators);
+    assert_eq!(locators.len(), 1);
 
-    // /* [5] */
-    // // Open a first transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [5a1]");
-    // let res = client02_manager.open_transport(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [5a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // let c_ses2 = res.unwrap();
-    // assert_eq!(c_ses2.get_links().unwrap().len(), 1);
+    /* [2a] */
+    // Open a first transport from client01 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [2a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [2a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert_eq!(c_ses1.get_links().unwrap().len(), 1);
 
-    // /* [6] */
-    // // Open a second transport from the client to the router
-    // // -> This should be rejected
-    // println!("Transport Authenticator PubKey [6a1]");
-    // let res = client02_manager.open_transport(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [6a2]: {:?}", res);
-    // assert!(res.is_err());
-    // assert_eq!(c_ses2.get_links().unwrap().len(), 1);
+    /* [2b] */
+    // Open a second transport from client01 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [2b1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [2b2]: {:?}", res);
+    assert!(res.is_ok());
+    assert_eq!(c_ses1.get_links().unwrap().len(), 2);
 
-    // /* [7] */
-    // // Close the session
-    // println!("Transport Authenticator PubKey [7a1]");
-    // let res = c_ses2.close().await;
-    // println!("Transport Authenticator PubKey [7a2]: {:?}", res);
-    // assert!(res.is_ok());
+    /* [2c] */
+    // Open a third transport from client01 to the router
+    // -> This should be rejected
+    println!("Transport Authenticator PubKey [2c1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [2c2]: {:?}", res);
+    assert!(res.is_err());
+    assert_eq!(c_ses1.get_links().unwrap().len(), 2);
 
-    // task::sleep(SLEEP).await;
+    /* [2d] */
+    // Close the session
+    println!("Transport Authenticator PubKey [2d1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator PubKey [2d2]: {:?}", res);
+    assert!(res.is_ok());
 
-    // /* [8] */
-    // // Open a first transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [8a1]");
-    // let res = client01_spoof_manager
-    //     .open_transport(endpoint.clone())
-    //     .await;
-    // println!("Transport Authenticator PubKey [8a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // let c_ses1_spoof = res.unwrap();
-    // assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 1);
+    task::sleep(SLEEP).await;
 
-    // /* [9] */
-    // // Open a second transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [9a1]");
-    // let res = client01_spoof_manager
-    //     .open_transport(endpoint.clone())
-    //     .await;
-    // println!("Transport Authenticator PubKey [9a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
+    /* [3a] */
+    // Open a first transport from client02 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [3a1]");
+    let res = client02_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [3a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
+    assert_eq!(c_ses2.get_links().unwrap().len(), 1);
 
-    // /* [10] */
-    // // Close the session
-    // println!("Transport Authenticator PubKey [10a1]");
-    // let res = c_ses1_spoof.close().await;
-    // println!("Transport Authenticator PubKey [10a2]: {:?}", res);
-    // assert!(res.is_ok());
+    /* [3b] */
+    // Open a second transport from client02 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [3b1]");
+    let res = client02_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [3b2]: {:?}", res);
+    assert!(res.is_ok());
+    assert_eq!(c_ses2.get_links().unwrap().len(), 2);
 
-    // task::sleep(SLEEP).await;
+    /* [3c] */
+    // Open a third transport from client02 to the router
+    // -> This should be rejected
+    println!("Transport Authenticator PubKey [3c1]");
+    let res = client02_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [3c2]: {:?}", res);
+    assert!(res.is_err());
+    assert_eq!(c_ses2.get_links().unwrap().len(), 2);
 
-    // /* [11] */
-    // // Open a first transport from the client to the router
-    // // -> This should be accepted
-    // println!("Transport Authenticator PubKey [11a1]");
-    // let res = client01_manager.open_transport(endpoint.clone()).await;
-    // println!("Transport Authenticator PubKey [11a2]: {:?}", res);
-    // assert!(res.is_ok());
-    // let c_ses1 = res.unwrap();
-    // assert_eq!(c_ses1.get_links().unwrap().len(), 1);
+    /* [3d] */
+    // Close the session
+    println!("Transport Authenticator PubKey [3d1]");
+    let res = c_ses2.close().await;
+    println!("Transport Authenticator PubKey [7d2]: {:?}", res);
+    assert!(res.is_ok());
 
-    // /* [12] */
-    // // Open a spoof transport from the client to the router
-    // // -> This should be rejected
-    // println!("Transport Authenticator PubKey [12a1]");
-    // let res = client01_spoof_manager
-    //     .open_transport(endpoint.clone())
-    //     .await;
-    // println!("Transport Authenticator PubKey [12a2]: {:?}", res);
-    // assert!(res.is_err());
+    task::sleep(SLEEP).await;
 
-    // /* [13] */
-    // // Close the session
-    // println!("Transport Authenticator PubKey [13a1]");
-    // let res = c_ses1.close().await;
-    // println!("Transport Authenticator PubKey [13a2]: {:?}", res);
-    // assert!(res.is_ok());
+    /* [4a] */
+    // Open a first transport from client01_spoof to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [4a1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [4a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1_spoof = res.unwrap();
+    assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 1);
 
-    // task::sleep(SLEEP).await;
+    /* [4b] */
+    // Open a second transport from client01_spoof to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [4b1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [4b2]: {:?}", res);
+    assert!(res.is_ok());
+    assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
 
-    // /* [14] */
-    // // Perform clean up of the open locators
-    // println!("Transport Authenticator UserPassword [14a1]");
-    // let res = router_manager.del_listener(endpoint).await;
-    // println!("Transport Authenticator UserPassword [14a2]: {:?}", res);
-    // assert!(res.is_ok());
+    /* [4c] */
+    // Open a third transport from client02 to the router
+    // -> This should be rejected
+    println!("Transport Authenticator PubKey [41]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [4c2]: {:?}", res);
+    assert!(res.is_err());
+    assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
 
-    // task::sleep(SLEEP).await;
+    /* [4d] */
+    // Close the session
+    println!("Transport Authenticator PubKey [4d1]");
+    let res = c_ses1_spoof.close().await;
+    println!("Transport Authenticator PubKey [4d2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [5a] */
+    // Open a first transport from client01 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [5a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [5a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert_eq!(c_ses1.get_links().unwrap().len(), 1);
+
+    /* [5b] */
+    // Open a spoof transport from client01_spoof to the router
+    // -> This should be rejected. Spoofing detected.
+    println!("Transport Authenticator PubKey [5b1]");
+    let res = client01_spoof_manager
+        .open_transport(endpoint.clone())
+        .await;
+    println!("Transport Authenticator PubKey [5b2]: {:?}", res);
+    assert!(res.is_err());
+
+    /* [5c] */
+    // Open a second transport from client01 to the router
+    // -> This should be accepted
+    println!("Transport Authenticator PubKey [5a1]");
+    let res = client01_manager.open_transport(endpoint.clone()).await;
+    println!("Transport Authenticator PubKey [5a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    assert_eq!(c_ses1.get_links().unwrap().len(), 2);
+
+    /* [5d] */
+    // Close the session
+    println!("Transport Authenticator PubKey [5d1]");
+    let res = c_ses1.close().await;
+    println!("Transport Authenticator PubKey [5d2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
+
+    /* [6] */
+    // Perform clean up of the open locators
+    println!("Transport Authenticator UserPassword [6a1]");
+    let res = router_manager.del_listener(endpoint).await;
+    println!("Transport Authenticator UserPassword [6a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    task::sleep(SLEEP).await;
 }
 
 #[cfg(feature = "auth_usrpwd")]
@@ -342,15 +528,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     lookup.insert(user03.clone().into(), password03.clone().into());
 
     let peer_auth_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
@@ -361,16 +544,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         lookup,
         Some((user01.clone().into(), password01.clone().into())),
     );
-
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
     let client01_manager = TransportManager::new(config);
@@ -381,15 +560,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         lookup,
         Some((user02.clone().into(), password02.clone().into())),
     );
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
     let client02_manager = TransportManager::new(config);
@@ -400,15 +576,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         lookup,
         Some((user03.clone().into(), password03.clone().into())),
     );
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client03.into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client03_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client03.into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
     let client03_manager = TransportManager::new(config);
@@ -510,30 +683,24 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let peer_auth_router = SharedMemoryAuthenticator::new();
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the first client
     let peer_auth_client = SharedMemoryAuthenticator::new();
+    let unicast = TransportManagerConfigUnicast::builder()
+        .peer_authenticator(HashSet::from_iter(vec![peer_auth_client.into()]));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(client_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .peer_authenticator(HashSet::from_iter(vec![peer_auth_client.into()]))
-                .build()
-                .unwrap(),
-        )
+        .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
     let client_manager = TransportManager::new(config);
@@ -578,8 +745,8 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
 }
 
 async fn run(endpoint: &EndPoint) {
-    #[cfg(feature = "auth_pubkey")]
-    authenticator_public_key(endpoint).await;
+    #[cfg(feature = "transport_multilink")]
+    authenticator_multilink(endpoint).await;
     #[cfg(feature = "auth_usrpwd")]
     authenticator_user_password(endpoint).await;
     #[cfg(feature = "shared-memory")]

@@ -106,10 +106,8 @@ mod tests {
 
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new());
-        let unicast = TransportManagerConfigUnicast::builder()
-            .max_links(endpoint01.len() + endpoint02.len())
-            .build()
-            .unwrap();
+        let unicast =
+            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id01)
@@ -120,10 +118,8 @@ mod tests {
 
         // Create the peer01 transport manager
         let peer_sh02 = Arc::new(SHPeer::new());
-        let unicast = TransportManagerConfigUnicast::builder()
-            .max_links(endpoint01.len() + endpoint02.len())
-            .build()
-            .unwrap();
+        let unicast =
+            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
         let config = TransportManagerConfig::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id02)
