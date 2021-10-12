@@ -157,21 +157,21 @@ mod consts {
     pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = ZN_TRUE;
 
     /// The file path containing the TLS server private key.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_server_private_key"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_SERVER_PRIVATE_KEY_KEY: u64 = 0x4E;
     pub const ZN_TLS_SERVER_PRIVATE_KEY_STR: &str = "tls_server_private_key";
 
     /// The file path containing the TLS server certificate.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_server_certificate"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_SERVER_CERTIFICATE_KEY: u64 = 0x4F;
     pub const ZN_TLS_SERVER_CERTIFICATE_STR: &str = "tls_server_certificate";
 
     /// The file path containing the TLS root CA certificate.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_root_ca_certificate"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_KEY: u64 = 0x50;
@@ -379,6 +379,28 @@ mod consts {
     pub const ZN_MAX_SESSIONS_MULTICAST_KEY: u64 = 0x84;
     pub const ZN_MAX_SESSIONS_MULTICAST_STR: &str = "max_sessions_multicast";
     pub const ZN_MAX_SESSIONS_MULTICAST_DEFAULT: &str = "1024";
+
+    /// The file path containing the TLS server private key.
+    /// String key : `"tls_client_private_key"`.
+    /// Accepted values : `<file path>`.
+    /// Default value : None.
+    pub const ZN_TLS_CLIENT_PRIVATE_KEY_KEY: u64 = 0x85;
+    pub const ZN_TLS_CLIENT_PRIVATE_KEY_STR: &str = "tls_client_private_key";
+
+    /// The file path containing the TLS server certificate.
+    /// String key : `"tls_client_private_key"`.
+    /// Accepted values : `<file path>`.
+    /// Default value : None.
+    pub const ZN_TLS_CLIENT_CERTIFICATE_KEY: u64 = 0x86;
+    pub const ZN_TLS_CLIENT_CERTIFICATE_STR: &str = "tls_client_certificate";
+
+    /// The file path containing the TLS server certificate.
+    /// String key : `"tls_private_key"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"false"`.
+    pub const ZN_TLS_CLIENT_AUTH_KEY: u64 = 0x87;
+    pub const ZN_TLS_CLIENT_AUTH_STR: &str = "tls_client_auth";
+    pub const ZN_TLS_CLIENT_AUTH_DEFAULT: &str = ZN_FALSE;
 }
 
 pub use consts::*;
@@ -436,6 +458,9 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_AUTH_RSA_KEY_SIZE_STR => Some(ZN_AUTH_RSA_KEY_SIZE_KEY),
             ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY),
             ZN_MAX_SESSIONS_MULTICAST_STR => Some(ZN_MAX_SESSIONS_MULTICAST_KEY),
+            ZN_TLS_CLIENT_PRIVATE_KEY_STR => Some(ZN_TLS_CLIENT_PRIVATE_KEY_KEY),
+            ZN_TLS_CLIENT_CERTIFICATE_STR => Some(ZN_TLS_CLIENT_CERTIFICATE_KEY),
+            ZN_TLS_CLIENT_AUTH_STR => Some(ZN_TLS_CLIENT_AUTH_KEY),
             _ => None,
         }
     }
@@ -491,6 +516,9 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_AUTH_RSA_KEY_SIZE_KEY => Some(ZN_AUTH_RSA_KEY_SIZE_STR.to_string()),
             ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR.to_string()),
             ZN_MAX_SESSIONS_MULTICAST_KEY => Some(ZN_MAX_SESSIONS_MULTICAST_STR.to_string()),
+            ZN_TLS_CLIENT_PRIVATE_KEY_KEY => Some(ZN_TLS_CLIENT_PRIVATE_KEY_STR.to_string()),
+            ZN_TLS_CLIENT_CERTIFICATE_KEY => Some(ZN_TLS_CLIENT_CERTIFICATE_STR.to_string()),
+            ZN_TLS_CLIENT_AUTH_KEY => Some(ZN_TLS_CLIENT_AUTH_STR.to_string()),
             _ => None,
         }
     }

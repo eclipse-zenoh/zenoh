@@ -20,6 +20,7 @@ use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::properties::config::{ZN_FALSE, ZN_TRUE};
 use zenoh_util::properties::Properties;
 use zenoh_util::{zerror, zerror2};
 
@@ -144,6 +145,24 @@ impl LocatorConfigTls {
             properties.insert(
                 TLS_SERVER_CERTIFICATE_FILE.into(),
                 tls_server_certificate.into(),
+            );
+        }
+        if let Some(tls_client_auth) = c.client_auth() {
+            match tls_client_auth {
+                true => properties.insert(TLS_CLIENT_AUTH.into(), ZN_TRUE.into()),
+                false => properties.insert(TLS_CLIENT_AUTH.into(), ZN_FALSE.into()),
+            };
+        }
+        if let Some(tls_client_private_key) = c.client_private_key() {
+            properties.insert(
+                TLS_CLIENT_PRIVATE_KEY_FILE.into(),
+                tls_client_private_key.into(),
+            );
+        }
+        if let Some(tls_client_certificate) = c.client_certificate() {
+            properties.insert(
+                TLS_CLIENT_CERTIFICATE_FILE.into(),
+                tls_client_certificate.into(),
             );
         }
 

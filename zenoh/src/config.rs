@@ -203,12 +203,18 @@ validated_struct::validator! {
                 defrag_buffer_size: Option<usize>,
                 #[serde(default)]
                 pub tls: TLSConf {
+                    #[intkey(ZN_TLS_ROOT_CA_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    root_ca_certificate: Option<String>,
                     #[intkey(ZN_TLS_SERVER_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
                     server_private_key: Option<String>,
                     #[intkey(ZN_TLS_SERVER_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
                     server_certificate: Option<String>,
-                    #[intkey(ZN_TLS_ROOT_CA_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
-                    root_ca_certificate: Option<String>,
+                    #[intkey(ZN_TLS_CLIENT_AUTH_KEY, into = bool_to_cowstr, from = bool_from_str)]
+                    client_auth: Option<bool>,
+                    #[intkey(ZN_TLS_CLIENT_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
+                    client_private_key: Option<String>,
+                    #[intkey(ZN_TLS_CLIENT_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
+                    client_certificate: Option<String>,
                 },
             },
             #[serde(default)]
