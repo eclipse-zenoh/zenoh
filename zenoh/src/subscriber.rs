@@ -133,6 +133,7 @@ impl Subscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
@@ -153,6 +154,7 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unsubscribe(self.state.id)
@@ -198,14 +200,15 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
         self.session.pull(&self.state.reskey)
     }
 
     /// Undeclare a [`CallbackSubscriber`](CallbackSubscriber).
     ///
-    /// CallbackSubscribers are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the CallbackSubscriber asynchronously.
+    /// `CallbackSubscribers` are automatically unregistered when dropped, but you may want to use this function to handle errors or
+    /// unregister the `CallbackSubscriber` asynchronously.
     ///
     /// # Examples
     /// ```
@@ -220,6 +223,7 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unsubscribe(self.state.id)
@@ -296,14 +300,14 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the subscription reliability to Reliable.
+    /// Change the subscription reliability to `Reliable`.
     #[inline]
     pub fn reliable(mut self) -> Self {
         self.reliability = Reliability::Reliable;
         self
     }
 
-    /// Change the subscription reliability to BestEffort.
+    /// Change the subscription reliability to `BestEffort`.
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
@@ -437,14 +441,14 @@ impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the subscription reliability to Reliable.
+    /// Change the subscription reliability to `Reliable`.
     #[inline]
     pub fn reliable(mut self) -> Self {
         self.reliability = Reliability::Reliable;
         self
     }
 
-    /// Change the subscription reliability to BestEffort.
+    /// Change the subscription reliability to `BestEffort`.
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;

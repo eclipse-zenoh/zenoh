@@ -497,7 +497,7 @@ async fn accept_read_task(
 
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
     // Buffers for deserialization
-    let pool = RecyclingObjectPool::new(1, || vec![0u8; UDP_MAX_MTU as usize].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(1, || vec![0_u8; UDP_MAX_MTU as usize].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         let mut buff = pool.take().await;
         // Wait for incoming connections

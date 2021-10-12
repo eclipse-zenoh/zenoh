@@ -78,7 +78,7 @@ impl TransportEventHandler for SHClientOpenClose {
 
 async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
@@ -97,8 +97,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
     #[allow(unused_mut)]

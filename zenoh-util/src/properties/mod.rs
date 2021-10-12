@@ -34,7 +34,7 @@ where
 impl<T: KeyTranscoder> IntKeyProperties<T> {
     #[inline]
     pub fn get_or<'a>(&'a self, key: &u64, default: &'a str) -> &'a str {
-        self.get(key).map(|s| &s[..]).or(Some(default)).unwrap()
+        self.get(key).map(|s| &s[..]).unwrap_or(default)
     }
 }
 

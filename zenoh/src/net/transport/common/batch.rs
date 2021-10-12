@@ -17,7 +17,7 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
-const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
+const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
 enum CurrentFrame {
@@ -447,7 +447,7 @@ mod tests {
                     dropping = !dropping;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()).into());
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,
                     reliability: if reliable {
@@ -524,7 +524,7 @@ mod tests {
                 let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".into());
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;

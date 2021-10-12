@@ -246,7 +246,7 @@ async fn rx_task_stream(
 
     async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
         // 16 bits for reading the batch length
-        let mut length = [0u8, 0u8];
+        let mut length = [0_u8, 0_u8];
         link.read_exact(&mut length).await?;
         let n = u16::from_le_bytes(length) as usize;
         link.read_exact(&mut buffer[0..n]).await?;
@@ -263,7 +263,7 @@ async fn rx_task_stream(
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
-    let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the ZBuf
         zbuf.clear();
@@ -336,7 +336,7 @@ async fn rx_task_dgram(
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
-    let pool = RecyclingObjectPool::new(n, || vec![0u8; mtu].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         // Clear the zbuf
         zbuf.clear();

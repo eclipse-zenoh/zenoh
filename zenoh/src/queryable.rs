@@ -69,7 +69,7 @@ impl Query {
     /// Sends a reply to this Query.
     #[inline(always)]
     pub fn reply(&'_ self, msg: Sample) {
-        self.replies_sender.send(msg)
+        self.replies_sender.send(msg);
     }
 
     /// Tries sending a reply to this Query.
@@ -81,7 +81,7 @@ impl Query {
     /// Sends a reply to this Query asynchronously.
     #[inline(always)]
     pub async fn reply_async(&'_ self, msg: Sample) {
-        self.replies_sender.send_async(msg).await
+        self.replies_sender.send_async(msg).await;
     }
 }
 
@@ -208,6 +208,7 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unregister_queryable(self.state.id)
@@ -237,12 +238,14 @@ pub struct RepliesSender {
 
 impl RepliesSender {
     #[inline(always)]
+    /// Send a reply.
     pub fn send(&'_ self, msg: Sample) {
         if let Err(e) = self.sender.send((self.kind, msg)) {
             log::error!("Error sending reply: {}", e);
         }
     }
 
+    /// Attempt to send a reply. If the channel is full, an error is returned.
     #[inline(always)]
     pub fn try_send(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
         match self.sender.try_send((self.kind, msg)) {
@@ -253,26 +256,32 @@ impl RepliesSender {
     }
 
     #[inline(always)]
+    /// Returns the channel capacity of this `RepliesSender`.
     pub fn capacity(&self) -> usize {
         self.sender.capacity().unwrap_or(0)
     }
 
     #[inline(always)]
+    /// Returns true the channel of this `RepliesSender` is empty.
     pub fn is_empty(&self) -> bool {
         self.sender.is_empty()
     }
 
     #[inline(always)]
+    /// Returns true the channel of this `RepliesSender` is full.
     pub fn is_full(&self) -> bool {
         self.sender.is_full()
     }
 
     #[inline(always)]
+    /// Returns the number of replies in the channel of this `RepliesSender`.
     pub fn len(&self) -> usize {
         self.sender.len()
     }
 
     #[inline(always)]
+    /// Asynchronously send a reply. If the channel is full, the returned future
+    /// will yield to the async runtime.
     pub async fn send_async(&self, msg: Sample) {
         if let Err(e) = self.sender.send_async((self.kind, msg)).await {
             log::error!("Error sending reply: {}", e);

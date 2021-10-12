@@ -652,7 +652,7 @@ mod tests {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = ResKey::RName("test".into());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -781,7 +781,7 @@ mod tests {
 
             // Send reliable messages
             let key = ResKey::RName("test".into());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
@@ -893,7 +893,7 @@ mod tests {
 
             // Send reliable messages
             let key = ResKey::RName("test".into());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
@@ -1026,7 +1026,7 @@ mod tests {
 
                     // Send reliable messages
                     let key = ResKey::RName("/pipeline/thr".into());
-                    let payload = ZBuf::from(vec![0u8; *size]);
+                    let payload = ZBuf::from(vec![0_u8; *size]);
                     let channel = Channel {
                         priority: Priority::Control,
                         reliability: Reliability::Reliable,

@@ -264,7 +264,7 @@ impl SharedMemoryReader {
         // that the sender of this buffer has incremented for us.
         self.try_read_shmbuf(info).or_else(|_| {
             self.connect_map_to_shm(info)?;
-            Ok(self.try_read_shmbuf(info).unwrap())
+            self.try_read_shmbuf(info)
         })
     }
 }
@@ -304,7 +304,14 @@ impl SharedMemoryManager {
         let mut temp_dir = std::env::temp_dir();
         let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
         temp_dir.push(file_name);
-        let path: String = temp_dir.to_str().unwrap().to_string();
+        let path: String = temp_dir
+            .to_str()
+            .ok_or_else(|| {
+                zerror2!(ZErrorKind::SharedMemory {
+                    descr: format!("Unable to parse tmp directory: {:?}", temp_dir)
+                })
+            })?
+            .to_string();
         log::trace!("Creating file at: {}", path);
         let real_size = size + ACCOUNTED_OVERHEAD;
         let shmem = match ShmemConf::new()

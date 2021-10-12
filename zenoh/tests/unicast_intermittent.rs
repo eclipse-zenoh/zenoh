@@ -138,7 +138,7 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
@@ -157,9 +157,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
-    let client03_id = PeerId::new(1, [3u8; PeerId::MAX_SIZE]);
+    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let client03_id = PeerId::new(1, [3_u8; PeerId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
@@ -287,7 +287,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let res = task::spawn_blocking(move || {
         // Create the message to send
         let key = ResKey::RName("/test".into());
-        let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
+        let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),
             reliability: Reliability::Reliable,

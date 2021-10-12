@@ -252,13 +252,12 @@ impl TransportManager {
     /*************************************/
     fn new_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
-        match w_guard.get(protocol) {
-            Some(lm) => Ok(lm.clone()),
-            None => {
-                let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
-                w_guard.insert(protocol.clone(), lm.clone());
-                Ok(lm)
-            }
+        if let Some(lm) = w_guard.get(protocol) {
+            Ok(lm.clone())
+        } else {
+            let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
+            w_guard.insert(protocol.clone(), lm.clone());
+            Ok(lm)
         }
     }
 

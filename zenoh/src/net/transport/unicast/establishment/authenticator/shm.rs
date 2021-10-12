@@ -169,7 +169,11 @@ impl SharedMemoryAuthenticator {
                     },
                 )?;
 
-            let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
+            let mut buffer = _manager.alloc(SHM_SIZE).ok_or_else(|| {
+                zerror2!(ZErrorKind::Other {
+                    descr: format!("unable to allocate shm segment of size {}", SHM_SIZE)
+                })
+            })?;
             let slice = unsafe { buffer.as_mut_slice() };
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 

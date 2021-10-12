@@ -132,7 +132,7 @@ mod tests {
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
         // Define peer01 and peer02 IDs
-        let peer01_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+        let peer01_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
         let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
         // Create the peer01 transport manager
@@ -254,7 +254,7 @@ mod tests {
     ) {
         // Create the message to send
         let key = ResKey::RName("/test".into());
-        let payload = ZBuf::from(vec![0u8; msg_size]);
+        let payload = ZBuf::from(vec![0_u8; msg_size]);
         let data_info = None;
         let routing_context = None;
         let reply_context = None;

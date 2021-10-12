@@ -104,7 +104,7 @@ mod tests {
             };
             assert_eq!(payload.len(), MSG_SIZE);
 
-            let mut count_bytes = [0u8; 8];
+            let mut count_bytes = [0_u8; 8];
             count_bytes.copy_from_slice(&payload[0..8]);
             let msg_count = u64::from_le_bytes(count_bytes) as usize;
             let sex_count = self.count.fetch_add(1, Ordering::SeqCst);
@@ -126,9 +126,9 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
