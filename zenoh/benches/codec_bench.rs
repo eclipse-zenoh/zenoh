@@ -135,7 +135,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let _ns: [ZInt; 4] = [0; 4];
     let len = String::from("u8");
-    let bytes = vec![0u8; 32];
+    let bytes = vec![0_u8; 32];
     let payload: ZBuf = bytes.clone().into();
     let fragment: ZSlice = bytes.into();
     let mut data = ZenohMessage::make_data(

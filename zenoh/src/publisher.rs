@@ -62,6 +62,7 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unpublishing(self.state.id)
@@ -116,24 +117,22 @@ impl<'a> Runnable for PublisherBuilder<'a, '_> {
             id,
             reskey: self.reskey.to_owned(),
         });
-        let declared_pub = match state
+        let declared_pub = if let Some(join_pub) = state
             .join_publications
             .iter()
             .find(|s| rname::include(s, &resname))
         {
-            Some(join_pub) => {
-                let joined_pub = state.publishers.values().any(|p| {
-                    rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
-                });
-                (!joined_pub).then(|| join_pub.clone().into())
-            }
-            None => {
-                let twin_pub = state.publishers.values().any(|p| {
-                    state.localkey_to_resname(&p.reskey).unwrap()
-                        == state.localkey_to_resname(&pub_state.reskey).unwrap()
-                });
-                (!twin_pub).then(|| self.reskey.clone())
-            }
+            let joined_pub = state
+                .publishers
+                .values()
+                .any(|p| rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap()));
+            (!joined_pub).then(|| join_pub.clone().into())
+        } else {
+            let twin_pub = state.publishers.values().any(|p| {
+                state.localkey_to_resname(&p.reskey).unwrap()
+                    == state.localkey_to_resname(&pub_state.reskey).unwrap()
+            });
+            (!twin_pub).then(|| self.reskey.clone())
         };
 
         state.publishers.insert(id, pub_state.clone());
@@ -184,7 +183,7 @@ derive_zfuture! {
 }
 
 impl<'a> Writer<'a> {
-    /// Change the congestion_control to apply when routing the data.
+    /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Writer<'a> {
         self.congestion_control = congestion_control;
@@ -207,7 +206,7 @@ impl<'a> Writer<'a> {
         if let Some(mut payload) = self.value.as_mut() {
             payload.encoding = encoding.into();
         } else {
-            self.value = Some(Value::empty().encoding(encoding.into()))
+            self.value = Some(Value::empty().encoding(encoding.into()));
         }
         self
     }

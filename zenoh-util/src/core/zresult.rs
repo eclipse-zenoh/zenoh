@@ -41,11 +41,11 @@ pub enum ZErrorKind {
     InvalidSession {
         descr: String,
     },
-    InvalidPath {
-        path: String,
+    InvalidKey {
+        key: String,
     },
-    InvalidPathExpr {
-        path: String,
+    InvalidKeyExpr {
+        key: String,
     },
     InvalidSelector {
         selector: String,
@@ -98,8 +98,8 @@ impl fmt::Display for ZErrorKind {
             ZErrorKind::InvalidReference { descr } => write!(f, "Invalid Reference ({})", descr),
             ZErrorKind::InvalidResolution { descr } => write!(f, "Invalid Resolution ({})", descr),
             ZErrorKind::InvalidSession { descr } => write!(f, "Invalid Session ({})", descr),
-            ZErrorKind::InvalidPath { path } => write!(f, "Invalid Path ({})", path),
-            ZErrorKind::InvalidPathExpr { path } => write!(f, "Invalid PathExpr ({})", path),
+            ZErrorKind::InvalidKey { key } => write!(f, "Invalid key ({})", key),
+            ZErrorKind::InvalidKeyExpr { key } => write!(f, "Invalid key expression ({})", key),
             ZErrorKind::InvalidSelector { selector } => {
                 write!(f, "Invalid Selector ({})", selector)
             }

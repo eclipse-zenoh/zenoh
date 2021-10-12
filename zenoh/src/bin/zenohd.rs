@@ -17,7 +17,7 @@ use clap::{App, Arg};
 use git_version::git_version;
 use validated_struct::ValidatedMap;
 use zenoh::config::Config;
-use zenoh::net::plugins::*;
+use zenoh::net::plugins::{PluginsManager, PLUGIN_PREFIX};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh_util::LibLoader;
 
@@ -147,11 +147,11 @@ fn main() {
         // Add plugins' expected args and parse command line
         let args = app.args(&expected_args).get_matches();
 
-        let mut config = if let Some(conf_file) = args.value_of("config") {
-            Config::from_file(conf_file).unwrap()
-        } else {
-            Config::default()
-        };
+        let mut config = args
+            .value_of("config")
+            .map_or_else(Config::default, |conf_file| {
+                Config::from_file(conf_file).unwrap()
+            });
 
         if config.mode().is_none() {
             config
@@ -215,7 +215,7 @@ fn main() {
                 match json5::Deserializer::from_str(value) {
                     Ok(mut deserializer) => {
                         if let Err(e) = config.insert(key, &mut deserializer) {
-                            log::warn!("Couldn't perform configuration {}: {}", json, e)
+                            log::warn!("Couldn't perform configuration {}: {}", json, e);
                         }
                     }
                     Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),

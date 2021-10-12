@@ -644,7 +644,7 @@ fn codec_frame_batching() {
 
         // Create data message
         let key = ResKey::RName("test".into());
-        let payload = ZBuf::from(vec![0u8; 1]);
+        let payload = ZBuf::from(vec![0_u8; 1]);
         let data_info = None;
         let routing_context = None;
         let reply_context = None;

@@ -527,12 +527,12 @@ mod tests {
 
     #[test]
     fn zslice() {
-        let buf = vec![0u8; 16];
+        let buf = vec![0_u8; 16];
         let zslice: ZSlice = buf.clone().into();
         println!("[01] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
-        let buf: Vec<u8> = (0u8..16).into_iter().collect();
+        let buf: Vec<u8> = (0_u8..16).into_iter().collect();
         unsafe {
             let mbuf = zslice.as_mut_slice();
             mbuf[..buf.len()].clone_from_slice(&buf[..]);

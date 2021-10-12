@@ -278,7 +278,7 @@ impl TransportManager {
     pub fn new(config: TransportManagerConfig) -> TransportManager {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
-        let mut key = [0u8; BlockCipher::BLOCK_SIZE];
+        let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);
 

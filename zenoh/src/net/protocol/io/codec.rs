@@ -147,7 +147,7 @@ impl ZBuf {
             log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
             return None;
         }
-        let mut id = [0u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; PeerId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(PeerId::new(size, id))
         } else {
@@ -265,7 +265,7 @@ impl ZBuf {
             );
             return None;
         }
-        let mut id = [0u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; PeerId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
         } else {

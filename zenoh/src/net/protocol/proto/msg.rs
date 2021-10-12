@@ -2004,7 +2004,7 @@ pub enum TransportBody {
     Frame(Frame),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
@@ -2238,5 +2238,11 @@ impl TransportMessage {
             #[cfg(feature = "stats")]
             size: None,
         }
+    }
+}
+
+impl PartialEq for TransportMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.body.eq(&other.body) && self.attachment.eq(&other.attachment)
     }
 }
