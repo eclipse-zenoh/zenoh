@@ -163,7 +163,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&mut msg);
                     }
 
-                    let mut zbuf = ZBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(wbuf);
                     b.iter(|| {
                         zbuf.reset();
                         let _ = zbuf.read_transport_message().unwrap();
@@ -185,7 +185,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&mut msg);
                     }
 
-                    let mut zbuf = ZBuf::from(&wbuf);
+                    let mut zbuf = ZBuf::from(wbuf);
                     b.iter(|| {
                         zbuf.reset();
                         let _ = zbuf.read_transport_message().unwrap();

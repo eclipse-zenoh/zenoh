@@ -694,7 +694,7 @@ mod tests {
                 batches += 1;
                 bytes += batch.len();
                 // Create a ZBuf for deserialization starting from the batch
-                let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
                 while let Some(msg) = zbuf.read_transport_message() {
                     match msg.body {

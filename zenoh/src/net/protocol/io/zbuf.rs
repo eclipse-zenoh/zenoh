@@ -430,7 +430,11 @@ impl ZBuf {
             let slice_len = current.len();
             let remain_in_slice = slice_len - pos_1;
             let l = n.min(remain_in_slice);
-            dest.add_zslice(current.new_sub_slice(pos_1, pos_1 + l));
+            let zs = match current.new_sub_slice(pos_1, pos_1 + l) {
+                Some(zs) => zs,
+                None => return false,
+            };
+            dest.add_zslice(zs);
             self.skip_bytes_no_check(l);
             n -= l;
         }
@@ -447,7 +451,7 @@ impl ZBuf {
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
         let slice = self.curr_slice()?;
         if len <= slice.len() {
-            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len);
+            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len)?;
             self.skip_bytes_no_check(len);
             Some(slice)
         } else {
@@ -589,7 +593,7 @@ impl Iterator for ZBuf {
     fn next(&mut self) -> Option<Self::Item> {
         let mut slice = self.curr_slice()?.clone();
         if self.pos.byte > 0 {
-            slice = slice.new_sub_slice(self.pos.byte, slice.len());
+            slice = slice.new_sub_slice(self.pos.byte, slice.len())?;
             self.pos.byte = 0;
         }
         self.pos.slice += 1;
@@ -664,14 +668,7 @@ impl From<ZSlice> for ZBuf {
 
 impl From<Vec<u8>> for ZBuf {
     fn from(buf: Vec<u8>) -> ZBuf {
-        let len = buf.len();
-        ZBuf::from(ZSlice::new(buf.into(), 0, len))
-    }
-}
-
-impl From<&[u8]> for ZBuf {
-    fn from(slice: &[u8]) -> ZBuf {
-        ZBuf::from(slice.to_vec())
+        ZBuf::from(ZSlice::from(buf))
     }
 }
 
@@ -692,15 +689,9 @@ impl<'a> From<Vec<IoSlice<'a>>> for ZBuf {
     }
 }
 
-impl From<&super::WBuf> for ZBuf {
-    fn from(wbuf: &super::WBuf) -> ZBuf {
-        ZBuf::from(wbuf.as_zslices())
-    }
-}
-
 impl From<super::WBuf> for ZBuf {
     fn from(wbuf: super::WBuf) -> ZBuf {
-        Self::from(&wbuf)
+        ZBuf::from(wbuf.to_zslices())
     }
 }
 

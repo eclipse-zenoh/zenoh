@@ -282,7 +282,11 @@ async fn rx_task_stream(
             })??;
         match action {
             Action::Read(n) => {
-                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
+                let zs = ZSlice::make(buffer.into(), 0, n).map_err(|_| {
+                    let e = format!("{}: decoding error", link);
+                    zerror2!(ZErrorKind::IoError { descr: e })
+                })?;
+                zbuf.add_zslice(zs);
 
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
@@ -364,7 +368,11 @@ async fn rx_task_dgram(
                 transport.stats.inc_rx_bytes(n);
 
                 // Add the received bytes to the ZBuf for deserialization
-                zbuf.add_zslice(ZSlice::new(buffer.into(), 0, n));
+                let zs = ZSlice::make(buffer.into(), 0, n).map_err(|_| {
+                    let e = format!("{}: decoding error", link);
+                    zerror2!(ZErrorKind::IoError { descr: e })
+                })?;
+                zbuf.add_zslice(zs);
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {

@@ -215,7 +215,7 @@ impl From<Vec<u8>> for Value {
 
 impl From<&[u8]> for Value {
     fn from(buf: &[u8]) -> Self {
-        Value::from(ZBuf::from(buf))
+        Value::from(ZBuf::from(buf.to_vec()))
     }
 }
 
@@ -231,7 +231,7 @@ impl From<String> for Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value {
-            payload: ZBuf::from(s.as_bytes()),
+            payload: ZBuf::from(s.as_bytes().to_vec()),
             encoding: Encoding::STRING,
         }
     }
@@ -240,7 +240,7 @@ impl From<&str> for Value {
 impl From<Properties> for Value {
     fn from(p: Properties) -> Self {
         Value {
-            payload: ZBuf::from(p.to_string().as_bytes()),
+            payload: ZBuf::from(p.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_PROPERTIES,
         }
     }
@@ -249,7 +249,7 @@ impl From<Properties> for Value {
 impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
-            payload: ZBuf::from(json.to_string().as_bytes()),
+            payload: ZBuf::from(json.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_JSON,
         }
     }
@@ -264,7 +264,7 @@ impl From<serde_json::Value> for Value {
 impl From<i64> for Value {
     fn from(i: i64) -> Self {
         Value {
-            payload: ZBuf::from(i.to_string().as_bytes()),
+            payload: ZBuf::from(i.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_INTEGER,
         }
     }
@@ -273,7 +273,7 @@ impl From<i64> for Value {
 impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes()),
+            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_FLOAT,
         }
     }

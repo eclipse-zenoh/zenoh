@@ -89,7 +89,7 @@ fn gen_attachment() -> Attachment {
     let props = gen_props(PROPS_LENGTH, PROP_MAX_SIZE);
     wbuf.write_properties(&props);
 
-    let zbuf = ZBuf::from(&wbuf);
+    let zbuf = ZBuf::from(wbuf);
     Attachment::new(zbuf)
 }
 
@@ -259,7 +259,7 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_transport_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf).read_transport_message().unwrap();
+    let mut result = ZBuf::from(buf).read_transport_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
         let properties = attachment.buffer.read_properties();
@@ -273,7 +273,7 @@ fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf)
+    let mut result = ZBuf::from(buf)
         .read_zenoh_message(msg.channel.reliability)
         .unwrap();
     println!("Message read: {:?}", result);
@@ -699,7 +699,7 @@ fn codec_frame_batching() {
         ));
 
         // Deserialize from the buffer
-        let mut zbuf = ZBuf::from(&wbuf);
+        let mut zbuf = ZBuf::from(wbuf);
 
         let mut read: Vec<TransportMessage> = vec![];
         while let Some(msg) = zbuf.read_transport_message() {

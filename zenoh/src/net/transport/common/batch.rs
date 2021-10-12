@@ -485,7 +485,7 @@ mod tests {
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
-            let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+            let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
             // Deserialize the messages
             while let Some(msg) = zbuf.read_transport_message() {
                 deserialized.push(msg);
@@ -574,7 +574,7 @@ mod tests {
                 let mut fragments = WBuf::new(0, false);
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                    let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                     // Deserialize the messages
                     let msg = zbuf.read_transport_message().unwrap();
 

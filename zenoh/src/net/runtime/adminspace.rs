@@ -356,7 +356,10 @@ pub async fn router_data(
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (ZBuf::from(json.to_string().as_bytes()), Encoding::APP_JSON)
+    (
+        ZBuf::from(json.to_string().as_bytes().to_vec()),
+        Encoding::APP_JSON,
+    )
 }
 
 pub async fn linkstate_routers_data(
@@ -367,7 +370,15 @@ pub async fn linkstate_routers_data(
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
-        ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
+        ZBuf::from(
+            tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .dot()
+                .as_bytes()
+                .to_vec(),
+        ),
         Encoding::TEXT_PLAIN,
     );
     res
@@ -390,7 +401,8 @@ pub async fn linkstate_peers_data(
                 .as_ref()
                 .unwrap()
                 .dot()
-                .as_bytes(),
+                .as_bytes()
+                .to_vec(),
         ),
         Encoding::TEXT_PLAIN,
     )

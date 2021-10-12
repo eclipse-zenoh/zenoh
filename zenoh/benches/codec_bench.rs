@@ -40,13 +40,13 @@ fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
 
 fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v);
-    ZBuf::from(&*buf).read_zint()
+    ZBuf::from(buf.clone()).read_zint()
 }
 
 fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
-    let mut zbuf = ZBuf::from(&*buf);
+    let mut zbuf = ZBuf::from(buf.clone());
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
 }
@@ -55,7 +55,7 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
-    let mut zbuf = ZBuf::from(&*buf);
+    let mut zbuf = ZBuf::from(buf.clone());
     let _ = zbuf.read_zint()?;
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
