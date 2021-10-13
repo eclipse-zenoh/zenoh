@@ -156,9 +156,9 @@ impl<'a> PublicationCache<'a> {
                     sample = sub_recv.next().fuse() => {
                         if let Some(sample) = sample {
                             let queryable_resname = if let Some(prefix) = &queryable_prefix {
-                                format!("{}{}", prefix, sample.res_name)
+                                format!("{}{}", prefix, sample.res_key)
                             } else {
-                                sample.res_name.clone()
+                                sample.res_key.to_string()
                             };
 
                             if let Some(queue) = cache.get_mut(&queryable_resname) {
@@ -180,15 +180,15 @@ impl<'a> PublicationCache<'a> {
                     // on query, reply with cach content
                     query = quer_recv.next().fuse() => {
                         if let Some(query) = query {
-                            if !query.selector().key_selector.contains('*') {
-                                if let Some(queue) = cache.get(query.selector().key_selector) {
+                            if !query.selector().key_selector.as_str().contains('*') {
+                                if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {
                                         query.reply(sample.clone());
                                     }
                                 }
                             } else {
                                 for (resname, queue) in cache.iter() {
-                                    if resource_name::intersect(query.selector().key_selector, resname) {
+                                    if resource_name::intersect(query.selector().key_selector.as_str(), resname) {
                                         for sample in queue {
                                             query.reply(sample.clone());
                                         }

@@ -20,7 +20,7 @@ use zenoh::utils::resource_name::*;
 /// This would be the common prefix of all keys stored in a storage using this key selector.
 ///
 /// Use this operation at creation of a Storage to get the keys prefix, and in [`Storage::on_sample()`](crate::Storage::on_sample())
-/// strip this prefix from all received [`Sample::res_name`](zenoh::prelude::Sample::res_name) to retrieve the corrsponding key.
+/// strip this prefix from all received [`Sample::res_key`](zenoh::prelude::Sample::res_key) to retrieve the corrsponding key.
 ///
 /// # Examples:
 /// ```

@@ -293,6 +293,14 @@ use ResKey::*;
 
 impl ResKey<'_> {
     #[inline(always)]
+    pub fn as_str(&self) -> &str {
+        match self {
+            RName(name) => name.as_ref(),
+            RId(_) | RIdWithSuffix(_, _) => "",
+        }
+    }
+
+    #[inline(always)]
     pub fn rid(&self) -> ResourceId {
         match self {
             RName(_) => NO_RESOURCE_ID,

@@ -195,7 +195,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.subscribe("/resource/name")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
+    ///     .callback(|sample| { println!("Received : {} {}", sample.res_key, sample.value); })
     ///     .mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
     /// # })
@@ -402,7 +402,7 @@ derive_zfuture! {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .subscribe("/resource/name")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
+    ///     .callback(|sample| { println!("Received : {} {}", sample.res_key, sample.value); })
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await

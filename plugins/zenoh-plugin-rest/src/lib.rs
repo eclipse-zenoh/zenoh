@@ -67,7 +67,7 @@ fn sample_to_json(sample: Sample) -> String {
     let encoding = sample.value.encoding.to_string();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.res_name,
+        sample.res_key.as_str(),
         value_to_json(sample.value),
         encoding,
         if let Some(ts) = sample.timestamp {
@@ -90,7 +90,7 @@ async fn to_json(results: ReplyReceiver) -> String {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.res_name,
+        sample.res_key.as_str(),
         String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
@@ -230,7 +230,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         let resource = path_to_resource(url.path(), &req.state().1);
         let query_part = url.query().map(|q| format!("?{}", q));
         let selector = if let Some(q) = &query_part {
-            KeyedSelector::from(resource).with_value_selector(q)
+            Selector::from(resource).with_value_selector(q)
         } else {
             resource.into()
         };

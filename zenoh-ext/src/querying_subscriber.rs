@@ -127,9 +127,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
     /// Change the resource key to be used for queries.
     #[inline]
-    pub fn query_selector<IntoKeyedSelector>(mut self, query_selector: IntoKeyedSelector) -> Self
+    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
-        IntoKeyedSelector: Into<KeyedSelector<'b>>,
+        IntoSelector: Into<Selector<'b>>,
     {
         let selector = query_selector.into();
         self.query_reskey = selector.key_selector.to_owned();
@@ -231,7 +231,7 @@ impl<'a> QueryingSubscriber<'a> {
     #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on_selector(
-            KeyedSelector {
+            Selector {
                 key_selector: self.conf.query_reskey.clone(),
                 value_selector: &self.conf.query_value_selector.clone(),
             },
@@ -242,14 +242,14 @@ impl<'a> QueryingSubscriber<'a> {
 
     /// Issue a new query on the specified resource key and value_selector.
     #[inline]
-    pub fn query_on<'c, IntoKeyedSelector>(
+    pub fn query_on<'c, IntoSelector>(
         &mut self,
-        selector: IntoKeyedSelector,
+        selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>>
     where
-        IntoKeyedSelector: Into<KeyedSelector<'c>>,
+        IntoSelector: Into<Selector<'c>>,
     {
         self.query_on_selector(selector.into(), target, consolidation)
     }
@@ -257,7 +257,7 @@ impl<'a> QueryingSubscriber<'a> {
     #[inline]
     fn query_on_selector(
         &mut self,
-        selector: KeyedSelector,
+        selector: Selector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
@@ -357,7 +357,7 @@ impl Stream for InnerState {
                 loop {
                     match mself.replies_recv_queue[i].poll_next(cx) {
                         Poll::Ready(Some(mut reply)) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.res_key);
                             reply.data.ensure_timestamp();
                             mself.merge_queue.push(reply.data);
                         }
@@ -383,7 +383,7 @@ impl Stream for InnerState {
 
             // get all publications received during the queries and add them to merge_queue
             while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next(cx) {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.res_key);
                 sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
             }
@@ -431,7 +431,7 @@ impl InnerState {
             // get all replies and add them to merge_queue
             for recv in self.replies_recv_queue.drain(..) {
                 while let Ok(mut reply) = recv.recv() {
-                    log::trace!("Reply received: {}", reply.data.res_name);
+                    log::trace!("Reply received: {}", reply.data.res_key);
                     reply.data.ensure_timestamp();
                     self.merge_queue.push(reply.data);
                 }
@@ -443,7 +443,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.res_key);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
@@ -483,7 +483,7 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].try_recv() {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.res_key);
                             reply.data.ensure_timestamp();
                             self.merge_queue.push(reply.data);
                         }
@@ -509,7 +509,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.res_key);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
@@ -554,7 +554,7 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].recv_deadline(deadline) {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.res_key);
                             reply.data.ensure_timestamp();
                             self.merge_queue.push(reply.data);
                         }
@@ -580,7 +580,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.res_key);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }

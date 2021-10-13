@@ -36,7 +36,7 @@ pub use super::net::protocol::core::queryable::*;
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: String,
+    pub(crate) key_selector: ResKey<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
     /// The sender to use to send replies to this query.
@@ -49,14 +49,14 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_selector: &self.key_selector,
+            key_selector: self.key_selector.clone(),
             value_selector: &self.value_selector,
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &str {
+    pub fn key_selector(&self) -> &ResKey<'_> {
         &self.key_selector
     }
 

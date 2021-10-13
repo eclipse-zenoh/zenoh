@@ -122,7 +122,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct Getter<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) selector: KeyedSelector<'b>,
+        pub(crate) selector: Selector<'b>,
         pub(crate) target: Option<QueryTarget>,
         pub(crate) consolidation: Option<QueryConsolidation>,
     }

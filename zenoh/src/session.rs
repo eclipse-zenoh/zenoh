@@ -963,10 +963,11 @@ impl Session {
         match invoker {
             SubscriberInvoker::Handler(handler) => {
                 let handler = &mut *zwrite!(handler);
-                handler(Sample::with_info(res_name, payload, data_info));
+                handler(Sample::with_info(res_name.into(), payload, data_info));
             }
             SubscriberInvoker::Sender(sender) => {
-                if let Err(e) = sender.send(Sample::with_info(res_name, payload, data_info)) {
+                if let Err(e) = sender.send(Sample::with_info(res_name.into(), payload, data_info))
+                {
                     error!("SubscriberInvoker error: {}", e);
                 }
             }
@@ -1078,9 +1079,9 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoKeyedSelector>(&'a self, selector: IntoKeyedSelector) -> Getter<'a, 'b>
+    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> Getter<'a, 'b>
     where
-        IntoKeyedSelector: Into<KeyedSelector<'b>>,
+        IntoSelector: Into<Selector<'b>>,
     {
         Getter {
             session: self,
@@ -1145,7 +1146,7 @@ impl Session {
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
-                key_selector: resname.clone(),
+                key_selector: resname.clone().into(),
                 value_selector: value_selector.clone(),
                 replies_sender: RepliesSender {
                     kind,
@@ -1161,27 +1162,20 @@ impl Session {
             let this = self.clone();
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
-                    let (res_name, payload, data_info) = sample.split();
-                    this.send_reply_data(
-                        qid,
-                        replier_kind,
-                        pid,
-                        res_name.into(),
-                        Some(data_info),
-                        payload,
-                    );
+                    let (res_key, payload, data_info) = sample.split();
+                    this.send_reply_data(qid, replier_kind, pid, res_key, Some(data_info), payload);
                 }
                 this.send_reply_final(qid);
             });
         } else {
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
-                    let (res_name, payload, data_info) = sample.split();
+                    let (res_key, payload, data_info) = sample.split();
                     primitives.send_reply_data(
                         qid,
                         replier_kind,
                         pid,
-                        res_name.into(),
+                        res_key,
                         Some(data_info),
                         payload,
                     );
@@ -1328,7 +1322,7 @@ impl Primitives for Session {
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    data: Sample::with_info(res_name, payload, data_info),
+                    data: Sample::with_info(res_name.into(), payload, data_info),
                     replier_kind,
                     replier_id,
                 };
@@ -1341,15 +1335,14 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(&new_reply.data.res_name)
+                            .get(new_reply.data.res_key.as_str())
                         {
                             Some(reply) => {
                                 if new_reply.data.timestamp > reply.data.timestamp {
-                                    query
-                                        .replies
-                                        .as_mut()
-                                        .unwrap()
-                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    query.replies.as_mut().unwrap().insert(
+                                        new_reply.data.res_key.to_string(),
+                                        new_reply.clone(),
+                                    );
                                     let _ = query.rep_sender.send(new_reply);
                                 }
                             }
@@ -1358,7 +1351,7 @@ impl Primitives for Session {
                                     .replies
                                     .as_mut()
                                     .unwrap()
-                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    .insert(new_reply.data.res_key.to_string(), new_reply.clone());
                                 let _ = query.rep_sender.send(new_reply);
                             }
                         }
@@ -1368,15 +1361,14 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(&new_reply.data.res_name)
+                            .get(new_reply.data.res_key.as_str())
                         {
                             Some(reply) => {
                                 if new_reply.data.timestamp > reply.data.timestamp {
-                                    query
-                                        .replies
-                                        .as_mut()
-                                        .unwrap()
-                                        .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    query.replies.as_mut().unwrap().insert(
+                                        new_reply.data.res_key.to_string(),
+                                        new_reply.clone(),
+                                    );
                                 }
                             }
                             None => {
@@ -1384,7 +1376,7 @@ impl Primitives for Session {
                                     .replies
                                     .as_mut()
                                     .unwrap()
-                                    .insert(new_reply.data.res_name.clone(), new_reply.clone());
+                                    .insert(new_reply.data.res_key.to_string(), new_reply.clone());
                             }
                         };
                     }

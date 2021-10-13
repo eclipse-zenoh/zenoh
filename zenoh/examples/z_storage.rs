@@ -44,21 +44,21 @@ async fn main() {
         .unwrap();
 
     let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
+    let mut input = [0u8];
     loop {
         select!(
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
-                stored.insert(sample.res_name.clone(), sample);
+                    sample.kind, sample.res_key, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                stored.insert(sample.res_key.to_string(), sample);
             },
 
             query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if resource_name::intersect(query.selector().key_selector, stored_name) {
+                    if resource_name::intersect(query.selector().key_selector.as_str(), stored_name) {
                         query.reply(sample.clone());
                     }
                 }
