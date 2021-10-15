@@ -48,9 +48,9 @@ fn criterion_benchmark(c: &mut Criterion) {
                         Default::default(),
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
                     )),
-                    source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
                     source_sn: Some(12345),
-                    first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
                     first_router_sn: Some(12345),
                 });
 
@@ -99,11 +99,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         encoding: Some(Encoding::default()),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
-            uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),
+            uhlc::ID::new(16, [0_u8; uhlc::ID::MAX_SIZE]),
         )),
-        source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
         source_sn: Some(12345),
-        first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
         first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);

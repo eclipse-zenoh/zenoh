@@ -37,14 +37,14 @@ async fn main() {
     env_logger::init();
 
     let config = parse_args();
-    let path = "/demo/sse";
+    let key = "/demo/sse";
     let value = "Pub from sse server!";
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Queryable on {}", path);
-    let mut queryable = session.register_queryable(path).kind(EVAL).await.unwrap();
+    println!("Register Queryable on {}", key);
+    let mut queryable = session.register_queryable(key).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
         queryable
@@ -52,15 +52,15 @@ async fn main() {
             .clone()
             .for_each(move |request| async move {
                 request
-                    .reply_async(Sample::new(path.to_string(), HTML))
+                    .reply_async(Sample::new(key.to_string(), HTML))
                     .await;
             }),
     );
 
-    let event_path = [path, "/event"].concat();
+    let event_key = [key, "/event"].concat();
 
-    print!("Register Resource {}", event_path);
-    let rid = session.register_resource(&event_path).await.unwrap();
+    print!("Register Resource {}", event_key);
+    let rid = session.register_resource(&event_key).await.unwrap();
     println!(" => RId {}", rid);
 
     println!("Register Publisher on {}", rid);
@@ -70,7 +70,7 @@ async fn main() {
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
-        path
+        key
     );
     loop {
         session

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::TransportManager;
-use super::authenticator::*;
+use super::establishment::authenticator::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
@@ -33,6 +33,7 @@ pub struct TransportManagerConfigUnicast {
     pub open_timeout: Duration,
     pub open_pending: usize,
     pub max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     pub is_qos: bool,
     #[cfg(feature = "shared-memory")]
@@ -43,7 +44,7 @@ pub struct TransportManagerConfigUnicast {
 
 impl Default for TransportManagerConfigUnicast {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().build().unwrap()
     }
 }
 
@@ -59,6 +60,7 @@ pub struct TransportManagerConfigBuilderUnicast {
     pub(super) open_timeout: Duration,
     pub(super) open_pending: usize,
     pub(super) max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
     #[cfg(feature = "shared-memory")]
@@ -68,13 +70,14 @@ pub struct TransportManagerConfigBuilderUnicast {
 }
 
 impl Default for TransportManagerConfigBuilderUnicast {
-    fn default() -> TransportManagerConfigBuilderUnicast {
-        TransportManagerConfigBuilderUnicast {
+    fn default() -> Self {
+        Self {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
+            #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
             #[cfg(feature = "shared-memory")]
@@ -111,6 +114,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
+    #[cfg(feature = "transport_multilink")]
     pub fn max_links(mut self, max_links: usize) -> Self {
         self.max_links = max_links;
         self
@@ -141,29 +145,30 @@ impl TransportManagerConfigBuilderUnicast {
         mut self,
         properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
-        if let Some(v) = properties.link().lease() {
+        if let Some(v) = properties.transport().link().lease() {
             self = self.lease(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().keep_alive() {
+        if let Some(v) = properties.transport().link().keep_alive() {
             self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.link().open_timeout() {
+        if let Some(v) = properties.transport().unicast().open_timeout() {
             self = self.open_timeout(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.open_pending() {
+        if let Some(v) = properties.transport().unicast().open_pending() {
             self = self.open_pending(*v);
         }
-        if let Some(v) = properties.max_sessions() {
+        if let Some(v) = properties.transport().unicast().max_sessions() {
             self = self.max_sessions(*v);
         }
-        if let Some(v) = properties.link().max_number() {
+        #[cfg(feature = "transport_multilink")]
+        if let Some(v) = properties.transport().unicast().max_links() {
             self = self.max_links(*v);
         }
-        if let Some(v) = properties.qos() {
+        if let Some(v) = properties.transport().qos() {
             self = self.qos(*v);
         }
         #[cfg(feature = "shared-memory")]
-        if let Some(v) = properties.zero_copy() {
+        if let Some(v) = properties.shared_memory() {
             self = self.shm(*v);
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
@@ -173,7 +178,17 @@ impl TransportManagerConfigBuilderUnicast {
     }
 
     #[allow(unused_mut)]
-    pub fn build(mut self) -> TransportManagerConfigUnicast {
+    pub fn build(mut self) -> ZResult<TransportManagerConfigUnicast> {
+        #[cfg(feature = "auth_pubkey")]
+        if !self
+            .peer_authenticator
+            .iter()
+            .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
+        {
+            self.peer_authenticator
+                .insert(PubKeyAuthenticator::init()?.into());
+        }
+
         #[cfg(feature = "shared-memory")]
         if self.is_shm
             && !self
@@ -184,19 +199,22 @@ impl TransportManagerConfigBuilderUnicast {
             self.peer_authenticator
                 .insert(SharedMemoryAuthenticator::new().into());
         }
-        TransportManagerConfigUnicast {
+
+        let tmcu = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
             open_pending: self.open_pending,
             max_sessions: self.max_sessions,
+            #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
-            peer_authenticator: self.peer_authenticator,
-            link_authenticator: self.link_authenticator,
             is_qos: self.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
-        }
+            peer_authenticator: self.peer_authenticator,
+            link_authenticator: self.link_authenticator,
+        };
+        Ok(tmcu)
     }
 }
 
@@ -222,10 +240,10 @@ impl Default for TransportManagerStateUnicast {
     }
 }
 
-pub(super) struct Opened {
-    pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
-    pub(super) initial_sn: ZInt,
+pub(crate) struct Opened {
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn: ZInt,
 }
 
 impl TransportManager {
@@ -234,13 +252,12 @@ impl TransportManager {
     /*************************************/
     fn new_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
-        match w_guard.get(protocol) {
-            Some(lm) => Ok(lm.clone()),
-            None => {
-                let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
-                w_guard.insert(protocol.clone(), lm.clone());
-                Ok(lm)
-            }
+        if let Some(lm) = w_guard.get(protocol) {
+            Ok(lm.clone())
+        } else {
+            let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
+            w_guard.insert(protocol.clone(), lm.clone());
+            Ok(lm)
         }
     }
 
@@ -436,7 +453,7 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open_link(self, &link).await
+        super::establishment::open::open_link(self, &link).await
     }
 
     pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
@@ -516,13 +533,13 @@ impl TransportManager {
         let c_incoming = self.state.unicast.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
-            let auth_link = AuthenticatedPeerLink {
+            let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src(),
                 dst: link.get_dst(),
                 peer_id,
             };
 
-            let res = super::establishment::accept_link(&c_manager, &link, &auth_link)
+            let res = super::establishment::accept::accept_link(&c_manager, &link, &mut auth_link)
                 .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {

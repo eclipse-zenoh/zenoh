@@ -147,7 +147,7 @@ impl ZBuf {
             log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
             return None;
         }
-        let mut id = [0u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; PeerId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(PeerId::new(size, id))
         } else {
@@ -265,7 +265,7 @@ impl ZBuf {
             );
             return None;
         }
-        let mut id = [0u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; PeerId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
         } else {
@@ -388,11 +388,12 @@ impl WBuf {
         true
     }
 
-    pub fn write_properties(&mut self, props: &[Property]) {
-        self.write_usize_as_zint(props.len());
+    pub fn write_properties(&mut self, props: &[Property]) -> bool {
+        zcheck!(self.write_usize_as_zint(props.len()));
         for p in props {
-            self.write_property(p);
+            zcheck!(self.write_property(p));
         }
+        true
     }
 
     fn write_property(&mut self, p: &Property) -> bool {

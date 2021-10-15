@@ -44,7 +44,7 @@ async fn main() {
         .unwrap();
 
     let mut stdin = async_std::io::stdin();
-    let mut input = [0u8];
+    let mut input = [0_u8];
     loop {
         select!(
             sample = subscriber.receiver().next() => {

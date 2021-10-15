@@ -73,8 +73,9 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
-        .build(Arc::new(SH::default()));
+        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .build(Arc::new(SH::default()))
+        .unwrap();
     let sm = TransportManager::new(config);
 
     for _ in 0..RUNS {

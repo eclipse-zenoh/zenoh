@@ -113,17 +113,17 @@ impl Default for ZBufInner {
 /// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
-/// let zbuf: ZBuf = vec![0u8; 16].into();
-/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
+/// let zbuf: ZBuf = vec![0_u8; 16].into();
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// // Allocate first a vectore of bytes and convert it into a ZSlice.
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone()); // Cloning a ZSlice does not allocate
 /// zbuf.add_zslice(zslice);
 ///
-/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
 /// ```
 ///
 /// Calling [`contiguous()`][ZBuf::contiguous] allows to acces to the whole payload as a contigous `&[u8]` via the
@@ -135,18 +135,18 @@ impl Default for ZBufInner {
 /// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone());
 ///
 /// // contiguous() does not allocate since zbuf contains only one slice
-/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
 ///
 /// // Add a second slice to zbuf
 /// zbuf.add_zslice(zslice.clone());
 ///
 /// // contiguous() allocates since zbuf contains two slices
-/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
 /// ```
 ///
 /// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice]s the [`ZBuf`][ZBuf] is composed of. If
@@ -158,7 +158,7 @@ impl Default for ZBufInner {
 /// ```
 /// use zenoh::buf::{ZBuf, ZSlice};
 ///
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 ///
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone());
@@ -391,7 +391,7 @@ impl ZBuf {
 
     #[inline(always)]
     pub fn read_vec(&mut self) -> Vec<u8> {
-        let mut vec = vec![0u8; self.readable()];
+        let mut vec = vec![0_u8; self.readable()];
         self.read_bytes(&mut vec);
         vec
     }
@@ -399,7 +399,7 @@ impl ZBuf {
     // returns a Vec<u8> containing a copy of ZBuf content (not considering read position)
     #[inline(always)]
     pub fn to_vec(&self) -> Vec<u8> {
-        let mut vec = vec![0u8; self.len()];
+        let mut vec = vec![0_u8; self.len()];
         self.copy_bytes(&mut vec[..], (0, 0));
         vec
     }
@@ -430,7 +430,11 @@ impl ZBuf {
             let slice_len = current.len();
             let remain_in_slice = slice_len - pos_1;
             let l = n.min(remain_in_slice);
-            dest.add_zslice(current.new_sub_slice(pos_1, pos_1 + l));
+            let zs = match current.new_sub_slice(pos_1, pos_1 + l) {
+                Some(zs) => zs,
+                None => return false,
+            };
+            dest.add_zslice(zs);
             self.skip_bytes_no_check(l);
             n -= l;
         }
@@ -447,7 +451,7 @@ impl ZBuf {
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
         let slice = self.curr_slice()?;
         if len <= slice.len() {
-            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len);
+            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len)?;
             self.skip_bytes_no_check(len);
             Some(slice)
         } else {
@@ -589,7 +593,7 @@ impl Iterator for ZBuf {
     fn next(&mut self) -> Option<Self::Item> {
         let mut slice = self.curr_slice()?.clone();
         if self.pos.byte > 0 {
-            slice = slice.new_sub_slice(self.pos.byte, slice.len());
+            slice = slice.new_sub_slice(self.pos.byte, slice.len())?;
             self.pos.byte = 0;
         }
         self.pos.slice += 1;
@@ -664,14 +668,7 @@ impl From<ZSlice> for ZBuf {
 
 impl From<Vec<u8>> for ZBuf {
     fn from(buf: Vec<u8>) -> ZBuf {
-        let len = buf.len();
-        ZBuf::from(ZSlice::new(buf.into(), 0, len))
-    }
-}
-
-impl From<&[u8]> for ZBuf {
-    fn from(slice: &[u8]) -> ZBuf {
-        ZBuf::from(slice.to_vec())
+        ZBuf::from(ZSlice::from(buf))
     }
 }
 
@@ -692,15 +689,9 @@ impl<'a> From<Vec<IoSlice<'a>>> for ZBuf {
     }
 }
 
-impl From<&super::WBuf> for ZBuf {
-    fn from(wbuf: &super::WBuf) -> ZBuf {
-        ZBuf::from(wbuf.as_zslices())
-    }
-}
-
 impl From<super::WBuf> for ZBuf {
     fn from(wbuf: super::WBuf) -> ZBuf {
-        Self::from(&wbuf)
+        ZBuf::from(wbuf.to_zslices())
     }
 }
 
@@ -758,9 +749,9 @@ mod tests {
 
     #[test]
     fn test_zbuf() {
-        let v1 = ZSlice::from(vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        let v2 = ZSlice::from(vec![10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
-        let v3 = ZSlice::from(vec![20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+        let v1 = ZSlice::from(vec![0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let v2 = ZSlice::from(vec![10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        let v3 = ZSlice::from(vec![20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
 
         // test a 1st buffer
         let mut buf1 = ZBuf::new();
@@ -780,7 +771,7 @@ mod tests {
         assert_eq!(10, buf1.len());
         assert_eq!(1, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            Some(&[0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
             buf1.as_ioslices()[0].get(0..10)
         );
 
@@ -793,7 +784,7 @@ mod tests {
         assert_eq!(20, buf1.len());
         assert_eq!(2, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            Some(&[10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
             buf1.as_ioslices()[1].get(0..10)
         );
 
@@ -806,14 +797,14 @@ mod tests {
         assert_eq!(30, buf1.len());
         assert_eq!(3, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
+            Some(&[20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
             buf1.as_ioslices()[2].get(0..10)
         );
 
         // test PartialEq
         let v4 = vec![
-            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29,
+            0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+            23, 24, 25, 26, 27, 28, 29,
         ];
         assert_eq!(buf1, ZBuf::from(v4));
 
@@ -836,7 +827,7 @@ mod tests {
         buf1.reset();
         println!("[05] {:?}", buf1);
         assert_eq!(30, buf1.readable());
-        let mut bytes = [0u8; 10];
+        let mut bytes = [0_u8; 10];
         assert!(buf1.read_bytes(&mut bytes));
         assert_eq!(20, buf1.readable());
         let pos = buf1.get_pos();
@@ -861,7 +852,7 @@ mod tests {
         // test read_bytes
         buf1.reset();
         println!("[06] {:?}", buf1);
-        let mut bytes = [0u8; 3];
+        let mut bytes = [0_u8; 3];
         for i in 0..10 {
             assert!(buf1.read_bytes(&mut bytes));
             println!(
@@ -908,14 +899,14 @@ mod tests {
         let dest_slices = dest.as_ioslices();
         assert_eq!(3, dest_slices.len());
         assert_eq!(
-            Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            Some(&[1_u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
             dest_slices[0].get(..)
         );
         assert_eq!(
-            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            Some(&[10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
             dest_slices[1].get(..)
         );
-        assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
+        assert_eq!(Some(&[20_u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
         // test drain_into_zbuf
         // buf1.reset();

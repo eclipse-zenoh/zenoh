@@ -202,20 +202,30 @@ impl TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
+    #[allow(unused_variables)]
+    pub(super) fn can_add_link(&self, link: &LinkUnicast) -> bool {
+        let guard = zread!(self.links);
+        #[cfg(feature = "transport_multilink")]
+        {
+            if guard.len() < self.manager.config.unicast.max_links {
+                zlinkget!(guard, link).is_none()
+            } else {
+                false
+            }
+        }
+        #[cfg(not(feature = "transport_multilink"))]
+        {
+            guard.is_empty()
+        }
+    }
+
     pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        if guard.len() >= self.manager.config.unicast.max_links {
+        if !self.can_add_link(&link) {
             return zerror!(ZErrorKind::InvalidLink {
                 descr: format!(
-                    "Can not add Link {} with peer {}: max num of links ({})",
-                    link, self.pid, self.manager.config.unicast.max_links
+                    "Can not add Link {} with peer {}: max num of links reached",
+                    link, self.pid,
                 )
-            });
-        }
-
-        if zlinkget!(guard, &link).is_some() {
-            return zerror!(ZErrorKind::InvalidLink {
-                descr: format!("Can not add Link {} with peer: {}", link, self.pid)
             });
         }
 
@@ -223,6 +233,7 @@ impl TransportUnicastInner {
         let link = TransportLinkUnicast::new(self.clone(), link);
 
         // Add the link to the channel
+        let mut guard = zwrite!(self.links);
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link);
@@ -306,6 +317,7 @@ impl TransportUnicastInner {
         // Try to remove the link
         let target = {
             let mut guard = zwrite!(self.links);
+
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
@@ -425,22 +437,20 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "shared-memory")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        let res = if self.is_shm {
-            message.map_to_shminfo()
-        } else {
-            message.map_to_shmbuf(self.manager.shmr.clone())
-        };
-        if let Err(e) = res {
-            log::trace!("Failed SHM conversion: {}", e);
-            return;
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = if self.is_shm {
+                message.map_to_shminfo()
+            } else {
+                message.map_to_shmbuf(self.manager.shmr.clone())
+            };
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return;
+            }
         }
-        self.schedule_first_fit(message);
-    }
 
-    #[cfg(not(feature = "shared-memory"))]
-    pub(crate) fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message);
     }
 

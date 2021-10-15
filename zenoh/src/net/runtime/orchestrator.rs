@@ -559,6 +559,8 @@ impl Runtime {
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             let mut scout = TransportMessage::make_scout(Some(matcher), true, None);
             wbuf.write_transport_message(&mut scout);
+            let zbuf: ZBuf = wbuf.into();
+            let zslice = zbuf.contiguous();
             loop {
                 for socket in sockets {
                     log::trace!(
@@ -570,7 +572,7 @@ impl Runtime {
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
                     if let Err(err) = socket
-                        .send_to(&ZBuf::from(&wbuf).contiguous(), mcast_addr.to_string())
+                        .send_to(zslice.as_slice(), mcast_addr.to_string())
                         .await
                     {
                         log::warn!(
@@ -595,7 +597,7 @@ impl Runtime {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
-                    let mut zbuf = ZBuf::from(&buf[..n]);
+                    let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
                     if let Some(msg) = zbuf.read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
                         if let TransportBody::Hello(hello) = &msg.body {
@@ -744,7 +746,7 @@ impl Runtime {
                 continue;
             }
 
-            let mut zbuf = ZBuf::from(&buf[..n]);
+            let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
             if let Some(msg) = zbuf.read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let TransportBody::Scout(Scout {
@@ -775,9 +777,9 @@ impl Runtime {
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
                         wbuf.write_transport_message(&mut hello);
-                        if let Err(err) =
-                            socket.send_to(&ZBuf::from(&wbuf).contiguous(), peer).await
-                        {
+                        let zbuf: ZBuf = wbuf.into();
+                        let zslice = zbuf.contiguous();
+                        if let Err(err) = socket.send_to(zslice.as_slice(), peer).await {
                             log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }
                     }

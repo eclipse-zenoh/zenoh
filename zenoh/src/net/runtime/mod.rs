@@ -65,7 +65,11 @@ impl Runtime {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
-        config.set_version(Some(version)).unwrap();
+        config.set_version(Some(version)).map_err(|e| {
+            zerror2!(ZErrorKind::Other {
+                descr: format!("Unable to set version: {:?}", e)
+            })
+        })?;
 
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
@@ -81,7 +85,7 @@ impl Runtime {
                     descr: format!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
                 });
             }
-            let mut id = [0u8; PeerId::MAX_SIZE];
+            let mut id = [0_u8; PeerId::MAX_SIZE];
             id[..size].copy_from_slice(vec.as_slice());
             PeerId::new(size, id)
         } else {
@@ -117,7 +121,7 @@ impl Runtime {
             .version(version)
             .whatami(whatami)
             .pid(pid)
-            .build(handler.clone());
+            .build(handler.clone())?;
 
         let config = Notifier::new(config);
 

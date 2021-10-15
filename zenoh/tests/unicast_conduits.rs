@@ -169,22 +169,24 @@ async fn open_transport(
     priority: Priority,
 ) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
-        .build(router_handler.clone());
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     let config = TransportManagerConfig::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
-        .build(Arc::new(SHClient::default()));
+        .build(Arc::new(SHClient::default()))
+        .unwrap();
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
@@ -260,7 +262,7 @@ async fn single_run(
 ) {
     // Create the message to send
     let key = ResKey::RName("/test".into());
-    let payload = ZBuf::from(vec![0u8; msg_size]);
+    let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;
     let reply_context = None;

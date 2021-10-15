@@ -125,7 +125,7 @@ impl LinkUnicast {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         if self.is_streamed() {
             // Reserve 16 bits to write the length
-            wbuf.write_bytes(&[0u8, 0u8]);
+            wbuf.write_bytes(&[0_u8, 0_u8]);
         }
         // Serialize the message
         wbuf.write_transport_message(msg);
@@ -135,7 +135,7 @@ impl LinkUnicast {
             let bits = wbuf.get_first_slice_mut(..2);
             bits.copy_from_slice(&length.to_le_bytes());
         }
-        let mut buffer = vec![0u8; wbuf.len()];
+        let mut buffer = vec![0_u8; wbuf.len()];
         wbuf.copy_into_slice(&mut buffer[..]);
 
         // Send the message on the link
@@ -148,16 +148,16 @@ impl LinkUnicast {
         // Read from the link
         let buffer = if self.is_streamed() {
             // Read and decode the message length
-            let mut length_bytes = [0u8; 2];
+            let mut length_bytes = [0_u8; 2];
             let _ = self.read_exact(&mut length_bytes).await?;
             let to_read = u16::from_le_bytes(length_bytes) as usize;
             // Read the message
-            let mut buffer = vec![0u8; to_read];
+            let mut buffer = vec![0_u8; to_read];
             let _ = self.read_exact(&mut buffer).await?;
             buffer
         } else {
             // Read the message
-            let mut buffer = vec![0u8; self.get_mtu() as usize];
+            let mut buffer = vec![0_u8; self.get_mtu() as usize];
             let n = self.read(&mut buffer).await?;
             buffer.truncate(n);
             buffer
@@ -253,7 +253,7 @@ impl LinkMulticast {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_transport_message(msg);
-        let mut buffer = vec![0u8; wbuf.len()];
+        let mut buffer = vec![0_u8; wbuf.len()];
         wbuf.copy_into_slice(&mut buffer[..]);
 
         // Send the message on the link
@@ -264,7 +264,7 @@ impl LinkMulticast {
 
     //     pub(crate) async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {
     //         // Read the message
-    //         let mut buffer = vec![0u8; self.get_mtu()];
+    //         let mut buffer = vec![0_u8; self.get_mtu()];
     //         let (n, locator) = self.read(&mut buffer).await?;
     //         buffer.truncate(n);
 

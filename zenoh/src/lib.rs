@@ -125,14 +125,14 @@ pub mod time {
 
     /// Generates a reception [`Timestamp`] with id=0x00.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
-    /// that doesn't contain any data_info or timestamp within its data_info.
+    /// that doesn't contain any timestamp.
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         Timestamp::new(
             now.into(),
-            TimestampId::new(1, [0u8; TimestampId::MAX_SIZE]),
+            TimestampId::new(1, [0_u8; TimestampId::MAX_SIZE]),
         )
     }
 }
@@ -272,20 +272,36 @@ where
     <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     let what = what.into();
-    let config: crate::config::Config = config.try_into().unwrap();
+    let config: crate::config::Config = match config.try_into() {
+        Ok(config) => config,
+        Err(e) => {
+            return zready(zerror!(ZErrorKind::Other {
+                descr: format!("invalid configuration {:?}", &e)
+            }))
+        }
+    };
+
     trace!("scout({}, {})", what, &config);
-    let addr = config
-        .scouting
-        .multicast
-        .address()
-        .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap());
+
+    let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return zready(zerror!(ZErrorKind::Other {
+                descr: format!(
+                    "invalid default addr {}: {:?}",
+                    ZN_MULTICAST_IPV4_ADDRESS_DEFAULT, &e
+                )
+            }))
+        }
+    };
+
+    let addr = config.scouting.multicast.address().unwrap_or(default_addr);
     let ifaces = config
         .scouting
         .multicast
         .interface()
         .as_ref()
-        .map(|s| s.as_ref())
-        .unwrap_or(ZN_MULTICAST_INTERFACE_DEFAULT);
+        .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
 
     let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
     let (stop_sender, stop_receiver) = bounded::<()>(1);
@@ -373,15 +389,13 @@ where
     IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    let config = config.try_into().unwrap();
-    debug!("Zenoh Rust API {}", GIT_VERSION);
-    debug!("Config: {:?}", &config);
     Session::new(config)
 }
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime than the router.
 #[doc(hidden)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub fn init(runtime: Runtime) -> impl ZFuture<Output = ZResult<Session>> {
     zpinbox(async { Ok(Session::init(runtime, true, vec![], vec![]).await) })
 }

@@ -17,7 +17,7 @@ use zenoh::net::protocol::io::{WBuf, ZBuf};
 fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);
     buf.write_zint(v);
-    assert_eq!(v, ZBuf::from(&buf).read_zint().unwrap());
+    assert_eq!(v, ZBuf::from(buf).read_zint().unwrap());
 }
 
 #[test]

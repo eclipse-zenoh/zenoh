@@ -57,23 +57,23 @@ pub struct AdminSpace {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
         let pid_str = runtime.get_pid_str();
-        let root_path = format!("/@/router/{}", pid_str);
+        let root_key = format!("/@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
-            root_path.clone(),
+            root_key.clone(),
             Arc::new(Box::new(|context, key, args| {
                 router_data(context, key, args).boxed()
             })),
         );
         handlers.insert(
-            [&root_path, "/linkstate/routers"].concat(),
+            [&root_key, "/linkstate/routers"].concat(),
             Arc::new(Box::new(|context, key, args| {
                 linkstate_routers_data(context, key, args).boxed()
             })),
         );
         handlers.insert(
-            [&root_path, "/linkstate/peers"].concat(),
+            [&root_key, "/linkstate/peers"].concat(),
             Arc::new(Box::new(|context, key, args| {
                 linkstate_peers_data(context, key, args).boxed()
             })),
@@ -96,7 +96,7 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.decl_queryable(
-            &[&root_path, "/**"].concat().into(),
+            &[&root_key, "/**"].concat().into(),
             EVAL,
             &QueryableInfo {
                 complete: 0,
@@ -214,9 +214,9 @@ impl Primitives for AdminSpace {
         let mut matching_handlers = vec![];
         match self.reskey_to_string(reskey) {
             Some(name) => {
-                for (path, handler) in &self.handlers {
-                    if rname::intersect(&name, path) {
-                        matching_handlers.push((path.clone(), handler.clone()));
+                for (key, handler) in &self.handlers {
+                    if rname::intersect(&name, key) {
+                        matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
             }
@@ -228,12 +228,12 @@ impl Primitives for AdminSpace {
 
         // router is not re-entrant
         task::spawn(async move {
-            for (path, handler) in matching_handlers {
+            for (key, handler) in matching_handlers {
                 let (payload, encoding) = handler(&context, &reskey, &value_selector).await;
                 let mut data_info = DataInfo::new();
                 data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(qid, EVAL, pid, path.into(), Some(data_info), payload);
+                primitives.send_reply_data(qid, EVAL, pid, key.into(), Some(data_info), payload);
             }
 
             primitives.send_reply_final(qid);
@@ -356,7 +356,10 @@ pub async fn router_data(
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (ZBuf::from(json.to_string().as_bytes()), Encoding::APP_JSON)
+    (
+        ZBuf::from(json.to_string().as_bytes().to_vec()),
+        Encoding::APP_JSON,
+    )
 }
 
 pub async fn linkstate_routers_data(
@@ -367,7 +370,15 @@ pub async fn linkstate_routers_data(
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
-        ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
+        ZBuf::from(
+            tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .dot()
+                .as_bytes()
+                .to_vec(),
+        ),
         Encoding::TEXT_PLAIN,
     );
     res
@@ -390,7 +401,8 @@ pub async fn linkstate_peers_data(
                 .as_ref()
                 .unwrap()
                 .dot()
-                .as_bytes(),
+                .as_bytes()
+                .to_vec(),
         ),
         Encoding::TEXT_PLAIN,
     )

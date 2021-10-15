@@ -32,15 +32,16 @@ const MSG_DEFRAG_BUF: usize = 128_000;
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
 
     // Create the router transport manager
     let config = TransportManagerConfig::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()));
+        .build(Arc::new(DummyTransportEventHandler::default()))
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
@@ -48,7 +49,8 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()));
+        .build(Arc::new(DummyTransportEventHandler::default()))
+        .unwrap();
     let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
@@ -74,7 +76,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Create the message to send, this would trigger the transport closure
     let key = ResKey::RName("/test".into());
-    let payload = ZBuf::from(vec![0u8; msg_size]);
+    let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;
     let reply_context = None;

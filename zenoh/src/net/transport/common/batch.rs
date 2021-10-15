@@ -17,7 +17,7 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
-const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
+const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
 enum CurrentFrame {
@@ -447,7 +447,7 @@ mod tests {
                     dropping = !dropping;
                 }
                 let key = ResKey::RName(format!("test{}", zmsgs_in.len()).into());
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,
                     reliability: if reliable {
@@ -485,7 +485,7 @@ mod tests {
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
-            let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+            let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
             // Deserialize the messages
             while let Some(msg) = zbuf.read_transport_message() {
                 deserialized.push(msg);
@@ -524,7 +524,7 @@ mod tests {
                 let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
                 let key = ResKey::RName("test".into());
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;
@@ -574,7 +574,7 @@ mod tests {
                 let mut fragments = WBuf::new(0, false);
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                    let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                     // Deserialize the messages
                     let msg = zbuf.read_transport_message().unwrap();
 

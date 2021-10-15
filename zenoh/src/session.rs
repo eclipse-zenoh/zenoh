@@ -209,6 +209,7 @@ impl Session {
     where
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
+        debug!("Zenoh Rust API {}", GIT_VERSION);
         zpinbox(async {
             let config: Config = match config.try_into() {
                 Ok(c) => c,
@@ -218,6 +219,7 @@ impl Session {
                     })
                 }
             };
+            debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();
@@ -240,6 +242,7 @@ impl Session {
     }
 
     /// Returns the identifier for this session.
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn id(&self) -> impl ZFuture<Output = String> {
         zready(self.runtime.get_pid_str())
     }
@@ -251,6 +254,7 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn init(
         runtime: Runtime,
         local_routing: bool,
@@ -299,6 +303,7 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.close_alive()
@@ -332,6 +337,7 @@ impl Session {
     /// let _ = session.config().await.insert_json5("peers", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn config(&self) -> impl ZFuture<Output = &Notifier<Config>> {
         zready(&self.runtime.config)
     }
@@ -347,6 +353,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
         trace!("info()");
         let sessions = self.runtime.manager().get_transports();
@@ -356,8 +363,7 @@ impl Session {
                 s.get_whatami()
                     .ok()
                     .map(|what| what == WhatAmI::Peer)
-                    .or(Some(false))
-                    .unwrap()
+                    .unwrap_or(false)
             })
             .filter_map(|s| {
                 s.get_pid()
@@ -376,8 +382,7 @@ impl Session {
                     s.get_whatami()
                         .ok()
                         .map(|what| what == WhatAmI::Router)
-                        .or(Some(false))
-                        .unwrap()
+                        .unwrap_or(false)
                 })
                 .filter_map(|s| {
                     s.get_pid()
@@ -415,6 +420,7 @@ impl Session {
     /// let rid = session.register_resource("/resource/name").await.unwrap();
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn register_resource<'a, IntoResKey>(
         &self,
         resource: IntoResKey,
@@ -471,6 +477,7 @@ impl Session {
     /// session.unregister_resource(rid).await;
     /// # })
     /// ```
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn unregister_resource(&self, rid: ResourceId) -> impl ZFuture<Output = ZResult<()>> {
         trace!("unregister_resource({:?})", rid);
         let mut state = zwrite!(self.state);

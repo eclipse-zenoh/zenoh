@@ -58,20 +58,17 @@ impl TransportUnicastInner {
         }
 
         let callback = zread!(self.callback).clone();
-        match callback.as_ref() {
-            Some(callback) => {
-                #[cfg(feature = "shared-memory")]
-                let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
-                callback.handle_message(msg)
-            }
-            None => {
-                log::debug!(
-                    "Transport: {}. No callback available, dropping message: {}",
-                    self.pid,
-                    msg
-                );
-                Ok(())
-            }
+        if let Some(callback) = callback.as_ref() {
+            #[cfg(feature = "shared-memory")]
+            let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+            callback.handle_message(msg)
+        } else {
+            log::debug!(
+                "Transport: {}. No callback available, dropping message: {}",
+                self.pid,
+                msg
+            );
+            Ok(())
         }
     }
 

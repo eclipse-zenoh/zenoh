@@ -392,7 +392,29 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         };
         let certs = pemfile::certs(&mut Cursor::new(bytes.as_slice())).unwrap();
 
-        let mut sc = ServerConfig::new(NoClientAuth::new());
+        // Configure the client authentication
+        let client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(ca) => ca,
+            None => TLS_CLIENT_AUTH_DEFAULT,
+        }
+        .parse()
+        .map_err(|e| {
+            zerror2!(ZErrorKind::Other {
+                descr: format!("Invalid {} value: {}", TLS_CLIENT_AUTH, e)
+            })
+        })?;
+
+        let mut sc = if client_auth {
+            // @TODO: implement Client authentication
+            let e = format!(
+                "Can not create a new TLS listener on {}. ClientAuth not supported.",
+                addr
+            );
+            return zerror!(ZErrorKind::InvalidLink { descr: e });
+        } else {
+            ServerConfig::new(NoClientAuth::new())
+        };
+
         sc.set_single_cert(certs, keys.remove(0)).unwrap();
 
         // Initialize the TcpListener

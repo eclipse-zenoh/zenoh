@@ -215,7 +215,7 @@ impl From<Vec<u8>> for Value {
 
 impl From<&[u8]> for Value {
     fn from(buf: &[u8]) -> Self {
-        Value::from(ZBuf::from(buf))
+        Value::from(ZBuf::from(buf.to_vec()))
     }
 }
 
@@ -231,7 +231,7 @@ impl From<String> for Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value {
-            payload: ZBuf::from(s.as_bytes()),
+            payload: ZBuf::from(s.as_bytes().to_vec()),
             encoding: Encoding::STRING,
         }
     }
@@ -240,7 +240,7 @@ impl From<&str> for Value {
 impl From<Properties> for Value {
     fn from(p: Properties) -> Self {
         Value {
-            payload: ZBuf::from(p.to_string().as_bytes()),
+            payload: ZBuf::from(p.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_PROPERTIES,
         }
     }
@@ -249,7 +249,7 @@ impl From<Properties> for Value {
 impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
-            payload: ZBuf::from(json.to_string().as_bytes()),
+            payload: ZBuf::from(json.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_JSON,
         }
     }
@@ -264,7 +264,7 @@ impl From<serde_json::Value> for Value {
 impl From<i64> for Value {
     fn from(i: i64) -> Self {
         Value {
-            payload: ZBuf::from(i.to_string().as_bytes()),
+            payload: ZBuf::from(i.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_INTEGER,
         }
     }
@@ -273,7 +273,7 @@ impl From<i64> for Value {
 impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes()),
+            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_FLOAT,
         }
     }
@@ -529,9 +529,9 @@ pub const PROP_STOPTIME: &str = "stoptime";
 /// ```
 /// where:
 ///  * __key_selector__: an expression identifying a set of Resources.
-///  * __filter__: a list of value_selectors separated by `'&'` allowing to perform filtering on the values
-///    associated with the matching keys. Each value_selector has the form "`field`-`operator`-`value`" value where:
-///      * _field_ is the name of a field in the value (is applicable and is existing. otherwise the value_selector is false)
+///  * __filter__: a list of `value_selectors` separated by `'&'` allowing to perform filtering on the values
+///    associated with the matching keys. Each `value_selector` has the form "`field`-`operator`-`value`" value where:
+///      * _field_ is the name of a field in the value (is applicable and is existing. otherwise the `value_selector` is false)
 ///      * _operator_ is one of a comparison operators: `<` , `>` , `<=` , `>=` , `=` , `!=`
 ///      * _value_ is the the value to compare the field’s value with
 ///  * __fragment__: a list of fields names allowing to return a sub-part of each value.
@@ -550,14 +550,14 @@ pub struct Selector<'a> {
 }
 
 impl<'a> Selector<'a> {
-    /// Sets the value_selector part of this `Selector`.
+    /// Sets the `value_selector` part of this `Selector`.
     #[inline(always)]
     pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
         self.value_selector = value_selector;
         self
     }
 
-    /// Parses the value_selector part of this `Selector`.
+    /// Parses the `value_selector` part of this `Selector`.
     pub fn parse_value_selector(&self) -> Result<ValueSelector<'a>, ZError> {
         ValueSelector::try_from(self.value_selector)
     }
@@ -586,11 +586,8 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
 
 impl<'a> From<&'a str> for Selector<'a> {
     fn from(s: &'a str) -> Self {
-        let (key_selector, value_selector) = if let Some(i) = s.find(|c| c == '?') {
-            s.split_at(i)
-        } else {
-            (s, "")
-        };
+        let (key_selector, value_selector) =
+            s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
         Selector {
             key_selector,
             value_selector,
@@ -615,7 +612,7 @@ impl<'a> From<&'a Query> for Selector<'a> {
 
 /// An expression identifying a selection of resources.
 ///
-/// A KeyedSelector is similar to a [`Selector`] except that it's key_selector
+/// A `KeyedSelector` is similar to a [`Selector`] except that it's `key_selector`
 /// is represented as a [`ResKey`] rather than a [`&str`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyedSelector<'a> {
@@ -637,14 +634,14 @@ impl<'a> KeyedSelector<'a> {
         }
     }
 
-    /// Sets the value_selector part of this `KeyedSelector`.
+    /// Sets the `value_selector` part of this `KeyedSelector`.
     #[inline(always)]
     pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
         self.value_selector = value_selector;
         self
     }
 
-    /// Parses the value_selector part of this `KeyedSelector`.
+    /// Parses the `value_selector` part of this `KeyedSelector`.
     pub fn parse_value_selector(&self) -> Result<ValueSelector<'a>, ZError> {
         ValueSelector::try_from(self.value_selector)
     }
@@ -673,11 +670,8 @@ impl<'a> From<&KeyedSelector<'a>> for KeyedSelector<'a> {
 
 impl<'a> From<&'a str> for KeyedSelector<'a> {
     fn from(s: &'a str) -> Self {
-        let (key_selector, value_selector) = if let Some(i) = s.find(|c| c == '?') {
-            s.split_at(i)
-        } else {
-            (s, "")
-        };
+        let (key_selector, value_selector) =
+            s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
         KeyedSelector {
             key_selector: key_selector.into(),
             value_selector,
@@ -730,7 +724,7 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
     }
 }
 
-/// A struct that can be used to help decoding or encoding the value_selector part of a [`Query`](crate::queryable::Query).
+/// A struct that can be used to help decoding or encoding the `value_selector` part of a [`Query`](crate::queryable::Query).
 ///
 /// # Examples
 /// ```
@@ -864,12 +858,12 @@ impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
 
         if let Some(caps) = RE.captures(s) {
             Ok(ValueSelector {
-                filter: caps.name("proj").map(|s| s.as_str()).unwrap_or(""),
+                filter: caps.name("proj").map_or("", |s| s.as_str()),
                 properties: caps
                     .name("prop")
                     .map(|s| s.as_str().into())
                     .unwrap_or_default(),
-                fragment: caps.name("frag").map(|s| s.as_str()).unwrap_or(""),
+                fragment: caps.name("frag").map_or("", |s| s.as_str()),
             })
         } else {
             zerror!(ZErrorKind::InvalidSelector {

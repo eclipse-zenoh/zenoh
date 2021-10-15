@@ -74,7 +74,7 @@
 //! impl MyStorage {
 //!     async fn new(properties: Properties) -> ZResult<MyStorage> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
-//!         // They contain at least a PROP_STORAGE_PATH_EXPR entry (i.e. "path_expr").
+//!         // They contain at least a PROP_STORAGE_KEY_EXPR entry (i.e. "key_expr").
 //!         // Here we choose to re-expose them as they are in the admin space for GET operations.
 //!         let admin_status = properties_to_json_value(&properties);
 //!         Ok(MyStorage { admin_status })
@@ -90,8 +90,8 @@
 //!         self.admin_status.clone()
 //!     }
 //!
-//!     // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!         // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!         // extract Timestamp from sample
 //!         sample.ensure_timestamp();
 //!         let timestamp = sample.timestamp.take().unwrap();
@@ -141,16 +141,16 @@ pub mod utils;
 /// The `"type"` property key to be used in admin status reported by Backends.
 pub const PROP_BACKEND_TYPE: &str = "type";
 
-/// The `"path_expr"` property key to be used for configuration of each storage.
-pub const PROP_STORAGE_PATH_EXPR: &str = "path_expr";
+/// The `"key_expr"` property key to be used for configuration of each storage.
+pub const PROP_STORAGE_KEY_EXPR: &str = "key_expr";
 
-/// The `"path_prefix"` property key that could be used to specify the common path prefix
-/// to be stripped from Paths before storing them as keys in the Storage.
+/// The `"key_prefix"` property key that could be used to specify the common key prefix
+/// to be stripped from keys before storing them as keys in the Storage.
 ///
-/// Note that it shall be a prefix of the `"path_expr"`.
+/// Note that it shall be a prefix of the `"key_expr"`.
 /// If you use it, you should also adapt in [`Storage::on_query()`] implementation the incoming
-/// queries' path expression to the stored keys calling [`crate::utils::get_sub_key_selectors()`].
-pub const PROP_STORAGE_PATH_PREFIX: &str = "path_prefix";
+/// queries' key expression to the stored keys calling [`crate::utils::get_sub_key_selectors()`].
+pub const PROP_STORAGE_KEY_PREFIX: &str = "key_prefix";
 
 /// Trait to be implemented by a Backend.
 ///
@@ -182,7 +182,7 @@ pub trait Storage: Send + Sync {
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;
 
-    /// Function called for each incoming query matching this storage's PathExpression.
+    /// Function called for each incoming query matching this storage's keys exp.
     /// This storage should reply with data matching the query calling [`Query::reply()`].
     async fn on_query(&mut self, query: Query) -> ZResult<()>;
 }

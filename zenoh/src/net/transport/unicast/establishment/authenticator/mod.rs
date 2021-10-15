@@ -11,24 +11,30 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[cfg(feature = "auth_pubkey")]
+mod pubkey;
 #[cfg(feature = "shared-memory")]
 mod shm;
+#[cfg(feature = "auth_usrpwd")]
 mod userpassword;
 
-#[cfg(feature = "shared-memory")]
-use super::protocol;
-use super::protocol::core::{PeerId, Property, ZInt};
-use super::protocol::io::{WBuf, ZBuf};
 use crate::config::Config;
 use crate::net::link::{Link, Locator};
+use crate::net::protocol::core::{PeerId, ZInt};
+#[cfg(feature = "auth_usrpwd")]
+use crate::net::protocol::io::{WBuf, ZBuf};
+use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::Arc;
 use async_trait::async_trait;
+#[cfg(feature = "auth_pubkey")]
+pub use pubkey::*;
 #[cfg(feature = "shared-memory")]
 pub use shm::*;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+#[cfg(feature = "auth_usrpwd")]
 pub use userpassword::*;
 use zenoh_util::core::ZResult;
 
@@ -119,8 +125,15 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
 #[repr(u8)]
 pub enum PeerAuthenticatorId {
     Reserved = 0,
-    UserPassword = 1,
-    Shm = 2,
+    Shm = 1,
+    UserPassword = 2,
+    PublicKey = 3,
+}
+
+impl From<PeerAuthenticatorId> for ZInt {
+    fn from(pa: PeerAuthenticatorId) -> ZInt {
+        pa as ZInt
+    }
 }
 
 #[derive(Clone)]
@@ -130,9 +143,20 @@ impl PeerAuthenticator {
     pub(crate) async fn from_config(config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
 
-        let mut res = UserPasswordAuthenticator::from_config(config).await?;
-        if let Some(pa) = res.take() {
-            pas.insert(pa.into());
+        #[cfg(feature = "auth_pubkey")]
+        {
+            let mut res = PubKeyAuthenticator::from_config(config).await?;
+            if let Some(pa) = res.take() {
+                pas.insert(pa.into());
+            }
+        }
+
+        #[cfg(feature = "auth_usrpwd")]
+        {
+            let mut res = UserPasswordAuthenticator::from_config(config).await?;
+            if let Some(pa) = res.take() {
+                pas.insert(pa.into());
+            }
         }
 
         #[cfg(feature = "shared-memory")]
@@ -183,51 +207,9 @@ impl fmt::Display for AuthenticatedPeerLink {
     }
 }
 
-// Authenticated peer transport
-pub struct AuthenticatedPeerTransport {
-    pub is_shm: bool,
-}
-
-impl AuthenticatedPeerTransport {
-    pub fn merge(self, other: Self) -> Self {
-        Self {
-            is_shm: self.is_shm || other.is_shm,
-        }
-    }
-}
-
-impl Default for AuthenticatedPeerTransport {
-    fn default() -> Self {
-        Self { is_shm: false }
-    }
-}
-
-pub struct PeerAuthenticatorOutput {
-    pub properties: Vec<Property>,
-    pub transport: AuthenticatedPeerTransport,
-}
-
-impl PeerAuthenticatorOutput {
-    pub fn merge(mut self, mut other: Self) -> Self {
-        self.properties.append(&mut other.properties);
-        Self {
-            properties: self.properties,
-            transport: self.transport.merge(other.transport),
-        }
-    }
-}
-
-impl Default for PeerAuthenticatorOutput {
-    fn default() -> Self {
-        Self {
-            properties: vec![],
-            transport: AuthenticatedPeerTransport::default(),
-        }
-    }
-}
-
 #[async_trait]
 pub trait PeerAuthenticatorTrait: Send + Sync {
+    /// Return the ID of this authenticator.
     fn id(&self) -> PeerAuthenticatorId;
 
     /// Return the attachment to be included in the InitSyn message.
@@ -242,7 +224,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         &self,
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput>;
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Return the attachment to be included in the InitAck message to be sent
     /// in response of the authenticated InitSyn.
@@ -250,19 +232,16 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link`            - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
     ///
-    /// * `peer_id`         - The [`PeerId`][PeerId] of the sender of the InitSyn message
+    /// * `cookie`          - The Cookie containing the internal state
     ///
-    /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitSyn message
-    ///
-    /// * `properties`      - The optional [`Property`][Property] included in the InitSyn message
+    /// * `property`        - The optional [`Property`][Property] included in the InitSyn message
     ///
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
-        sn_resolution: ZInt,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        cookie: &Cookie,
+        property: Option<Vec<u8>>,
+    ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)>; // (Attachment, Cookie)
 
     /// Return the attachment to be included in the OpenSyn message to be sent
     /// in response of the authenticated InitAck.
@@ -281,8 +260,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
         link: &AuthenticatedPeerLink,
         peer_id: &PeerId,
         sn_resolution: ZInt,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Return the attachment to be included in the OpenAck message to be sent
     /// in response of the authenticated OpenSyn.
@@ -292,11 +271,14 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     ///
     /// * `properties`      - The optional [`Property`][Property] included in the OpenSyn message
     ///
+    /// * `cookie`          - The optional [`Property`][Property] included in the OpenSyn message
+    ///
     async fn handle_open_syn(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        cookie: &Cookie,
+        property: (Option<Vec<u8>>, Option<Vec<u8>>), // (Attachment, Cookie)
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
     ///
@@ -308,8 +290,8 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     async fn handle_open_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput>;
+        property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -349,18 +331,17 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         &self,
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::default())
+    ) -> ZResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 
     async fn handle_init_syn(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
-        _sn_resolution: ZInt,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::default())
+        _cookie: &Cookie,
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
+        Ok((None, None))
     }
 
     async fn handle_init_ack(
@@ -368,25 +349,26 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &PeerId,
         _sn_resolution: ZInt,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::default())
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 
     async fn handle_open_syn(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::default())
+        _cookie: &Cookie,
+        _property: (Option<Vec<u8>>, Option<Vec<u8>>),
+    ) -> ZResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 
     async fn handle_open_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _properties: &[Property],
-    ) -> ZResult<PeerAuthenticatorOutput> {
-        Ok(PeerAuthenticatorOutput::default())
+        _property: Option<Vec<u8>>,
+    ) -> ZResult<Option<Vec<u8>>> {
+        Ok(None)
     }
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
