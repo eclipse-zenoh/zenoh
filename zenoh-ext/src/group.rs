@@ -79,7 +79,7 @@ pub struct Member {
     info: Option<String>,
     liveliness: MemberLiveliness,
     lease: Duration,
-    refresh_ratio: f32
+    refresh_ratio: f32,
 }
 
 impl Member {
@@ -89,7 +89,7 @@ impl Member {
             info: None,
             liveliness: MemberLiveliness::Auto,
             lease: DEFAULT_LEASE,
-            refresh_ratio: VIEW_REFRESH_LEASE_RATIO
+            refresh_ratio: VIEW_REFRESH_LEASE_RATIO,
         }
     }
 
@@ -136,7 +136,10 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     let mid = state.local_member.mid.clone();
     let evt = GroupNetEvent::KeepAlive(KeepAliveEvent { mid });
     let buf = bincode::serialize(&evt).unwrap();
-    let period = state.local_member.lease.mul_f32(state.local_member.refresh_ratio);
+    let period = state
+        .local_member
+        .lease
+        .mul_f32(state.local_member.refresh_ratio);
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
