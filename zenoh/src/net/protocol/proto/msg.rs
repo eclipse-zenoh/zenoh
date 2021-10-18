@@ -990,7 +990,7 @@ impl Header for Pull {
 /// +-+-+-+---------+
 /// ~    ResKey     ~ if K==1 then resource key has name
 /// +---------------+
-/// ~   value_selector   ~
+/// ~ value_selector~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
