@@ -16,22 +16,20 @@
 # Script generating the "zenoh" top-level Debian package
 
 if [ -z "$1" -o -z "$2" ]; then
-    echo "Usage: $0 TARGET ARCH"
-    echo "  example: $0 x86_64-unknown-linux-gnu amd64"
+    echo "Usage: $0 VERSION ARCH"
+    echo "  example: $0 0.5.0-beta.9 amd64"
     exit 1
 fi
 
-TARGET=$1
+VERSION=`echo $1 | sed s/-/~/g`
 ARCH=$2
 
-VERSION=`git describe --abbrev=0 | sed s/-/~/g`
 PACKAGE_NAME="zenoh_${VERSION}_${ARCH}"
-TARGET_DIR="target/${TARGET}/debian/${PACKAGE_NAME}"
-CONTROL_FILE="${TARGET_DIR}/DEBIAN/control"
+CONTROL_FILE="${PACKAGE_NAME}/DEBIAN/control"
 
-echo "Generate zenoh top-level package: target/${TARGET}/debian/${PACKAGE_NAME}.deb ..."
+echo "Generate zenoh top-level package: ${PACKAGE_NAME}.deb ..."
 # create control file for zenoh deb package
-mkdir -p ${TARGET_DIR}/DEBIAN
+mkdir -p ${PACKAGE_NAME}/DEBIAN
 echo "Package: zenoh " > ${CONTROL_FILE}
 echo "Version: ${VERSION} " >> ${CONTROL_FILE}
 echo "Architecture: ${ARCH}" >> ${CONTROL_FILE}
@@ -47,4 +45,4 @@ echo "Maintainer: zenoh-dev@eclipse.org " >> ${CONTROL_FILE}
 echo "Description: The zenoh top-level package" >> ${CONTROL_FILE}
 echo "" >> ${CONTROL_FILE}
 
-dpkg-deb --build ${TARGET_DIR}
+dpkg-deb --build ${PACKAGE_NAME}
