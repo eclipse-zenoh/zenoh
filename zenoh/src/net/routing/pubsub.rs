@@ -966,7 +966,7 @@ macro_rules! treat_timestamp {
                 }
             },
             None => $info,
-        };
+        }
     }
 }
 
