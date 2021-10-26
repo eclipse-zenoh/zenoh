@@ -14,10 +14,10 @@
 use async_std::sync::Arc;
 use std::convert::TryInto;
 use uhlc::HLC;
-use zenoh::net::protocol::core::rname::intersect;
+use zenoh::net::protocol::core::key_expr::intersect;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, ResKey, SubInfo, SubMode, WhatAmI, ZInt,
+    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, SubInfo, SubMode, WhatAmI, ZInt,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -67,7 +67,7 @@ fn base_test() {
 
 #[test]
 fn match_test() {
-    let rnames = [
+    let key_exprs = [
         "/",
         "/a",
         "/a/",
@@ -129,27 +129,27 @@ fn match_test() {
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
-    for (i, rname) in rnames.iter().enumerate() {
+    for (i, key_expr) in key_exprs.iter().enumerate() {
         register_resource(
             &mut tables,
             &mut face.upgrade().unwrap(),
             i.try_into().unwrap(),
             0,
-            rname,
+            key_expr,
         );
     }
 
-    for rname1 in rnames.iter() {
-        let res_matches = Resource::get_matches(&tables, rname1);
-        for rname2 in rnames.iter() {
+    for key_expr1 in key_exprs.iter() {
+        let res_matches = Resource::get_matches(&tables, key_expr1);
+        for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
-                .map(|m| m.upgrade().unwrap().name())
-                .any(|x| x == **rname2)
+                .map(|m| m.upgrade().unwrap().expr())
+                .any(|x| x == **key_expr2)
             {
-                assert!(intersect(rname1, rname2));
+                assert!(intersect(key_expr1, key_expr2));
             } else {
-                assert!(!intersect(rname1, rname2));
+                assert!(!intersect(key_expr1, key_expr2));
             }
         }
     }
@@ -333,7 +333,7 @@ fn clean_test() {
 }
 
 pub struct ClientPrimitives {
-    data: std::sync::Mutex<Option<ResKey<'static>>>,
+    data: std::sync::Mutex<Option<KeyExpr<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
 }
 
@@ -357,12 +357,12 @@ impl Default for ClientPrimitives {
 }
 
 impl ClientPrimitives {
-    fn get_name(&self, reskey: &ResKey) -> String {
+    fn get_name(&self, key_expr: &KeyExpr) -> String {
         let mapping = self.mapping.lock().unwrap();
-        match reskey {
-            ResKey::RName(name) => name.to_string(),
-            ResKey::RId(id) => mapping.get(id).unwrap().clone(),
-            ResKey::RIdWithSuffix(id, suffix) => {
+        match key_expr {
+            KeyExpr::Expr(name) => name.to_string(),
+            KeyExpr::Id(id) => mapping.get(id).unwrap().clone(),
+            KeyExpr::IdWithSuffix(id, suffix) => {
                 [&mapping.get(id).unwrap()[..], &suffix[..]].concat()
             }
         }
@@ -377,14 +377,14 @@ impl ClientPrimitives {
     }
 
     #[allow(dead_code)]
-    fn get_last_key(&self) -> Option<ResKey> {
+    fn get_last_key(&self) -> Option<KeyExpr> {
         self.data.lock().unwrap().as_ref().cloned()
     }
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        let name = self.get_name(reskey);
+    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
+        let name = self.get_name(key_expr);
         zlock!(self.mapping).insert(rid, name);
     }
 
@@ -392,21 +392,21 @@ impl Primitives for ClientPrimitives {
         zlock!(self.mapping).remove(&rid);
     }
 
-    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
-    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_subscriber(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_queryable(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
@@ -414,7 +414,7 @@ impl Primitives for ClientPrimitives {
     }
     fn forget_queryable(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -422,19 +422,19 @@ impl Primitives for ClientPrimitives {
 
     fn send_data(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         _payload: ZBuf,
         _channel: Channel,
         _congestion_control: CongestionControl,
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
-        *zlock!(self.data) = Some(reskey.to_owned());
+        *zlock!(self.data) = Some(key_expr.to_owned());
     }
 
     fn send_query(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
@@ -448,7 +448,7 @@ impl Primitives for ClientPrimitives {
         _qid: ZInt,
         _replier_kind: ZInt,
         _replier_id: PeerId,
-        _reskey: ResKey,
+        _key_expr: KeyExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
@@ -458,7 +458,7 @@ impl Primitives for ClientPrimitives {
     fn send_pull(
         &self,
         _is_final: bool,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {
@@ -493,7 +493,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives0.decl_resource(11, &ResKey::RName("/test/client".into()));
+    primitives0.decl_resource(11, &KeyExpr::Expr("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -508,7 +508,7 @@ fn client_test() {
         11,
         "/z1_pub1",
     );
-    primitives0.decl_resource(12, &ResKey::RIdWithSuffix(11, "/z1_pub1".into()));
+    primitives0.decl_resource(12, &KeyExpr::IdWithSuffix(11, "/z1_pub1".into()));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
@@ -523,7 +523,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives1.decl_resource(21, &ResKey::RName("/test/client".into()));
+    primitives1.decl_resource(21, &KeyExpr::Expr("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
@@ -538,7 +538,7 @@ fn client_test() {
         21,
         "/z2_pub1",
     );
-    primitives1.decl_resource(22, &ResKey::RIdWithSuffix(21, "/z2_pub1".into()));
+    primitives1.decl_resource(22, &KeyExpr::IdWithSuffix(21, "/z2_pub1".into()));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
@@ -553,7 +553,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives2.decl_resource(31, &ResKey::RName("/test/client".into()));
+    primitives2.decl_resource(31, &KeyExpr::Expr("/test/client".into()));
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),
@@ -581,13 +581,13 @@ fn client_test() {
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_wr1");
     // mapping strategy check
-    // assert_eq!(primitives1.get_last_key().unwrap(), ResKey::RIdWithSuffix(21, "/z1_wr1".to_string()));
+    // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_wr1");
     // mapping strategy check
-    // assert_eq!(primitives2.get_last_key().unwrap(), ResKey::RIdWithSuffix(31, "/z1_wr1".to_string()));
+    // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_wr1".to_string()));
 
     primitives0.clear_data();
     primitives1.clear_data();
@@ -608,13 +608,13 @@ fn client_test() {
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_wr2");
     // mapping strategy check
-    // assert_eq!(primitives1.get_last_key().unwrap(), ResKey::RIdWithSuffix(21, "/z1_wr2".to_string()));
+    // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr2".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_wr2");
     // mapping strategy check
-    // assert_eq!(primitives2.get_last_key().unwrap(), ResKey::RIdWithSuffix(31, "/z1_wr2".to_string()));
+    // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_wr2".to_string()));
 
     primitives0.clear_data();
     primitives1.clear_data();
@@ -635,13 +635,13 @@ fn client_test() {
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "/test/client/**");
     // mapping strategy check
-    // assert_eq!(primitives1.get_last_key().unwrap(), ResKey::RIdWithSuffix(11, "/**".to_string()));
+    // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/**".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/**");
     // mapping strategy check
-    // assert_eq!(primitives2.get_last_key().unwrap(), ResKey::RIdWithSuffix(31, "/**".to_string()));
+    // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/**".to_string()));
 
     primitives0.clear_data();
     primitives1.clear_data();
@@ -662,13 +662,13 @@ fn client_test() {
     assert!(primitives1.get_last_name().is_some());
     assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_pub1");
     // mapping strategy check
-    // assert_eq!(primitives1.get_last_key().unwrap(), ResKey::RIdWithSuffix(21, "/z1_pub1".to_string()));
+    // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_pub1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_pub1");
     // mapping strategy check
-    // assert_eq!(primitives2.get_last_key().unwrap(), ResKey::RIdWithSuffix(31, "/z1_pub1".to_string()));
+    // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_pub1".to_string()));
 
     primitives0.clear_data();
     primitives1.clear_data();
@@ -689,11 +689,11 @@ fn client_test() {
     assert!(primitives0.get_last_name().is_some());
     assert_eq!(primitives0.get_last_name().unwrap(), "/test/client/z2_pub1");
     // mapping strategy check
-    // assert_eq!(primitives1.get_last_key().unwrap(), ResKey::RIdWithSuffix(11, "/z2_pub1".to_string()));
+    // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/z2_pub1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
     assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z2_pub1");
     // mapping strategy check
-    // assert_eq!(primitives2.get_last_key().unwrap(), ResKey::RIdWithSuffix(31, "/z2_pub1".to_string()));
+    // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z2_pub1".to_string()));
 }

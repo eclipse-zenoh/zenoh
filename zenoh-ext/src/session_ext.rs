@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
-use zenoh::prelude::ResKey;
+use zenoh::prelude::KeyExpr;
 use zenoh::Session;
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
@@ -29,7 +29,7 @@ pub trait SessionExt {
     /// A typical usage of the QueryingSubscriber is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
     /// # Arguments
-    /// * `sub_reskey` - The resource key to subscribe (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
+    /// * `sub_key_expr` - The resource key to subscribe (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
     ///
     /// # Examples
     /// ```no_run
@@ -45,39 +45,39 @@ pub trait SessionExt {
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query<'a, 'b, IntoResKey>(
+    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
-        sub_reskey: IntoResKey,
+        sub_key_expr: IntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>;
+        IntoKeyExpr: Into<KeyExpr<'b>>;
 
-    fn publishing_with_cache<'a, 'b, IntoResKey>(
+    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
-        pub_reskey: IntoResKey,
+        pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>;
+        IntoKeyExpr: Into<KeyExpr<'b>>;
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query<'a, 'b, IntoResKey>(
+    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
-        sub_reskey: IntoResKey,
+        sub_key_expr: IntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        QueryingSubscriberBuilder::new(self, sub_reskey.into())
+        QueryingSubscriberBuilder::new(self, sub_key_expr.into())
     }
 
-    fn publishing_with_cache<'a, 'b, IntoResKey>(
+    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
-        pub_reskey: IntoResKey,
+        pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        PublicationCacheBuilder::new(self, pub_reskey.into())
+        PublicationCacheBuilder::new(self, pub_key_expr.into())
     }
 }

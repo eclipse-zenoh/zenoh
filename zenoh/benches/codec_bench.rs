@@ -17,7 +17,9 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey, ZInt};
+use zenoh::net::protocol::core::{
+    Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt,
+};
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
@@ -63,7 +65,7 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
 
 fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
-        ResKey::RId(10),
+        KeyExpr::Id(10),
         payload,
         Channel::default(),
         CongestionControl::default(),
@@ -139,7 +141,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let payload: ZBuf = bytes.clone().into();
     let fragment: ZSlice = bytes.into();
     let mut data = ZenohMessage::make_data(
-        ResKey::RId(10),
+        KeyExpr::Id(10),
         payload.clone(),
         Channel::default(),
         CongestionControl::default(),

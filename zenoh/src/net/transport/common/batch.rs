@@ -394,7 +394,7 @@ impl SerializationBatch {
 mod tests {
     use super::*;
     use crate::net::protocol::core::{
-        Channel, CongestionControl, Priority, Reliability, ResKey, ZInt,
+        Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt,
     };
     use crate::net::protocol::io::{WBuf, ZBuf};
     use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
@@ -446,7 +446,7 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key = ResKey::RName(format!("test{}", zmsgs_in.len()).into());
+                let key = KeyExpr::Expr(format!("test{}", zmsgs_in.len()).into());
                 let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,
@@ -523,7 +523,7 @@ mod tests {
                 };
                 let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
-                let key = ResKey::RName("test".into());
+                let key = KeyExpr::Expr("test".into());
                 let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let data_info = None;
                 let routing_context = None;

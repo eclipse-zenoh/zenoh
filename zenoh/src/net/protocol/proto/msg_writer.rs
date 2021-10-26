@@ -325,7 +325,7 @@ impl WBuf {
         }
 
         zcheck!(self.write(data.header()));
-        zcheck!(self.write_reskey(&data.key));
+        zcheck!(self.write_key_expr(&data.key));
 
         #[cfg(feature = "shared-memory")]
         let mut sliced = false;
@@ -349,11 +349,11 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_reskey(&mut self, key: &ResKey) -> bool {
+    fn write_key_expr(&mut self, key: &KeyExpr) -> bool {
         match key {
-            ResKey::RId(rid) => self.write_zint(*rid),
-            ResKey::RName(name) => self.write_zint(NO_RESOURCE_ID) && self.write_string(name),
-            ResKey::RIdWithSuffix(rid, suffix) => {
+            KeyExpr::Id(rid) => self.write_zint(*rid),
+            KeyExpr::Expr(name) => self.write_zint(EMPTY_EXPR_ID) && self.write_string(name),
+            KeyExpr::IdWithSuffix(rid, suffix) => {
                 self.write_zint(*rid) && self.write_string(suffix)
             }
         }
@@ -407,29 +407,29 @@ impl WBuf {
     fn write_declaration(&mut self, declaration: &Declaration) -> bool {
         match declaration {
             Declaration::Resource(r) => {
-                self.write(r.header()) && self.write_zint(r.rid) && self.write_reskey(&r.key)
+                self.write(r.header()) && self.write_zint(r.rid) && self.write_key_expr(&r.key)
             }
             Declaration::ForgetResource(fr) => self.write(fr.header()) && self.write_zint(fr.rid),
             Declaration::Subscriber(s) => {
                 let header = s.header();
                 zcheck!(self.write(header));
-                zcheck!(self.write_reskey(&s.key));
+                zcheck!(self.write_key_expr(&s.key));
                 if imsg::has_flag(header, zmsg::flag::S) {
                     zcheck!(self.write_submode(&s.info.mode, &s.info.period))
                 }
                 true
             }
             Declaration::ForgetSubscriber(fs) => {
-                self.write(fs.header()) && self.write_reskey(&fs.key)
+                self.write(fs.header()) && self.write_key_expr(&fs.key)
             }
-            Declaration::Publisher(p) => self.write(p.header()) && self.write_reskey(&p.key),
+            Declaration::Publisher(p) => self.write(p.header()) && self.write_key_expr(&p.key),
             Declaration::ForgetPublisher(fp) => {
-                self.write(fp.header()) && self.write_reskey(&fp.key)
+                self.write(fp.header()) && self.write_key_expr(&fp.key)
             }
             Declaration::Queryable(q) => {
                 let header = q.header();
                 zcheck!(self.write(header));
-                zcheck!(self.write_reskey(&q.key));
+                zcheck!(self.write_key_expr(&q.key));
                 zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
                     zcheck!(self.write_queryable_info(&q.info));
@@ -437,7 +437,7 @@ impl WBuf {
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                zcheck!(self.write(fq.header()) && self.write_reskey(&fq.key));
+                zcheck!(self.write(fq.header()) && self.write_key_expr(&fq.key));
                 zcheck!(self.write_zint(fq.kind));
                 true
             }
@@ -471,7 +471,7 @@ impl WBuf {
 
     fn write_pull(&mut self, pull: &Pull) -> bool {
         zcheck!(self.write(pull.header()));
-        zcheck!(self.write_reskey(&pull.key));
+        zcheck!(self.write_key_expr(&pull.key));
         zcheck!(self.write_zint(pull.pull_id));
         if let Some(n) = pull.max_samples {
             zcheck!(self.write_zint(n));
@@ -481,7 +481,7 @@ impl WBuf {
 
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write(query.header()));
-        zcheck!(self.write_reskey(&query.key));
+        zcheck!(self.write_key_expr(&query.key));
         zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {

@@ -61,7 +61,7 @@ async fn main() {
 
     print!("Register Resource {}", event_key);
     let rid = session.register_resource(&event_key).await.unwrap();
-    println!(" => RId {}", rid);
+    println!(" => ExprId {}", rid);
 
     println!("Register Publisher on {}", rid);
     let _publ = session.publishing(rid).await.unwrap();

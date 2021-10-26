@@ -116,7 +116,7 @@ struct GroupState {
     members: Mutex<HashMap<String, (Member, Instant)>>,
     _group_resource: String,
     _group_resource_id: u64,
-    event_resource: ResKey<'static>,
+    event_resource: KeyExpr<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
 }
@@ -313,7 +313,7 @@ impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_resource = format!("{}/{}", GROUP_PREFIX, group);
         let rid = z.register_resource(&_group_resource).await.unwrap();
-        let event_resource = ResKey::RIdWithSuffix(rid, EVENT_POSTFIX.into());
+        let event_resource = KeyExpr::IdWithSuffix(rid, EVENT_POSTFIX.into());
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),

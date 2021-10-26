@@ -146,7 +146,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     if let Ok(mut backends_admin) = zenoh.subscribe(&backends_admin_selector).await {
         while let Some(sample) = backends_admin.receiver().next().await {
             debug!("Received sample: {:?}", sample);
-            let key = sample.res_key.as_str();
+            let key = sample.key_expr.as_str();
             match sample.kind {
                 SampleKind::Put => {
                     #[allow(clippy::map_entry)]

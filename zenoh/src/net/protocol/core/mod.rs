@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod rname;
+pub mod key_expr;
 
 use http_types::Mime;
 use std::borrow::Cow;
@@ -270,153 +270,153 @@ pub mod whatami {
     }
 }
 
-/// A numerical Id mapped to a resource name with [`register_resource`](crate::Session::register_resource).
-pub type ResourceId = ZInt;
+/// A numerical Id mapped to a key expression with [`register_resource`](crate::Session::register_resource).
+pub type ExprId = ZInt;
 
-pub const NO_RESOURCE_ID: ResourceId = 0;
+pub const EMPTY_EXPR_ID: ExprId = 0;
 
-/// A resource key.
+/// A key expression.
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~      id       — if ResName{name} : id=0
+// ~      id       — if Expr : id=0
 // +-+-+-+-+-+-+-+-+
-// ~  name/suffix  ~ if flag K==1 in Message's header
+// ~    suffix     ~ if flag K==1 in Message's header
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum ResKey<'a> {
-    RName(Cow<'a, str>),
-    RId(ResourceId),
-    RIdWithSuffix(ResourceId, Cow<'a, str>),
+pub enum KeyExpr<'a> {
+    Expr(Cow<'a, str>),
+    Id(ExprId),
+    IdWithSuffix(ExprId, Cow<'a, str>),
 }
-use ResKey::*;
+use KeyExpr::*;
 
-impl ResKey<'_> {
+impl KeyExpr<'_> {
     #[inline(always)]
     pub fn as_str(&self) -> &str {
         match self {
-            RName(name) => name.as_ref(),
-            RId(_) | RIdWithSuffix(_, _) => "",
+            Expr(name) => name.as_ref(),
+            Id(_) | IdWithSuffix(_, _) => "",
         }
     }
 
     #[inline(always)]
-    pub fn rid(&self) -> ResourceId {
+    pub fn id(&self) -> ExprId {
         match self {
-            RName(_) => NO_RESOURCE_ID,
-            RId(rid) | RIdWithSuffix(rid, _) => *rid,
+            Expr(_) => EMPTY_EXPR_ID,
+            Id(rid) | IdWithSuffix(rid, _) => *rid,
         }
     }
 
     #[inline(always)]
     pub fn is_string(&self) -> bool {
         match self {
-            RName(_) | RIdWithSuffix(_, _) => true,
-            RId(_) => false,
+            Expr(_) | IdWithSuffix(_, _) => true,
+            Id(_) => false,
         }
     }
 
     #[inline(always)]
     pub fn is_numeric(&self) -> bool {
         match self {
-            RId(_) => true,
-            RName(_) | RIdWithSuffix(_, _) => false,
+            Id(_) => true,
+            Expr(_) | IdWithSuffix(_, _) => false,
         }
     }
 
-    pub fn to_owned(&self) -> ResKey<'static> {
+    pub fn to_owned(&self) -> KeyExpr<'static> {
         match self {
-            Self::RId(id) => ResKey::RId(*id),
-            Self::RName(s) => ResKey::RName(s.to_string().into()),
-            Self::RIdWithSuffix(id, s) => ResKey::RIdWithSuffix(*id, s.to_string().into()),
+            Self::Id(id) => KeyExpr::Id(*id),
+            Self::Expr(s) => KeyExpr::Expr(s.to_string().into()),
+            Self::IdWithSuffix(id, s) => KeyExpr::IdWithSuffix(*id, s.to_string().into()),
         }
     }
 }
 
-impl fmt::Debug for ResKey<'_> {
+impl fmt::Debug for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RName(name) => write!(f, "{}", name),
-            RId(rid) => write!(f, "{}", rid),
-            RIdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
+            Expr(name) => write!(f, "{}", name),
+            Id(rid) => write!(f, "{}", rid),
+            IdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
         }
     }
 }
 
-impl fmt::Display for ResKey<'_> {
+impl fmt::Display for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
-impl<'a> From<&ResKey<'a>> for ResKey<'a> {
+impl<'a> From<&KeyExpr<'a>> for KeyExpr<'a> {
     #[inline]
-    fn from(key: &ResKey<'a>) -> ResKey<'a> {
+    fn from(key: &KeyExpr<'a>) -> KeyExpr<'a> {
         key.clone()
     }
 }
 
-impl From<ResourceId> for ResKey<'_> {
+impl From<ExprId> for KeyExpr<'_> {
     #[inline]
-    fn from(rid: ResourceId) -> ResKey<'static> {
-        RId(rid)
+    fn from(rid: ExprId) -> KeyExpr<'static> {
+        Id(rid)
     }
 }
 
-impl<'a> From<&'a str> for ResKey<'a> {
+impl<'a> From<&'a str> for KeyExpr<'a> {
     #[inline]
-    fn from(name: &'a str) -> ResKey<'a> {
-        RName(name.into())
+    fn from(name: &'a str) -> KeyExpr<'a> {
+        Expr(name.into())
     }
 }
 
-impl From<String> for ResKey<'_> {
+impl From<String> for KeyExpr<'_> {
     #[inline]
-    fn from(name: String) -> ResKey<'static> {
-        RName(name.into())
+    fn from(name: String) -> KeyExpr<'static> {
+        Expr(name.into())
     }
 }
 
-impl<'a> From<&'a String> for ResKey<'a> {
+impl<'a> From<&'a String> for KeyExpr<'a> {
     #[inline]
-    fn from(name: &'a String) -> ResKey<'a> {
-        RName(name.as_str().into())
+    fn from(name: &'a String) -> KeyExpr<'a> {
+        Expr(name.as_str().into())
     }
 }
 
-impl<'a> From<(ResourceId, &'a str)> for ResKey<'a> {
+impl<'a> From<(ExprId, &'a str)> for KeyExpr<'a> {
     #[inline]
-    fn from(tuple: (ResourceId, &'a str)) -> ResKey<'a> {
+    fn from(tuple: (ExprId, &'a str)) -> KeyExpr<'a> {
         if tuple.1.is_empty() {
-            RId(tuple.0)
-        } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.into())
+            Id(tuple.0)
+        } else if tuple.0 == EMPTY_EXPR_ID {
+            Expr(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1.into())
+            IdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl From<(ResourceId, String)> for ResKey<'_> {
+impl From<(ExprId, String)> for KeyExpr<'_> {
     #[inline]
-    fn from(tuple: (ResourceId, String)) -> ResKey<'static> {
+    fn from(tuple: (ExprId, String)) -> KeyExpr<'static> {
         if tuple.1.is_empty() {
-            RId(tuple.0)
-        } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.into())
+            Id(tuple.0)
+        } else if tuple.0 == EMPTY_EXPR_ID {
+            Expr(tuple.1.into())
         } else {
-            RIdWithSuffix(tuple.0, tuple.1.into())
+            IdWithSuffix(tuple.0, tuple.1.into())
         }
     }
 }
 
-impl<'a> From<&'a ResKey<'a>> for (ResourceId, &'a str) {
+impl<'a> From<&'a KeyExpr<'a>> for (ExprId, &'a str) {
     #[inline]
-    fn from(key: &'a ResKey<'a>) -> (ResourceId, &'a str) {
+    fn from(key: &'a KeyExpr<'a>) -> (ExprId, &'a str) {
         match key {
-            RId(rid) => (*rid, ""),
-            RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as ZInt)
-            RIdWithSuffix(rid, suffix) => (*rid, &suffix[..]),
+            Id(rid) => (*rid, ""),
+            Expr(name) => (EMPTY_EXPR_ID, &name[..]), //(&(0 as ZInt)
+            IdWithSuffix(rid, suffix) => (*rid, &suffix[..]),
         }
     }
 }

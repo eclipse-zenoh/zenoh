@@ -480,7 +480,7 @@ impl ZBuf {
             CongestionControl::Block
         };
 
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "shared-memory")]
         let mut sliced = false;
@@ -512,17 +512,17 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_reskey(&mut self, is_string: bool) -> Option<ResKey<'static>> {
+    fn read_key_expr(&mut self, is_string: bool) -> Option<KeyExpr<'static>> {
         let id = self.read_zint()?;
         if is_string {
             let s = self.read_string()?;
-            if id == NO_RESOURCE_ID {
-                Some(ResKey::RName(s.into()))
+            if id == EMPTY_EXPR_ID {
+                Some(KeyExpr::Expr(s.into()))
             } else {
-                Some(ResKey::RIdWithSuffix(id, s.into()))
+                Some(KeyExpr::IdWithSuffix(id, s.into()))
             }
         } else {
-            Some(ResKey::RId(id))
+            Some(KeyExpr::Id(id))
         }
     }
 
@@ -583,7 +583,7 @@ impl ZBuf {
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
         let pull_id = self.read_zint()?;
         let max_samples = if imsg::has_flag(header, zmsg::flag::N) {
             Some(self.read_zint()?)
@@ -621,7 +621,7 @@ impl ZBuf {
         match imsg::mid(header) {
             RESOURCE => {
                 let rid = self.read_zint()?;
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Resource(Resource { rid, key }))
             }
             FORGET_RESOURCE => {
@@ -634,7 +634,7 @@ impl ZBuf {
                 } else {
                     Reliability::BestEffort
                 };
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let (mode, period) = if imsg::has_flag(header, zmsg::flag::S) {
                     self.read_submode()?
                 } else {
@@ -650,19 +650,19 @@ impl ZBuf {
                 }))
             }
             FORGET_SUBSCRIBER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetSubscriber(ForgetSubscriber { key }))
             }
             PUBLISHER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Publisher(Publisher { key }))
             }
             FORGET_PUBLISHER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetPublisher(ForgetPublisher { key }))
             }
             QUERYABLE => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
                 let info = if imsg::has_flag(header, zmsg::flag::Q) {
                     self.read_queryable_info()?
@@ -672,7 +672,7 @@ impl ZBuf {
                 Some(Declaration::Queryable(Queryable { key, kind, info }))
             }
             FORGET_QUERYABLE => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
                 Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
             }
@@ -684,7 +684,7 @@ impl ZBuf {
     }
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
         let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {

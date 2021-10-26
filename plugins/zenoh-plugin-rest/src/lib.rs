@@ -67,7 +67,7 @@ fn sample_to_json(sample: Sample) -> String {
     let encoding = sample.value.encoding.to_string();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.res_key.as_str(),
+        sample.key_expr.as_str(),
         value_to_json(sample.value),
         encoding,
         if let Some(ts) = sample.timestamp {
@@ -90,7 +90,7 @@ async fn to_json(results: ReplyReceiver) -> String {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.res_key.as_str(),
+        sample.key_expr.as_str(),
         String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
@@ -342,12 +342,12 @@ pub async fn run(runtime: Runtime, port: String) {
     }
 }
 
-fn path_to_resource<'a>(path: &'a str, pid: &str) -> ResKey<'a> {
+fn path_to_resource<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
     if path == "/@/router/local" {
-        ResKey::from(format!("/@/router/{}", pid))
+        KeyExpr::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        ResKey::from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
     } else {
-        ResKey::from(path)
+        KeyExpr::from(path)
     }
 }

@@ -36,7 +36,7 @@ pub use super::net::protocol::core::queryable::*;
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: ResKey<'static>,
+    pub(crate) key_selector: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
     /// The sender to use to send replies to this query.
@@ -56,7 +56,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &ResKey<'_> {
+    pub fn key_selector(&self) -> &KeyExpr<'_> {
         &self.key_selector
     }
 
@@ -107,7 +107,7 @@ impl fmt::Display for Query {
 
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) sender: Sender<Query>,
@@ -115,7 +115,11 @@ pub(crate) struct QueryableState {
 
 impl fmt::Debug for QueryableState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queryable{{ id:{}, reskey:{} }}", self.id, self.reskey)
+        write!(
+            f,
+            "Queryable{{ id:{}, key_expr:{} }}",
+            self.id, self.key_expr
+        )
     }
 }
 
@@ -319,7 +323,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryableBuilder<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) reskey: ResKey<'b>,
+        pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) kind: ZInt,
         pub(crate) complete: bool,
     }
@@ -345,13 +349,13 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = ZResult<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("register_queryable({:?}, {:?})", self.reskey, self.kind);
+        log::trace!("register_queryable({:?}, {:?})", self.key_expr, self.kind);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
-            reskey: self.reskey.to_owned(),
+            key_expr: self.key_expr.to_owned(),
             kind: self.kind,
             complete: self.complete,
             sender,
@@ -362,20 +366,20 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
 
             if self.complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, &self.reskey, self.kind);
+                let complete = Session::complete_twin_qabls(&state, &self.key_expr, self.kind);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
             }
         }
         #[cfg(not(feature = "complete_n"))]
         {
-            let twin_qabl = Session::twin_qabl(&state, &self.reskey, self.kind);
+            let twin_qabl = Session::twin_qabl(&state, &self.key_expr, self.kind);
             let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, &self.reskey, self.kind);
+                twin_qabl && Session::complete_twin_qabl(&state, &self.key_expr, self.kind);
 
             state.queryables.insert(id, qable_state.clone());
 
@@ -391,7 +395,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
             }
         }
 

@@ -631,7 +631,7 @@ impl PartialOrd for DataInfo {
 /// +-+-+-+-+-+-+-+-+
 /// |K|I|D|  DATA   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 -- Only numerical id
+/// ~    KeyExpr     ~ if K==1 -- Only numerical id
 /// +---------------+
 /// ~    DataInfo   ~ if I==1
 /// +---------------+
@@ -641,7 +641,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -710,13 +710,13 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
     pub rid: ZInt,
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Resource {
@@ -755,12 +755,12 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Publisher {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Publisher {
@@ -779,12 +779,12 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetPublisher {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetPublisher {
@@ -803,7 +803,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -812,7 +812,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscriber {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub info: SubInfo,
 }
 
@@ -838,12 +838,12 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetSubscriber {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetSubscriber {
@@ -862,7 +862,7 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -871,7 +871,7 @@ impl Header for ForgetSubscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub kind: ZInt,
     pub info: QueryableInfo,
 }
@@ -895,14 +895,14 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub kind: ZInt,
 }
 
@@ -949,7 +949,7 @@ impl Header for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -958,7 +958,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -988,7 +988,7 @@ impl Header for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then resource key has name
 /// +---------------+
 /// ~   value_selector   ~
 /// +---------------+
@@ -1001,7 +1001,7 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
@@ -1153,7 +1153,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1199,7 +1199,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1221,7 +1221,7 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,

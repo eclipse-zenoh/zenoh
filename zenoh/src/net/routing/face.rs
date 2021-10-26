@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::{
-    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
     SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -164,8 +164,8 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        let (prefixid, suffix) = reskey.into();
+    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         register_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
     }
@@ -177,11 +177,11 @@ impl Primitives for Face {
 
     fn decl_subscriber(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -220,8 +220,8 @@ impl Primitives for Face {
         }
     }
 
-    fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
-        let (prefixid, suffix) = reskey.into();
+    fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -252,18 +252,18 @@ impl Primitives for Face {
         }
     }
 
-    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
 
-    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_queryable(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -307,11 +307,11 @@ impl Primitives for Face {
 
     fn forget_queryable(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -352,14 +352,14 @@ impl Primitives for Face {
 
     fn send_data(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         full_reentrant_route_data(
             &self.tables,
             &self.state,
@@ -375,14 +375,14 @@ impl Primitives for Face {
 
     fn send_query(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: QueryConsolidation,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         route_query(
             &mut tables,
@@ -402,7 +402,7 @@ impl Primitives for Face {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: PeerId,
-        reskey: ResKey,
+        key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -413,7 +413,7 @@ impl Primitives for Face {
             qid,
             replier_kind,
             replier_id,
-            reskey,
+            key_expr,
             info,
             payload,
         );
@@ -427,11 +427,11 @@ impl Primitives for Face {
     fn send_pull(
         &self,
         is_final: bool,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        let (prefixid, suffix) = reskey.into();
+        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         pull_data(
             &mut tables,

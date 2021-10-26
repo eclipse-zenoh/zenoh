@@ -14,7 +14,7 @@
 
 //! Publishing primitives.
 
-use super::net::protocol::core::{rname, Channel};
+use super::net::protocol::core::{key_expr, Channel};
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
 use super::net::transport::Primitives;
 use crate::prelude::*;
@@ -33,7 +33,7 @@ pub use super::net::protocol::core::CongestionControl;
 #[derive(Debug)]
 pub(crate) struct PublisherState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
 }
 
 /// A publisher.
@@ -101,7 +101,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct PublisherBuilder<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) reskey: ResKey<'b>,
+        pub(crate) key_expr: KeyExpr<'b>,
     }
 }
 
@@ -109,30 +109,29 @@ impl<'a> Runnable for PublisherBuilder<'a, '_> {
     type Output = ZResult<Publisher<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("publishing({:?})", self.reskey);
+        log::trace!("publishing({:?})", self.key_expr);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(&self.reskey)?;
+        let key_expr = state.localkey_to_expr(&self.key_expr)?;
         let pub_state = Arc::new(PublisherState {
             id,
-            reskey: self.reskey.to_owned(),
+            key_expr: self.key_expr.to_owned(),
         });
         let declared_pub = if let Some(join_pub) = state
             .join_publications
             .iter()
-            .find(|s| rname::include(s, &resname))
+            .find(|s| key_expr::include(s, &key_expr))
         {
-            let joined_pub = state
-                .publishers
-                .values()
-                .any(|p| rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap()));
+            let joined_pub = state.publishers.values().any(|p| {
+                key_expr::include(join_pub, &state.localkey_to_expr(&p.key_expr).unwrap())
+            });
             (!joined_pub).then(|| join_pub.clone().into())
         } else {
             let twin_pub = state.publishers.values().any(|p| {
-                state.localkey_to_resname(&p.reskey).unwrap()
-                    == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                state.localkey_to_expr(&p.key_expr).unwrap()
+                    == state.localkey_to_expr(&pub_state.key_expr).unwrap()
             });
-            (!twin_pub).then(|| self.reskey.clone())
+            (!twin_pub).then(|| self.key_expr.clone())
         };
 
         state.publishers.insert(id, pub_state.clone());
@@ -174,7 +173,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct Writer<'a> {
         pub(crate) session: &'a Session,
-        pub(crate) reskey: ResKey<'a>,
+        pub(crate) key_expr: KeyExpr<'a>,
         pub(crate) value: Option<Value>,
         pub(crate) kind: Option<ZInt>,
         pub(crate) congestion_control: CongestionControl,
@@ -223,7 +222,7 @@ impl Runnable for Writer<'_> {
     type Output = ZResult<()>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("write({:?}, [...])", self.reskey);
+        log::trace!("write({:?}, [...])", self.key_expr);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
@@ -243,7 +242,7 @@ impl Runnable for Writer<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &self.reskey,
+            &self.key_expr,
             value.payload.clone(),
             Channel {
                 priority: self.priority.into(),
@@ -254,7 +253,7 @@ impl Runnable for Writer<'_> {
             None,
         );
         self.session
-            .handle_data(true, &self.reskey, data_info, value.payload);
+            .handle_data(true, &self.key_expr, data_info, value.payload);
         Ok(())
     }
 }

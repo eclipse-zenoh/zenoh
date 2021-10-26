@@ -64,7 +64,7 @@ pub(crate) async fn start_storage(
             }
         };
         while let Some(reply) = replies.next().await {
-            log::trace!("Storage {} aligns data {}", admin_key, reply.data.res_key);
+            log::trace!("Storage {} aligns data {}", admin_key, reply.data.key_expr);
             // Call incoming data interceptor (if any)
             let sample = if let Some(ref interceptor) = in_interceptor {
                 interceptor.read().await.on_sample(reply.data).await

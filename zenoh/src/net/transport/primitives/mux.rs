@@ -13,7 +13,7 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey,
+    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
     SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -35,10 +35,10 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
+    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
         let d = Declaration::Resource(Resource {
             rid,
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
         });
         let decls = vec![d];
         let _ = self
@@ -56,12 +56,12 @@ impl Primitives for Mux {
 
     fn decl_subscriber(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Subscriber(Subscriber {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
             info: sub_info.clone(),
         });
         let decls = vec![d];
@@ -70,9 +70,9 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_subscriber(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetSubscriber(ForgetSubscriber {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -80,9 +80,9 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn decl_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn decl_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::Publisher(Publisher {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -90,9 +90,9 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_publisher(&self, reskey: &ResKey, routing_context: Option<RoutingContext>) {
+    fn forget_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetPublisher(ForgetPublisher {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
         });
         let decls = vec![d];
         let _ =
@@ -102,13 +102,13 @@ impl Primitives for Mux {
 
     fn decl_queryable(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Queryable(Queryable {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
             kind,
             info: qabl_info.clone(),
         });
@@ -120,12 +120,12 @@ impl Primitives for Mux {
 
     fn forget_queryable(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::ForgetQueryable(ForgetQueryable {
-            key: reskey.to_owned(),
+            key: key_expr.to_owned(),
             kind,
         });
         let decls = vec![d];
@@ -136,7 +136,7 @@ impl Primitives for Mux {
 
     fn send_data(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         payload: ZBuf,
         channel: Channel,
         cogestion_control: CongestionControl,
@@ -144,7 +144,7 @@ impl Primitives for Mux {
         routing_context: Option<RoutingContext>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
-            reskey.to_owned(),
+            key_expr.to_owned(),
             payload,
             channel,
             cogestion_control,
@@ -157,7 +157,7 @@ impl Primitives for Mux {
 
     fn send_query(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
@@ -170,7 +170,7 @@ impl Primitives for Mux {
             Some(target)
         };
         let _ = self.handler.handle_message(ZenohMessage::make_query(
-            reskey.to_owned(),
+            key_expr.to_owned(),
             value_selector.to_string(),
             qid,
             target_opt,
@@ -185,12 +185,12 @@ impl Primitives for Mux {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: PeerId,
-        reskey: ResKey,
+        key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
-            reskey.to_owned(),
+            key_expr.to_owned(),
             payload,
             zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
@@ -219,13 +219,13 @@ impl Primitives for Mux {
     fn send_pull(
         &self,
         is_final: bool,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_pull(
             is_final,
-            reskey.to_owned(),
+            key_expr.to_owned(),
             pull_id,
             *max_samples,
             None,

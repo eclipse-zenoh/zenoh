@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
-    queryable, rname, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, ResKey, Target,
+    key_expr, queryable, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Target,
     WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -207,17 +207,17 @@ fn send_sourced_queryable_to_net_childs<Face: std::borrow::Borrow<Arc<FaceState>
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.as_ref().unwrap().borrow().id {
-                        let reskey = Resource::decl_key(res, &mut someface);
+                        let key_expr = Resource::decl_key(res, &mut someface);
 
                         log::debug!(
                             "Send queryable {} (kind: {}) on {}",
-                            res.name(),
+                            res.expr(),
                             kind,
                             someface
                         );
 
                         someface.primitives.decl_queryable(
-                            &reskey,
+                            &key_expr,
                             kind,
                             qabl_info,
                             routing_context,
@@ -252,10 +252,10 @@ fn propagate_simple_queryable(
             get_mut_unchecked(dst_face)
                 .local_qabls
                 .insert((res.clone(), kind), info.clone());
-            let reskey = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, dst_face);
             dst_face
                 .primitives
-                .decl_queryable(&reskey, kind, &info, None);
+                .decl_queryable(&key_expr, kind, &info, None);
         }
     }
 }
@@ -286,7 +286,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
             } else {
                 log::trace!(
                     "Propagating qabl {}: tree for node {} sid:{} not yet ready",
-                    res.name(),
+                    res.expr(),
                     tree_sid.index(),
                     source
                 );
@@ -294,7 +294,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
         }
         None => log::error!(
             "Error propagating qabl {}: cannot get index of {}!",
-            res.name(),
+            res.expr(),
             source
         ),
     }
@@ -314,7 +314,7 @@ fn register_router_queryable(
         {
             log::debug!(
                 "Register router queryable {} (router: {}, kind:{})",
-                res.name(),
+                res.expr(),
                 router,
                 kind,
             );
@@ -382,7 +382,7 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
         {
             log::debug!(
                 "Register peer queryable {} (peer: {}, kind:{})",
-                res.name(),
+                res.expr(),
                 peer,
                 kind,
             );
@@ -444,7 +444,7 @@ fn register_client_queryable(
         let res = get_mut_unchecked(res);
         log::debug!(
             "Register queryable {} (face: {}, kind: {})",
-            res.name(),
+            res.expr(),
             face,
             kind,
         );
@@ -564,18 +564,18 @@ fn send_forget_sourced_queryable_to_net_childs(
             match tables.get_face(&net.graph[*child].pid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let reskey = Resource::decl_key(res, &mut someface);
+                        let key_expr = Resource::decl_key(res, &mut someface);
 
                         log::debug!(
                             "Send forget queryable {} (kind: {}) on {}",
-                            res.name(),
+                            res.expr(),
                             kind,
                             someface
                         );
 
                         someface
                             .primitives
-                            .forget_queryable(&reskey, kind, routing_context);
+                            .forget_queryable(&key_expr, kind, routing_context);
                     }
                 }
                 None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
@@ -587,8 +587,8 @@ fn send_forget_sourced_queryable_to_net_childs(
 fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource>, kind: ZInt) {
     for face in tables.faces.values_mut() {
         if face.local_qabls.contains_key(&(res.clone(), kind)) {
-            let reskey = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_queryable(&reskey, kind, None);
+            let key_expr = Resource::get_best_key(res, "", face.id);
+            face.primitives.forget_queryable(&key_expr, kind, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -621,7 +621,7 @@ fn propagate_forget_sourced_queryable(
             } else {
                 log::trace!(
                     "Propagating forget qabl {}: tree for node {} sid:{} not yet ready",
-                    res.name(),
+                    res.expr(),
                     tree_sid.index(),
                     source
                 );
@@ -629,7 +629,7 @@ fn propagate_forget_sourced_queryable(
         }
         None => log::error!(
             "Error propagating forget qabl {}: cannot get index of {}!",
-            res.name(),
+            res.expr(),
             source
         ),
     }
@@ -643,7 +643,7 @@ fn unregister_router_queryable(
 ) {
     log::debug!(
         "Unregister router queryable {} (router: {}, kind: {})",
-        res.name(),
+        res.expr(),
         router,
         kind,
     );
@@ -703,7 +703,7 @@ fn unregister_peer_queryable(
 ) {
     log::debug!(
         "Unregister peer queryable {} (peer: {}, kind: {})",
-        res.name(),
+        res.expr(),
         peer,
         kind
     );
@@ -787,7 +787,7 @@ pub(crate) fn undeclare_client_queryable(
 ) {
     log::debug!(
         "Unregister client queryable {} (kind: {}) for {}",
-        res.name(),
+        res.expr(),
         kind,
         face
     );
@@ -840,8 +840,8 @@ pub(crate) fn undeclare_client_queryable(
     if client_qabls.len() == 1 && !router_qabls && !peer_qabls {
         let face = &mut client_qabls[0];
         if face.local_qabls.contains_key(&(res.clone(), kind)) {
-            let reskey = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_queryable(&reskey, kind, None);
+            let key_expr = Resource::get_best_key(res, "", face.id);
+            face.primitives.forget_queryable(&key_expr, kind, None);
 
             get_mut_unchecked(face)
                 .local_qabls
@@ -880,8 +880,9 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     get_mut_unchecked(face)
                         .local_qabls
                         .insert((qabl.clone(), *kind), info.clone());
-                    let reskey = Resource::decl_key(qabl, face);
-                    face.primitives.decl_queryable(&reskey, *kind, &info, None);
+                    let key_expr = Resource::decl_key(qabl, face);
+                    face.primitives
+                        .decl_queryable(&key_expr, *kind, &info, None);
                 }
             }
         }
@@ -1036,11 +1037,11 @@ fn insert_target_for_qabls(
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].pid) {
                                 if net.distances.len() > qabl_idx.index() {
-                                    let reskey = Resource::get_best_key(prefix, suffix, face.id);
+                                    let key_expr = Resource::get_best_key(prefix, suffix, face.id);
                                     route.push(TargetQabl {
                                         direction: (
                                             face.clone(),
-                                            reskey.to_owned(),
+                                            key_expr.to_owned(),
                                             if source != 0 {
                                                 Some(RoutingContext::new(source as ZInt))
                                             } else {
@@ -1071,21 +1072,21 @@ fn compute_query_route(
     source_type: WhatAmI,
 ) -> Arc<TargetQablSet> {
     let mut route = TargetQablSet::new();
-    let res_name = [&prefix.name(), suffix].concat();
+    let key_expr = [&prefix.expr(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
         .map(|res| res.context.as_ref())
         .flatten()
         .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &res_name)));
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
     let master = tables.whatami != WhatAmI::Router
-        || *elect_router(&res_name, &tables.shared_nodes) == tables.pid;
+        || *elect_router(&key_expr, &tables.shared_nodes) == tables.pid;
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        let complete = rname::include(&mres.name(), &res_name);
+        let complete = key_expr::include(&mres.expr(), &key_expr);
         if tables.whatami == WhatAmI::Router {
             if master || source_type == WhatAmI::Router {
                 let net = tables.routers_net.as_ref().unwrap();
@@ -1144,10 +1145,10 @@ fn compute_query_route(
 
         if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
             for (sid, context) in &mres.session_ctxs {
-                let reskey = Resource::get_best_key(prefix, suffix, *sid);
+                let key_expr = Resource::get_best_key(prefix, suffix, *sid);
                 for (qabl_kind, qabl_info) in &context.qabl {
                     route.push(TargetQabl {
-                        direction: (context.face.clone(), reskey.to_owned(), None),
+                        direction: (context.face.clone(), key_expr.to_owned(), None),
                         complete: if complete { qabl_info.complete } else { 0 },
                         kind: *qabl_kind,
                         distance: 0.5,
@@ -1352,7 +1353,7 @@ pub fn route_query(
                 "Route query {}:{} for res {}{}",
                 face,
                 qid,
-                prefix.name(),
+                prefix.expr(),
                 suffix,
             );
 
@@ -1444,7 +1445,7 @@ pub fn route_query(
                 });
 
                 #[cfg(feature = "complete_n")]
-                for ((outface, reskey, context), t) in route.values() {
+                for ((outface, key_expr, context), t) in route.values() {
                     let mut outface = outface.clone();
                     let outface_mut = get_mut_unchecked(&mut outface);
                     outface_mut.next_qid += 1;
@@ -1454,7 +1455,7 @@ pub fn route_query(
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
                     outface.primitives.send_query(
-                        reskey,
+                        key_expr,
                         value_selector,
                         qid,
                         QueryTarget {
@@ -1467,7 +1468,7 @@ pub fn route_query(
                 }
 
                 #[cfg(not(feature = "complete_n"))]
-                for (outface, reskey, context) in route.values() {
+                for (outface, key_expr, context) in route.values() {
                     let mut outface = outface.clone();
                     let outface_mut = get_mut_unchecked(&mut outface);
                     outface_mut.next_qid += 1;
@@ -1477,7 +1478,7 @@ pub fn route_query(
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
                     outface.primitives.send_query(
-                        reskey,
+                        key_expr,
                         value_selector,
                         qid,
                         target.clone(),
@@ -1501,7 +1502,7 @@ pub(crate) fn route_send_reply_data(
     qid: ZInt,
     replier_kind: ZInt,
     replier_id: PeerId,
-    reskey: ResKey,
+    key_expr: KeyExpr,
     info: Option<DataInfo>,
     payload: ZBuf,
 ) {
@@ -1511,7 +1512,7 @@ pub(crate) fn route_send_reply_data(
                 query.src_qid,
                 replier_kind,
                 replier_id,
-                reskey,
+                key_expr,
                 info,
                 payload,
             );

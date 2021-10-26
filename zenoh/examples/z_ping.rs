@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use std::time::Instant;
-use zenoh::prelude::ResKey::*;
+use zenoh::prelude::KeyExpr::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -25,12 +25,12 @@ fn main() {
     let session = zenoh::open(config).wait().unwrap();
 
     // The resource to publish data on
-    let reskey_ping = RId(session.register_resource("/test/ping").wait().unwrap());
+    let key_expr_ping = Id(session.register_resource("/test/ping").wait().unwrap());
 
     // The resource to wait the response back
-    let reskey_pong = RId(session.register_resource("/test/pong").wait().unwrap());
+    let key_expr_pong = Id(session.register_resource("/test/pong").wait().unwrap());
 
-    let mut sub = session.subscribe(&reskey_pong).wait().unwrap();
+    let mut sub = session.subscribe(&key_expr_pong).wait().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -45,7 +45,7 @@ fn main() {
     for _ in 0..wun {
         let data = data.clone();
         session
-            .put(&reskey_ping, data)
+            .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .wait()
@@ -58,7 +58,7 @@ fn main() {
         let data = data.clone();
         let write_time = Instant::now();
         session
-            .put(&reskey_ping, data)
+            .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .wait()

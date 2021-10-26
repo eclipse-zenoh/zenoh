@@ -24,8 +24,8 @@ use flume::{bounded, Sender};
 use log::{error, trace, warn};
 use net::protocol::{
     core::{
-        queryable, rname, AtomicZInt, Channel, CongestionControl, QueryConsolidation, QueryTarget,
-        QueryableInfo, ResKey, ResourceId, SubInfo, ZInt,
+        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -55,8 +55,8 @@ pub(crate) struct SessionState {
     pub(crate) rid_counter: AtomicUsize,      // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicZInt,
     pub(crate) decl_id_counter: AtomicUsize,
-    pub(crate) local_resources: HashMap<ResourceId, Resource>,
-    pub(crate) remote_resources: HashMap<ResourceId, Resource>,
+    pub(crate) local_resources: HashMap<ExprId, Resource>,
+    pub(crate) remote_resources: HashMap<ExprId, Resource>,
     pub(crate) publishers: HashMap<Id, Arc<PublisherState>>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) local_subscribers: HashMap<Id, Arc<SubscriberState>>,
@@ -94,68 +94,68 @@ impl SessionState {
 
 impl SessionState {
     #[inline]
-    fn get_local_res(&self, rid: &ResourceId) -> Option<&Resource> {
-        self.local_resources.get(rid)
+    fn get_local_res(&self, id: &ExprId) -> Option<&Resource> {
+        self.local_resources.get(id)
     }
 
     #[inline]
-    fn get_remote_res(&self, rid: &ResourceId) -> Option<&Resource> {
-        match self.remote_resources.get(rid) {
-            None => self.local_resources.get(rid),
+    fn get_remote_res(&self, id: &ExprId) -> Option<&Resource> {
+        match self.remote_resources.get(id) {
+            None => self.local_resources.get(id),
             res => res,
         }
     }
 
     #[inline]
-    fn get_res(&self, rid: &ResourceId, local: bool) -> Option<&Resource> {
+    fn get_res(&self, id: &ExprId, local: bool) -> Option<&Resource> {
         if local {
-            self.get_local_res(rid)
+            self.get_local_res(id)
         } else {
-            self.get_remote_res(rid)
+            self.get_remote_res(id)
         }
     }
 
     #[inline]
-    fn localid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.local_resources.get(rid) {
+    fn localid_to_expr(&self, id: &ExprId) -> ZResult<String> {
+        match self.local_resources.get(id) {
             Some(res) => Ok(res.name.clone()),
-            None => zerror!(ZErrorKind::UnkownResourceId {
-                rid: format!("{}", rid)
+            None => zerror!(ZErrorKind::UnkownExprId {
+                id: format!("{}", id)
             }),
         }
     }
 
     #[inline]
-    fn rid_to_resname(&self, rid: &ResourceId) -> ZResult<String> {
-        match self.remote_resources.get(rid) {
+    fn id_to_expr(&self, id: &ExprId) -> ZResult<String> {
+        match self.remote_resources.get(id) {
             Some(res) => Ok(res.name.clone()),
-            None => self.localid_to_resname(rid),
+            None => self.localid_to_expr(id),
         }
     }
 
-    pub fn remotekey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
-        use super::ResKey::*;
-        match reskey {
-            RName(name) => Ok(name.to_string()),
-            RId(rid) => self.rid_to_resname(rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.rid_to_resname(rid)? + suffix),
+    pub fn remotekey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
+        use super::KeyExpr::*;
+        match key_expr {
+            Expr(name) => Ok(name.to_string()),
+            Id(id) => self.id_to_expr(id),
+            IdWithSuffix(id, suffix) => Ok(self.id_to_expr(id)? + suffix),
         }
     }
 
-    pub fn localkey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
-        use super::ResKey::*;
-        match reskey {
-            RName(name) => Ok(name.to_string()),
-            RId(rid) => self.localid_to_resname(rid),
-            RIdWithSuffix(rid, suffix) => Ok(self.localid_to_resname(rid)? + suffix),
+    pub fn localkey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
+        use super::KeyExpr::*;
+        match key_expr {
+            Expr(expr) => Ok(expr.to_string()),
+            Id(id) => self.localid_to_expr(id),
+            IdWithSuffix(id, suffix) => Ok(self.localid_to_expr(id)? + suffix),
         }
     }
 
-    pub fn reskey_to_resname(&self, reskey: &ResKey, local: bool) -> ZResult<String> {
+    pub fn key_expr_to_expr(&self, key_expr: &KeyExpr, local: bool) -> ZResult<String> {
         if local {
-            self.localkey_to_resname(reskey)
+            self.localkey_to_expr(key_expr)
         } else {
-            self.remotekey_to_resname(reskey)
+            self.remotekey_to_expr(key_expr)
         }
     }
 }
@@ -421,29 +421,29 @@ impl Session {
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn register_resource<'a, IntoResKey>(
+    pub fn register_resource<'a, IntoKeyExpr>(
         &self,
-        resource: IntoResKey,
-    ) -> impl ZFuture<Output = ZResult<ResourceId>>
+        resource: IntoKeyExpr,
+    ) -> impl ZFuture<Output = ZResult<ExprId>>
     where
-        IntoResKey: Into<ResKey<'a>>,
+        IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let resource = resource.into();
         trace!("register_resource({:?})", resource);
         let mut state = zwrite!(self.state);
 
-        zready(state.localkey_to_resname(&resource).map(|resname| {
+        zready(state.localkey_to_expr(&resource).map(|key_expr| {
             match state
                 .local_resources
                 .iter()
-                .find(|(_rid, res)| res.name == resname)
+                .find(|(_rid, res)| res.name == key_expr)
             {
                 Some((rid, _res)) => *rid,
                 None => {
                     let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                    let mut res = Resource::new(resname.clone());
+                    let mut res = Resource::new(key_expr.clone());
                     for sub in state.subscribers.values() {
-                        if rname::matches(&resname, &sub.resname) {
+                        if key_expr::matches(&key_expr, &sub.key_expr_str) {
                             res.subscribers.push(sub.clone());
                         }
                     }
@@ -478,7 +478,7 @@ impl Session {
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister_resource(&self, rid: ResourceId) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn unregister_resource(&self, rid: ExprId) -> impl ZFuture<Output = ZResult<()>> {
         trace!("unregister_resource({:?})", rid);
         let mut state = zwrite!(self.state);
         state.local_resources.remove(&rid);
@@ -497,7 +497,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `reskey` - The resource key to publish
+    /// * `key_expr` - The resource key to publish
     ///
     /// # Examples
     /// ```
@@ -509,13 +509,16 @@ impl Session {
     /// session.put("/resource/name", "value").await.unwrap();
     /// # })
     /// ```
-    pub fn publishing<'a, 'b, IntoResKey>(&'a self, reskey: IntoResKey) -> PublisherBuilder<'a, 'b>
+    pub fn publishing<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        key_expr: IntoKeyExpr,
+    ) -> PublisherBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         PublisherBuilder {
             session: self,
-            reskey: reskey.into(),
+            key_expr: key_expr.into(),
         }
     }
 
@@ -523,34 +526,37 @@ impl Session {
         let mut state = zwrite!(self.state);
         zready(if let Some(pub_state) = state.publishers.remove(&pid) {
             trace!("unpublishing({:?})", pub_state);
-            // Note: there might be several Publishers on the same ResKey.
-            // Before calling forget_publisher(reskey), check if this was the last one.
-            state.localkey_to_resname(&pub_state.reskey).map(|resname| {
+            // Note: there might be several Publishers on the same KeyExpr.
+            // Before calling forget_publisher(key_expr), check if this was the last one.
+            state.localkey_to_expr(&pub_state.key_expr).map(|key_expr| {
                 match state
                     .join_publications
                     .iter()
-                    .find(|s| rname::include(s, &resname))
+                    .find(|s| key_expr::include(s, &key_expr))
                 {
                     Some(join_pub) => {
                         let joined_pub = state.publishers.values().any(|p| {
-                            rname::include(join_pub, &state.localkey_to_resname(&p.reskey).unwrap())
+                            key_expr::include(
+                                join_pub,
+                                &state.localkey_to_expr(&p.key_expr).unwrap(),
+                            )
                         });
                         if !joined_pub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
-                            let reskey = join_pub.clone().into();
+                            let key_expr = join_pub.clone().into();
                             drop(state);
-                            primitives.forget_publisher(&reskey, None);
+                            primitives.forget_publisher(&key_expr, None);
                         }
                     }
                     None => {
                         let twin_pub = state.publishers.values().any(|p| {
-                            state.localkey_to_resname(&p.reskey).unwrap()
-                                == state.localkey_to_resname(&pub_state.reskey).unwrap()
+                            state.localkey_to_expr(&p.key_expr).unwrap()
+                                == state.localkey_to_expr(&pub_state.key_expr).unwrap()
                         });
                         if !twin_pub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             drop(state);
-                            primitives.forget_publisher(&pub_state.reskey, None);
+                            primitives.forget_publisher(&pub_state.key_expr, None);
                         }
                     }
                 };
@@ -564,71 +570,73 @@ impl Session {
 
     pub(crate) fn register_any_subscriber(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(reskey)?;
+        let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            reskey: reskey.to_owned(),
-            resname,
+            key_expr: key_expr.to_owned(),
+            key_expr_str,
             invoker,
         });
         let declared_sub = match state
             .join_subscriptions
             .iter()
-            .find(|s| rname::include(s, &sub_state.resname))
+            .find(|s| key_expr::include(s, &sub_state.key_expr_str))
         {
             Some(join_sub) => {
                 let joined_sub = state.subscribers.values().any(|s| {
-                    rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                    key_expr::include(join_sub, &state.localkey_to_expr(&s.key_expr).unwrap())
                 });
                 (!joined_sub).then(|| join_sub.clone().into())
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| {
-                    state.localkey_to_resname(&s.reskey).unwrap()
-                        == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                    state.localkey_to_expr(&s.key_expr).unwrap()
+                        == state.localkey_to_expr(&sub_state.key_expr).unwrap()
                 });
-                (!twin_sub).then(|| sub_state.reskey.clone())
+                (!twin_sub).then(|| sub_state.key_expr.clone())
             }
         };
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if rname::matches(&sub_state.resname, &res.name) {
+            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if rname::matches(&sub_state.resname, &res.name) {
+            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
 
-        if let Some(reskey) = declared_sub {
+        if let Some(key_expr) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
 
-            // If reskey is a pure RName, remap it to optimal Rid or RidWithSuffix
-            let reskey = match reskey {
-                ResKey::RName(name) => match name.find('*') {
+            // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
+            let key_expr = match key_expr {
+                KeyExpr::Expr(key_expr_str) => match key_expr_str.find('*') {
                     Some(pos) => {
-                        let id = self.register_resource(&name[..pos]).wait()?;
-                        ResKey::RIdWithSuffix(id, name[pos..].to_string().into())
+                        let id = self.register_resource(&key_expr_str[..pos]).wait()?;
+                        KeyExpr::IdWithSuffix(id, key_expr_str[pos..].to_string().into())
                     }
                     None => {
-                        let id = self.register_resource(&ResKey::RName(name)).wait()?;
-                        ResKey::RId(id)
+                        let id = self
+                            .register_resource(&KeyExpr::Expr(key_expr_str))
+                            .wait()?;
+                        KeyExpr::Id(id)
                     }
                 },
-                reskey => reskey,
+                key_expr => key_expr,
             };
 
-            primitives.decl_subscriber(&reskey, info, None);
+            primitives.decl_subscriber(&key_expr, info, None);
         }
 
         Ok(sub_state)
@@ -636,28 +644,28 @@ impl Session {
 
     pub(crate) fn register_any_local_subscriber(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let resname = state.localkey_to_resname(reskey)?;
+        let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            reskey: reskey.to_owned(),
-            resname,
+            key_expr: key_expr.to_owned(),
+            key_expr_str,
             invoker,
         });
         state
             .local_subscribers
             .insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if rname::matches(&sub_state.resname, &res.name) {
+            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if rname::matches(&sub_state.resname, &res.name) {
+            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
@@ -669,7 +677,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `reskey` - The resource key to subscribe
+    /// * `key_expr` - The resource key to subscribe
     ///
     /// # Examples
     /// ```no_run
@@ -684,13 +692,16 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn subscribe<'a, 'b, IntoResKey>(&'a self, reskey: IntoResKey) -> SubscriberBuilder<'a, 'b>
+    pub fn subscribe<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        key_expr: IntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         SubscriberBuilder {
             session: self,
-            reskey: reskey.into(),
+            key_expr: key_expr.into(),
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
@@ -709,34 +720,37 @@ impl Session {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
-            // Note: there might be several Subscribers on the same ResKey.
-            // Before calling forget_subscriber(reskey), check if this was the last one.
-            state.localkey_to_resname(&sub_state.reskey).map(|resname| {
+            // Note: there might be several Subscribers on the same KeyExpr.
+            // Before calling forget_subscriber(key_expr), check if this was the last one.
+            state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
                 match state
                     .join_subscriptions
                     .iter()
-                    .find(|s| rname::include(s, &resname))
+                    .find(|s| key_expr::include(s, &key_expr))
                 {
                     Some(join_sub) => {
                         let joined_sub = state.subscribers.values().any(|s| {
-                            rname::include(join_sub, &state.localkey_to_resname(&s.reskey).unwrap())
+                            key_expr::include(
+                                join_sub,
+                                &state.localkey_to_expr(&s.key_expr).unwrap(),
+                            )
                         });
                         if !joined_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
-                            let reskey = join_sub.clone().into();
+                            let key_expr = join_sub.clone().into();
                             drop(state);
-                            primitives.forget_subscriber(&reskey, None);
+                            primitives.forget_subscriber(&key_expr, None);
                         }
                     }
                     None => {
                         let twin_sub = state.subscribers.values().any(|s| {
-                            state.localkey_to_resname(&s.reskey).unwrap()
-                                == state.localkey_to_resname(&sub_state.reskey).unwrap()
+                            state.localkey_to_expr(&s.key_expr).unwrap()
+                                == state.localkey_to_expr(&sub_state.key_expr).unwrap()
                         });
                         if !twin_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             drop(state);
-                            primitives.forget_subscriber(&sub_state.reskey, None);
+                            primitives.forget_subscriber(&sub_state.key_expr, None);
                         }
                     }
                 };
@@ -757,34 +771,34 @@ impl Session {
         })
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+    pub(crate) fn twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.kind == kind
-                && state.localkey_to_resname(&q.reskey).unwrap()
-                    == state.localkey_to_resname(key).unwrap()
+                && state.localkey_to_expr(&q.key_expr).unwrap()
+                    == state.localkey_to_expr(key).unwrap()
         })
     }
 
     #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &ResKey, kind: ZInt) -> bool {
+    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.complete
                 && q.kind == kind
-                && state.localkey_to_resname(&q.reskey).unwrap()
-                    == state.localkey_to_resname(key).unwrap()
+                && state.localkey_to_expr(&q.key_expr).unwrap()
+                    == state.localkey_to_expr(key).unwrap()
         })
     }
 
     #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &ResKey, kind: ZInt) -> ZInt {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &KeyExpr, kind: ZInt) -> ZInt {
         state
             .queryables
             .values()
             .filter(|q| {
                 q.complete
                     && q.kind == kind
-                    && state.localkey_to_resname(&q.reskey).unwrap()
-                        == state.localkey_to_resname(key).unwrap()
+                    && state.localkey_to_expr(&q.key_expr).unwrap()
+                        == state.localkey_to_expr(key).unwrap()
             })
             .count() as ZInt
     }
@@ -793,7 +807,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `reskey` - The resource key the [`Queryable`](Queryable) will reply to
+    /// * `key_expr` - The resource key the [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -811,16 +825,16 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn register_queryable<'a, 'b, IntoResKey>(
+    pub fn register_queryable<'a, 'b, IntoKeyExpr>(
         &'a self,
-        reskey: IntoResKey,
+        key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         QueryableBuilder {
             session: self,
-            reskey: reskey.into(),
+            key_expr: key_expr.into(),
             kind: EVAL,
             complete: true,
         }
@@ -830,14 +844,14 @@ impl Session {
         let mut state = zwrite!(self.state);
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("unregister_queryable({:?})", qable_state);
-            if Session::twin_qabl(&state, &qable_state.reskey, qable_state.kind) {
-                // There still exist Queryables on the same ResKey.
+            if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
+                // There still exist Queryables on the same KeyExpr.
                 if qable_state.complete {
                     #[cfg(feature = "complete_n")]
                     {
                         let complete = Session::complete_twin_qabls(
                             &state,
-                            &qable_state.reskey,
+                            &qable_state.key_expr,
                             qable_state.kind,
                         );
                         let primitives = state.primitives.as_ref().unwrap();
@@ -846,7 +860,7 @@ impl Session {
                             distance: 0,
                         };
                         primitives.decl_queryable(
-                            &qable_state.reskey,
+                            &qable_state.key_expr,
                             qable_state.kind,
                             &qabl_info,
                             None,
@@ -856,7 +870,7 @@ impl Session {
                     {
                         if !Session::complete_twin_qabl(
                             &state,
-                            &qable_state.reskey,
+                            &qable_state.key_expr,
                             qable_state.kind,
                         ) {
                             let primitives = state.primitives.as_ref().unwrap();
@@ -865,7 +879,7 @@ impl Session {
                                 distance: 0,
                             };
                             primitives.decl_queryable(
-                                &qable_state.reskey,
+                                &qable_state.key_expr,
                                 qable_state.kind,
                                 &qabl_info,
                                 None,
@@ -874,9 +888,9 @@ impl Session {
                     }
                 }
             } else {
-                // There are no more Queryables on the same ResKey.
+                // There are no more Queryables on the same KeyExpr.
                 let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.reskey, qable_state.kind, None);
+                primitives.forget_queryable(&qable_state.key_expr, qable_state.kind, None);
             }
             Ok(())
         } else {
@@ -890,7 +904,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `reskey` - The resource key to write
+    /// * `key_expr` - The resource key to write
     /// * `payload` - The value to write
     ///
     /// # Examples
@@ -904,18 +918,18 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, IntoResKey, IntoValue>(
+    pub fn put<'a, IntoKeyExpr, IntoValue>(
         &'a self,
-        reskey: IntoResKey,
+        key_expr: IntoKeyExpr,
         value: IntoValue,
     ) -> Writer<'a>
     where
-        IntoResKey: Into<ResKey<'a>>,
+        IntoKeyExpr: Into<KeyExpr<'a>>,
         IntoValue: Into<Value>,
     {
         Writer {
             session: self,
-            reskey: reskey.into(),
+            key_expr: key_expr.into(),
             value: Some(value.into()),
             kind: None,
             congestion_control: CongestionControl::default(),
@@ -927,7 +941,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `reskey` - The resource key to delete
+    /// * `key_expr` - The resource key to delete
     ///
     /// # Examples
     /// ```
@@ -939,13 +953,13 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, IntoResKey>(&'a self, reskey: IntoResKey) -> Writer<'a>
+    pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> Writer<'a>
     where
-        IntoResKey: Into<ResKey<'a>>,
+        IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         Writer {
             session: self,
-            reskey: reskey.into(),
+            key_expr: key_expr.into(),
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
@@ -956,17 +970,17 @@ impl Session {
     #[inline]
     fn invoke_subscriber(
         invoker: &SubscriberInvoker,
-        res_name: String,
+        key_expr: String,
         payload: ZBuf,
         data_info: Option<DataInfo>,
     ) {
         match invoker {
             SubscriberInvoker::Handler(handler) => {
                 let handler = &mut *zwrite!(handler);
-                handler(Sample::with_info(res_name.into(), payload, data_info));
+                handler(Sample::with_info(key_expr.into(), payload, data_info));
             }
             SubscriberInvoker::Sender(sender) => {
-                if let Err(e) = sender.send(Sample::with_info(res_name.into(), payload, data_info))
+                if let Err(e) = sender.send(Sample::with_info(key_expr.into(), payload, data_info))
                 {
                     error!("SubscriberInvoker error: {}", e);
                 }
@@ -977,12 +991,12 @@ impl Session {
     pub(crate) fn handle_data(
         &self,
         local: bool,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         let state = zread!(self.state);
-        if let ResKey::RId(rid) = reskey {
+        if let KeyExpr::Id(rid) = key_expr {
             match state.get_res(rid, local) {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
@@ -1016,14 +1030,14 @@ impl Session {
                 }
             }
         } else {
-            match state.reskey_to_resname(reskey, local) {
-                Ok(resname) => {
+            match state.key_expr_to_expr(key_expr, local) {
+                Ok(key_expr) => {
                     if !local || state.local_routing {
                         for sub in state.subscribers.values() {
-                            if rname::matches(&sub.resname, &resname) {
+                            if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
                                     &sub.invoker,
-                                    resname.clone(),
+                                    key_expr.clone(),
                                     payload.clone(),
                                     info.clone(),
                                 );
@@ -1032,10 +1046,10 @@ impl Session {
                     }
                     if local {
                         for sub in state.local_subscribers.values() {
-                            if rname::matches(&sub.resname, &resname) {
+                            if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
                                     &sub.invoker,
-                                    resname.clone(),
+                                    key_expr.clone(),
                                     payload.clone(),
                                     info.clone(),
                                 );
@@ -1044,18 +1058,18 @@ impl Session {
                     }
                 }
                 Err(err) => {
-                    error!("Received Data for unkown reskey: {}", err);
+                    error!("Received Data for unkown key_expr: {}", err);
                 }
             }
         }
     }
 
-    pub(crate) fn pull(&self, reskey: &ResKey) -> impl ZFuture<Output = ZResult<()>> {
-        trace!("pull({:?})", reskey);
+    pub(crate) fn pull(&self, key_expr: &KeyExpr) -> impl ZFuture<Output = ZResult<()>> {
+        trace!("pull({:?})", key_expr);
         let state = zread!(self.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.send_pull(true, reskey, 0, &None);
+        primitives.send_pull(true, key_expr, 0, &None);
         zready(Ok(()))
     }
 
@@ -1094,30 +1108,30 @@ impl Session {
     pub(crate) fn handle_query(
         &self,
         local: bool,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
     ) {
-        let (primitives, resname, kinds_and_senders) = {
+        let (primitives, key_expr, kinds_and_senders) = {
             let state = zread!(self.state);
-            match state.reskey_to_resname(reskey, local) {
-                Ok(resname) => {
+            match state.key_expr_to_expr(key_expr, local) {
+                Ok(key_expr) => {
                     let kinds_and_senders = state
                         .queryables
                         .values()
                         .filter(
-                            |queryable| match state.localkey_to_resname(&queryable.reskey) {
+                            |queryable| match state.localkey_to_expr(&queryable.key_expr) {
                                 Ok(qablname) => {
-                                    rname::matches(&qablname, &resname)
+                                    key_expr::matches(&qablname, &key_expr)
                                         && ((queryable.kind == queryable::ALL_KINDS
                                             || target.kind == queryable::ALL_KINDS)
                                             || (queryable.kind & target.kind != 0))
                                 }
                                 Err(err) => {
                                     error!(
-                                        "{}. Internal error (queryable reskey to resname failed).",
+                                        "{}. Internal error (queryable key_expr to key_expr failed).",
                                         err
                                     );
                                     false
@@ -1128,12 +1142,12 @@ impl Session {
                         .collect::<Vec<(ZInt, Sender<Query>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
-                        resname,
+                        key_expr,
                         kinds_and_senders,
                     )
                 }
                 Err(err) => {
-                    error!("Received Query for unkown reskey: {}", err);
+                    error!("Received Query for unkown key_expr: {}", err);
                     return;
                 }
             }
@@ -1146,7 +1160,7 @@ impl Session {
 
         for (kind, req_sender) in kinds_and_senders {
             let _ = req_sender.send(Query {
-                key_selector: resname.clone().into(),
+                key_selector: key_expr.clone().into(),
                 value_selector: value_selector.clone(),
                 replies_sender: RepliesSender {
                     kind,
@@ -1162,20 +1176,27 @@ impl Session {
             let this = self.clone();
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
-                    let (res_key, payload, data_info) = sample.split();
-                    this.send_reply_data(qid, replier_kind, pid, res_key, Some(data_info), payload);
+                    let (key_expr, payload, data_info) = sample.split();
+                    this.send_reply_data(
+                        qid,
+                        replier_kind,
+                        pid,
+                        key_expr,
+                        Some(data_info),
+                        payload,
+                    );
                 }
                 this.send_reply_final(qid);
             });
         } else {
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
-                    let (res_key, payload, data_info) = sample.split();
+                    let (key_expr, payload, data_info) = sample.split();
                     primitives.send_reply_data(
                         qid,
                         replier_kind,
                         pid,
-                        res_key,
+                        key_expr,
                         Some(data_info),
                         payload,
                     );
@@ -1185,28 +1206,28 @@ impl Session {
         }
     }
 
-    pub fn reskey_to_resname(&self, reskey: &ResKey) -> ZResult<String> {
+    pub fn key_expr_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
         let state = zread!(self.state);
-        state.remotekey_to_resname(reskey)
+        state.remotekey_to_expr(key_expr)
     }
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        trace!("recv Decl Resource {} {:?}", rid, reskey);
+    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
+        trace!("recv Decl Resource {} {:?}", rid, key_expr);
         let state = &mut zwrite!(self.state);
-        match state.remotekey_to_resname(reskey) {
-            Ok(resname) => {
-                let mut res = Resource::new(resname.clone());
+        match state.remotekey_to_expr(key_expr) {
+            Ok(key_expr) => {
+                let mut res = Resource::new(key_expr.clone());
                 for sub in state.subscribers.values() {
-                    if rname::matches(&resname, &sub.resname) {
+                    if key_expr::matches(&key_expr, &sub.key_expr_str) {
                         res.subscribers.push(sub.clone());
                     }
                 }
 
                 state.remote_resources.insert(rid, res);
             }
-            Err(_) => error!("Received Resource for unkown reskey: {}", reskey),
+            Err(_) => error!("Received Resource for unkown key_expr: {}", key_expr),
         }
     }
 
@@ -1214,49 +1235,49 @@ impl Primitives for Session {
         trace!("recv Forget Resource {}", _rid);
     }
 
-    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Decl Publisher {:?}", _reskey);
+    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Decl Publisher {:?}", _key_expr);
     }
 
-    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Publisher {:?}", _reskey);
+    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Publisher {:?}", _key_expr);
     }
 
     fn decl_subscriber(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Decl Subscriber {:?} , {:?}", _reskey, _sub_info);
+        trace!("recv Decl Subscriber {:?} , {:?}", _key_expr, _sub_info);
     }
 
-    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", _reskey);
+    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Subscriber {:?}", _key_expr);
     }
 
     fn decl_queryable(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Decl Queryable {:?}", _reskey);
+        trace!("recv Decl Queryable {:?}", _key_expr);
     }
 
     fn forget_queryable(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Forget Queryable {:?}", _reskey);
+        trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
     fn send_data(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1265,18 +1286,18 @@ impl Primitives for Session {
     ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?} {:?}",
-            reskey,
+            key_expr,
             payload,
             channel,
             congestion_control,
             info,
         );
-        self.handle_data(false, reskey, info, payload)
+        self.handle_data(false, key_expr, info, payload)
     }
 
     fn send_query(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
@@ -1285,12 +1306,12 @@ impl Primitives for Session {
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
-            reskey,
+            key_expr,
             value_selector,
             target,
             consolidation
         );
-        self.handle_query(false, reskey, value_selector, qid, target, consolidation)
+        self.handle_query(false, key_expr, value_selector, qid, target, consolidation)
     }
 
     fn send_reply_data(
@@ -1298,7 +1319,7 @@ impl Primitives for Session {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: PeerId,
-        reskey: ResKey,
+        key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -1307,22 +1328,22 @@ impl Primitives for Session {
             qid,
             replier_kind,
             replier_id,
-            reskey,
+            key_expr,
             data_info,
             payload
         );
         let state = &mut zwrite!(self.state);
-        let res_name = match state.remotekey_to_resname(&reskey) {
+        let key_expr = match state.remotekey_to_expr(&key_expr) {
             Ok(name) => name,
             Err(e) => {
-                error!("Received ReplyData for unkown reskey: {}", e);
+                error!("Received ReplyData for unkown key_expr: {}", e);
                 return;
             }
         };
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    data: Sample::with_info(res_name.into(), payload, data_info),
+                    data: Sample::with_info(key_expr.into(), payload, data_info),
                     replier_kind,
                     replier_id,
                 };
@@ -1335,12 +1356,12 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.data.res_key.as_str())
+                            .get(new_reply.data.key_expr.as_str())
                         {
                             Some(reply) => {
                                 if new_reply.data.timestamp > reply.data.timestamp {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.data.res_key.to_string(),
+                                        new_reply.data.key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                     let _ = query.rep_sender.send(new_reply);
@@ -1351,7 +1372,7 @@ impl Primitives for Session {
                                     .replies
                                     .as_mut()
                                     .unwrap()
-                                    .insert(new_reply.data.res_key.to_string(), new_reply.clone());
+                                    .insert(new_reply.data.key_expr.to_string(), new_reply.clone());
                                 let _ = query.rep_sender.send(new_reply);
                             }
                         }
@@ -1361,12 +1382,12 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.data.res_key.as_str())
+                            .get(new_reply.data.key_expr.as_str())
                         {
                             Some(reply) => {
                                 if new_reply.data.timestamp > reply.data.timestamp {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.data.res_key.to_string(),
+                                        new_reply.data.key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                 }
@@ -1376,7 +1397,7 @@ impl Primitives for Session {
                                     .replies
                                     .as_mut()
                                     .unwrap()
-                                    .insert(new_reply.data.res_key.to_string(), new_reply.clone());
+                                    .insert(new_reply.data.key_expr.to_string(), new_reply.clone());
                             }
                         };
                     }
@@ -1413,14 +1434,14 @@ impl Primitives for Session {
     fn send_pull(
         &self,
         _is_final: bool,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {
         trace!(
             "recv Pull {:?} {:?} {:?} {:?}",
             _is_final,
-            _reskey,
+            _key_expr,
             _pull_id,
             _max_samples
         );

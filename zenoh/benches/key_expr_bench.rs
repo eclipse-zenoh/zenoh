@@ -16,10 +16,10 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::rname::intersect;
+use zenoh::net::protocol::core::key_expr::intersect;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("bench_rname_1", |b| {
+    c.bench_function("bench_key_expr_1", |b| {
         b.iter(|| {
             intersect(
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -27,7 +27,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             );
         })
     });
-    c.bench_function("bench_rname_2", |b| {
+    c.bench_function("bench_key_expr_2", |b| {
         b.iter(|| {
             intersect(
                 "/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
@@ -35,12 +35,12 @@ fn criterion_benchmark(c: &mut Criterion) {
             );
         })
     });
-    c.bench_function("bench_rname_3", |b| {
+    c.bench_function("bench_key_expr_3", |b| {
         b.iter(|| {
             intersect("/*", "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         })
     });
-    c.bench_function("bench_rname_4", |b| {
+    c.bench_function("bench_key_expr_4", |b| {
         b.iter(|| {
             intersect(
                 "/**",
@@ -48,7 +48,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             );
         })
     });
-    c.bench_function("bench_rname_5", |b| {
+    c.bench_function("bench_key_expr_5", |b| {
         b.iter(|| {
             intersect("/", "/");
             intersect("/a", "/a");

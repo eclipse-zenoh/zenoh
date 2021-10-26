@@ -19,7 +19,7 @@ use futures::select;
 use std::collections::HashMap;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
-use zenoh::utils::resource_name;
+use zenoh::utils::key_expr;
 
 #[async_std::main]
 async fn main() {
@@ -50,15 +50,15 @@ async fn main() {
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.res_key, String::from_utf8_lossy(&sample.value.payload.contiguous()));
-                stored.insert(sample.res_key.to_string(), sample);
+                    sample.kind, sample.key_expr, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                stored.insert(sample.key_expr.to_string(), sample);
             },
 
             query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if resource_name::intersect(query.selector().key_selector.as_str(), stored_name) {
+                    if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
                         query.reply(sample.clone());
                     }
                 }

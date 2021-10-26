@@ -52,10 +52,10 @@ pub use super::net::protocol::core::Encoding;
 pub use super::net::protocol::core::PeerId;
 
 /// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
-pub use super::net::protocol::core::ResourceId;
+pub use super::net::protocol::core::ExprId;
 
 /// A resource key.
-pub use super::net::protocol::core::ResKey;
+pub use super::net::protocol::core::KeyExpr;
 
 /// A zenoh error.
 pub use zenoh_util::core::ZError;
@@ -372,7 +372,7 @@ impl From<ZInt> for SampleKind {
 #[derive(Clone, Debug)]
 pub struct Sample {
     // The name of the resource on which this Sample was published.
-    pub res_key: ResKey<'static>,
+    pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
     pub value: Value,
     // The kind of this Sample.
@@ -386,13 +386,13 @@ pub struct Sample {
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    pub fn new<IntoResKey, IntoValue>(res_key: IntoResKey, value: IntoValue) -> Self
+    pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
-        IntoResKey: Into<ResKey<'static>>,
+        IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoValue: Into<Value>,
     {
         Sample {
-            res_key: res_key.into(),
+            key_expr: key_expr.into(),
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
@@ -402,7 +402,7 @@ impl Sample {
 
     #[inline]
     pub(crate) fn with_info(
-        res_key: ResKey<'static>,
+        key_expr: KeyExpr<'static>,
         payload: ZBuf,
         data_info: Option<DataInfo>,
     ) -> Self {
@@ -412,7 +412,7 @@ impl Sample {
                 value.encoding = encoding.clone();
             }
             Sample {
-                res_key,
+                key_expr,
                 value,
                 kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
                 timestamp: data_info.timestamp,
@@ -420,7 +420,7 @@ impl Sample {
             }
         } else {
             Sample {
-                res_key,
+                key_expr,
                 value,
                 kind: SampleKind::default(),
                 timestamp: None,
@@ -430,7 +430,7 @@ impl Sample {
     }
 
     #[inline]
-    pub(crate) fn split(self) -> (ResKey<'static>, ZBuf, DataInfo) {
+    pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
         let info = DataInfo {
             kind: None,
             encoding: Some(self.value.encoding),
@@ -442,7 +442,7 @@ impl Sample {
             first_router_id: self.source_info.first_router_id,
             first_router_sn: self.source_info.first_router_sn,
         };
-        (self.res_key, self.value.payload, info)
+        (self.key_expr, self.value.payload, info)
     }
 
     /// Gets the timestamp of this Sample.
@@ -478,8 +478,8 @@ impl Sample {
 impl fmt::Display for Sample {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            SampleKind::Delete => write!(f, "{}({})", self.kind, self.res_key),
-            _ => write!(f, "{}({}: {})", self.kind, self.res_key, self.value),
+            SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
+            _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
         }
     }
 }
@@ -548,7 +548,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     /// I.e. all characters before `?`.
-    pub key_selector: ResKey<'a>,
+    pub key_selector: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     /// I.e. all characters starting from `?`.
     pub value_selector: &'a str,
@@ -615,8 +615,8 @@ impl<'a> From<&'a Query> for Selector<'a> {
     }
 }
 
-impl<'a> From<&ResKey<'a>> for Selector<'a> {
-    fn from(key_selector: &ResKey<'a>) -> Self {
+impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
+    fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
             key_selector: key_selector.clone(),
             value_selector: "",
@@ -624,8 +624,8 @@ impl<'a> From<&ResKey<'a>> for Selector<'a> {
     }
 }
 
-impl<'a> From<ResKey<'a>> for Selector<'a> {
-    fn from(key_selector: ResKey<'a>) -> Self {
+impl<'a> From<KeyExpr<'a>> for Selector<'a> {
+    fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {
             key_selector,
             value_selector: "",

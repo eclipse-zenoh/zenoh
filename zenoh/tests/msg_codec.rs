@@ -182,12 +182,12 @@ fn gen_declarations() -> Vec<Declaration> {
     ]
 }
 
-fn gen_key() -> ResKey<'static> {
+fn gen_key() -> KeyExpr<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
-        0 => ResKey::from(gen!(ZInt)),
-        1 => ResKey::from("my_resource".to_string()),
-        _ => ResKey::from((gen!(ZInt), "my_resource".to_string())),
+        0 => KeyExpr::from(gen!(ZInt)),
+        1 => KeyExpr::from("my_resource".to_string()),
+        _ => KeyExpr::from((gen!(ZInt), "my_resource".to_string())),
     }
 }
 
@@ -643,7 +643,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&mut frame));
 
         // Create data message
-        let key = ResKey::RName("test".into());
+        let key = KeyExpr::Expr("test".into());
         let payload = ZBuf::from(vec![0_u8; 1]);
         let data_info = None;
         let routing_context = None;

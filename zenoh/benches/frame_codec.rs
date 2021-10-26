@@ -15,7 +15,7 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey};
+use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, Priority, Reliability};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -29,15 +29,15 @@ fn criterion_benchmark(c: &mut Criterion) {
         current *= 2;
     }
 
-    let res_key_set = [
-        ResKey::RId(1),
-        ResKey::RName("/frame/bench".into()),
-        ResKey::RIdWithSuffix(1, "/frame/bench".into()),
+    let key_expr_set = [
+        KeyExpr::Id(1),
+        KeyExpr::Expr("/frame/bench".into()),
+        KeyExpr::IdWithSuffix(1, "/frame/bench".into()),
     ];
 
     for p in &pld {
-        for r in &res_key_set {
-            let res_key = r.clone();
+        for r in &key_expr_set {
+            let key_expr = r.clone();
             let payload = ZBuf::from(vec![0; *p]);
             let channel = Channel {
                 priority: Priority::default(),
@@ -47,7 +47,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let info = None;
 
             let mut msg = ZenohMessage::make_data(
-                res_key,
+                key_expr,
                 payload,
                 channel,
                 congestion_control,
@@ -77,7 +77,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             None,
                         );
                         for _ in 0..num {
-                            let res_key = r.clone();
+                            let key_expr = r.clone();
                             let payload = ZBuf::from(vec![0; *p]);
                             let channel = Channel {
                                 priority: Priority::default(),
@@ -87,7 +87,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                             let info = None;
 
                             let mut msg = ZenohMessage::make_data(
-                                res_key,
+                                key_expr,
                                 payload,
                                 channel,
                                 congestion_control,

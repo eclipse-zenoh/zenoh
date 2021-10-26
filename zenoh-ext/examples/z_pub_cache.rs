@@ -29,7 +29,7 @@ async fn main() {
 
     print!("Register Resource {}", path);
     let rid = session.register_resource(&path).await.unwrap();
-    println!(" => RId {}", rid);
+    println!(" => ExprId {}", rid);
 
     println!("Register Publisher on {}", rid);
     let mut publisher_builder = session.publishing_with_cache(rid).history(history);

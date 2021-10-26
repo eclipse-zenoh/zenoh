@@ -15,7 +15,7 @@
 //! Some useful operations for the zenoh API.
 
 /// Helpers to manipulate and compare resource names.
-pub mod resource_name {
-    pub use super::super::net::protocol::core::rname::include;
-    pub use super::super::net::protocol::core::rname::intersect;
+pub mod key_expr {
+    pub use super::super::net::protocol::core::key_expr::include;
+    pub use super::super::net::protocol::core::key_expr::intersect;
 }
