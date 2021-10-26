@@ -71,8 +71,10 @@ fn parse_args() -> (Properties, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to pull'")
-                .default_value("/demo/example/**"),
+            Arg::from_usage(
+                "-s, --selector=[SELECTOR] 'The key expression matching resources to pull'",
+            )
+            .default_value("/demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

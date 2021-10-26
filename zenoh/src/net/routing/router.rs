@@ -92,11 +92,11 @@ impl Tables {
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        rid: &ZInt,
+        expr_id: &ZInt,
     ) -> Option<&'a Arc<Resource>> {
-        match rid {
+        match expr_id {
             0 => Some(&self.root_res),
-            rid => face.get_mapping(rid),
+            expr_id => face.get_mapping(expr_id),
         }
     }
 

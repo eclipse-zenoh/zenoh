@@ -173,7 +173,10 @@ pub fn declare_router_subscription(
 
             compute_matches_data_routes(tables, &mut res);
         }
-        None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
+        None => log::error!(
+            "Declare router subscription for unknown expr_id {}!",
+            prefixid
+        ),
     }
 }
 
@@ -219,7 +222,10 @@ pub fn declare_peer_subscription(
 
             compute_matches_data_routes(tables, &mut res);
         }
-        None => log::error!("Declare router subscription for unknown rid {}!", prefixid),
+        None => log::error!(
+            "Declare router subscription for unknown expr_id {}!",
+            prefixid
+        ),
     }
 }
 
@@ -249,8 +255,8 @@ fn register_client_subscription(
                     face.id,
                     Arc::new(SessionContext {
                         face: face.clone(),
-                        local_rid: None,
-                        remote_rid: None,
+                        local_expr_id: None,
+                        remote_expr_id: None,
                         subs: Some(sub_info.clone()),
                         qabl: HashMap::new(),
                         last_values: HashMap::new(),
@@ -299,7 +305,7 @@ pub fn declare_client_subscription(
 
             compute_matches_data_routes(tables, &mut res);
         }
-        None => log::error!("Declare subscription for unknown rid {}!", prefixid),
+        None => log::error!("Declare subscription for unknown expr_id {}!", prefixid),
     }
 }
 
@@ -1132,7 +1138,7 @@ macro_rules! cache_data {
 pub fn route_data(
     tables: &Tables,
     face: &Arc<FaceState>,
-    rid: u64,
+    expr_id: u64,
     suffix: &str,
     channel: Channel,
     congestion_control: CongestionControl,
@@ -1140,7 +1146,7 @@ pub fn route_data(
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
-    match tables.get_mapping(face, &rid).cloned() {
+    match tables.get_mapping(face, &expr_id).cloned() {
         Some(prefix) => {
             log::trace!("Route data for res {}{}", prefix.expr(), suffix);
 
@@ -1164,7 +1170,7 @@ pub fn route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown rid {}!", rid);
+            log::error!("Route data with unknown expr_id {}!", expr_id);
         }
     }
 }
@@ -1174,7 +1180,7 @@ pub fn route_data(
 pub fn full_reentrant_route_data(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
-    rid: u64,
+    expr_id: u64,
     suffix: &str,
     channel: Channel,
     congestion_control: CongestionControl,
@@ -1183,7 +1189,7 @@ pub fn full_reentrant_route_data(
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &rid).cloned() {
+    match tables.get_mapping(face, &expr_id).cloned() {
         Some(prefix) => {
             log::trace!("Route data for res {}{}", prefix.expr(), suffix);
 
@@ -1209,7 +1215,7 @@ pub fn full_reentrant_route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown rid {}!", rid);
+            log::error!("Route data with unknown expr_id {}!", expr_id);
         }
     }
 }
@@ -1218,12 +1224,12 @@ pub fn pull_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     _is_final: bool,
-    rid: ZInt,
+    expr_id: ZInt,
     suffix: &str,
     _pull_id: ZInt,
     _max_samples: &Option<ZInt>,
 ) {
-    match tables.get_mapping(face, &rid) {
+    match tables.get_mapping(face, &expr_id) {
         Some(prefix) => match Resource::get_resource(prefix, suffix) {
             Some(mut res) => {
                 let res = get_mut_unchecked(&mut res);
@@ -1272,7 +1278,7 @@ pub fn pull_data(
             }
         },
         None => {
-            log::error!("Pull data with unknown rid {}!", rid);
+            log::error!("Pull data with unknown expr_id {}!", expr_id);
         }
     };
 }

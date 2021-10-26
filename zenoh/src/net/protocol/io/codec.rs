@@ -141,7 +141,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_peerid(&mut self) -> Option<PeerId> {
+    pub fn read_peeexpr_id(&mut self) -> Option<PeerId> {
         let size = self.read_zint_as_usize()?;
         if size > PeerId::MAX_SIZE {
             log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
@@ -316,7 +316,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_peerid(&mut self, pid: &PeerId) -> bool {
+    pub fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 

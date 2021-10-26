@@ -41,11 +41,11 @@ fn parse_args() -> (Properties, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to write.'")
+            Arg::from_usage("-p, --path=[PATH]        'The key expression to write.'")
                 .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to write.'")
+            Arg::from_usage("-v, --value=[VALUE]      'The value to write.'")
                 .default_value("Put from Rust!"),
         )
         .arg(Arg::from_usage(

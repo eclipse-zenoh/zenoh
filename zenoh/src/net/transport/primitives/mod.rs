@@ -25,8 +25,8 @@ pub use demux::*;
 pub use mux::*;
 
 pub trait Primitives: Send + Sync {
-    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr);
-    fn forget_resource(&self, rid: ZInt);
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr);
+    fn forget_resource(&self, expr_id: ZInt);
 
     fn decl_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>);
     fn forget_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>);
@@ -106,8 +106,8 @@ impl DummyPrimitives {
 }
 
 impl Primitives for DummyPrimitives {
-    fn decl_resource(&self, _rid: ZInt, _key_expr: &KeyExpr) {}
-    fn forget_resource(&self, _rid: ZInt) {}
+    fn decl_resource(&self, _expr_id: ZInt, _key_expr: &KeyExpr) {}
+    fn forget_resource(&self, _expr_id: ZInt) {}
 
     fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
     fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}

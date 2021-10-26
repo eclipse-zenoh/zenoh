@@ -230,12 +230,12 @@ impl TransportPeerEventHandler for RuntimeSession {
         // critical path shortcut
         if let ZenohBody::Data(data) = msg.body {
             if data.reply_context.is_none() {
-                let (rid, suffix) = (&data.key).into();
+                let (expr_id, suffix) = (&data.key).into();
                 let face = &self.sub_event_handler.face.state;
                 full_reentrant_route_data(
                     &self.sub_event_handler.tables,
                     face,
-                    rid,
+                    expr_id,
                     suffix,
                     msg.channel,
                     data.congestion_control,

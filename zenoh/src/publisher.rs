@@ -57,7 +57,7 @@ impl Publisher<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/resource/name").await.unwrap();
+    /// let publisher = session.publishing("/key/expression").await.unwrap();
     /// publisher.unregister().await.unwrap();
     /// # })
     /// ```
@@ -95,7 +95,7 @@ derive_zfuture! {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/resource/name").await.unwrap();
+    /// let publisher = session.publishing("/key/expression").await.unwrap();
     /// # })
     /// ```
     #[derive(Debug, Clone)]
@@ -163,7 +163,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session
-    ///     .put("/resource/name", "value")
+    ///     .put("/key/expression", "value")
     ///     .encoding(Encoding::TEXT_PLAIN)
     ///     .congestion_control(CongestionControl::Block)
     ///     .await

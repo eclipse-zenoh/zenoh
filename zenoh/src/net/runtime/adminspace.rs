@@ -118,18 +118,18 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
-        trace!("recv Resource {} {:?}", rid, key_expr);
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+        trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Some(s) => {
-                zlock!(self.mappings).insert(rid, s);
+                zlock!(self.mappings).insert(expr_id, s);
             }
-            None => error!("Unknown rid {}!", rid),
+            None => error!("Unknown expr_id {}!", expr_id),
         }
     }
 
-    fn forget_resource(&self, _rid: ZInt) {
-        trace!("recv Forget Resource {}", _rid);
+    fn forget_resource(&self, _expr_id: ZInt) {
+        trace!("recv Forget Resource {}", _expr_id);
     }
 
     fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {

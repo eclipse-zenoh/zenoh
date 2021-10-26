@@ -24,11 +24,11 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    // The resource to read the data from
-    let key_expr_ping = Id(session.register_resource("/test/ping").wait().unwrap());
+    // The key expression to read the data from
+    let key_expr_ping = Id(session.register_expr("/test/ping").wait().unwrap());
 
-    // The resource to echo the data back
-    let key_expr_pong = Id(session.register_resource("/test/pong").wait().unwrap());
+    // The key expression to echo the data back
+    let key_expr_pong = Id(session.register_expr("/test/pong").wait().unwrap());
     let _publ = session.publishing(&key_expr_pong).wait().unwrap();
 
     let mut sub = session.subscribe(&key_expr_ping).wait().unwrap();

@@ -52,7 +52,7 @@ zconfigurable! {
 
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) rid_counter: AtomicUsize,      // @TODO: manage rollover and uniqueness
+    pub(crate) expr_id_counter: AtomicUsize,  // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicZInt,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
@@ -75,7 +75,7 @@ impl SessionState {
     ) -> SessionState {
         SessionState {
             primitives: None,
-            rid_counter: AtomicUsize::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
+            expr_id_counter: AtomicUsize::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicZInt::new(0),
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
@@ -402,14 +402,14 @@ impl Session {
         zready(info)
     }
 
-    /// Associate a numerical Id with the given resource key.
+    /// Associate a numerical Id with the given key expression.
     ///
     /// This numerical Id will be used on the network to save bandwidth and
-    /// ease the retrieval of the concerned resource in the routing tables.
+    /// ease the retrieval of the concerned key expression in the routing tables.
     ///
     /// # Arguments
     ///
-    /// * `resource` - The resource key to map to a numerical Id
+    /// * `key_expr` - The key expression to map to a numerical Id
     ///
     /// # Examples
     /// ```
@@ -417,55 +417,55 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let rid = session.register_resource("/resource/name").await.unwrap();
+    /// let expr_id = session.register_expr("/key/expression").await.unwrap();
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn register_resource<'a, IntoKeyExpr>(
+    pub fn register_expr<'a, IntoKeyExpr>(
         &self,
-        resource: IntoKeyExpr,
+        key_expr: IntoKeyExpr,
     ) -> impl ZFuture<Output = ZResult<ExprId>>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
-        let resource = resource.into();
-        trace!("register_resource({:?})", resource);
+        let key_expr = key_expr.into();
+        trace!("register_expr({:?})", key_expr);
         let mut state = zwrite!(self.state);
 
-        zready(state.localkey_to_expr(&resource).map(|key_expr| {
+        zready(state.localkey_to_expr(&key_expr).map(|expr| {
             match state
                 .local_resources
                 .iter()
-                .find(|(_rid, res)| res.name == key_expr)
+                .find(|(_expr_id, res)| res.name == expr)
             {
-                Some((rid, _res)) => *rid,
+                Some((expr_id, _res)) => *expr_id,
                 None => {
-                    let rid = state.rid_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                    let mut res = Resource::new(key_expr.clone());
+                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                    let mut res = Resource::new(expr.clone());
                     for sub in state.subscribers.values() {
-                        if key_expr::matches(&key_expr, &sub.key_expr_str) {
+                        if key_expr::matches(&expr, &sub.key_expr_str) {
                             res.subscribers.push(sub.clone());
                         }
                     }
 
-                    state.local_resources.insert(rid, res);
+                    state.local_resources.insert(expr_id, res);
 
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.decl_resource(rid, &resource);
+                    primitives.decl_resource(expr_id, &key_expr);
 
-                    rid
+                    expr_id
                 }
             }
         }))
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
-    /// with [`register_resource`](Session::register_resource).
+    /// with [`register_expr`](Session::register_expr).
     ///
     /// # Arguments
     ///
-    /// * `rid` - The numerical Id to unmap
+    /// * `expr_id` - The numerical Id to unmap
     ///
     /// # Examples
     /// ```
@@ -473,31 +473,31 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let rid = session.register_resource("/resource/name").await.unwrap();
-    /// session.unregister_resource(rid).await;
+    /// let expr_id = session.register_expr("/key/expression").await.unwrap();
+    /// session.unregister_expr(expr_id).await;
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister_resource(&self, rid: ExprId) -> impl ZFuture<Output = ZResult<()>> {
-        trace!("unregister_resource({:?})", rid);
+    pub fn unregister_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
+        trace!("unregister_expr({:?})", expr_id);
         let mut state = zwrite!(self.state);
-        state.local_resources.remove(&rid);
+        state.local_resources.remove(&expr_id);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.forget_resource(rid);
+        primitives.forget_resource(expr_id);
 
         zready(Ok(()))
     }
 
-    /// Declare a [`Publisher`](Publisher) for the given resource key.
+    /// Declare a [`Publisher`](Publisher) for the given key expression.
     ///
-    /// Written resources that match the given key will only be sent on the network
+    /// Puts that match the given key expression will only be sent on the network
     /// if matching subscribers exist in the system.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resource key to publish
+    /// * `key_expr` - The key expression to publish
     ///
     /// # Examples
     /// ```
@@ -505,8 +505,8 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/resource/name").await.unwrap();
-    /// session.put("/resource/name", "value").await.unwrap();
+    /// let publisher = session.publishing("/key/expression").await.unwrap();
+    /// session.put("/key/expression", "value").await.unwrap();
     /// # })
     /// ```
     pub fn publishing<'a, 'b, IntoKeyExpr>(
@@ -623,13 +623,11 @@ impl Session {
             let key_expr = match key_expr {
                 KeyExpr::Expr(key_expr_str) => match key_expr_str.find('*') {
                     Some(pos) => {
-                        let id = self.register_resource(&key_expr_str[..pos]).wait()?;
+                        let id = self.register_expr(&key_expr_str[..pos]).wait()?;
                         KeyExpr::IdWithSuffix(id, key_expr_str[pos..].to_string().into())
                     }
                     None => {
-                        let id = self
-                            .register_resource(&KeyExpr::Expr(key_expr_str))
-                            .wait()?;
+                        let id = self.register_expr(&KeyExpr::Expr(key_expr_str)).wait()?;
                         KeyExpr::Id(id)
                     }
                 },
@@ -673,11 +671,11 @@ impl Session {
         Ok(sub_state)
     }
 
-    /// Declare a [`Subscriber`](Subscriber) for the given resource key.
+    /// Declare a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resource key to subscribe
+    /// * `key_expr` - The resourkey expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -686,7 +684,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
@@ -803,11 +801,12 @@ impl Session {
             .count() as ZInt
     }
 
-    /// Declare a [`Queryable`](Queryable) for the given resource key.
+    /// Declare a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resource key the [`Queryable`](Queryable) will reply to
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -816,10 +815,10 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///     query.reply_async(Sample::new(
-    ///         "/resource/name".to_string(),
+    ///         "/key/expression".to_string(),
     ///         "value",
     ///     )).await;
     /// }
@@ -904,7 +903,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resource key to write
+    /// * `key_expr` - The key expression matching resources to write
     /// * `payload` - The value to write
     ///
     /// # Examples
@@ -913,7 +912,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// session.put("/resource/name", "value")
+    /// session.put("/key/expression", "value")
     ///        .encoding(Encoding::TEXT_PLAIN).await.unwrap();
     /// # })
     /// ```
@@ -941,7 +940,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resource key to delete
+    /// * `key_expr` - The key expression matching resources to delete
     ///
     /// # Examples
     /// ```
@@ -949,7 +948,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// session.delete("/resource/name");
+    /// session.delete("/key/expression");
     /// # })
     /// ```
     #[inline]
@@ -996,8 +995,8 @@ impl Session {
         payload: ZBuf,
     ) {
         let state = zread!(self.state);
-        if let KeyExpr::Id(rid) = key_expr {
-            match state.get_res(rid, local) {
+        if let KeyExpr::Id(expr_id) = key_expr {
+            match state.get_res(expr_id, local) {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
@@ -1026,7 +1025,7 @@ impl Session {
                     }
                 }
                 None => {
-                    error!("Received Data for unkown rid: {}", rid);
+                    error!("Received Data for unkown expr_id: {}", expr_id);
                 }
             }
         } else {
@@ -1087,7 +1086,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut replies = session.get("/resource/name").await.unwrap();
+    /// let mut replies = session.get("/key/expression").await.unwrap();
     /// while let Some(reply) = replies.next().await {
     ///     println!(">> Received {:?}", reply.data);
     /// }
@@ -1213,8 +1212,8 @@ impl Session {
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
-        trace!("recv Decl Resource {} {:?}", rid, key_expr);
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+        trace!("recv Decl Resource {} {:?}", expr_id, key_expr);
         let state = &mut zwrite!(self.state);
         match state.remotekey_to_expr(key_expr) {
             Ok(key_expr) => {
@@ -1225,14 +1224,14 @@ impl Primitives for Session {
                     }
                 }
 
-                state.remote_resources.insert(rid, res);
+                state.remote_resources.insert(expr_id, res);
             }
             Err(_) => error!("Received Resource for unkown key_expr: {}", key_expr),
         }
     }
 
-    fn forget_resource(&self, _rid: ZInt) {
-        trace!("recv Forget Resource {}", _rid);
+    fn forget_resource(&self, _expr_id: ZInt) {
+        trace!("recv Forget Resource {}", _expr_id);
     }
 
     fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {

@@ -96,10 +96,12 @@ fn gen_attachment() -> Attachment {
 fn gen_declarations() -> Vec<Declaration> {
     vec![
         Declaration::Resource(Resource {
-            rid: gen!(ZInt),
+            expr_id: gen!(ZInt),
             key: gen_key(),
         }),
-        Declaration::ForgetResource(ForgetResource { rid: gen!(ZInt) }),
+        Declaration::ForgetResource(ForgetResource {
+            expr_id: gen!(ZInt),
+        }),
         Declaration::Publisher(Publisher { key: gen_key() }),
         Declaration::ForgetPublisher(ForgetPublisher { key: gen_key() }),
         Declaration::Subscriber(Subscriber {

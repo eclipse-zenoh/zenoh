@@ -164,15 +164,21 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
         let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
-        register_resource(&mut tables, &mut self.state.clone(), rid, prefixid, suffix);
+        register_expr(
+            &mut tables,
+            &mut self.state.clone(),
+            expr_id,
+            prefixid,
+            suffix,
+        );
     }
 
-    fn forget_resource(&self, rid: ZInt) {
+    fn forget_resource(&self, expr_id: ZInt) {
         let mut tables = zwrite!(self.tables);
-        unregister_resource(&mut tables, &mut self.state.clone(), rid);
+        unregister_expr(&mut tables, &mut self.state.clone(), expr_id);
     }
 
     fn decl_subscriber(

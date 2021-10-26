@@ -77,11 +77,11 @@ fn parse_args() -> (Properties, String, Option<String>) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
+            Arg::from_usage("-s, --selector=[SELECTOR] 'The key expression to subscribe onto'")
                 .default_value("/demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
+            Arg::from_usage("-q, --query=[SELECTOR] 'The selector to use for queries (by default it's same than 'selector' option)'"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

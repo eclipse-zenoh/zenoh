@@ -40,8 +40,8 @@ pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_rid: Option<ZInt>,
-    pub(super) remote_rid: Option<ZInt>,
+    pub(super) local_expr_id: Option<ZInt>,
+    pub(super) remote_expr_id: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: HashMap<ZInt, QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
@@ -369,28 +369,28 @@ impl Resource {
                     .or_insert_with(|| {
                         Arc::new(SessionContext {
                             face: face.clone(),
-                            local_rid: None,
-                            remote_rid: None,
+                            local_expr_id: None,
+                            remote_expr_id: None,
                             subs: None,
                             qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     });
 
-                let rid = match ctx.local_rid.or(ctx.remote_rid) {
-                    Some(rid) => rid,
+                let expr_id = match ctx.local_expr_id.or(ctx.remote_expr_id) {
+                    Some(expr_id) => expr_id,
                     None => {
-                        let rid = face.get_next_local_id();
-                        get_mut_unchecked(&mut ctx).local_rid = Some(rid);
+                        let expr_id = face.get_next_local_id();
+                        get_mut_unchecked(&mut ctx).local_expr_id = Some(expr_id);
                         get_mut_unchecked(face)
                             .local_mappings
-                            .insert(rid, nonwild_prefix.clone());
+                            .insert(expr_id, nonwild_prefix.clone());
                         face.primitives
-                            .decl_resource(rid, &nonwild_prefix.expr().into());
-                        rid
+                            .decl_resource(expr_id, &nonwild_prefix.expr().into());
+                        expr_id
                     }
                 };
-                (rid, wildsuffix).into()
+                (expr_id, wildsuffix).into()
             }
             None => wildsuffix.into(),
         }
@@ -411,10 +411,10 @@ impl Resource {
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
-                if let Some(rid) = ctx.local_rid {
-                    return (rid, suffix).into();
-                } else if let Some(rid) = ctx.remote_rid {
-                    return (rid, suffix).into();
+                if let Some(expr_id) = ctx.local_expr_id {
+                    return (expr_id, suffix).into();
+                } else if let Some(expr_id) = ctx.remote_expr_id {
+                    return (expr_id, suffix).into();
                 }
             }
             match &prefix.parent {
@@ -515,18 +515,18 @@ impl Resource {
     }
 }
 
-pub fn register_resource(
+pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    rid: ZInt,
+    expr_id: ZInt,
     prefixid: ZInt,
     suffix: &str,
 ) {
     match tables.get_mapping(face, &prefixid).cloned() {
-        Some(mut prefix) => match face.remote_mappings.get(&rid) {
+        Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
                 if res.expr() != format!("{}{}", prefix.expr(), suffix) {
-                    log::error!("Resource {} remapped. Remapping unsupported!", rid);
+                    log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
                 }
             }
             None => {
@@ -538,8 +538,8 @@ pub fn register_resource(
                     .or_insert_with(|| {
                         Arc::new(SessionContext {
                             face: face.clone(),
-                            local_rid: None,
-                            remote_rid: Some(rid),
+                            local_expr_id: None,
+                            remote_expr_id: Some(expr_id),
                             subs: None,
                             qabl: HashMap::new(),
                             last_values: HashMap::new(),
@@ -547,20 +547,21 @@ pub fn register_resource(
                     })
                     .clone();
 
-                if face.local_mappings.get(&rid).is_some() && ctx.local_rid == None {
-                    let local_rid = get_mut_unchecked(face).get_next_local_id();
-                    get_mut_unchecked(&mut ctx).local_rid = Some(local_rid);
+                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id == None {
+                    let local_expr_id = get_mut_unchecked(face).get_next_local_id();
+                    get_mut_unchecked(&mut ctx).local_expr_id = Some(local_expr_id);
 
                     get_mut_unchecked(face)
                         .local_mappings
-                        .insert(local_rid, res.clone());
+                        .insert(local_expr_id, res.clone());
 
-                    face.primitives.decl_resource(local_rid, &res.expr().into());
+                    face.primitives
+                        .decl_resource(local_expr_id, &res.expr().into());
                 }
 
                 get_mut_unchecked(face)
                     .remote_mappings
-                    .insert(rid, res.clone());
+                    .insert(expr_id, res.clone());
                 tables.compute_matches_routes(&mut res);
             }
         },
@@ -568,8 +569,8 @@ pub fn register_resource(
     }
 }
 
-pub fn unregister_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
-    match get_mut_unchecked(face).remote_mappings.remove(&rid) {
+pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: ZInt) {
+    match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
     }

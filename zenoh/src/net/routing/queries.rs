@@ -364,7 +364,7 @@ pub fn declare_router_queryable(
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare router queryable for unknown rid {}!", prefixid),
+        None => log::error!("Declare router queryable for unknown expr_id {}!", prefixid),
     }
 }
 
@@ -428,7 +428,7 @@ pub fn declare_peer_queryable(
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare router queryable for unknown rid {}!", prefixid),
+        None => log::error!("Declare router queryable for unknown expr_id {}!", prefixid),
     }
 }
 
@@ -451,8 +451,8 @@ fn register_client_queryable(
         get_mut_unchecked(res.session_ctxs.entry(face.id).or_insert_with(|| {
             Arc::new(SessionContext {
                 face: face.clone(),
-                local_rid: None,
-                remote_rid: None,
+                local_expr_id: None,
+                remote_expr_id: None,
                 subs: None,
                 qabl: HashMap::new(),
                 last_values: HashMap::new(),
@@ -511,7 +511,7 @@ pub fn declare_client_queryable(
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare queryable for unknown rid {}!", prefixid),
+        None => log::error!("Declare queryable for unknown expr_id {}!", prefixid),
     }
 }
 
@@ -1339,7 +1339,7 @@ fn compute_final_route(
 pub fn route_query(
     tables: &mut Tables,
     face: &Arc<FaceState>,
-    rid: ZInt,
+    expr_id: ZInt,
     suffix: &str,
     value_selector: &str,
     qid: ZInt,
@@ -1347,7 +1347,7 @@ pub fn route_query(
     consolidation: QueryConsolidation,
     routing_context: Option<RoutingContext>,
 ) {
-    match tables.get_mapping(face, &rid) {
+    match tables.get_mapping(face, &expr_id) {
         Some(prefix) => {
             log::debug!(
                 "Route query {}:{} for res {}{}",
@@ -1489,7 +1489,10 @@ pub fn route_query(
             }
         }
         None => {
-            log::error!("Route query with unknown rid {}! Send final reply.", rid);
+            log::error!(
+                "Route query with unknown expr_id {}! Send final reply.",
+                expr_id
+            );
             face.primitives.clone().send_reply_final(qid)
         }
     }

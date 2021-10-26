@@ -38,7 +38,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource(r) => {
-                            self.primitives.decl_resource(r.rid, &r.key);
+                            self.primitives.decl_resource(r.expr_id, &r.key);
                         }
                         Declaration::Publisher(p) => {
                             self.primitives.decl_publisher(&p.key, msg.routing_context);
@@ -56,7 +56,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                             );
                         }
                         Declaration::ForgetResource(fr) => {
-                            self.primitives.forget_resource(fr.rid);
+                            self.primitives.forget_resource(fr.expr_id);
                         }
                         Declaration::ForgetPublisher(fp) => {
                             self.primitives

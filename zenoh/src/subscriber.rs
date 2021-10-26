@@ -77,7 +77,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut subscriber = session.subscribe("/resource/name").wait().unwrap();
+    /// let mut subscriber = session.subscribe("/key/expression").wait().unwrap();
     /// while let Ok(sample) = subscriber.receiver().recv() {
     ///      println!(">> Received sample '{}'", sample);
     /// }
@@ -90,7 +90,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///      println!(">> Received sample '{}'", sample);
     /// }
@@ -125,7 +125,7 @@ impl Subscriber<'_> {
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe("/resource/name")
+    /// let mut subscriber = session.subscribe("/key/expression")
     ///                             .mode(SubMode::Pull).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
     ///     move |sample| async move { println!("Received : {:?}", sample); }
@@ -149,7 +149,7 @@ impl Subscriber<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
     /// ```
@@ -194,7 +194,7 @@ impl CallbackSubscriber<'_> {
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe("/resource/name")
+    /// let subscriber = session.subscribe("/key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
@@ -217,7 +217,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.subscribe("/resource/name")
+    /// let subscriber = session.subscribe("/key/expression")
     ///     .callback(data_handler).await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
@@ -257,7 +257,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/resource/name")
+    ///     .subscribe("/key/expression")
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await
@@ -401,7 +401,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/resource/name")
+    ///     .subscribe("/key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .best_effort()
     ///     .pull_mode()

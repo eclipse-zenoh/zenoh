@@ -29,14 +29,14 @@ fn tables_bench(c: &mut Criterion) {
     let primitives = Arc::new(DummyPrimitives {});
 
     let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives.clone());
-    register_resource(
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
         0,
         "/bench/tables",
     );
-    register_resource(
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
@@ -55,7 +55,7 @@ fn tables_bench(c: &mut Criterion) {
 
     for p in [8, 32, 256, 1024, 8192].iter() {
         for i in 1..(*p) {
-            register_resource(
+            register_expr(
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
                 i,

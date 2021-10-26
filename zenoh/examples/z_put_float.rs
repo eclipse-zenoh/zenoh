@@ -52,11 +52,11 @@ fn parse_args() -> (Properties, String, f64) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
+            Arg::from_usage("-p, --path=[PATH]        'The key expression to put.'")
                 .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The float value of the resource to put.'")
+            Arg::from_usage("-v, --value=[VALUE]      'The float value to put.'")
                 .default_value(&default_value),
         )
         .arg(Arg::from_usage(

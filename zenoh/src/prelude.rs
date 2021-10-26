@@ -51,10 +51,10 @@ pub use super::net::protocol::core::Encoding;
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
 
-/// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
+/// A numerical Id mapped to a key expression with [`register_expr`](Session::register_expr).
 pub use super::net::protocol::core::ExprId;
 
-/// A resource key.
+/// A key expression.
 pub use super::net::protocol::core::KeyExpr;
 
 /// A zenoh error.
@@ -371,7 +371,7 @@ impl From<ZInt> for SampleKind {
 /// A zenoh sample.
 #[derive(Clone, Debug)]
 pub struct Sample {
-    // The name of the resource on which this Sample was published.
+    // The key expression on which this Sample was published.
     pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
     pub value: Value,
@@ -523,7 +523,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 #[derive(Clone, Debug, PartialEq)]
 /// An expression identifying a selection of resources.
 ///
-/// A selector is the conjunction of an key selector identifying a set
+/// A selector is the conjunction of an key expression identifying a set
 /// of resource keys and a value selector filtering out the resource values.
 ///
 /// Structure of a selector:
@@ -654,7 +654,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// use std::convert::TryInto;
 ///
-/// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+/// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.receiver().next().await {
 ///     let value_selector = query.selector().parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
@@ -677,7 +677,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///     .with_fragment("x;y");
 ///
 /// let mut replies = session.get(
-///     &Selector::from("/resource/name").with_value_selector(&value_selector.to_string())
+///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
 /// ).await.unwrap();
 /// # })
 /// ```

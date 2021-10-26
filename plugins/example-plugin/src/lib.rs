@@ -54,7 +54,7 @@ impl Plugin for ExamplePlugin {
 
     fn get_requirements() -> Self::Requirements {
         vec![
-            Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
+            Arg::from_usage("--storage-expr 'The selection of resources to be stored'")
                 .default_value("/demo/example/**"),
         ]
     }

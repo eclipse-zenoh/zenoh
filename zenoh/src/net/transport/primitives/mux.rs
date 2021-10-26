@@ -35,9 +35,9 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, rid: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
         let d = Declaration::Resource(Resource {
-            rid,
+            expr_id,
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
@@ -46,8 +46,8 @@ impl Primitives for Mux {
             .handle_message(ZenohMessage::make_declare(decls, None, None));
     }
 
-    fn forget_resource(&self, rid: ZInt) {
-        let d = Declaration::ForgetResource(ForgetResource { rid });
+    fn forget_resource(&self, expr_id: ZInt) {
+        let d = Declaration::ForgetResource(ForgetResource { expr_id });
         let decls = vec![d];
         let _ = self
             .handler

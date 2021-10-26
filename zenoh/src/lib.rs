@@ -23,7 +23,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     session.put("/resource/name", "value").await.unwrap();
+//!     session.put("/key/expression", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
 //! ```
@@ -36,7 +36,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+//!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
 //!     while let Some(sample) = subscriber.receiver().next().await {
 //!         println!("Received : {}", sample);
 //!     };
@@ -51,7 +51,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut replies = session.get("/resource/name").await.unwrap();
+//!     let mut replies = session.get("/key/expression").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
 //!         println!(">> Received {}", reply.data);
 //!     }

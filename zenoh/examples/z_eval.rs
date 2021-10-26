@@ -60,8 +60,10 @@ fn parse_args() -> (Properties, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
-                .default_value("/demo/example/zenoh-rs-eval"),
+            Arg::from_usage(
+                "-p, --path=[PATH]        'The key expression matching queries to evaluate.'",
+            )
+            .default_value("/demo/example/zenoh-rs-eval"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")

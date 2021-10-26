@@ -24,11 +24,11 @@ fn main() {
     let (config, size, n) = parse_args();
     let session = zenoh::open(config).wait().unwrap();
 
-    // The resource to publish data on
-    let key_expr_ping = Id(session.register_resource("/test/ping").wait().unwrap());
+    // The key expression to publish data on
+    let key_expr_ping = Id(session.register_expr("/test/ping").wait().unwrap());
 
-    // The resource to wait the response back
-    let key_expr_pong = Id(session.register_resource("/test/pong").wait().unwrap());
+    // The key expression to wait the response back
+    let key_expr_pong = Id(session.register_expr("/test/pong").wait().unwrap());
 
     let mut sub = session.subscribe(&key_expr_pong).wait().unwrap();
 

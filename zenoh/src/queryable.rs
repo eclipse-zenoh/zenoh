@@ -140,7 +140,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/resource/name").wait().unwrap();
+    /// let mut queryable = session.register_queryable("/key/expression").wait().unwrap();
     /// while let Ok(query) = queryable.receiver().recv() {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -153,7 +153,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -185,10 +185,10 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
-    ///      query.reply(Sample::new("/resource/name".to_string(), "some value"));
+    ///      query.reply(Sample::new("/key/expression".to_string(), "some value"));
     /// }
     /// # })
     /// ```
@@ -207,7 +207,7 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let queryable = session.register_queryable("/key/expression").await.unwrap();
     /// queryable.unregister().await.unwrap();
     /// # })
     /// ```
@@ -314,7 +314,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session
-    ///     .register_queryable("/resource/name")
+    ///     .register_queryable("/key/expression")
     ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();

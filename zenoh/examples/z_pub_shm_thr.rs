@@ -32,7 +32,7 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let key_expr = Id(z.register_resource("/test/thr").await.unwrap());
+    let key_expr = Id(z.register_expr("/test/thr").await.unwrap());
     let _publ = z.publishing(&key_expr).await.unwrap();
 
     loop {

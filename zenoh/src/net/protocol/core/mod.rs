@@ -270,7 +270,7 @@ pub mod whatami {
     }
 }
 
-/// A numerical Id mapped to a key expression with [`register_resource`](crate::Session::register_resource).
+/// A numerical Id mapped to a key expression with [`register_expr`](crate::Session::register_expr).
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
@@ -304,7 +304,7 @@ impl KeyExpr<'_> {
     pub fn id(&self) -> ExprId {
         match self {
             Expr(_) => EMPTY_EXPR_ID,
-            Id(rid) | IdWithSuffix(rid, _) => *rid,
+            Id(expr_id) | IdWithSuffix(expr_id, _) => *expr_id,
         }
     }
 
@@ -337,8 +337,8 @@ impl fmt::Debug for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Expr(name) => write!(f, "{}", name),
-            Id(rid) => write!(f, "{}", rid),
-            IdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
+            Id(expr_id) => write!(f, "{}", expr_id),
+            IdWithSuffix(expr_id, suffix) => write!(f, "{}, {}", expr_id, suffix),
         }
     }
 }
@@ -358,8 +358,8 @@ impl<'a> From<&KeyExpr<'a>> for KeyExpr<'a> {
 
 impl From<ExprId> for KeyExpr<'_> {
     #[inline]
-    fn from(rid: ExprId) -> KeyExpr<'static> {
-        Id(rid)
+    fn from(expr_id: ExprId) -> KeyExpr<'static> {
+        Id(expr_id)
     }
 }
 
@@ -414,9 +414,9 @@ impl<'a> From<&'a KeyExpr<'a>> for (ExprId, &'a str) {
     #[inline]
     fn from(key: &'a KeyExpr<'a>) -> (ExprId, &'a str) {
         match key {
-            Id(rid) => (*rid, ""),
+            Id(expr_id) => (*expr_id, ""),
             Expr(name) => (EMPTY_EXPR_ID, &name[..]), //(&(0 as ZInt)
-            IdWithSuffix(rid, suffix) => (*rid, &suffix[..]),
+            IdWithSuffix(expr_id, suffix) => (*expr_id, &suffix[..]),
         }
     }
 }

@@ -125,7 +125,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the resource key to be used for queries.
+    /// Change the selector to be used for queries.
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
@@ -227,7 +227,7 @@ impl<'a> QueryingSubscriber<'a> {
         &mut self.receiver
     }
 
-    /// Issue a new query using the configured resource key and value_selector.
+    /// Issue a new query using the configured selector.
     #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on_selector(
@@ -240,7 +240,7 @@ impl<'a> QueryingSubscriber<'a> {
         )
     }
 
-    /// Issue a new query on the specified resource key and value_selector.
+    /// Issue a new query on the specified selector.
     #[inline]
     pub fn query_on<'c, IntoSelector>(
         &mut self,

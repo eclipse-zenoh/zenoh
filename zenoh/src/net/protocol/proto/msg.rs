@@ -187,7 +187,7 @@ pub mod zmsg {
         pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
+        pub const K: u8 = 1 << 7; // 0x80 KeySuffix     if K==1 then key_expr has suffix
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
@@ -710,12 +710,12 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
-    pub rid: ZInt,
+    pub expr_id: ZInt,
     pub key: KeyExpr<'static>,
 }
 
@@ -740,7 +740,7 @@ impl Header for Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetResource {
-    pub rid: ZInt,
+    pub expr_id: ZInt,
 }
 
 impl Header for ForgetResource {
@@ -755,7 +755,7 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -779,7 +779,7 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -803,7 +803,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -838,7 +838,7 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -862,7 +862,7 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -895,7 +895,7 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -949,7 +949,7 @@ impl Header for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -988,7 +988,7 @@ impl Header for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    KeyExpr     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~   value_selector   ~
 /// +---------------+
