@@ -138,21 +138,11 @@ use zenoh::prelude::*;
 
 pub mod config;
 pub mod utils;
-use config::StorageConfig;
+use config::{BackendConfig, StorageConfig};
 
-/// The `"type"` property key to be used in admin status reported by Backends.
-pub const PROP_BACKEND_TYPE: &str = "type";
-
-/// The `"key_expr"` property key to be used for configuration of each storage.
-pub const PROP_STORAGE_KEY_EXPR: &str = "key_expr";
-
-/// The `"key_prefix"` property key that could be used to specify the common key prefix
-/// to be stripped from keys before storing them as keys in the Storage.
-///
-/// Note that it shall be a prefix of the `"key_expr"`.
-/// If you use it, you should also adapt in [`Storage::on_query()`] implementation the incoming
-/// queries' key expression to the stored keys calling [`crate::utils::get_sub_key_selectors()`].
-pub const PROP_STORAGE_KEY_PREFIX: &str = "key_prefix";
+/// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
+pub const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
+pub type CreateBackend = unsafe extern "C" fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
 
 /// Trait to be implemented by a Backend.
 ///

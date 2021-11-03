@@ -26,6 +26,8 @@ use std::sync::Mutex;
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::Session;
+use zenoh_backend_traits::CreateBackend;
+use zenoh_backend_traits::CREATE_BACKEND_FN_NAME;
 // use zenoh_backend_traits::Storage;
 use zenoh_backend_traits::{config::*, Backend};
 use zenoh_plugin_trait::prelude::*;
@@ -299,7 +301,3 @@ impl RunningPluginTrait for StorageRuntime {
 
 const BACKEND_LIB_PREFIX: &str = "zbackend_";
 const MEMORY_BACKEND_NAME: &str = "memory";
-
-/// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
-const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
-type CreateBackend = unsafe extern "C" fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
