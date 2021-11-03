@@ -31,7 +31,7 @@ no_mangle = []
 default = ["no_mangle"]
 
 [dependencies]
-clap = "2.33.3"
 libloading = "0.7.0"
 log = "0.4"
 zenoh-util = { path = "../../zenoh-util" }
+serde_json = "1.0"

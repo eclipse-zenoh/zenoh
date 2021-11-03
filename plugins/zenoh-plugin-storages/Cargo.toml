@@ -37,6 +37,7 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
+anyhow = "1.0"
 async-std = "=1.9.0"
 async-trait = "0.1"
 clap = "2.33.3"
@@ -45,6 +46,7 @@ futures = "0.3.12"
 lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4.14"
+serde_json = "1.0"
 zenoh = { path = "../../zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../zenoh-util" }

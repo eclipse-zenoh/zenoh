@@ -79,6 +79,7 @@ use sync::{zready, ZFuture};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::zpinbox;
 
+pub use validated_struct;
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 #[macro_use]

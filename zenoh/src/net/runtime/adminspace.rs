@@ -28,10 +28,7 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<
-    super::plugins::Requirements,
-    super::plugins::StartArgs,
->;
+type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
 
 pub struct AdminContext {
     runtime: Runtime,

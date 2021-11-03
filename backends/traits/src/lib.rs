@@ -55,12 +55,12 @@
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
 //!
-//!     fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
+//!     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
 //!         // No interception point for incoming data (on PUT operations)
 //!         None
 //!     }
 //!
-//!     fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>> {
+//!     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
 //!         // No interception point for outgoing data (on GET operations)
 //!         None
 //!     }
@@ -132,11 +132,13 @@
 //! }
 //! ```
 
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use zenoh::prelude::*;
 
+pub mod config;
 pub mod utils;
+use config::StorageConfig;
 
 /// The `"type"` property key to be used in admin status reported by Backends.
 pub const PROP_BACKEND_TYPE: &str = "type";
@@ -161,15 +163,15 @@ pub trait Backend: Send + Sync {
     async fn get_admin_status(&self) -> Value;
 
     /// Creates a storage configured with some properties.
-    async fn create_storage(&mut self, props: Properties) -> ZResult<Box<dyn Storage>>;
+    async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
 
     /// Returns an [`IncomingDataInterceptor`] that will be called before pushing any data
     /// into a storage created by this backend. `None` can be returned for no interception point.
-    fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>>;
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 
     /// Returns an [`OutgoingDataInterceptor`] that will be called before sending any reply
     /// to a query from a storage created by this backend. `None` can be returned for no interception point.
-    fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>>;
+    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
 
 /// Trait to be implemented by a Storage.
@@ -187,29 +189,17 @@ pub trait Storage: Send + Sync {
     async fn on_query(&mut self, query: Query) -> ZResult<()>;
 }
 
-/// An interceptor allowing to modify the data pushed into a storage before it's actually stored.
-#[async_trait]
-pub trait IncomingDataInterceptor: Send + Sync {
-    async fn on_sample(&self, sample: Sample) -> Sample;
-}
-
-/// An interceptor allowing to modify the data going out of a storage before it's sent as a reply to a query.
-#[async_trait]
-pub trait OutgoingDataInterceptor: Send + Sync {
-    async fn on_reply(&self, sample: Sample) -> Sample;
-}
-
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
     q: zenoh::queryable::Query,
-    interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
+    interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
 }
 
 impl Query {
     pub fn new(
         q: zenoh::queryable::Query,
-        interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
+        interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     ) -> Query {
         Query { q, interceptor }
     }
@@ -236,7 +226,7 @@ impl Query {
     pub async fn reply(&self, sample: Sample) {
         // Call outgoing intercerceptor
         let sample = if let Some(ref interceptor) = self.interceptor {
-            interceptor.read().await.on_reply(sample).await
+            interceptor(sample)
         } else {
             sample
         };

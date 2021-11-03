@@ -18,66 +18,49 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
-use zenoh::properties::properties_to_json_value;
 use zenoh::time::Timestamp;
 use zenoh::utils::resource_name;
+use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
 
-pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
-    // For now admin status is static and only contains a PROP_BACKEND_TYPE entry
-    let properties = Properties::from(&[(PROP_BACKEND_TYPE, "memory")][..]);
-    let admin_status = properties_to_json_value(&properties);
-    Ok(Box::new(MemoryBackend { admin_status }))
+pub fn create_memory_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+    Ok(Box::new(MemoryBackend { config }))
 }
 
 pub struct MemoryBackend {
-    admin_status: Value,
+    config: BackendConfig,
 }
 
 #[async_trait]
 impl Backend for MemoryBackend {
     async fn get_admin_status(&self) -> Value {
-        self.admin_status.clone()
+        self.config.to_json_value().into()
     }
 
-    async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
-        debug!("Create Memory Storage with properties: {}", properties);
+    async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+        debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }
 
-    fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        None
+        // None
         // To test interceptors, uncomment this line:
-        // Some(Box::new(InTestInterceptor {}))
+        Some(Arc::new(|sample| {
+            println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+            sample
+        }))
     }
 
-    fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>> {
+    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        None
+        // None
         // To test interceptors, uncomment this line:
-        // Some(Box::new(OutTestInterceptor {}))
-    }
-}
-
-struct InTestInterceptor {}
-
-#[async_trait]
-impl IncomingDataInterceptor for InTestInterceptor {
-    async fn on_sample(&self, sample: Sample) -> Sample {
-        println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
-        sample
-    }
-}
-
-struct OutTestInterceptor {}
-
-#[async_trait]
-impl OutgoingDataInterceptor for OutTestInterceptor {
-    async fn on_reply(&self, sample: Sample) -> Sample {
-        println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
-        sample
+        Some(Arc::new(|sample| {
+            println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
+            sample
+        }))
     }
 }
 
@@ -114,17 +97,15 @@ impl StoredValue {
 use StoredValue::{Present, Removed};
 
 struct MemoryStorage {
-    admin_status: Value,
+    config: StorageConfig,
     map: Arc<RwLock<HashMap<String, StoredValue>>>,
     timer: Timer,
 }
 
 impl MemoryStorage {
-    async fn new(properties: Properties) -> ZResult<MemoryStorage> {
-        let admin_status = properties_to_json_value(&properties);
-
+    async fn new(properties: StorageConfig) -> ZResult<MemoryStorage> {
         Ok(MemoryStorage {
-            admin_status,
+            config: properties,
             map: Arc::new(RwLock::new(HashMap::new())),
             timer: Timer::new(),
         })
@@ -149,7 +130,7 @@ impl MemoryStorage {
 #[async_trait]
 impl Storage for MemoryStorage {
     async fn get_admin_status(&self) -> Value {
-        self.admin_status.clone()
+        self.config.to_json_value().into()
     }
 
     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {

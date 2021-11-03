@@ -13,6 +13,7 @@
 //
 use async_std::future;
 use async_std::task;
+use clap::ArgMatches;
 use clap::{App, Arg};
 use git_version::git_version;
 use validated_struct::ValidatedMap;
@@ -124,7 +125,22 @@ fn main() {
                 .takes_value(true)
                 .value_name("KEY:VALUE")
                 .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
+            ).arg(Arg::with_name("rest-port")
+                .long("port")
+                .required(false)
+                .takes_value(true)
+                .value_name("PORT")
+                .help("Maps to --cfg=/plugins/rest/port:PORT")
+            ).arg(Arg::with_name("domain-id")
+                .long("domain-id")
+                .required(false)
+                .takes_value(true)
+                .value_name("DOMAIN")
+                .help("Maps to --cfg=/plugins/dds/domain-id:\"DOMAIN\"")
             );
+
+        let args = app.get_matches();
+        let config = config_from_args(&args);
 
         // Get plugins search directories from the command line, and create LibLoader
         let plugin_search_dirs = get_plugin_search_dirs_from_args();
@@ -139,91 +155,9 @@ fn main() {
             .into_dynamic(lib_loader)
             .load_plugins(&get_plugins_from_args(), &PLUGIN_PREFIX);
         // Also search for plugins if no "--plugin-nolookup" arg
-        if !std::env::args().any(|arg| arg == "--plugin-nolookup") {
+        if !args.is_present("plugin-nolookup") {
             plugins = plugins.search_and_load_plugins(Some(&PLUGIN_PREFIX));
         }
-        let (plugins, expected_args) = plugins.get_requirements();
-
-        // Add plugins' expected args and parse command line
-        let args = app.args(&expected_args).get_matches();
-
-        let mut config = args
-            .value_of("config")
-            .map_or_else(Config::default, |conf_file| {
-                Config::from_file(conf_file).unwrap()
-            });
-
-        if config.mode().is_none() {
-            config
-                .set_mode(Some(zenoh::config::WhatAmI::Router))
-                .unwrap();
-        }
-
-        config
-            .peers
-            .extend(
-                args.values_of("peer")
-                    .unwrap_or_default()
-                    .filter_map(|v| match v.parse() {
-                        Ok(v) => Some(v),
-                        Err(e) => {
-                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                            None
-                        }
-                    }),
-            );
-
-        config.listeners.extend(
-            args.values_of("listener")
-                .unwrap_or_default()
-                .filter_map(|v| match v.parse() {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                        None
-                    }
-                }),
-        );
-
-        match (
-            config.add_timestamp().is_none(),
-            args.is_present("no-timestamp"),
-        ) {
-            (_, true) => {
-                config.set_add_timestamp(Some(false)).unwrap();
-            }
-            (true, false) => {
-                config.set_add_timestamp(Some(true)).unwrap();
-            }
-            (false, false) => {}
-        };
-        match (
-            config.scouting.multicast.enabled().is_none(),
-            args.is_present("no-multicast-scouting"),
-        ) {
-            (_, true) => {
-                config.scouting.multicast.set_enabled(Some(false)).unwrap();
-            }
-            (true, false) => {
-                config.scouting.multicast.set_enabled(Some(true)).unwrap();
-            }
-            (false, false) => {}
-        };
-
-        for json in args.values_of("cfg").unwrap_or_default() {
-            if let Some((key, value)) = json.split_once(':') {
-                match json5::Deserializer::from_str(value) {
-                    Ok(mut deserializer) => {
-                        if let Err(e) = config.insert(key, &mut deserializer) {
-                            log::warn!("Couldn't perform configuration {}: {}", json, e);
-                        }
-                    }
-                    Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
-                }
-            }
-        }
-
-        log::debug!("Config: {:?}", &config);
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {
             Ok(runtime) => runtime,
@@ -233,7 +167,7 @@ fn main() {
             }
         };
 
-        let (handles, failures) = plugins.start(&(runtime.clone(), args));
+        let (handles, failures) = plugins.build().start(&runtime);
         for p in handles.plugins() {
             log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
         }
@@ -245,4 +179,104 @@ fn main() {
 
         future::pending::<()>().await;
     });
+}
+
+fn config_from_args(args: &ArgMatches) -> Config {
+    let mut config = args
+        .value_of("config")
+        .map_or_else(Config::default, |conf_file| {
+            Config::from_file(conf_file).unwrap()
+        });
+    if config.mode().is_none() {
+        config
+            .set_mode(Some(zenoh::config::WhatAmI::Router))
+            .unwrap();
+    }
+    if let Some(value) = args.value_of("rest-port") {
+        config.insert_json5("/plugins/rest/port", value).unwrap();
+    }
+    if let Some(value) = args.value_of("domain-id") {
+        config
+            .insert_json5("/plugins/dds/domain-id", &format!("\"{}\"", value))
+            .unwrap();
+    }
+    if let Some(paths) = args.values_of("plugin") {
+        for path in paths {
+            if path.contains('.') || path.contains('/') {
+                let name = LibLoader::plugin_name(&path).unwrap();
+                config
+                    .insert_json5(
+                        format!("/plugins/{}", name),
+                        &format!(r#"{{"__path__": "{}", "__required__": true}}"#, path),
+                    )
+                    .unwrap();
+            } else {
+                config
+                    .insert_json5(format!("/plugins/{}", path), r#"{"__required__": true}"#)
+                    .unwrap();
+            }
+        }
+    }
+    config
+        .peers
+        .extend(
+            args.values_of("peer")
+                .unwrap_or_default()
+                .filter_map(|v| match v.parse() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                        None
+                    }
+                }),
+        );
+    config.listeners.extend(
+        args.values_of("listener")
+            .unwrap_or_default()
+            .filter_map(|v| match v.parse() {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    log::warn!("Couldn't parse {} into Locator: {}", v, e);
+                    None
+                }
+            }),
+    );
+    match (
+        config.add_timestamp().is_none(),
+        args.is_present("no-timestamp"),
+    ) {
+        (_, true) => {
+            config.set_add_timestamp(Some(false)).unwrap();
+        }
+        (true, false) => {
+            config.set_add_timestamp(Some(true)).unwrap();
+        }
+        (false, false) => {}
+    };
+    match (
+        config.scouting.multicast.enabled().is_none(),
+        args.is_present("no-multicast-scouting"),
+    ) {
+        (_, true) => {
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        }
+        (true, false) => {
+            config.scouting.multicast.set_enabled(Some(true)).unwrap();
+        }
+        (false, false) => {}
+    };
+    for json in args.values_of("cfg").unwrap_or_default() {
+        if let Some((key, value)) = json.split_once(':') {
+            match json5::Deserializer::from_str(value) {
+                Ok(mut deserializer) => {
+                    if let Err(e) = config.insert(key, &mut deserializer) {
+                        log::warn!("Couldn't perform configuration {}: {}", json, e);
+                    }
+                }
+                Err(e) => log::warn!("Couldn't perform configuration {}: {}", json, e),
+            }
+        }
+    }
+    log::debug!("Config: {:?}", &config);
+    config
 }

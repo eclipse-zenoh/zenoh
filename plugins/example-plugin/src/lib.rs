@@ -13,65 +13,117 @@
 //
 #![recursion_limit = "256"]
 
-use clap::{Arg, ArgMatches};
+use anyhow::anyhow;
 use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
-    Arc,
+    Arc, Mutex,
 };
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::resource_name;
 use zenoh_plugin_trait::prelude::*;
+use zenoh_plugin_trait::RunningPluginTrait;
+use zenoh_plugin_trait::ValidationFunction;
 use zenoh_util::zerror2;
+use zenoh_util::zlock;
 
 pub struct ExamplePlugin {}
 
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
-pub struct ExamplePluginStopper {
-    flag: Arc<AtomicBool>,
-}
-
-impl PluginStopper for ExamplePluginStopper {
-    fn stop(&self) {
-        self.flag.store(false, Relaxed);
-    }
-}
-
+const DEFAULT_SELECTOR: &str = "/demo/example/**";
 impl Plugin for ExamplePlugin {
-    type Requirements = Vec<Arg<'static, 'static>>;
-    type StartArgs = (Runtime, ArgMatches<'static>);
+    type StartArgs = Runtime;
     fn compatibility() -> zenoh_plugin_trait::PluginId {
         zenoh_plugin_trait::PluginId {
             uid: "zenoh-example-plugin",
         }
     }
-
-    fn get_requirements() -> Self::Requirements {
-        vec![
-            Arg::from_usage("--storage-selector 'The selection of resources to be stored'")
-                .default_value("/demo/example/**"),
-        ]
-    }
+    const STATIC_NAME: &'static str = "example";
 
     fn start(
-        (runtime, args): &Self::StartArgs,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
-        if let Some(selector) = args.value_of("storage-selector") {
-            let flag = Arc::new(AtomicBool::new(true));
-            let stopper = ExamplePluginStopper { flag: flag.clone() };
-            async_std::task::spawn(run(runtime.clone(), selector.to_string().into(), flag));
-            Ok(Box::new(stopper))
-        } else {
-            Err(Box::new(zerror2!(ZErrorKind::Other {
-                descr: "storage-selector is a mandatory option for ExamplePlugin".into()
-            })))
+        name: &str,
+        runtime: &Self::StartArgs,
+    ) -> Result<Box<dyn RunningPluginTrait>, Box<dyn std::error::Error>> {
+        let config = runtime.config.lock();
+        let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
+        let selector;
+        match self_cfg.get("storage-selector") {
+            Some(serde_json::Value::String(s)) => {
+                selector = s.clone();
+            }
+            None => selector = DEFAULT_SELECTOR.into(),
+            _ => {
+                return Err(Box::new(zerror2!(ZErrorKind::Other {
+                    descr: format!("storage-selector is a mandatory option for {}", name)
+                })))
+            }
         }
+        std::mem::drop(config);
+        let flag = Arc::new(AtomicBool::new(true));
+        async_std::task::spawn(run(runtime.clone(), selector.into(), flag.clone()));
+        Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
+            RunningPluginInner {
+                flag,
+                name: name.into(),
+                runtime: runtime.clone(),
+            },
+        )))))
+    }
+}
+struct RunningPluginInner {
+    flag: Arc<AtomicBool>,
+    name: String,
+    runtime: Runtime,
+}
+#[derive(Clone)]
+struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
+impl RunningPluginTrait for RunningPlugin {
+    fn config_checker(&self) -> ValidationFunction {
+        let guard = zlock!(&self.0);
+        let name = guard.name.clone();
+        std::mem::drop(guard);
+        let plugin = self.clone();
+        Arc::new(move |path, old, new| {
+            const STORAGE_SELECTOR: &str = "storage-selector";
+            if path == STORAGE_SELECTOR || path.is_empty() {
+                match (old.get(STORAGE_SELECTOR), new.get(STORAGE_SELECTOR)) {
+                    (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
+                        if os == ns => {}
+                    (_, Some(serde_json::Value::String(selector))) => {
+                        let mut guard = zlock!(&plugin.0);
+                        guard.flag.store(false, Relaxed);
+                        guard.flag = Arc::new(AtomicBool::new(true));
+                        async_std::task::spawn(run(
+                            guard.runtime.clone(),
+                            selector.clone().into(),
+                            guard.flag.clone(),
+                        ));
+                        return Ok(());
+                    }
+                    (_, None) => {
+                        let guard = zlock!(&plugin.0);
+                        guard.flag.store(false, Relaxed);
+                    }
+                    _ => {
+                        return Err(
+                            anyhow!("storage-selector for {} must be a string", &name).into()
+                        )
+                    }
+                }
+            }
+            Err(anyhow!("unknown option {} for {}", path, &name).into())
+        })
+    }
+}
+impl Drop for RunningPlugin {
+    fn drop(&mut self) {
+        zlock!(self.0).flag.store(false, Relaxed);
     }
 }
 
