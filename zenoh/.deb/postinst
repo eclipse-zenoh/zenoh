@@ -21,7 +21,9 @@ set -e
 case "$1" in
     configure)
         id -u zenoh  >/dev/null 2>&1 ||  sudo useradd -r -s /bin/false zenoh
-        sudo chown zenoh:zenoh -R /var/zenoh
+        mkdir -p /etc/zenoh
+        chown zenoh:zenoh -R /etc/zenoh
+        chmod 0644 /etc/zenoh -R
         systemctl daemon-reload
         systemctl disable zenoh
     ;;

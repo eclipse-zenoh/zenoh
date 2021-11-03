@@ -113,9 +113,7 @@ maintainer-scripts = "zenoh/.deb"
 assets = [
     # binary
     ["target/release/zenohd", "/usr/bin/", "755"],
-    # assets
-    ["etc/*", "/etc/zenoh", "644"],
-    ["var/*", "/var/zenoh", "644"],
+    # service
     [".service/zenoh.service","/lib/systemd/system/zenoh.service","644"],
 ]
 

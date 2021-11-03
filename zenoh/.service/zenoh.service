@@ -5,7 +5,6 @@ Description = Eclipse Zenoh Router
 
 [Service]
 Type=simple
-PIDFile=/tmp/zenoh.pid
 Environment=RUST_LOG=info
 ExecStart = /usr/bin/zenohd
 KillMode=mixed
