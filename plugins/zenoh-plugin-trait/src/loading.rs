@@ -233,7 +233,7 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
                     } else {
                         filename.to_string()
                     };
-                    DynamicPlugin::new(name, lib, p).map_err(|_| todo!())
+                    DynamicPlugin::new(name.clone(), lib, p).map_err(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION))
                 })
                 .filter_map(ZResult::ok),
         );

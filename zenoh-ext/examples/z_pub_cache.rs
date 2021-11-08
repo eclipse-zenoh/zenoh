@@ -14,7 +14,7 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::prelude::*;
+use zenoh::config::Config;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -46,7 +46,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, String, String, usize, Option<String>) {
+fn parse_args() -> (Config, String, String, usize, Option<String>) {
     let args = App::new("zenoh-ext pub cache example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -79,21 +79,32 @@ fn parse_args() -> (Properties, String, String, usize, Option<String>) {
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
+        Config::from_file(conf_file).unwrap()
     } else {
-        Properties::default()
+        Config::default()
     };
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+        config.set_mode(Some(mode)).unwrap();
+    }
+    match args.value_of("mode").map(|m| m.parse()) {
+        Some(Ok(mode)) => {
+            config.set_mode(Some(mode)).unwrap();
         }
+        Some(Err(())) => panic!("Invalid mode"),
+        None => {}
+    };
+    if let Some(values) = args.values_of("peer") {
+        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    }
+    if let Some(values) = args.values_of("listeners") {
+        config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
-        config.insert("multicast_scouting".to_string(), "false".to_string());
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
     // Timestamping of publications is required for publication cache
-    config.insert("add_timestamp".to_string(), "true".to_string());
+    config.set_add_timestamp(Some(true)).unwrap();
 
     let path = args.value_of("path").unwrap();
     let value = args.value_of("value").unwrap();

@@ -14,6 +14,7 @@
 
 use clap::{App, Arg};
 use futures::prelude::*;
+use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 use zenoh::queryable::EVAL;
@@ -83,7 +84,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> Properties {
+fn parse_args() -> Config {
     let args = App::new("zenoh ssl server example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -104,17 +105,28 @@ fn parse_args() -> Properties {
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
+        Config::from_file(conf_file).unwrap()
     } else {
-        Properties::default()
+        Config::default()
     };
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+        config.set_mode(Some(mode)).unwrap();
+    }
+    match args.value_of("mode").map(|m| m.parse()) {
+        Some(Ok(mode)) => {
+            config.set_mode(Some(mode)).unwrap();
         }
+        Some(Err(())) => panic!("Invalid mode"),
+        None => {}
+    };
+    if let Some(values) = args.values_of("peer") {
+        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    }
+    if let Some(values) = args.values_of("listeners") {
+        config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
-        config.insert("multicast_scouting".to_string(), "false".to_string());
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
     config

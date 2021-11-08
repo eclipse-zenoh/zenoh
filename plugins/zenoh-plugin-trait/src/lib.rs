@@ -102,10 +102,13 @@ pub trait Plugin: Sized + 'static {
 pub type RunningPlugin = Box<dyn RunningPluginTrait>;
 pub type ValidationFunction = Arc<
     dyn Fn(
-        &str,
-        &serde_json::Map<String, serde_json::Value>,
-        &serde_json::Map<String, serde_json::Value>,
-    ) -> Result<(), Box<dyn std::error::Error>>,
+            &str,
+            &serde_json::Map<String, serde_json::Value>,
+            &serde_json::Map<String, serde_json::Value>,
+        )
+            -> Result<Option<serde_json::Map<String, serde_json::Value>>, Box<dyn std::error::Error>>
+        + Send
+        + Sync,
 >;
 
 pub trait RunningPluginTrait: Send + Sync + Any {

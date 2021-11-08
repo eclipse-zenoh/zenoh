@@ -6,7 +6,7 @@ type LoadPluginResultInner = Result<PluginVTableInner<()>, PluginVTableVersion>;
 pub type LoadPluginResult<A> = Result<PluginVTable<A>, PluginVTableVersion>;
 
 /// This number should change any time the internal structure of [`PluginVTable`] changes
-pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
+pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 1;
 
 type StartFn<StartArgs> = fn(&str, &StartArgs) -> Result<RunningPlugin, Box<dyn Error>>;
 

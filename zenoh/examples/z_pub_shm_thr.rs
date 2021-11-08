@@ -13,8 +13,8 @@
 //
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
+use zenoh::config::Config;
 use zenoh::prelude::ResKey::*;
-use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
 #[async_std::main]
@@ -44,7 +44,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, usize, usize) {
+fn parse_args() -> (Config, usize, usize) {
     let args = App::new("zenoh shared-memory throughput pub example")
         .arg(
             Arg::from_usage("-s, --shared-memory=[MB]  'shared memory size in MBytes'")
@@ -61,7 +61,7 @@ fn parse_args() -> (Properties, usize, usize) {
         ))
         .get_matches();
 
-    let config = Properties::default();
+    let config = Config::default();
     let sm_size = args
         .value_of("shared-memory")
         .unwrap()

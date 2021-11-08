@@ -363,8 +363,8 @@ where
 /// use zenoh::prelude::*;
 ///
 /// let mut config = config::peer();
-/// config.insert(config::ZN_LOCAL_ROUTING_KEY, "false".to_string());
-/// config.insert(config::ZN_PEER_KEY, "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
+/// config.set_local_routing(Some(false));
+/// config.peers.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).await.unwrap();
 /// # })
@@ -378,9 +378,9 @@ where
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
 ///
-/// let mut config = Properties::default();
-/// config.insert("local_routing".to_string(), "false".to_string());
-/// config.insert("peer".to_string(), "tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".to_string());
+/// let mut config = config::default();
+/// config.set_local_routing(Some(false));
+/// config.peers.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).await.unwrap();
 /// # })

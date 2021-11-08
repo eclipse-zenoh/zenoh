@@ -22,7 +22,6 @@ use std::{
     any::Any,
     borrow::Cow,
     collections::HashMap,
-    convert::TryFrom,
     io::Read,
     net::SocketAddr,
     path::Path,
@@ -30,7 +29,6 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_util::properties::config::*;
-use zenoh_util::properties::{IntKeyProperties, Properties};
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -41,42 +39,28 @@ use zenoh_util::properties::{IntKeyProperties, Properties};
 /// [`Properties`](crate::properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
-pub fn empty() -> ConfigProperties {
-    ConfigProperties::default()
+pub fn empty() -> Config {
+    Config::default()
 }
 
-/// Creates a default zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "peer")`
-pub fn default() -> ConfigProperties {
+/// Creates a default zenoh net Session configuration (equivalent to `peer`).
+pub fn default() -> Config {
     peer()
 }
 
 /// Creates a default `'peer'` mode zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "peer")`
-pub fn peer() -> ConfigProperties {
-    let mut props = ConfigProperties::default();
-    props.insert(ZN_MODE_KEY, "peer".to_string());
-    props
+pub fn peer() -> Config {
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Peer)).unwrap();
+    config
 }
 
 /// Creates a default `'client'` mode zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "client")`
-///
-/// If the given peer locator is not `None`, the returned configuration also contains :
-///  - `(ZN_PEER_KEY, <peer>)`
-pub fn client(peer: Option<String>) -> ConfigProperties {
-    let mut props = ConfigProperties::default();
-    props.insert(ZN_MODE_KEY, "client".to_string());
-    if let Some(peer) = peer {
-        props.insert(ZN_PEER_KEY, peer);
-    }
-    props
+pub fn client<I: IntoIterator<Item = T>, T: Into<Locator>>(peers: I) -> Config {
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config.peers.extend(peers.into_iter().map(|t| t.into()));
+    config
 }
 
 #[test]
@@ -253,6 +237,7 @@ validated_struct::validator! {
         #[intkey(skip)]
         plugins_search_dirs: Vec<String>,
         #[intkey(skip)]
+        #[serde(default)]
         plugins: PluginsConfig,
     }
 }
@@ -301,6 +286,12 @@ impl Config {
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
         self.plugins.values.get(name)
+    }
+
+    pub fn sift_privates(&self) -> Self {
+        let mut copy = self.clone();
+        copy.plugins.sift_privates();
+        copy
     }
 }
 
@@ -497,78 +488,6 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     }
 }
 
-impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
-    type Error = Config;
-    fn try_from(value: &'a HashMap<ZInt, String>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value {
-            s.iset(*key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<HashMap<ZInt, String>> for Config {
-    type Error = Config;
-    fn try_from(value: HashMap<ZInt, String>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value {
-            s.iset(key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<Properties> for Config {
-    type Error = Config;
-    fn try_from(value: Properties) -> Result<Self, Self::Error> {
-        let props: IntKeyProperties<ConfigTranscoder> = value.into();
-        Config::try_from(props)
-    }
-}
-
-impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
-    type Error = Config;
-    fn try_from(value: &'a IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in &value.0 {
-            s.iset(*key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<IntKeyProperties<ConfigTranscoder>> for Config {
-    type Error = Config;
-    fn try_from(value: IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value.0 {
-            s.iset(key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
 impl<'a> From<&'a Config> for ConfigProperties {
     fn from(c: &'a Config) -> Self {
         let mut result = ConfigProperties::default();
@@ -728,13 +647,35 @@ fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
     s.parse().ok().map(Some)
 }
 
-type Validator = Arc<dyn Fn(&str, &Value, &Value) -> Result<(), String> + Send + Sync>;
-
-#[derive(serde::Serialize, Clone)]
+#[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    #[serde(skip_serializing)]
-    validators: HashMap<String, Validator>,
+    validators: HashMap<String, zenoh_plugin_trait::ValidationFunction>,
+}
+fn sift_privates(value: &mut serde_json::Value) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        Value::Array(a) => a.iter_mut().for_each(sift_privates),
+        Value::Object(o) => {
+            o.remove("private");
+            o.values_mut().for_each(sift_privates);
+        }
+    }
+}
+impl PluginsConfig {
+    pub fn sift_privates(&mut self) {
+        sift_privates(&mut self.values);
+    }
+}
+impl serde::Serialize for PluginsConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut value = self.values.clone();
+        sift_privates(&mut value);
+        value.serialize(serializer)
+    }
 }
 impl Default for PluginsConfig {
     fn default() -> Self {
@@ -853,9 +794,17 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .unwrap()
             .entry(plugin)
             .or_insert(Value::Null);
-        let new_value = value.clone().merge(key, new_value)?;
+        let mut new_value = value.clone().merge(key, new_value)?;
         if let Some(validator) = validator {
-            validator(key, value, &new_value)?;
+            match validator(
+                key,
+                value.as_object().unwrap(),
+                new_value.as_object().unwrap(),
+            ) {
+                Ok(Some(val)) => new_value = Value::Object(val),
+                Ok(None) => {}
+                Err(e) => return Err(format!("{}", e).into()),
+            }
         }
         *value = new_value;
         Ok(())

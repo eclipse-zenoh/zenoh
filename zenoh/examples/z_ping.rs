@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use std::time::Instant;
+use zenoh::config::Config;
 use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
@@ -74,7 +75,7 @@ fn main() {
     }
 }
 
-fn parse_args() -> (Properties, usize, usize) {
+fn parse_args() -> (Config, usize, usize) {
     let args = App::new("zenoh roundtrip ping example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -98,14 +99,29 @@ fn parse_args() -> (Properties, usize, usize) {
         ))
         .get_matches();
 
-    let mut config = Properties::default();
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+    let mut config = if let Some(conf_file) = args.value_of("config") {
+        Config::from_file(conf_file).unwrap()
+    } else {
+        Config::default()
+    };
+    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+        config.set_mode(Some(mode)).unwrap();
+    }
+    match args.value_of("mode").map(|m| m.parse()) {
+        Some(Ok(mode)) => {
+            config.set_mode(Some(mode)).unwrap();
         }
+        Some(Err(())) => panic!("Invalid mode"),
+        None => {}
+    };
+    if let Some(values) = args.values_of("peer") {
+        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    }
+    if let Some(values) = args.values_of("listeners") {
+        config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
-        config.insert("multicast_scouting".to_string(), "false".to_string());
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
     let n: usize = args.value_of("samples").unwrap().parse().unwrap();
     let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();

@@ -21,24 +21,21 @@
 //!
 //! # Example
 //! ```
+//! use std::sync::Arc;
 //! use async_trait::async_trait;
 //! use zenoh::prelude::*;
 //! use zenoh::properties::properties_to_json_value;
 //! use zenoh_backend_traits::*;
+//! use zenoh_backend_traits::config::*;
 //!
 //! #[no_mangle]
-//! pub fn create_backend(properties: &Properties) -> ZResult<Box<dyn Backend>> {
-//!     // The properties are the ones passed via a PUT in the admin space for Backend creation.
-//!     // Here we re-expose them in the admin space for GET operations, adding the PROP_BACKEND_TYPE entry.
-//!     let mut p = properties.clone();
-//!     p.insert(PROP_BACKEND_TYPE.into(), "my_backend_type".into());
-//!     let admin_status = properties_to_json_value(&p);
-//!     Ok(Box::new(MyBackend { admin_status }))
+//! pub extern "C" fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+//!     Ok(Box::new(MyBackend { config }))
 //! }
 //!
 //! // Your Backend implementation
 //! struct MyBackend {
-//!     admin_status: Value,
+//!     config: BackendConfig,
 //! }
 //!
 //! #[async_trait]
@@ -47,10 +44,10 @@
 //!         // This operation is called on GET operation on the admin space for the Backend
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Backend monitoring.
-//!         self.admin_status.clone()
+//!         self.config.to_json_value().into()
 //!     }
 //!
-//!     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
+//!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
@@ -68,16 +65,12 @@
 //!
 //! // Your Storage implementation
 //! struct MyStorage {
-//!     admin_status: Value,
+//!     config: StorageConfig,
 //! }
 //!
 //! impl MyStorage {
-//!     async fn new(properties: Properties) -> ZResult<MyStorage> {
-//!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
-//!         // They contain at least a PROP_STORAGE_KEY_EXPR entry (i.e. "key_expr").
-//!         // Here we choose to re-expose them as they are in the admin space for GET operations.
-//!         let admin_status = properties_to_json_value(&properties);
-//!         Ok(MyStorage { admin_status })
+//!     async fn new(config: StorageConfig) -> ZResult<MyStorage> {
+//!         Ok(MyStorage { config })
 //!     }
 //! }
 //!
@@ -87,7 +80,7 @@
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.admin_status.clone()
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {

@@ -294,7 +294,8 @@ impl RunningPluginTrait for StorageRuntime {
                 Err(e) => return Err(e.into()),
             };
             let diffs = ConfigDiff::diffs(old, new);
-            zlock!(runtime).update(diffs)
+            { zlock!(runtime).update(diffs) }?;
+            Ok(None)
         })
     }
 }

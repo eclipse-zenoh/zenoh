@@ -104,7 +104,7 @@ impl RunningPluginTrait for RunningPlugin {
                             selector.clone().into(),
                             guard.flag.clone(),
                         ));
-                        return Ok(());
+                        return Ok(None);
                     }
                     (_, None) => {
                         let guard = zlock!(&plugin.0);
