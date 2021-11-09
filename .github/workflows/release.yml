@@ -1,0 +1,282 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+name: Release
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 0 * * 1-5"
+  workflow_dispatch:
+
+
+jobs:
+
+  checks:
+    name: Code checks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          components: rustfmt, clippy
+    - name: Code format check
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: -- --check
+    - name: Clippy check
+      uses: actions-rs/cargo@v1
+      with:
+        command: clippy
+        args: --all-targets -- -D warnings
+
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+    - name: Run tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --release --verbose
+      env:
+        ASYNC_STD_THREAD_COUNT: 4
+
+
+  docker-build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0    # NOTE: get all history for git-version crate to correctly compute a version
+      - name: Docker meta - set tags and labels
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: eclipse/zenoh
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_COM_USERNAME }}
+          password: ${{ secrets.DOCKER_COM_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+
+  builds:
+    name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-unknown-linux-gnu      , arch: amd64 , os: ubuntu-20.04                  }
+          - { target: x86_64-unknown-linux-musl     , arch: amd64 , os: ubuntu-20.04, use-cross: true }
+          - { target: arm-unknown-linux-gnueabi     , arch: armel , os: ubuntu-20.04, use-cross: true }
+          - { target: arm-unknown-linux-gnueabihf   , arch: armhf , os: ubuntu-20.04, use-cross: true }
+          - { target: armv7-unknown-linux-gnueabihf , arch: armhf , os: ubuntu-20.04, use-cross: true }
+          - { target: aarch64-unknown-linux-gnu     , arch: arm64 , os: ubuntu-20.04, use-cross: true }
+          - { target: x86_64-apple-darwin           , arch: darwin, os: macos-10.15                   }
+          - { target: x86_64-pc-windows-msvc        , arch: win64 , os: windows-2019                  }
+          # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v2
+
+    - name: Install prerequisites
+      shell: bash
+      run: |
+        case ${{ matrix.job.target }} in
+          *-linux-gnu*) cargo install cargo-deb ;;
+        esac
+
+        case ${{ matrix.job.target }} in
+          arm-unknown-linux-gnueabi)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-arm-linux-gnueabi
+            ;;
+          arm*-unknown-linux-gnueabihf)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-arm-linux-gnueabihf
+            ;;
+          aarch64-unknown-linux-gnu)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-aarch64-linux-gnu
+            ;;
+        esac
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.job.target }}
+        override: true
+        profile: minimal
+
+    - name: Environment setup
+      id: env
+      shell: bash
+      run: |
+        # log some info
+        gcc --version || true
+        rustup -V
+        rustup toolchain list
+        rustup default
+        cargo -V
+        rustc -V
+
+        echo "GITHUB_REF=${GITHUB_REF}"
+        echo "GITHUB_SHA=${GITHUB_SHA:0:8}"
+        GIT_BRANCH=`[[ $GITHUB_REF =~ ^refs/heads/.* ]] && echo ${GITHUB_REF/refs\/heads\//} || true`
+        echo "GIT_BRANCH=${GIT_BRANCH}"
+        echo ::set-output name=GIT_BRANCH::"${GIT_BRANCH}"
+        GIT_TAG=`[[ $GITHUB_REF =~ ^refs/tags/.* ]] && echo ${GITHUB_REF/refs\/tags\//} || true`
+        echo "GIT_TAG=${GIT_TAG}"
+        echo ::set-output name=GIT_TAG::"${GIT_TAG}"
+
+        ZENOH_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' zenoh/Cargo.toml | head -n1)
+        echo "ZENOH_VERSION=${ZENOH_VERSION}"
+        echo ::set-output name=ZENOH_VERSION::"${ZENOH_VERSION}"
+        if [ -n "${GIT_TAG}" ]; then
+          IS_RELEASE="true"
+          echo "IS_RELEASE=${IS_RELEASE}"
+          echo ::set-output name=IS_RELEASE::"${IS_RELEASE}"
+          PKG_VERSION=${ZENOH_VERSION}
+        elif [ -n "${GIT_BRANCH}" ]; then
+          PKG_VERSION=${GIT_BRANCH}-${GITHUB_SHA:0:8}
+        else
+          PKG_VERSION=${ZENOH_VERSION}-${GITHUB_SHA:0:8}
+        fi
+        echo "PKG_VERSION=${PKG_VERSION}"
+        echo ::set-output name=PKG_VERSION::"${PKG_VERSION}"
+
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: ${{ matrix.job.use-cross }}
+        command: build
+        args: --release --bins --lib --examples --target=${{ matrix.job.target }}
+
+    - name: Debian package - zenoh
+      if: contains(matrix.job.target, '-linux-gnu')
+      uses: actions-rs/cargo@v1
+      with:
+        command: deb
+        args: --no-build --target=${{ matrix.job.target }} -p zenoh
+
+    - name: Debian package - zenoh-plugin-storages
+      if: contains(matrix.job.target, '-linux-gnu')
+      uses: actions-rs/cargo@v1
+      with:
+        command: deb
+        args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storages
+
+    - name: Debian package - zenoh-plugin-rest
+      if: contains(matrix.job.target, '-linux-gnu')
+      uses: actions-rs/cargo@v1
+      with:
+        command: deb
+        args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+
+    - name: Packaging
+      id: package
+      shell: bash
+      run: |
+        TARGET=${{ matrix.job.target }}
+        MAIN_PKG_NAME="${TARGET}-eclipse-zenoh-${{ steps.env.outputs.PKG_VERSION }}.zip"
+        EXPL_PKG_NAME="${TARGET}-eclipse-zenoh-${{ steps.env.outputs.PKG_VERSION }}-examples.zip"
+        DEBS_PKG_NAME="${TARGET}-eclipse-zenoh-${{ steps.env.outputs.PKG_VERSION }}-deb-pkgs.zip"
+
+        case ${TARGET} in
+          *linux*)
+            cd "target/${TARGET}/release/"
+            echo "Packaging ${MAIN_PKG_NAME}:"
+            zip ../../../${MAIN_PKG_NAME} zenohd libzplugin_*.so
+            cd -
+            cd "target/${TARGET}/release/examples"
+            # remove temporary build files we don't want to package
+            rm -f *.* *-????????????????
+            echo "Packaging ${EXPL_PKG_NAME}:"
+            zip ../../../../${EXPL_PKG_NAME} *
+            cd -
+            echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
+            echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
+
+            # check if debian packages has been created and packages them in a single tgz
+            if [[ -d target/${TARGET}/debian ]]; then
+              cd target/${TARGET}/debian
+              ../../../gen_zenoh_deb.sh ${{ steps.env.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
+              echo "Packaging ${DEBS_PKG_NAME}:"
+              zip ../../../${DEBS_PKG_NAME} *.deb
+              cd -
+              echo ::set-output name=DEBS_PKG_NAME::"${DEBS_PKG_NAME}"
+            fi
+            ;;
+          *apple*)
+            cd "target/${TARGET}/release/"
+            echo "Packaging ${MAIN_PKG_NAME}:"
+            zip ../../../${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
+            cd -
+            cd "target/${TARGET}/release/examples"
+            # remove temporary build files we don't want to package
+            rm -f *.* *-????????????????
+            echo "Packaging ${EXPL_PKG_NAME}:"
+            zip ../../../../${EXPL_PKG_NAME} *
+            cd -
+            echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
+            echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
+            ;;
+          *windows*)
+            cd "target/${TARGET}/release/"
+            echo "Packaging ${MAIN_PKG_NAME}:"
+            7z -y a "../../../${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
+            cd -
+            cd "target/${TARGET}/release/examples"
+            rm -f *-????????????????.exe
+            echo "Packaging ${EXPL_PKG_NAME}:"
+            7z -y a "../../../../${EXPL_PKG_NAME}" "*.exe"
+            cd -
+            echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
+            echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
+            ;;
+        esac
+
+    - name: "Upload main package"
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ steps.package.outputs.MAIN_PKG_NAME }}
+        path: ${{ steps.package.outputs.MAIN_PKG_NAME }}
+    - name: "Upload examples package"
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ steps.package.outputs.EXPL_PKG_NAME }}
+        path: ${{ steps.package.outputs.EXPL_PKG_NAME }}
+    - name: "Upload debian packages"
+      if: ${{ steps.package.outputs.DEBS_PKG_NAME }}
+      uses: actions/upload-artifact@master
+      with:
+        name: ${{ steps.package.outputs.DEBS_PKG_NAME }}
+        path: ${{ steps.package.outputs.DEBS_PKG_NAME }}
