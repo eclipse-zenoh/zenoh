@@ -450,19 +450,13 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             }
             // The connecting zenoh peer does not want to do multilink
             None => {
-                let mut guard = zasynclock!(self.state);
-                match guard.authenticated.get(&cookie.pid) {
-                    // Check if the peer is already present
-                    Some(_) => {
-                        // The peer is already present but no multilink intereset is declared.
-                        // Rejecting for inconsistent declaration.
-                        let e = format!("No multilink supported on link: {}", link);
-                        return zerror!(ZErrorKind::InvalidMessage { descr: e });
-                    }
-                    None => {
-                        // It's the first time we see this peer, insert it
-                        guard.authenticated.insert(cookie.pid, None);
-                    }
+                let guard = zasynclock!(self.state);
+                if guard.authenticated.get(&cookie.pid).is_some() {
+                    println!("\nERROR: {:?}\n", guard.authenticated);
+                    // The peer is already present but no multilink intereset is declared.
+                    // Rejecting for inconsistent declaration.
+                    let e = format!("No multilink supported on link: {}", link);
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
                 }
 
                 // No properties need to be included in the InitAck attachment
@@ -597,7 +591,18 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     }
                 }
             }
-            (None, None) => {}
+            (None, None) => {
+                // No multilink
+                let mut guard = zasynclock!(self.state);
+                println!("\nINSERTING: {} {:?}\n", cookie.pid, guard.authenticated);
+                if guard.authenticated.get(&cookie.pid).is_some() {
+                    // The peer did not previously express interest in multilink
+                    let e = format!("Invalid multilink pub key on link: {}", link);
+                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                }
+                // Finally store the public key
+                guard.authenticated.insert(cookie.pid, None);
+            }
             _ => {
                 let e = format!("Received invalid nonce on link: {}", link);
                 return zerror!(ZErrorKind::InvalidMessage { descr: e });

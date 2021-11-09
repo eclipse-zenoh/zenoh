@@ -79,6 +79,7 @@ pub struct Member {
     info: Option<String>,
     liveliness: MemberLiveliness,
     lease: Duration,
+    refresh_ratio: f32,
 }
 
 impl Member {
@@ -88,6 +89,7 @@ impl Member {
             info: None,
             liveliness: MemberLiveliness::Auto,
             lease: DEFAULT_LEASE,
+            refresh_ratio: VIEW_REFRESH_LEASE_RATIO,
         }
     }
 
@@ -106,6 +108,11 @@ impl Member {
 
     pub fn liveliness(mut self, l: MemberLiveliness) -> Self {
         self.liveliness = l;
+        self
+    }
+
+    pub fn refresh_ratio(mut self, r: f32) -> Self {
+        self.refresh_ratio = r;
         self
     }
 }
@@ -129,7 +136,10 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     let mid = state.local_member.mid.clone();
     let evt = GroupNetEvent::KeepAlive(KeepAliveEvent { mid });
     let buf = bincode::serialize(&evt).unwrap();
-    let period = state.local_member.lease.mul_f32(VIEW_REFRESH_LEASE_RATIO);
+    let period = state
+        .local_member
+        .lease
+        .mul_f32(state.local_member.refresh_ratio);
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
@@ -180,35 +190,6 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     }
 }
 
-async fn advertise_view(z: &Arc<Session>, state: &Arc<GroupState>) {
-    log::debug!("Maybe Advertising NewGroupView....");
-    let mut min: String = state.local_member.mid.clone();
-    let sid = &state.local_member.mid;
-    let mut members: Vec<Member> = state
-        .members
-        .lock()
-        .await
-        .iter()
-        .map(|e| {
-            if e.0 < sid {
-                min = e.0.clone()
-            };
-            e.1 .0.clone()
-        })
-        .collect();
-    members.push(state.local_member.clone());
-    if min == *sid {
-        let evt = GroupNetEvent::NewGroupView(NewGroupViewEvent {
-            source: sid.to_string(),
-            members,
-        });
-        log::debug!("Advertising NewGroupView: {:?}", &evt);
-        let buf = bincode::serialize(&evt).unwrap();
-        let res = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, EVENT_POSTFIX);
-        let _ = z.put(&res, buf).wait();
-    }
-}
-
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let mut sub = z.subscribe(&state.event_resource).await.unwrap();
     let stream = sub.receiver();
@@ -217,7 +198,6 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
         match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.to_vec())) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
-                    advertise_view(&z, &state).await;
                     log::debug!("Member joining the group:\n{:?}", &je.member);
                     let alive_till = Instant::now().add(je.member.lease);
                     let mut ms = state.members.lock().await;
