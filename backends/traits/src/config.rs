@@ -302,3 +302,31 @@ impl PartialEq for BackendConfig {
         self.name == other.name && self.paths == other.paths && self.rest == other.rest
     }
 }
+pub enum PrivacyGetResult<T> {
+    NotFound,
+    Private(T),
+    Public(T),
+    Both { public: T, private: T },
+}
+pub trait PrivacyTransparentGet<T> {
+    fn get_private(&self, key: &str) -> PrivacyGetResult<&T>;
+}
+impl PrivacyTransparentGet<serde_json::Value> for serde_json::Map<String, serde_json::Value> {
+    fn get_private(&self, key: &str) -> PrivacyGetResult<&serde_json::Value> {
+        use PrivacyGetResult::*;
+        match (
+            self.get(key),
+            self.get("private")
+                .map(|f| f.as_object().map(|f| f.get(key)).flatten())
+                .flatten(),
+        ) {
+            (None, None) => NotFound,
+            (Some(a), None) => Public(a),
+            (None, Some(a)) => Private(a),
+            (Some(a), Some(b)) => Both {
+                public: a,
+                private: b,
+            },
+        }
+    }
+}
