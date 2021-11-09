@@ -29,7 +29,7 @@
 //! use zenoh_backend_traits::config::*;
 //!
 //! #[no_mangle]
-//! pub extern "C" fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+//! pub fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
 //!     Ok(Box::new(MyBackend { config }))
 //! }
 //!
@@ -135,7 +135,7 @@ use config::{BackendConfig, StorageConfig};
 
 /// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
 pub const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
-pub type CreateBackend = unsafe extern "C" fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
+pub type CreateBackend = fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
 
 /// Trait to be implemented by a Backend.
 ///
