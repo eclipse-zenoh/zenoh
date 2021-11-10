@@ -50,7 +50,7 @@ async fn main() {
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr, String::from_utf8_lossy(&sample.value.payload.to_vec()));
+                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.to_vec()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
