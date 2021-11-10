@@ -19,13 +19,13 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (config, key_expr, value) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Put Data ('{}': '{}')", path, value);
-    session.put(&path, value).await.unwrap();
+    println!("Put Data ('{}': '{}')", key_expr, value);
+    session.put(&key_expr, value).await.unwrap();
 }
 
 fn parse_args() -> (Properties, String, String) {
@@ -41,7 +41,7 @@ fn parse_args() -> (Properties, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The key expression to write.'")
+            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to write.'")
                 .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(
@@ -67,8 +67,8 @@ fn parse_args() -> (Properties, String, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let path = args.value_of("path").unwrap();
-    let value = args.value_of("value").unwrap();
+    let key_expr = args.value_of("key").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
 
-    (config, path.to_string(), value.to_string())
+    (config, key_expr, value)
 }

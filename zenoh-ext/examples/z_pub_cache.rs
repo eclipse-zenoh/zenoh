@@ -22,13 +22,13 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, path, value, history, prefix) = parse_args();
+    let (config, key_expr, value, history, prefix) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    print!("Register key expression {}", path);
-    let expr_id = session.register_expr(&path).await.unwrap();
+    print!("Register key expression {}", key_expr);
+    let expr_id = session.register_expr(&key_expr).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Register Publisher on {}", expr_id);
@@ -59,7 +59,7 @@ fn parse_args() -> (Properties, String, String, usize, Option<String>) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The key expression to publish.'")
+            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish.'")
                 .default_value("/demo/example/zenoh-rs-pub"),
         )
         .arg(
@@ -95,10 +95,10 @@ fn parse_args() -> (Properties, String, String, usize, Option<String>) {
     // Timestamping of publications is required for publication cache
     config.insert("add_timestamp".to_string(), "true".to_string());
 
-    let path = args.value_of("path").unwrap();
-    let value = args.value_of("value").unwrap();
+    let key_expr = args.value_of("key").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
     let history: usize = args.value_of("history").unwrap().parse().unwrap();
     let prefix = args.value_of("prefix").map(String::from);
 
-    (config, path.to_string(), value.to_string(), history, prefix)
+    (config, key_expr, value, history, prefix)
 }

@@ -26,19 +26,19 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, key_expr) = parse_args();
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Subscriber on {}", selector);
-    let mut subscriber = session.subscribe(&selector).await.unwrap();
+    println!("Register Subscriber on {}", key_expr);
+    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
-    println!("Register Queryable on {}", selector);
+    println!("Register Queryable on {}", key_expr);
     let mut queryable = session
-        .register_queryable(&selector)
+        .register_queryable(&key_expr)
         .kind(STORAGE)
         .await
         .unwrap();
@@ -87,7 +87,7 @@ fn parse_args() -> (Properties, String) {
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to store'")
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The selection of resources to store'")
                 .default_value("/demo/example/**"),
         )
         .arg(Arg::from_usage(
@@ -109,7 +109,7 @@ fn parse_args() -> (Properties, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
 
-    (config, selector)
+    (config, key_expr)
 }
