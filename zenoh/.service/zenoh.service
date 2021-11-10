@@ -1,6 +1,8 @@
 [Unit]
 Description = Eclipse Zenoh Router
-
+Documentation=https://zenoh.io/docs/getting-started/key-concepts/
+After=network-online.target
+Wants=network-online.target
 
 
 [Service]
