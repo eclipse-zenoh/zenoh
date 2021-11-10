@@ -13,7 +13,6 @@
 //
 use clap::{App, Arg};
 use std::time::Instant;
-use zenoh::prelude::KeyExpr::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -25,10 +24,10 @@ fn main() {
     let session = zenoh::open(config).wait().unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = Id(session.register_expr("/test/ping").wait().unwrap());
+    let key_expr_ping = session.register_expr("/test/ping").wait().unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = Id(session.register_expr("/test/pong").wait().unwrap());
+    let key_expr_pong = session.register_expr("/test/pong").wait().unwrap();
 
     let mut sub = session.subscribe(&key_expr_pong).wait().unwrap();
 

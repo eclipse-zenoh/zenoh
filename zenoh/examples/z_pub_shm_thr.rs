@@ -13,7 +13,6 @@
 //
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
-use zenoh::prelude::KeyExpr::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -32,7 +31,7 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let key_expr = Id(z.register_expr("/test/thr").await.unwrap());
+    let key_expr = z.register_expr("/test/thr").await.unwrap();
     let _publ = z.publishing(&key_expr).await.unwrap();
 
     loop {

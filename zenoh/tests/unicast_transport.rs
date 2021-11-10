@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -264,7 +264,7 @@ async fn test_transport(
     msg_size: usize,
 ) {
     // Create the message to send
-    let key = KeyExpr::Expr("/test".into());
+    let key = "/test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;

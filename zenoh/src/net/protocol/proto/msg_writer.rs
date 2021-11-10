@@ -350,12 +350,10 @@ impl WBuf {
 
     #[inline(always)]
     fn write_key_expr(&mut self, key: &KeyExpr) -> bool {
-        match key {
-            KeyExpr::Id(expr_id) => self.write_zint(*expr_id),
-            KeyExpr::Expr(name) => self.write_zint(EMPTY_EXPR_ID) && self.write_string(name),
-            KeyExpr::IdWithSuffix(expr_id, suffix) => {
-                self.write_zint(*expr_id) && self.write_string(suffix)
-            }
+        if key.has_suffix() {
+            self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
+        } else {
+            self.write_zint(key.scope)
         }
     }
 

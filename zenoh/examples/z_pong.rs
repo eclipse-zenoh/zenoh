@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::prelude::KeyExpr::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -25,10 +24,10 @@ fn main() {
     let session = zenoh::open(config).wait().unwrap();
 
     // The key expression to read the data from
-    let key_expr_ping = Id(session.register_expr("/test/ping").wait().unwrap());
+    let key_expr_ping = session.register_expr("/test/ping").wait().unwrap();
 
     // The key expression to echo the data back
-    let key_expr_pong = Id(session.register_expr("/test/pong").wait().unwrap());
+    let key_expr_pong = session.register_expr("/test/pong").wait().unwrap();
     let _publ = session.publishing(&key_expr_pong).wait().unwrap();
 
     let mut sub = session.subscribe(&key_expr_ping).wait().unwrap();

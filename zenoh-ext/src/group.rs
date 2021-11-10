@@ -313,7 +313,7 @@ impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
         let expr_id = z.register_expr(&_group_expr).await.unwrap();
-        let event_expr = KeyExpr::IdWithSuffix(expr_id, EVENT_POSTFIX.into());
+        let event_expr = KeyExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),

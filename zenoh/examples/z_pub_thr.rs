@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::prelude::KeyExpr::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -28,7 +27,7 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    let key_expr = Id(session.register_expr("/test/thr").wait().unwrap());
+    let key_expr = session.register_expr("/test/thr").wait().unwrap();
     let _publ = session.publishing(&key_expr).wait().unwrap();
 
     loop {

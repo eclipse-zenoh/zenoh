@@ -655,7 +655,7 @@ impl Header for Data {
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         if self.congestion_control == CongestionControl::Drop {
@@ -723,7 +723,7 @@ impl Header for Resource {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -767,7 +767,7 @@ impl Header for Publisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -791,7 +791,7 @@ impl Header for ForgetPublisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -826,7 +826,7 @@ impl Header for Subscriber {
         if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
             header |= zmsg::flag::S;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -850,7 +850,7 @@ impl Header for ForgetSubscriber {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -883,7 +883,7 @@ impl Header for Queryable {
         if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -913,7 +913,7 @@ impl Header for ForgetQueryable {
         if self.kind != queryable::EVAL {
             header |= zmsg::flag::Q
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K
         }
         header
@@ -974,7 +974,7 @@ impl Header for Pull {
         if self.max_samples.is_some() {
             header |= zmsg::flag::N;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -1015,7 +1015,7 @@ impl Header for Query {
         if self.target.is_some() {
             header |= zmsg::flag::T;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header

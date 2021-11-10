@@ -512,17 +512,19 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_key_expr(&mut self, is_string: bool) -> Option<KeyExpr<'static>> {
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>> {
         let id = self.read_zint()?;
-        if is_string {
+        if has_suffix {
             let s = self.read_string()?;
-            if id == EMPTY_EXPR_ID {
-                Some(KeyExpr::Expr(s.into()))
-            } else {
-                Some(KeyExpr::IdWithSuffix(id, s.into()))
-            }
+            Some(KeyExpr {
+                scope: id,
+                suffix: s.into(),
+            })
         } else {
-            Some(KeyExpr::Id(id))
+            Some(KeyExpr {
+                scope: id,
+                suffix: "".into(),
+            })
         }
     }
 

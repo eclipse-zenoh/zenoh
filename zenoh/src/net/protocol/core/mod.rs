@@ -275,7 +275,7 @@ pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
-/// A key expression.
+/// A resource key expression.
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if Expr : id=0
@@ -284,68 +284,102 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum KeyExpr<'a> {
-    Expr(Cow<'a, str>),
-    Id(ExprId),
-    IdWithSuffix(ExprId, Cow<'a, str>),
+pub struct KeyExpr<'a> {
+    pub(crate) scope: ExprId, // 0 marks global scope
+    pub(crate) suffix: Cow<'a, str>,
 }
-use KeyExpr::*;
 
-impl KeyExpr<'_> {
-    #[inline(always)]
-    pub fn as_str(&self) -> &str {
-        match self {
-            Expr(name) => name.as_ref(),
-            Id(_) | IdWithSuffix(_, _) => "",
+impl<'a> KeyExpr<'a> {
+    pub fn as_str(&'a self) -> &'a str {
+        if self.scope == 0 {
+            self.suffix.as_ref()
+        } else {
+            "<encoded_expr>"
         }
     }
 
-    #[inline(always)]
-    pub fn id(&self) -> ExprId {
-        match self {
-            Expr(_) => EMPTY_EXPR_ID,
-            Id(expr_id) | IdWithSuffix(expr_id, _) => *expr_id,
+    pub fn try_as_str(&'a self) -> ZResult<&'a str> {
+        if self.scope == 0 {
+            Ok(self.suffix.as_ref())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Scoped key expression".to_string()
+            })
         }
     }
 
-    #[inline(always)]
-    pub fn is_string(&self) -> bool {
-        match self {
-            Expr(_) | IdWithSuffix(_, _) => true,
-            Id(_) => false,
+    pub fn as_id(&'a self) -> ExprId {
+        self.scope
+    }
+
+    pub fn try_as_id(&'a self) -> ZResult<ExprId> {
+        if self.has_suffix() {
+            zerror!(ZErrorKind::Other {
+                descr: "Suffixed key expression".to_string()
+            })
+        } else {
+            Ok(self.scope)
         }
     }
 
-    #[inline(always)]
-    pub fn is_numeric(&self) -> bool {
-        match self {
-            Id(_) => true,
-            Expr(_) | IdWithSuffix(_, _) => false,
-        }
+    pub(crate) fn has_suffix(&self) -> bool {
+        !self.suffix.as_ref().is_empty()
     }
 
     pub fn to_owned(&self) -> KeyExpr<'static> {
-        match self {
-            Self::Id(id) => KeyExpr::Id(*id),
-            Self::Expr(s) => KeyExpr::Expr(s.to_string().into()),
-            Self::IdWithSuffix(id, s) => KeyExpr::IdWithSuffix(*id, s.to_string().into()),
+        KeyExpr {
+            scope: self.scope,
+            suffix: self.suffix.to_string().into(),
         }
+    }
+
+    pub fn with_suffix(mut self, suffix: &'a str) -> Self {
+        if self.suffix.is_empty() {
+            self.suffix = suffix.into();
+        } else {
+            self.suffix += suffix;
+        }
+        self
+    }
+}
+
+impl TryInto<String> for KeyExpr<'_> {
+    type Error = ZError;
+    fn try_into(self) -> Result<String, Self::Error> {
+        if self.scope == 0 {
+            Ok(self.suffix.into_owned())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Scoped key expression".to_string()
+            })
+        }
+    }
+}
+
+impl TryInto<ExprId> for KeyExpr<'_> {
+    type Error = ZError;
+    fn try_into(self) -> Result<ExprId, Self::Error> {
+        self.try_as_id()
     }
 }
 
 impl fmt::Debug for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Expr(name) => write!(f, "{}", name),
-            Id(expr_id) => write!(f, "{}", expr_id),
-            IdWithSuffix(expr_id, suffix) => write!(f, "{}, {}", expr_id, suffix),
+        if self.scope == 0 {
+            write!(f, "{}", self.suffix)
+        } else {
+            write!(f, "{}:{}", self.scope, self.suffix)
         }
     }
 }
 
 impl fmt::Display for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        if self.scope == 0 {
+            write!(f, "{}", self.suffix)
+        } else {
+            write!(f, "{}:{}", self.scope, self.suffix)
+        }
     }
 }
 
@@ -358,41 +392,60 @@ impl<'a> From<&KeyExpr<'a>> for KeyExpr<'a> {
 
 impl From<ExprId> for KeyExpr<'_> {
     #[inline]
-    fn from(expr_id: ExprId) -> KeyExpr<'static> {
-        Id(expr_id)
+    fn from(rid: ExprId) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: rid,
+            suffix: "".into(),
+        }
+    }
+}
+
+impl From<&ExprId> for KeyExpr<'_> {
+    #[inline]
+    fn from(rid: &ExprId) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: *rid,
+            suffix: "".into(),
+        }
     }
 }
 
 impl<'a> From<&'a str> for KeyExpr<'a> {
     #[inline]
     fn from(name: &'a str) -> KeyExpr<'a> {
-        Expr(name.into())
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
+        }
     }
 }
 
 impl From<String> for KeyExpr<'_> {
     #[inline]
     fn from(name: String) -> KeyExpr<'static> {
-        Expr(name.into())
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
+        }
     }
 }
 
 impl<'a> From<&'a String> for KeyExpr<'a> {
     #[inline]
     fn from(name: &'a String) -> KeyExpr<'a> {
-        Expr(name.as_str().into())
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
+        }
     }
 }
 
 impl<'a> From<(ExprId, &'a str)> for KeyExpr<'a> {
     #[inline]
     fn from(tuple: (ExprId, &'a str)) -> KeyExpr<'a> {
-        if tuple.1.is_empty() {
-            Id(tuple.0)
-        } else if tuple.0 == EMPTY_EXPR_ID {
-            Expr(tuple.1.into())
-        } else {
-            IdWithSuffix(tuple.0, tuple.1.into())
+        KeyExpr {
+            scope: tuple.0,
+            suffix: tuple.1.into(),
         }
     }
 }
@@ -400,12 +453,9 @@ impl<'a> From<(ExprId, &'a str)> for KeyExpr<'a> {
 impl From<(ExprId, String)> for KeyExpr<'_> {
     #[inline]
     fn from(tuple: (ExprId, String)) -> KeyExpr<'static> {
-        if tuple.1.is_empty() {
-            Id(tuple.0)
-        } else if tuple.0 == EMPTY_EXPR_ID {
-            Expr(tuple.1.into())
-        } else {
-            IdWithSuffix(tuple.0, tuple.1.into())
+        KeyExpr {
+            scope: tuple.0,
+            suffix: tuple.1.into(),
         }
     }
 }
@@ -413,11 +463,7 @@ impl From<(ExprId, String)> for KeyExpr<'_> {
 impl<'a> From<&'a KeyExpr<'a>> for (ExprId, &'a str) {
     #[inline]
     fn from(key: &'a KeyExpr<'a>) -> (ExprId, &'a str) {
-        match key {
-            Id(expr_id) => (*expr_id, ""),
-            Expr(name) => (EMPTY_EXPR_ID, &name[..]), //(&(0 as ZInt)
-            IdWithSuffix(expr_id, suffix) => (*expr_id, &suffix[..]),
-        }
+        (key.scope, key.suffix.as_ref())
     }
 }
 

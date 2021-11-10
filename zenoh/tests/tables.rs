@@ -17,7 +17,7 @@ use uhlc::HLC;
 use zenoh::net::protocol::core::key_expr::intersect;
 use zenoh::net::protocol::core::{
     Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, SubInfo, SubMode, WhatAmI, ZInt,
+    Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
@@ -359,12 +359,13 @@ impl Default for ClientPrimitives {
 impl ClientPrimitives {
     fn get_name(&self, key_expr: &KeyExpr) -> String {
         let mapping = self.mapping.lock().unwrap();
-        match key_expr {
-            KeyExpr::Expr(name) => name.to_string(),
-            KeyExpr::Id(id) => mapping.get(id).unwrap().clone(),
-            KeyExpr::IdWithSuffix(id, suffix) => {
-                [&mapping.get(id).unwrap()[..], &suffix[..]].concat()
-            }
+        let (scope, suffix) = key_expr.into();
+        if scope == EMPTY_EXPR_ID {
+            suffix.to_string()
+        } else if suffix.is_empty() {
+            mapping.get(&scope).unwrap().clone()
+        } else {
+            format!("{}{}", mapping.get(&scope).unwrap(), suffix)
         }
     }
 
@@ -493,7 +494,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives0.decl_resource(11, &KeyExpr::Expr("/test/client".into()));
+    primitives0.decl_resource(11, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -508,7 +509,7 @@ fn client_test() {
         11,
         "/z1_pub1",
     );
-    primitives0.decl_resource(12, &KeyExpr::IdWithSuffix(11, "/z1_pub1".into()));
+    primitives0.decl_resource(12, &KeyExpr::from(11).with_suffix("/z1_pub1"));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
@@ -523,7 +524,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives1.decl_resource(21, &KeyExpr::Expr("/test/client".into()));
+    primitives1.decl_resource(21, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
@@ -538,7 +539,7 @@ fn client_test() {
         21,
         "/z2_pub1",
     );
-    primitives1.decl_resource(22, &KeyExpr::IdWithSuffix(21, "/z2_pub1".into()));
+    primitives1.decl_resource(22, &KeyExpr::from(21).with_suffix("/z2_pub1"));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
@@ -553,7 +554,7 @@ fn client_test() {
         0,
         "/test/client",
     );
-    primitives2.decl_resource(31, &KeyExpr::Expr("/test/client".into()));
+    primitives2.decl_resource(31, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),

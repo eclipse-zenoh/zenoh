@@ -13,7 +13,7 @@
 use super::protocol::{
     core::{
         key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -106,13 +106,15 @@ impl AdminSpace {
         );
     }
 
-    pub fn key_expr_to_string(&self, key: &KeyExpr) -> Option<String> {
-        match key {
-            KeyExpr::Id(id) => zlock!(self.mappings).get(id).cloned(),
-            KeyExpr::IdWithSuffix(id, suffix) => zlock!(self.mappings)
-                .get(id)
-                .map(|prefix| format!("{}{}", prefix, suffix)),
-            KeyExpr::Expr(name) => Some(name.to_string()),
+    pub fn key_expr_to_string(&self, key_expr: &KeyExpr) -> Option<String> {
+        if key_expr.scope == EMPTY_EXPR_ID {
+            Some(key_expr.suffix.to_string())
+        } else if key_expr.suffix.is_empty() {
+            zlock!(self.mappings).get(&key_expr.scope).cloned()
+        } else {
+            zlock!(self.mappings)
+                .get(&key_expr.scope)
+                .map(|prefix| format!("{}{}", prefix, key_expr.suffix.as_ref()))
         }
     }
 }

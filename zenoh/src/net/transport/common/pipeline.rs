@@ -631,7 +631,7 @@ impl fmt::Debug for TransmissionPipeline {
 mod tests {
     use super::*;
     use crate::net::protocol::core::{
-        Channel, ConduitSn, CongestionControl, KeyExpr, Priority, Reliability, ZInt,
+        Channel, ConduitSn, CongestionControl, Priority, Reliability, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
     use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
@@ -651,7 +651,7 @@ mod tests {
     fn tx_pipeline_flow() {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let key = KeyExpr::Expr("test".into());
+            let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
             let data_info = None;
             let routing_context = None;
@@ -780,7 +780,7 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = KeyExpr::Expr("test".into());
+            let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
@@ -892,7 +892,7 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = KeyExpr::Expr("test".into());
+            let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
@@ -1025,7 +1025,7 @@ mod tests {
                     c_size.store(*size, Ordering::Release);
 
                     // Send reliable messages
-                    let key = KeyExpr::Expr("/pipeline/thr".into());
+                    let key = "/pipeline/thr".into();
                     let payload = ZBuf::from(vec![0_u8; *size]);
                     let channel = Channel {
                         priority: Priority::Control,

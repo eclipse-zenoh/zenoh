@@ -17,7 +17,7 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -75,7 +75,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Create the message to send, this would trigger the transport closure
-    let key = KeyExpr::Expr("/test".into());
+    let key = "/test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;

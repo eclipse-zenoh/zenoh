@@ -18,6 +18,7 @@ use super::queryable::*;
 use super::subscriber::*;
 use super::*;
 use crate::config::{Config, Notifier};
+use crate::net::protocol::core::EMPTY_EXPR_ID;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -134,20 +135,22 @@ impl SessionState {
     }
 
     pub fn remotekey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
-        use super::KeyExpr::*;
-        match key_expr {
-            Expr(name) => Ok(name.to_string()),
-            Id(id) => self.id_to_expr(id),
-            IdWithSuffix(id, suffix) => Ok(self.id_to_expr(id)? + suffix),
+        if key_expr.scope == EMPTY_EXPR_ID {
+            Ok(key_expr.suffix.to_string())
+        } else if key_expr.suffix.is_empty() {
+            self.id_to_expr(&key_expr.scope)
+        } else {
+            Ok(self.id_to_expr(&key_expr.scope)? + key_expr.suffix.as_ref())
         }
     }
 
     pub fn localkey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
-        use super::KeyExpr::*;
-        match key_expr {
-            Expr(expr) => Ok(expr.to_string()),
-            Id(id) => self.localid_to_expr(id),
-            IdWithSuffix(id, suffix) => Ok(self.localid_to_expr(id)? + suffix),
+        if key_expr.scope == EMPTY_EXPR_ID {
+            Ok(key_expr.suffix.to_string())
+        } else if key_expr.suffix.is_empty() {
+            self.localid_to_expr(&key_expr.scope)
+        } else {
+            Ok(self.localid_to_expr(&key_expr.scope)? + key_expr.suffix.as_ref())
         }
     }
 
@@ -620,18 +623,27 @@ impl Session {
             drop(state);
 
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            let key_expr = match key_expr {
-                KeyExpr::Expr(key_expr_str) => match key_expr_str.find('*') {
+            let key_expr = if key_expr.scope == EMPTY_EXPR_ID {
+                match key_expr.suffix.as_ref().find('*') {
                     Some(pos) => {
-                        let id = self.register_expr(&key_expr_str[..pos]).wait()?;
-                        KeyExpr::IdWithSuffix(id, key_expr_str[pos..].to_string().into())
+                        let scope = self
+                            .register_expr(&key_expr.suffix.as_ref()[..pos])
+                            .wait()?;
+                        KeyExpr {
+                            scope,
+                            suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
+                        }
                     }
                     None => {
-                        let id = self.register_expr(&KeyExpr::Expr(key_expr_str)).wait()?;
-                        KeyExpr::Id(id)
+                        let scope = self.register_expr(key_expr.suffix.as_ref()).wait()?;
+                        KeyExpr {
+                            scope,
+                            suffix: "".into(),
+                        }
                     }
-                },
-                key_expr => key_expr,
+                }
+            } else {
+                key_expr
             };
 
             primitives.decl_subscriber(&key_expr, info, None);
@@ -995,8 +1007,8 @@ impl Session {
         payload: ZBuf,
     ) {
         let state = zread!(self.state);
-        if let KeyExpr::Id(expr_id) = key_expr {
-            match state.get_res(expr_id, local) {
+        if key_expr.suffix.is_empty() {
+            match state.get_res(&key_expr.scope, local) {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
@@ -1025,7 +1037,7 @@ impl Session {
                     }
                 }
                 None => {
-                    error!("Received Data for unkown expr_id: {}", expr_id);
+                    error!("Received Data for unkown expr_id: {}", key_expr.scope);
                 }
             }
         } else {

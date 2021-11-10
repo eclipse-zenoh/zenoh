@@ -645,7 +645,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&mut frame));
 
         // Create data message
-        let key = KeyExpr::Expr("test".into());
+        let key = "test".into();
         let payload = ZBuf::from(vec![0_u8; 1]);
         let data_info = None;
         let routing_context = None;

@@ -30,9 +30,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
 
     let key_expr_set = [
-        KeyExpr::Id(1),
-        KeyExpr::Expr("/frame/bench".into()),
-        KeyExpr::IdWithSuffix(1, "/frame/bench".into()),
+        KeyExpr::from(1),
+        KeyExpr::from("/frame/bench"),
+        KeyExpr::from(1).with_suffix("/frame/bench"),
     ];
 
     for p in &pld {

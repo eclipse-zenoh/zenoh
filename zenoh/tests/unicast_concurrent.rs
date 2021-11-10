@@ -21,7 +21,7 @@ mod tests {
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
     use zenoh::net::protocol::core::{
-        Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, WhatAmI,
+        Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
@@ -189,7 +189,7 @@ mod tests {
             );
 
             // Create the message to send
-            let key = KeyExpr::Expr("/test02".into());
+            let key = "/test02".into();
             let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
             let channel = Channel {
                 priority: Priority::default(),
@@ -299,7 +299,7 @@ mod tests {
             );
 
             // Create the message to send
-            let key = KeyExpr::Expr("/test02".into());
+            let key = "/test02".into();
             let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
             let channel = Channel {
                 priority: Priority::default(),
