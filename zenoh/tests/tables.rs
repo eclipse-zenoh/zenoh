@@ -38,15 +38,13 @@ fn base_test() {
         &mut tables,
         &mut face.upgrade().unwrap(),
         1,
-        0,
-        "/one/two/three",
+        &"/one/two/three".into(),
     );
     register_expr(
         &mut tables,
         &mut face.upgrade().unwrap(),
         2,
-        0,
-        "/one/deux/trois",
+        &"/one/deux/trois".into(),
     );
 
     let sub_info = SubInfo {
@@ -57,8 +55,7 @@ fn base_test() {
     declare_client_subscription(
         &mut tables,
         &mut face.upgrade().unwrap(),
-        1,
-        "/four/five",
+        &KeyExpr::from(1).with_suffix("/four/five"),
         &sub_info,
     );
 
@@ -134,8 +131,7 @@ fn match_test() {
             &mut tables,
             &mut face.upgrade().unwrap(),
             i.try_into().unwrap(),
-            0,
-            key_expr,
+            &(*key_expr).into(),
         );
     }
 
@@ -168,7 +164,12 @@ fn clean_test() {
     assert!(face0.upgrade().is_some());
 
     // --------------
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
+    register_expr(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        1,
+        &"/todrop1".into(),
+    );
     let optres1 =
         Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -179,8 +180,7 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        0,
-        "/todrop1/todrop11",
+        &"/todrop1/todrop11".into(),
     );
     let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -188,7 +188,7 @@ fn clean_test() {
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/**");
+    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, &"/**".into());
     let optres3 = Resource::get_resource(tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -210,7 +210,12 @@ fn clean_test() {
     assert!(!res3.upgrade().is_some());
 
     // --------------
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 1, 0, "/todrop1");
+    register_expr(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        1,
+        &"/todrop1".into(),
+    );
     let optres1 =
         Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
@@ -226,8 +231,7 @@ fn clean_test() {
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        0,
-        "/todrop1/todrop11",
+        &"/todrop1/todrop11".into(),
         &sub_info,
     );
     let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
@@ -239,8 +243,7 @@ fn clean_test() {
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        1,
-        "/todrop12",
+        &KeyExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
     );
     let optres3 = Resource::get_resource(tables._get_root(), "/todrop1/todrop12")
@@ -249,7 +252,11 @@ fn clean_test() {
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
 
-    forget_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 1, "/todrop12");
+    forget_client_subscription(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        &KeyExpr::from(1).with_suffix("/todrop12"),
+    );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(!res3.upgrade().is_some());
@@ -257,8 +264,7 @@ fn clean_test() {
     forget_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        0,
-        "/todrop1/todrop11",
+        &"/todrop1/todrop11".into(),
     );
     assert!(res1.upgrade().is_some());
     assert!(!res2.upgrade().is_some());
@@ -270,12 +276,16 @@ fn clean_test() {
     assert!(!res3.upgrade().is_some());
 
     // --------------
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 2, 0, "/todrop3");
+    register_expr(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        2,
+        &"/todrop3".into(),
+    );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        0,
-        "/todrop3",
+        &"/todrop3".into(),
         &sub_info,
     );
     let optres1 =
@@ -284,27 +294,39 @@ fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    forget_client_subscription(&mut tables, &mut face0.upgrade().unwrap(), 0, "/todrop3");
+    forget_client_subscription(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        &"/todrop3".into(),
+    );
     assert!(res1.upgrade().is_some());
 
     unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 2);
     assert!(!res1.upgrade().is_some());
 
     // --------------
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, 0, "/todrop4");
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 4, 0, "/todrop5");
+    register_expr(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        3,
+        &"/todrop4".into(),
+    );
+    register_expr(
+        &mut tables,
+        &mut face0.upgrade().unwrap(),
+        4,
+        &"/todrop5".into(),
+    );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        0,
-        "/todrop5",
+        &"/todrop5".into(),
         &sub_info,
     );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        0,
-        "/todrop6",
+        &"/todrop6".into(),
         &sub_info,
     );
 
@@ -359,7 +381,7 @@ impl Default for ClientPrimitives {
 impl ClientPrimitives {
     fn get_name(&self, key_expr: &KeyExpr) -> String {
         let mapping = self.mapping.lock().unwrap();
-        let (scope, suffix) = key_expr.into();
+        let (scope, suffix) = key_expr.as_id_and_suffix();
         if scope == EMPTY_EXPR_ID {
             suffix.to_string()
         } else if suffix.is_empty() {
@@ -491,23 +513,20 @@ fn client_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         11,
-        0,
-        "/test/client",
+        &"/test/client".into(),
     );
     primitives0.decl_resource(11, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        11,
-        "/**",
+        &KeyExpr::from(11).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         12,
-        11,
-        "/z1_pub1",
+        &KeyExpr::from(11).with_suffix("/z1_pub1"),
     );
     primitives0.decl_resource(12, &KeyExpr::from(11).with_suffix("/z1_pub1"));
 
@@ -521,23 +540,20 @@ fn client_test() {
         &mut tables,
         &mut face1.upgrade().unwrap(),
         21,
-        0,
-        "/test/client",
+        &"/test/client".into(),
     );
     primitives1.decl_resource(21, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
-        21,
-        "/**",
+        &KeyExpr::from(21).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
         &mut tables,
         &mut face1.upgrade().unwrap(),
         22,
-        21,
-        "/z2_pub1",
+        &KeyExpr::from(21).with_suffix("/z2_pub1"),
     );
     primitives1.decl_resource(22, &KeyExpr::from(21).with_suffix("/z2_pub1"));
 
@@ -551,15 +567,13 @@ fn client_test() {
         &mut tables,
         &mut face2.upgrade().unwrap(),
         31,
-        0,
-        "/test/client",
+        &"/test/client".into(),
     );
     primitives2.decl_resource(31, &"/test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),
-        31,
-        "/**",
+        &KeyExpr::from(31).with_suffix("/**"),
         &sub_info,
     );
 
@@ -569,8 +583,7 @@ fn client_test() {
     route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        0,
-        "/test/client/z1_wr1",
+        &"/test/client/z1_wr1".into(),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -596,8 +609,7 @@ fn client_test() {
     route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        11,
-        "/z1_wr2",
+        &KeyExpr::from(11).with_suffix("/z1_wr2"),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -623,8 +635,7 @@ fn client_test() {
     route_data(
         &tables,
         &face1.upgrade().unwrap(),
-        0,
-        "/test/client/**",
+        &"/test/client/**".into(),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -650,8 +661,7 @@ fn client_test() {
     route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        12,
-        "",
+        &12.into(),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -677,8 +687,7 @@ fn client_test() {
     route_data(
         &tables,
         &face1.upgrade().unwrap(),
-        22,
-        "",
+        &22.into(),
         Channel::default(),
         CongestionControl::default(),
         None,

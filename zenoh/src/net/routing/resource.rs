@@ -390,7 +390,10 @@ impl Resource {
                         expr_id
                     }
                 };
-                (expr_id, wildsuffix).into()
+                KeyExpr {
+                    scope: expr_id,
+                    suffix: wildsuffix.into(),
+                }
             }
             None => wildsuffix.into(),
         }
@@ -412,16 +415,22 @@ impl Resource {
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
                 if let Some(expr_id) = ctx.local_expr_id {
-                    return (expr_id, suffix).into();
+                    return KeyExpr {
+                        scope: expr_id,
+                        suffix: suffix.into(),
+                    };
                 } else if let Some(expr_id) = ctx.remote_expr_id {
-                    return (expr_id, suffix).into();
+                    return KeyExpr {
+                        scope: expr_id,
+                        suffix: suffix.into(),
+                    };
                 }
             }
             match &prefix.parent {
                 Some(parent) => {
                     get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false).to_owned()
                 }
-                None => (0, suffix).into(),
+                None => suffix.into(),
             }
         }
         get_best_key_(prefix, suffix, sid, true)
@@ -519,18 +528,17 @@ pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     expr_id: ZInt,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
-                if res.expr() != format!("{}{}", prefix.expr(), suffix) {
+                if res.expr() != format!("{}{}", prefix.expr(), expr.suffix) {
                     log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
                 }
             }
             None => {
-                let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+                let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                 Resource::match_resource(tables, &mut res);
                 let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
@@ -565,7 +573,7 @@ pub fn register_expr(
                 tables.compute_matches_routes(&mut res);
             }
         },
-        None => log::error!("Declare resource with unknown prefix {}!", prefixid),
+        None => log::error!("Declare resource with unknown scope {}!", expr.scope),
     }
 }
 

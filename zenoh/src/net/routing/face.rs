@@ -165,15 +165,8 @@ pub struct Face {
 
 impl Primitives for Face {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
-        register_expr(
-            &mut tables,
-            &mut self.state.clone(),
-            expr_id,
-            prefixid,
-            suffix,
-        );
+        register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
@@ -187,7 +180,6 @@ impl Primitives for Face {
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -195,8 +187,7 @@ impl Primitives for Face {
                     declare_router_subscription(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         sub_info,
                         router,
                     )
@@ -209,8 +200,7 @@ impl Primitives for Face {
                     declare_peer_subscription(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         sub_info,
                         peer,
                     )
@@ -219,15 +209,13 @@ impl Primitives for Face {
             _ => declare_client_subscription(
                 &mut tables,
                 &mut self.state.clone(),
-                prefixid,
-                suffix,
+                key_expr,
                 sub_info,
             ),
         }
     }
 
     fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -235,8 +223,7 @@ impl Primitives for Face {
                     forget_router_subscription(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         &router,
                     )
                 }
@@ -245,16 +232,10 @@ impl Primitives for Face {
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
                 if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    forget_peer_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        prefixid,
-                        suffix,
-                        &peer,
-                    )
+                    forget_peer_subscription(&mut tables, &mut self.state.clone(), key_expr, &peer)
                 }
             }
-            _ => forget_client_subscription(&mut tables, &mut self.state.clone(), prefixid, suffix),
+            _ => forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr),
         }
     }
 
@@ -269,7 +250,6 @@ impl Primitives for Face {
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -277,8 +257,7 @@ impl Primitives for Face {
                     declare_router_queryable(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         kind,
                         qabl_info,
                         router,
@@ -292,8 +271,7 @@ impl Primitives for Face {
                     declare_peer_queryable(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         kind,
                         qabl_info,
                         peer,
@@ -303,8 +281,7 @@ impl Primitives for Face {
             _ => declare_client_queryable(
                 &mut tables,
                 &mut self.state.clone(),
-                prefixid,
-                suffix,
+                key_expr,
                 kind,
                 qabl_info,
             ),
@@ -317,7 +294,6 @@ impl Primitives for Face {
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -325,8 +301,7 @@ impl Primitives for Face {
                     forget_router_queryable(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         kind,
                         &router,
                     )
@@ -339,20 +314,13 @@ impl Primitives for Face {
                     forget_peer_queryable(
                         &mut tables,
                         &mut self.state.clone(),
-                        prefixid,
-                        suffix,
+                        key_expr,
                         kind,
                         &peer,
                     )
                 }
             }
-            _ => forget_client_queryable(
-                &mut tables,
-                &mut self.state.clone(),
-                prefixid,
-                suffix,
-                kind,
-            ),
+            _ => forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr, kind),
         }
     }
 
@@ -365,12 +333,10 @@ impl Primitives for Face {
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         full_reentrant_route_data(
             &self.tables,
             &self.state,
-            prefixid,
-            suffix,
+            key_expr,
             channel,
             congestion_control,
             data_info,
@@ -388,13 +354,11 @@ impl Primitives for Face {
         consolidation: QueryConsolidation,
         routing_context: Option<RoutingContext>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         route_query(
             &mut tables,
             &self.state,
-            prefixid,
-            suffix,
+            key_expr,
             value_selector,
             qid,
             target,
@@ -437,14 +401,12 @@ impl Primitives for Face {
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        let (prefixid, suffix) = key_expr.into();
         let mut tables = zwrite!(self.tables);
         pull_data(
             &mut tables,
             &self.state.clone(),
             is_final,
-            prefixid,
-            suffix,
+            key_expr,
             pull_id,
             max_samples,
         );

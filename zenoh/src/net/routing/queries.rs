@@ -350,21 +350,20 @@ fn register_router_queryable(
 pub fn declare_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
     router: PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
             register_router_queryable(tables, Some(face), &mut res, kind, qabl_info, router);
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare router queryable for unknown expr_id {}!", prefixid),
+        None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
 }
 
@@ -401,16 +400,15 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
 pub fn declare_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
     peer: PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
             let mut face = Some(face);
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
             register_peer_queryable(tables, face.as_deref(), &mut res, kind, qabl_info, peer);
 
@@ -428,7 +426,7 @@ pub fn declare_peer_queryable(
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare router queryable for unknown expr_id {}!", prefixid),
+        None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
 }
 
@@ -469,14 +467,13 @@ fn register_client_queryable(
 pub fn declare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
 
             register_client_queryable(tables, face, &mut res, kind, qabl_info);
@@ -511,7 +508,7 @@ pub fn declare_client_queryable(
 
             compute_matches_query_routes(tables, &mut res);
         }
-        None => log::error!("Declare queryable for unknown expr_id {}!", prefixid),
+        None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
     }
 }
 
@@ -676,13 +673,12 @@ fn undeclare_router_queryable(
 pub fn forget_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
     router: &PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_router_queryable(tables, Some(face), &mut res, kind, router);
 
@@ -691,7 +687,7 @@ pub fn forget_router_queryable(
             }
             None => log::error!("Undeclare unknown router queryable!"),
         },
-        None => log::error!("Undeclare router queryable with unknown prefix!"),
+        None => log::error!("Undeclare router queryable with unknown scope!"),
     }
 }
 
@@ -733,13 +729,12 @@ fn undeclare_peer_queryable(
 pub fn forget_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
     peer: &PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_peer_queryable(tables, Some(face), &mut res, kind, peer);
 
@@ -775,7 +770,7 @@ pub fn forget_peer_queryable(
             }
             None => log::error!("Undeclare unknown peer queryable!"),
         },
-        None => log::error!("Undeclare peer queryable with unknown prefix!"),
+        None => log::error!("Undeclare peer queryable with unknown scope!"),
     }
 }
 
@@ -856,18 +851,17 @@ pub(crate) fn undeclare_client_queryable(
 pub fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     kind: ZInt,
 ) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_client_queryable(tables, face, &mut res, kind);
             }
             None => log::error!("Undeclare unknown queryable!"),
         },
-        None => log::error!("Undeclare queryable with unknown prefix!"),
+        None => log::error!("Undeclare queryable with unknown scope!"),
     }
 }
 
@@ -1339,22 +1333,21 @@ fn compute_final_route(
 pub fn route_query(
     tables: &mut Tables,
     face: &Arc<FaceState>,
-    expr_id: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     value_selector: &str,
     qid: ZInt,
     target: QueryTarget,
     consolidation: QueryConsolidation,
     routing_context: Option<RoutingContext>,
 ) {
-    match tables.get_mapping(face, &expr_id) {
+    match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
             log::debug!(
                 "Route query {}:{} for res {}{}",
                 face,
                 qid,
                 prefix.expr(),
-                suffix,
+                expr.suffix.as_ref(),
             );
 
             let route = match tables.whatami {
@@ -1363,14 +1356,14 @@ pub fn route_query(
                         let routers_net = tables.routers_net.as_ref().unwrap();
                         let local_context = routers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        Resource::get_resource(prefix, expr.suffix.as_ref())
                             .map(|res| res.routers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     tables,
                                     prefix,
-                                    suffix,
+                                    expr.suffix.as_ref(),
                                     Some(local_context),
                                     WhatAmI::Router,
                                 )
@@ -1380,24 +1373,30 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        Resource::get_resource(prefix, expr.suffix.as_ref())
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     tables,
                                     prefix,
-                                    suffix,
+                                    expr.suffix.as_ref(),
                                     Some(local_context),
                                     WhatAmI::Peer,
                                 )
                             })
                     }
-                    _ => Resource::get_resource(prefix, suffix)
+                    _ => Resource::get_resource(prefix, expr.suffix.as_ref())
                         .map(|res| res.routers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(tables, prefix, suffix, None, WhatAmI::Client)
+                            compute_query_route(
+                                tables,
+                                prefix,
+                                expr.suffix.as_ref(),
+                                None,
+                                WhatAmI::Client,
+                            )
                         }),
                 },
                 WhatAmI::Peer => match face.whatami {
@@ -1405,31 +1404,43 @@ pub fn route_query(
                         let peers_net = tables.peers_net.as_ref().unwrap();
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        Resource::get_resource(prefix, suffix)
+                        Resource::get_resource(prefix, expr.suffix.as_ref())
                             .map(|res| res.peers_query_route(local_context))
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     tables,
                                     prefix,
-                                    suffix,
+                                    expr.suffix.as_ref(),
                                     Some(local_context),
                                     WhatAmI::Peer,
                                 )
                             })
                     }
-                    _ => Resource::get_resource(prefix, suffix)
+                    _ => Resource::get_resource(prefix, expr.suffix.as_ref())
                         .map(|res| res.peers_query_route(0))
                         .flatten()
                         .unwrap_or_else(|| {
-                            compute_query_route(tables, prefix, suffix, None, WhatAmI::Client)
+                            compute_query_route(
+                                tables,
+                                prefix,
+                                expr.suffix.as_ref(),
+                                None,
+                                WhatAmI::Client,
+                            )
                         }),
                 },
-                _ => Resource::get_resource(prefix, suffix)
+                _ => Resource::get_resource(prefix, expr.suffix.as_ref())
                     .map(|res| res.client_query_route())
                     .flatten()
                     .unwrap_or_else(|| {
-                        compute_query_route(tables, prefix, suffix, None, WhatAmI::Client)
+                        compute_query_route(
+                            tables,
+                            prefix,
+                            expr.suffix.as_ref(),
+                            None,
+                            WhatAmI::Client,
+                        )
                     }),
             };
 
@@ -1490,8 +1501,8 @@ pub fn route_query(
         }
         None => {
             log::error!(
-                "Route query with unknown expr_id {}! Send final reply.",
-                expr_id
+                "Route query with unknown scope {}! Send final reply.",
+                expr.scope
             );
             face.primitives.clone().send_reply_final(qid)
         }

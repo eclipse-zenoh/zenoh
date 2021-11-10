@@ -20,7 +20,8 @@ use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zread;
 
 use super::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI, ZInt,
+    Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI,
+    ZInt,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -160,22 +161,21 @@ fn register_router_subscription(
 pub fn declare_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     sub_info: &SubInfo,
     router: PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
             register_router_subscription(tables, face, &mut res, sub_info, router);
 
             compute_matches_data_routes(tables, &mut res);
         }
         None => log::error!(
-            "Declare router subscription for unknown expr_id {}!",
-            prefixid
+            "Declare router subscription for unknown scope {}!",
+            expr.scope
         ),
     }
 }
@@ -203,14 +203,13 @@ fn register_peer_subscription(
 pub fn declare_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     sub_info: &SubInfo,
     peer: PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
             register_peer_subscription(tables, face, &mut res, sub_info, peer);
 
@@ -223,8 +222,8 @@ pub fn declare_peer_subscription(
             compute_matches_data_routes(tables, &mut res);
         }
         None => log::error!(
-            "Declare router subscription for unknown expr_id {}!",
-            prefixid
+            "Declare router subscription for unknown scope {}!",
+            expr.scope
         ),
     }
 }
@@ -271,13 +270,12 @@ fn register_client_subscription(
 pub fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     sub_info: &SubInfo,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
 
             register_client_subscription(tables, face, &mut res, sub_info);
@@ -305,7 +303,7 @@ pub fn declare_client_subscription(
 
             compute_matches_data_routes(tables, &mut res);
         }
-        None => log::error!("Declare subscription for unknown expr_id {}!", prefixid),
+        None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
     }
 }
 
@@ -453,12 +451,11 @@ fn undeclare_router_subscription(
 pub fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     router: &PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_router_subscription(tables, Some(face), &mut res, router);
 
@@ -467,7 +464,7 @@ pub fn forget_router_subscription(
             }
             None => log::error!("Undeclare unknown router subscription!"),
         },
-        None => log::error!("Undeclare router subscription with unknown prefix!"),
+        None => log::error!("Undeclare router subscription with unknown scope!"),
     }
 }
 
@@ -502,12 +499,11 @@ fn undeclare_peer_subscription(
 pub fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     peer: &PeerId,
 ) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_peer_subscription(tables, Some(face), &mut res, peer);
 
@@ -524,7 +520,7 @@ pub fn forget_peer_subscription(
             }
             None => log::error!("Undeclare unknown peer subscription!"),
         },
-        None => log::error!("Undeclare peer subscription with unknown prefix!"),
+        None => log::error!("Undeclare peer subscription with unknown scope!"),
     }
 }
 
@@ -573,20 +569,15 @@ pub(crate) fn undeclare_client_subscription(
     Resource::clean(res)
 }
 
-pub fn forget_client_subscription(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    prefixid: ZInt,
-    suffix: &str,
-) {
-    match tables.get_mapping(face, &prefixid) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+pub fn forget_client_subscription(tables: &mut Tables, face: &mut Arc<FaceState>, expr: &KeyExpr) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 undeclare_client_subscription(tables, face, &mut res);
             }
             None => log::error!("Undeclare unknown subscription!"),
         },
-        None => log::error!("Undeclare subscription with unknown prefix!"),
+        None => log::error!("Undeclare subscription with unknown scope!"),
     }
 }
 
@@ -1138,21 +1129,31 @@ macro_rules! cache_data {
 pub fn route_data(
     tables: &Tables,
     face: &Arc<FaceState>,
-    expr_id: u64,
-    suffix: &str,
+    expr: &KeyExpr,
     channel: Channel,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
-    match tables.get_mapping(face, &expr_id).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.expr(), suffix);
+            log::trace!(
+                "Route data for res {}{}",
+                prefix.expr(),
+                expr.suffix.as_ref()
+            );
 
-            let res = Resource::get_resource(&prefix, suffix);
-            let route = get_data_route(tables, face, &res, &prefix, suffix, routing_context);
-            let matching_pulls = get_matching_pulls(tables, &res, &prefix, suffix);
+            let res = Resource::get_resource(&prefix, expr.suffix.as_ref());
+            let route = get_data_route(
+                tables,
+                face,
+                &res,
+                &prefix,
+                expr.suffix.as_ref(),
+                routing_context,
+            );
+            let matching_pulls = get_matching_pulls(tables, &res, &prefix, expr.suffix.as_ref());
 
             if !(route.is_empty() && matching_pulls.is_empty()) {
                 let data_info = treat_timestamp!(&tables.hlc, info);
@@ -1162,7 +1163,13 @@ pub fn route_data(
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
-                        cache_data!(matching_pulls, prefix, suffix, payload, data_info);
+                        cache_data!(
+                            matching_pulls,
+                            prefix,
+                            expr.suffix.as_ref(),
+                            payload,
+                            data_info
+                        );
                         drop(lock);
                     }
                     send_to_all!(route, face, payload, channel, congestion_control, data_info);
@@ -1170,7 +1177,7 @@ pub fn route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown expr_id {}!", expr_id);
+            log::error!("Route data with unknown scope {}!", expr.scope);
         }
     }
 }
@@ -1180,8 +1187,7 @@ pub fn route_data(
 pub fn full_reentrant_route_data(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
-    expr_id: u64,
-    suffix: &str,
+    expr: &KeyExpr,
     channel: Channel,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
@@ -1189,13 +1195,24 @@ pub fn full_reentrant_route_data(
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr_id).cloned() {
+    match tables.get_mapping(face, &expr.scope).cloned() {
         Some(prefix) => {
-            log::trace!("Route data for res {}{}", prefix.expr(), suffix);
+            log::trace!(
+                "Route data for res {}{}",
+                prefix.expr(),
+                expr.suffix.as_ref()
+            );
 
-            let res = Resource::get_resource(&prefix, suffix);
-            let route = get_data_route(&tables, face, &res, &prefix, suffix, routing_context);
-            let matching_pulls = get_matching_pulls(&tables, &res, &prefix, suffix);
+            let res = Resource::get_resource(&prefix, expr.suffix.as_ref());
+            let route = get_data_route(
+                &tables,
+                face,
+                &res,
+                &prefix,
+                expr.suffix.as_ref(),
+                routing_context,
+            );
+            let matching_pulls = get_matching_pulls(&tables, &res, &prefix, expr.suffix.as_ref());
 
             if !(route.is_empty() && matching_pulls.is_empty()) {
                 let data_info = treat_timestamp!(&tables.hlc, info);
@@ -1206,7 +1223,13 @@ pub fn full_reentrant_route_data(
                 } else {
                     if !matching_pulls.is_empty() {
                         let lock = zlock!(tables.pull_caches_lock);
-                        cache_data!(matching_pulls, prefix, suffix, payload, data_info);
+                        cache_data!(
+                            matching_pulls,
+                            prefix,
+                            expr.suffix.as_ref(),
+                            payload,
+                            data_info
+                        );
                         drop(lock);
                     }
                     drop(tables);
@@ -1215,7 +1238,7 @@ pub fn full_reentrant_route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown expr_id {}!", expr_id);
+            log::error!("Route data with unknown scope {}!", expr.scope);
         }
     }
 }
@@ -1224,13 +1247,12 @@ pub fn pull_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     _is_final: bool,
-    expr_id: ZInt,
-    suffix: &str,
+    expr: &KeyExpr,
     _pull_id: ZInt,
     _max_samples: &Option<ZInt>,
 ) {
-    match tables.get_mapping(face, &expr_id) {
-        Some(prefix) => match Resource::get_resource(prefix, suffix) {
+    match tables.get_mapping(face, &expr.scope) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 let res = get_mut_unchecked(&mut res);
                 match res.session_ctxs.get_mut(&face.id) {
@@ -1258,14 +1280,14 @@ pub fn pull_data(
                         None => {
                             log::error!(
                                 "Pull data for unknown subscription {} (no info)!",
-                                [&prefix.expr(), suffix].concat()
+                                [&prefix.expr(), expr.suffix.as_ref()].concat()
                             );
                         }
                     },
                     None => {
                         log::error!(
                             "Pull data for unknown subscription {} (no context)!",
-                            [&prefix.expr(), suffix].concat()
+                            [&prefix.expr(), expr.suffix.as_ref()].concat()
                         );
                     }
                 }
@@ -1273,12 +1295,12 @@ pub fn pull_data(
             None => {
                 log::error!(
                     "Pull data for unknown subscription {} (no resource)!",
-                    [&prefix.expr(), suffix].concat()
+                    [&prefix.expr(), expr.suffix.as_ref()].concat()
                 );
             }
         },
         None => {
-            log::error!("Pull data with unknown expr_id {}!", expr_id);
+            log::error!("Pull data with unknown scope {}!", expr.scope);
         }
     };
 }

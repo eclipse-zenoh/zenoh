@@ -322,6 +322,10 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
+    pub fn as_id_and_suffix(&'a self) -> (ExprId, &'a str) {
+        (self.scope, self.suffix.as_ref())
+    }
+
     pub(crate) fn has_suffix(&self) -> bool {
         !self.suffix.as_ref().is_empty()
     }
@@ -437,33 +441,6 @@ impl<'a> From<&'a String> for KeyExpr<'a> {
             scope: 0,
             suffix: name.into(),
         }
-    }
-}
-
-impl<'a> From<(ExprId, &'a str)> for KeyExpr<'a> {
-    #[inline]
-    fn from(tuple: (ExprId, &'a str)) -> KeyExpr<'a> {
-        KeyExpr {
-            scope: tuple.0,
-            suffix: tuple.1.into(),
-        }
-    }
-}
-
-impl From<(ExprId, String)> for KeyExpr<'_> {
-    #[inline]
-    fn from(tuple: (ExprId, String)) -> KeyExpr<'static> {
-        KeyExpr {
-            scope: tuple.0,
-            suffix: tuple.1.into(),
-        }
-    }
-}
-
-impl<'a> From<&'a KeyExpr<'a>> for (ExprId, &'a str) {
-    #[inline]
-    fn from(key: &'a KeyExpr<'a>) -> (ExprId, &'a str) {
-        (key.scope, key.suffix.as_ref())
     }
 }
 
