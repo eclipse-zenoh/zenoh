@@ -171,7 +171,7 @@ impl ZBuf {
 
     fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
         let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peerid()?)
+            Some(self.read_peeexpr_id()?)
         } else {
             None
         };
@@ -201,7 +201,7 @@ impl ZBuf {
         };
         let version = self.read()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peerid()?;
+        let pid = self.read_peeexpr_id()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
@@ -225,7 +225,7 @@ impl ZBuf {
             0
         };
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peerid()?;
+        let pid = self.read_peeexpr_id()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
@@ -280,7 +280,7 @@ impl ZBuf {
         };
         let version = self.read()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peerid()?;
+        let pid = self.read_peeexpr_id()?;
         let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
@@ -320,7 +320,7 @@ impl ZBuf {
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
         let link_only = imsg::has_flag(header, tmsg::flag::K);
         let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peerid()?)
+            Some(self.read_peeexpr_id()?)
         } else {
             None
         };
@@ -365,7 +365,7 @@ impl ZBuf {
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
         let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peerid()?)
+            Some(self.read_peeexpr_id()?)
         } else {
             None
         };
@@ -401,7 +401,7 @@ impl ZBuf {
         } else {
             Some(ReplierInfo {
                 kind: self.read_zint()?,
-                id: self.read_peerid()?,
+                id: self.read_peeexpr_id()?,
             })
         };
 
@@ -480,7 +480,7 @@ impl ZBuf {
             CongestionControl::Block
         };
 
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "shared-memory")]
         let mut sliced = false;
@@ -512,17 +512,19 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    fn read_reskey(&mut self, is_string: bool) -> Option<ResKey<'static>> {
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>> {
         let id = self.read_zint()?;
-        if is_string {
+        if has_suffix {
             let s = self.read_string()?;
-            if id == NO_RESOURCE_ID {
-                Some(ResKey::RName(s.into()))
-            } else {
-                Some(ResKey::RIdWithSuffix(id, s.into()))
-            }
+            Some(KeyExpr {
+                scope: id,
+                suffix: s.into(),
+            })
         } else {
-            Some(ResKey::RId(id))
+            Some(KeyExpr {
+                scope: id,
+                suffix: "".into(),
+            })
         }
     }
 
@@ -548,13 +550,13 @@ impl ZBuf {
             info.timestamp = Some(self.read_timestamp()?);
         }
         if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id = Some(self.read_peerid()?);
+            info.source_id = Some(self.read_peeexpr_id()?);
         }
         if imsg::has_option(options, zmsg::data::info::SRCSN) {
             info.source_sn = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id = Some(self.read_peerid()?);
+            info.first_router_id = Some(self.read_peeexpr_id()?);
         }
         if imsg::has_option(options, zmsg::data::info::RTRSN) {
             info.first_router_sn = Some(self.read_zint()?);
@@ -583,7 +585,7 @@ impl ZBuf {
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
         let pull_id = self.read_zint()?;
         let max_samples = if imsg::has_flag(header, zmsg::flag::N) {
             Some(self.read_zint()?)
@@ -620,13 +622,13 @@ impl ZBuf {
         let header = self.read()?;
         match imsg::mid(header) {
             RESOURCE => {
-                let rid = self.read_zint()?;
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
-                Some(Declaration::Resource(Resource { rid, key }))
+                let expr_id = self.read_zint()?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                Some(Declaration::Resource(Resource { expr_id, key }))
             }
             FORGET_RESOURCE => {
-                let rid = self.read_zint()?;
-                Some(Declaration::ForgetResource(ForgetResource { rid }))
+                let expr_id = self.read_zint()?;
+                Some(Declaration::ForgetResource(ForgetResource { expr_id }))
             }
             SUBSCRIBER => {
                 let reliability = if imsg::has_flag(header, zmsg::flag::R) {
@@ -634,7 +636,7 @@ impl ZBuf {
                 } else {
                     Reliability::BestEffort
                 };
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let (mode, period) = if imsg::has_flag(header, zmsg::flag::S) {
                     self.read_submode()?
                 } else {
@@ -650,19 +652,19 @@ impl ZBuf {
                 }))
             }
             FORGET_SUBSCRIBER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetSubscriber(ForgetSubscriber { key }))
             }
             PUBLISHER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Publisher(Publisher { key }))
             }
             FORGET_PUBLISHER => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetPublisher(ForgetPublisher { key }))
             }
             QUERYABLE => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
                 let info = if imsg::has_flag(header, zmsg::flag::Q) {
                     self.read_queryable_info()?
@@ -672,7 +674,7 @@ impl ZBuf {
                 Some(Declaration::Queryable(Queryable { key, kind, info }))
             }
             FORGET_QUERYABLE => {
-                let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
                 Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
             }
@@ -684,7 +686,7 @@ impl ZBuf {
     }
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_reskey(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
         let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
@@ -717,7 +719,7 @@ impl ZBuf {
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
         let pid = if imsg::has_option(options, zmsg::link_state::PID) {
-            Some(self.read_peerid()?)
+            Some(self.read_peeexpr_id()?)
         } else {
             None
         };

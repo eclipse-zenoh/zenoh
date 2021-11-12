@@ -146,17 +146,17 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     if let Ok(mut backends_admin) = zenoh.subscribe(&backends_admin_selector).await {
         while let Some(sample) = backends_admin.receiver().next().await {
             debug!("Received sample: {:?}", sample);
-            let key = sample.res_name;
+            let key = sample.key_expr.as_str();
             match sample.kind {
                 SampleKind::Put => {
                     #[allow(clippy::map_entry)]
                     // Disable clippy check because no way to log the warn using map.entry().or_insert()
-                    if !backend_handles.contains_key(&key) {
-                        match load_and_start_backend(&key, sample.value, zenoh.clone(), &lib_loader)
+                    if !backend_handles.contains_key(key) {
+                        match load_and_start_backend(key, sample.value, zenoh.clone(), &lib_loader)
                             .await
                         {
                             Ok(handle) => {
-                                let _ = backend_handles.insert(key, handle);
+                                let _ = backend_handles.insert(key.to_string(), handle);
                             }
                             Err(e) => warn!("{}", e),
                         }
@@ -166,7 +166,7 @@ async fn run(runtime: Runtime, args: ArgMatches<'_>) {
                 }
                 SampleKind::Delete => {
                     debug!("Delete backend {}", key);
-                    let _ = backend_handles.remove(&key);
+                    let _ = backend_handles.remove(key);
                 }
                 SampleKind::Patch => warn!("PATCH not supported on {}", key),
             }

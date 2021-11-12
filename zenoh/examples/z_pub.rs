@@ -21,23 +21,23 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (config, key_expr, value) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    print!("Register Resource {}", path);
-    let rid = session.register_resource(&path).await.unwrap();
-    println!(" => RId {}", rid);
+    print!("Register key expression {}", key_expr);
+    let expr_id = session.register_expr(&key_expr).await.unwrap();
+    println!(" => ExprId {}", expr_id);
 
-    println!("Register Publisher on {}", rid);
-    let _publisher = session.publishing(rid).await.unwrap();
+    println!("Register Publisher on {}", expr_id);
+    let _publisher = session.publishing(expr_id).await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Put Data ('{}': '{}')", rid, buf);
-        session.put(rid, buf).await.unwrap();
+        println!("Put Data ('{}': '{}')", expr_id, buf);
+        session.put(expr_id, buf).await.unwrap();
     }
 }
 
@@ -54,11 +54,11 @@ fn parse_args() -> (Properties, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
+            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish onto.'")
                 .default_value("/demo/example/zenoh-rs-pub"),
         )
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
+            Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
                 .default_value("Pub from Rust!"),
         )
         .arg(Arg::from_usage(
@@ -80,8 +80,8 @@ fn parse_args() -> (Properties, String, String) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let path = args.value_of("path").unwrap();
-    let value = args.value_of("value").unwrap();
+    let key_expr = args.value_of("key").unwrap().to_string();
+    let value = args.value_of("value").unwrap().to_string();
 
-    (config, path.to_string(), value.to_string())
+    (config, key_expr, value)
 }

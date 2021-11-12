@@ -43,7 +43,7 @@ impl WBuf {
         zcheck!(self.write_zint(reply_context.qid));
         if let Some(replier) = reply_context.replier.as_ref() {
             zcheck!(self.write_zint(replier.kind));
-            zcheck!(self.write_peerid(&replier.id));
+            zcheck!(self.write_peeexpr_id(&replier.id));
         }
         true
     }
@@ -140,7 +140,7 @@ impl WBuf {
     fn write_hello(&mut self, hello: &Hello) -> bool {
         zcheck!(self.write(hello.header()));
         if let Some(pid) = hello.pid.as_ref() {
-            zcheck!(self.write_peerid(pid));
+            zcheck!(self.write_peeexpr_id(pid));
         }
         if let Some(w) = hello.whatami {
             if w != WhatAmI::Router {
@@ -161,7 +161,7 @@ impl WBuf {
         }
         zcheck!(self.write(init_syn.version));
         zcheck!(self.write_zint(init_syn.whatami.into()));
-        zcheck!(self.write_peerid(&init_syn.pid));
+        zcheck!(self.write_peeexpr_id(&init_syn.pid));
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
         }
@@ -174,7 +174,7 @@ impl WBuf {
             zcheck!(self.write_zint(init_ack.options()));
         }
         zcheck!(self.write_zint(init_ack.whatami.into()));
-        zcheck!(self.write_peerid(&init_ack.pid));
+        zcheck!(self.write_peeexpr_id(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
         }
@@ -212,7 +212,7 @@ impl WBuf {
         }
         zcheck!(self.write(join.version));
         zcheck!(self.write_zint(join.whatami.into()));
-        zcheck!(self.write_peerid(&join.pid));
+        zcheck!(self.write_peeexpr_id(&join.pid));
         if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
         } else {
@@ -239,7 +239,7 @@ impl WBuf {
     fn write_close(&mut self, close: &Close) -> bool {
         zcheck!(self.write(close.header()));
         if let Some(p) = close.pid.as_ref() {
-            zcheck!(self.write_peerid(p));
+            zcheck!(self.write_peeexpr_id(p));
         }
         self.write(close.reason)
     }
@@ -265,7 +265,7 @@ impl WBuf {
     fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
         zcheck!(self.write(keep_alive.header()));
         if let Some(p) = keep_alive.pid.as_ref() {
-            zcheck!(self.write_peerid(p));
+            zcheck!(self.write_peeexpr_id(p));
         }
         true
     }
@@ -325,7 +325,7 @@ impl WBuf {
         }
 
         zcheck!(self.write(data.header()));
-        zcheck!(self.write_reskey(&data.key));
+        zcheck!(self.write_key_expr(&data.key));
 
         #[cfg(feature = "shared-memory")]
         let mut sliced = false;
@@ -349,13 +349,11 @@ impl WBuf {
     }
 
     #[inline(always)]
-    fn write_reskey(&mut self, key: &ResKey) -> bool {
-        match key {
-            ResKey::RId(rid) => self.write_zint(*rid),
-            ResKey::RName(name) => self.write_zint(NO_RESOURCE_ID) && self.write_string(name),
-            ResKey::RIdWithSuffix(rid, suffix) => {
-                self.write_zint(*rid) && self.write_string(suffix)
-            }
+    fn write_key_expr(&mut self, key: &KeyExpr) -> bool {
+        if key.has_suffix() {
+            self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
+        } else {
+            self.write_zint(key.scope)
         }
     }
 
@@ -374,13 +372,13 @@ impl WBuf {
             zcheck!(self.write_timestamp(ts));
         }
         if let Some(pid) = info.source_id.as_ref() {
-            zcheck!(self.write_peerid(pid));
+            zcheck!(self.write_peeexpr_id(pid));
         }
         if let Some(sn) = info.source_sn {
             zcheck!(self.write_zint(sn));
         }
         if let Some(pid) = info.first_router_id.as_ref() {
-            zcheck!(self.write_peerid(pid));
+            zcheck!(self.write_peeexpr_id(pid));
         }
         if let Some(sn) = info.first_router_sn {
             zcheck!(self.write_zint(sn));
@@ -407,29 +405,31 @@ impl WBuf {
     fn write_declaration(&mut self, declaration: &Declaration) -> bool {
         match declaration {
             Declaration::Resource(r) => {
-                self.write(r.header()) && self.write_zint(r.rid) && self.write_reskey(&r.key)
+                self.write(r.header()) && self.write_zint(r.expr_id) && self.write_key_expr(&r.key)
             }
-            Declaration::ForgetResource(fr) => self.write(fr.header()) && self.write_zint(fr.rid),
+            Declaration::ForgetResource(fr) => {
+                self.write(fr.header()) && self.write_zint(fr.expr_id)
+            }
             Declaration::Subscriber(s) => {
                 let header = s.header();
                 zcheck!(self.write(header));
-                zcheck!(self.write_reskey(&s.key));
+                zcheck!(self.write_key_expr(&s.key));
                 if imsg::has_flag(header, zmsg::flag::S) {
                     zcheck!(self.write_submode(&s.info.mode, &s.info.period))
                 }
                 true
             }
             Declaration::ForgetSubscriber(fs) => {
-                self.write(fs.header()) && self.write_reskey(&fs.key)
+                self.write(fs.header()) && self.write_key_expr(&fs.key)
             }
-            Declaration::Publisher(p) => self.write(p.header()) && self.write_reskey(&p.key),
+            Declaration::Publisher(p) => self.write(p.header()) && self.write_key_expr(&p.key),
             Declaration::ForgetPublisher(fp) => {
-                self.write(fp.header()) && self.write_reskey(&fp.key)
+                self.write(fp.header()) && self.write_key_expr(&fp.key)
             }
             Declaration::Queryable(q) => {
                 let header = q.header();
                 zcheck!(self.write(header));
-                zcheck!(self.write_reskey(&q.key));
+                zcheck!(self.write_key_expr(&q.key));
                 zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
                     zcheck!(self.write_queryable_info(&q.info));
@@ -437,7 +437,7 @@ impl WBuf {
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                zcheck!(self.write(fq.header()) && self.write_reskey(&fq.key));
+                zcheck!(self.write(fq.header()) && self.write_key_expr(&fq.key));
                 zcheck!(self.write_zint(fq.kind));
                 true
             }
@@ -471,7 +471,7 @@ impl WBuf {
 
     fn write_pull(&mut self, pull: &Pull) -> bool {
         zcheck!(self.write(pull.header()));
-        zcheck!(self.write_reskey(&pull.key));
+        zcheck!(self.write_key_expr(&pull.key));
         zcheck!(self.write_zint(pull.pull_id));
         if let Some(n) = pull.max_samples {
             zcheck!(self.write_zint(n));
@@ -481,7 +481,7 @@ impl WBuf {
 
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write(query.header()));
-        zcheck!(self.write_reskey(&query.key));
+        zcheck!(self.write_key_expr(&query.key));
         zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
@@ -504,7 +504,7 @@ impl WBuf {
         zcheck!(self.write_zint(link_state.psid));
         zcheck!(self.write_zint(link_state.sn));
         if let Some(pid) = link_state.pid.as_ref() {
-            zcheck!(self.write_peerid(pid));
+            zcheck!(self.write_peeexpr_id(pid));
         }
         if let Some(&whatami) = link_state.whatami.as_ref() {
             zcheck!(self.write_zint(whatami.into()));

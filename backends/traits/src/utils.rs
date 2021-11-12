@@ -14,13 +14,13 @@
 
 //! Some useful functions for Backend/Storage implementations.
 
-use zenoh::utils::resource_name::*;
+use zenoh::utils::key_expr::*;
 
 /// Returns the longest prefix in a key selector that doesn't contain any '*' character.  
 /// This would be the common prefix of all keys stored in a storage using this key selector.
 ///
 /// Use this operation at creation of a Storage to get the keys prefix, and in [`Storage::on_sample()`](crate::Storage::on_sample())
-/// strip this prefix from all received [`Sample::res_name`](zenoh::prelude::Sample::res_name) to retrieve the corrsponding key.
+/// strip this prefix from all received [`Sample::key_expr`](zenoh::prelude::Sample::key_expr) to retrieve the corrsponding key.
 ///
 /// # Examples:
 /// ```

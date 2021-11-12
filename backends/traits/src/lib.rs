@@ -98,21 +98,21 @@
 //!         // Store or delete the sample depending the ChangeKind
 //!         match sample.kind {
 //!             SampleKind::Put => {
-//!                 let _key = sample.res_name;
+//!                 let _key = sample.key_expr;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
 //!                 //  - if not: drop the sample
 //!             }
 //!             SampleKind::Delete => {
-//!                 let _key = sample.res_name;
+//!                 let _key = sample.key_expr;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
 //!                 //  - if not: drop the sample
 //!             }
 //!             SampleKind::Patch => {
-//!                 println!("Received PATCH for {}: not yet supported", sample.res_name);
+//!                 println!("Received PATCH for {}: not yet supported", sample.key_expr);
 //!             }
 //!         }
 //!         Ok(())
@@ -222,7 +222,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &str {
+    pub fn key_selector(&self) -> &KeyExpr<'_> {
         self.q.key_selector()
     }
 

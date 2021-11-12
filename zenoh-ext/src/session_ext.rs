@@ -12,16 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
-use zenoh::prelude::ResKey;
+use zenoh::prelude::KeyExpr;
 use zenoh::Session;
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
-    /// Declare a [QueryingSubscriber](super::QueryingSubscriber) for the given resource key.
+    /// Declare a [QueryingSubscriber](super::QueryingSubscriber) with the given key expression.
     ///
     /// This operation returns a [QueryingSubscriberBuilder](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
     /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscriberBuilder), the QueryingSubscriber
-    /// will issue a query on a given resource key (by default it uses the same resource key than it subscribes to).
+    /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
     /// Later on, new queries can be issued again, calling [QueryingSubscriber::query()](super::QueryingSubscriber::query()) or
     /// [QueryingSubscriber::query_on()](super::QueryingSubscriber::query_on()).
@@ -29,7 +29,7 @@ pub trait SessionExt {
     /// A typical usage of the QueryingSubscriber is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
     /// # Arguments
-    /// * `sub_reskey` - The resource key to subscribe (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
+    /// * `sub_key_expr` - The key expression to subscribe on (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
     ///
     /// # Examples
     /// ```no_run
@@ -39,45 +39,45 @@ pub trait SessionExt {
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe_with_query("/resource/name").await.unwrap();
+    /// let mut subscriber = session.subscribe_with_query("/key/expr").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query<'a, 'b, IntoResKey>(
+    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
-        sub_reskey: IntoResKey,
+        sub_key_expr: IntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>;
+        IntoKeyExpr: Into<KeyExpr<'b>>;
 
-    fn publishing_with_cache<'a, 'b, IntoResKey>(
+    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
-        pub_reskey: IntoResKey,
+        pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>;
+        IntoKeyExpr: Into<KeyExpr<'b>>;
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query<'a, 'b, IntoResKey>(
+    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
-        sub_reskey: IntoResKey,
+        sub_key_expr: IntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        QueryingSubscriberBuilder::new(self, sub_reskey.into())
+        QueryingSubscriberBuilder::new(self, sub_key_expr.into())
     }
 
-    fn publishing_with_cache<'a, 'b, IntoResKey>(
+    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
-        pub_reskey: IntoResKey,
+        pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoResKey: Into<ResKey<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        PublicationCacheBuilder::new(self, pub_reskey.into())
+        PublicationCacheBuilder::new(self, pub_key_expr.into())
     }
 }

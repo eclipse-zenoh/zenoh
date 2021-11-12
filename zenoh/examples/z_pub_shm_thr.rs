@@ -13,7 +13,6 @@
 //
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
-use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -32,11 +31,11 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let reskey = RId(z.register_resource("/test/thr").await.unwrap());
-    let _publ = z.publishing(&reskey).await.unwrap();
+    let key_expr = z.register_expr("/test/thr").await.unwrap();
+    let _publ = z.publishing(&key_expr).await.unwrap();
 
     loop {
-        z.put(&reskey, buf.clone())
+        z.put(&key_expr, buf.clone())
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .await

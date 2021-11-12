@@ -67,7 +67,7 @@ fn sample_to_json(sample: Sample) -> String {
     let encoding = sample.value.encoding.to_string();
     format!(
         r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-        sample.res_name,
+        sample.key_expr.as_str(),
         value_to_json(sample.value),
         encoding,
         if let Some(ts) = sample.timestamp {
@@ -90,7 +90,7 @@ async fn to_json(results: ReplyReceiver) -> String {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.res_name,
+        sample.key_expr.as_str(),
         String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
@@ -186,15 +186,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let resource = path_to_resource(req.url().path(), &req.state().1).to_owned();
+                let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
-                        resource,
+                        key_expr,
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req.state().0.subscribe(&resource).await.unwrap();
+                    let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
@@ -227,12 +227,12 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         ))
     } else {
         let url = req.url();
-        let resource = path_to_resource(url.path(), &req.state().1);
+        let key_expr = path_to_key_expr(url.path(), &req.state().1);
         let query_part = url.query().map(|q| format!("?{}", q));
         let selector = if let Some(q) = &query_part {
-            KeyedSelector::from(resource).with_value_selector(q)
+            Selector::from(key_expr).with_value_selector(q)
         } else {
-            resource.into()
+            key_expr.into()
         };
         let consolidation = if selector.has_time_range() {
             QueryConsolidation::none()
@@ -274,14 +274,14 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
-            let resource = path_to_resource(req.url().path(), &req.state().1);
+            let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
             let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
 
             // @TODO: Define the right congestion control value
             match req
                 .state()
                 .0
-                .put(&resource, bytes)
+                .put(&key_expr, bytes)
                 .encoding(encoding)
                 .kind(method_to_kind(req.method()))
                 .await
@@ -342,12 +342,12 @@ pub async fn run(runtime: Runtime, port: String) {
     }
 }
 
-fn path_to_resource<'a>(path: &'a str, pid: &str) -> ResKey<'a> {
+fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
     if path == "/@/router/local" {
-        ResKey::from(format!("/@/router/{}", pid))
+        KeyExpr::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        ResKey::from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
     } else {
-        ResKey::from(path)
+        KeyExpr::from(path)
     }
 }

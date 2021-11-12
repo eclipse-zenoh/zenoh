@@ -92,26 +92,26 @@ pub(crate) async fn start_backend(
                 // on sample for storages_admin
                 sample = storages_admin.receiver().next() => {
                     let sample = sample.unwrap();
-                    trace!("{} received change for {}", admin_key, sample.res_name);
+                    trace!("{} received change for {}", admin_key, sample.key_expr);
                     match sample.kind {
                         SampleKind::Put => {
                             #[allow(clippy::map_entry)]
-                            if !storages_handles.contains_key(&sample.res_name) {
-                                match create_and_start_storage(sample.res_name.clone(), sample.value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
+                            if !storages_handles.contains_key(sample.key_expr.as_str()) {
+                                match create_and_start_storage(sample.key_expr.to_string(), sample.value, &mut backend, in_interceptor.clone(), out_interceptor.clone(), zenoh.clone()).await {
                                     Ok(handle) => {
-                                        let _ = storages_handles.insert(sample.res_name.clone(), handle);
+                                        let _ = storages_handles.insert(sample.key_expr.to_string(), handle);
                                     }
                                     Err(e) => warn!("{}", e),
                                 }
                             } else {
-                                warn!("Storage {} already exists", sample.res_name);
+                                warn!("Storage {} already exists", sample.key_expr);
                             }
                         }
                         SampleKind::Delete =>  {
-                            debug!("Delete storage {}", sample.res_name);
-                            let _ = storages_handles.remove(&sample.res_name);
+                            debug!("Delete storage {}", sample.key_expr);
+                            let _ = storages_handles.remove(sample.key_expr.as_str());
                         }
-                        SampleKind::Patch => warn!("PATCH not supported on {}", sample.res_name),
+                        SampleKind::Patch => warn!("PATCH not supported on {}", sample.key_expr),
                     }
                 },
                 _ = stop_rx.recv().fuse() => {

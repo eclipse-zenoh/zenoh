@@ -73,7 +73,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut replies = session.get("/resource/name").wait().unwrap();
+    /// let mut replies = session.get("/key/expression").wait().unwrap();
     /// while let Ok(reply) = replies.recv() {
     ///     println!(">> Received {:?}", reply.data);
     /// }
@@ -86,7 +86,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut replies = session.get("/resource/name").await.unwrap();
+    /// let mut replies = session.get("/key/expression").await.unwrap();
     /// while let Some(reply) = replies.next().await {
     ///     println!(">> Received {:?}", reply.data);
     /// }
@@ -112,7 +112,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut replies = session
-    ///     .get("/resource/name?value>1")
+    ///     .get("/key/expression?value>1")
     ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
     ///     .consolidation(QueryConsolidation::none())
     ///     .await
@@ -122,7 +122,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct Getter<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) selector: KeyedSelector<'b>,
+        pub(crate) selector: Selector<'b>,
         pub(crate) target: Option<QueryTarget>,
         pub(crate) consolidation: Option<QueryConsolidation>,
     }

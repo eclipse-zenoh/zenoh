@@ -59,14 +59,14 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Register Resource {}", event_key);
-    let rid = session.register_resource(&event_key).await.unwrap();
-    println!(" => RId {}", rid);
+    print!("Register key expression {}", event_key);
+    let expr_id = session.register_expr(&event_key).await.unwrap();
+    println!(" => ExprId {}", expr_id);
 
-    println!("Register Publisher on {}", rid);
-    let _publ = session.publishing(rid).await.unwrap();
+    println!("Register Publisher on {}", expr_id);
+    let _publ = session.publishing(expr_id).await.unwrap();
 
-    println!("Put Data periodically ('{}': '{}')...", rid, value);
+    println!("Put Data periodically ('{}': '{}')...", expr_id, value);
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
@@ -74,7 +74,7 @@ async fn main() {
     );
     loop {
         session
-            .put(rid, value)
+            .put(expr_id, value)
             .encoding(Encoding::TEXT_PLAIN)
             .congestion_control(CongestionControl::Block)
             .await

@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -28,12 +27,12 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
-    let _publ = session.publishing(&reskey).wait().unwrap();
+    let key_expr = session.register_expr("/test/thr").wait().unwrap();
+    let _publ = session.publishing(&key_expr).wait().unwrap();
 
     loop {
         session
-            .put(&reskey, data.clone())
+            .put(&key_expr, data.clone())
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .wait()

@@ -204,7 +204,7 @@ name = "rwbuf_bench"
 harness = false
 
 [[bench]]
-name = "rname_bench"
+name = "key_expr_bench"
 harness = false
 
 [[bench]]

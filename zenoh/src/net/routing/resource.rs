@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::face::FaceState;
-use super::protocol::core::rname;
-use super::protocol::core::{PeerId, QueryableInfo, ResKey, SubInfo, ZInt};
+use super::protocol::core::key_expr;
+use super::protocol::core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::Tables;
@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use zenoh_util::sync::get_mut_unchecked;
 
-pub(super) type Direction = (Arc<FaceState>, ResKey<'static>, Option<RoutingContext>);
+pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(super) type QueryRoute = HashMap<usize, (Direction, super::protocol::core::Target)>;
@@ -40,8 +40,8 @@ pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_rid: Option<ZInt>,
-    pub(super) remote_rid: Option<ZInt>,
+    pub(super) local_expr_id: Option<ZInt>,
+    pub(super) remote_expr_id: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: HashMap<ZInt, QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
@@ -92,14 +92,14 @@ pub struct Resource {
 
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
-        self.name() == other.name()
+        self.expr() == other.expr()
     }
 }
 impl Eq for Resource {}
 
 impl Hash for Resource {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name().hash(state);
+        self.expr().hash(state);
     }
 }
 
@@ -126,9 +126,9 @@ impl Resource {
         }
     }
 
-    pub fn name(&self) -> String {
+    pub fn expr(&self) -> String {
         match &self.parent {
-            Some(parent) => [&parent.name() as &str, &self.suffix].concat(),
+            Some(parent) => [&parent.expr() as &str, &self.suffix].concat(),
             None => String::from(""),
         }
     }
@@ -147,10 +147,10 @@ impl Resource {
         match &res.nonwild_prefix {
             None => (Some(res.clone()), "".to_string()),
             Some((nonwild_prefix, wildsuffix)) => {
-                if !nonwild_prefix.name().is_empty() {
+                if !nonwild_prefix.expr().is_empty() {
                     (Some(nonwild_prefix.clone()), wildsuffix.clone())
                 } else {
-                    (None, res.name())
+                    (None, res.expr())
                 }
             }
         }
@@ -224,7 +224,7 @@ impl Resource {
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
             if Arc::strong_count(res) <= 3 && res.childs.is_empty() {
-                log::debug!("Unregister resource {}", res.name());
+                log::debug!("Unregister resource {}", res.expr());
                 if let Some(context) = mutres.context.as_mut() {
                     for match_ in &mut context.matches {
                         let mut match_ = match_.upgrade().unwrap();
@@ -246,7 +246,7 @@ impl Resource {
     }
 
     pub fn print_tree(from: &Arc<Resource>) -> String {
-        let mut result = from.name();
+        let mut result = from.expr();
         result.push('\n');
         for child in from.childs.values() {
             result.push_str(&Resource::print_tree(child));
@@ -273,7 +273,7 @@ impl Resource {
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
                     if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                        log::debug!("Register resource {}", new.name());
+                        log::debug!("Register resource {}", new.expr());
                     }
                     let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
@@ -298,7 +298,7 @@ impl Resource {
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
                             if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
-                                log::debug!("Register resource {}", new.name());
+                                log::debug!("Register resource {}", new.expr());
                             }
                             let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
@@ -344,22 +344,22 @@ impl Resource {
         }
     }
 
-    fn fst_chunk(rname: &str) -> (&str, &str) {
-        if let Some(stripped_rname) = rname.strip_prefix('/') {
-            match stripped_rname.find('/') {
-                Some(idx) => (&rname[0..(idx + 1)], &rname[(idx + 1)..]),
-                None => (rname, ""),
+    fn fst_chunk(key_expr: &str) -> (&str, &str) {
+        if let Some(stripped_key_expr) = key_expr.strip_prefix('/') {
+            match stripped_key_expr.find('/') {
+                Some(idx) => (&key_expr[0..(idx + 1)], &key_expr[(idx + 1)..]),
+                None => (key_expr, ""),
             }
         } else {
-            match rname.find('/') {
-                Some(idx) => (&rname[0..(idx)], &rname[(idx)..]),
-                None => (rname, ""),
+            match key_expr.find('/') {
+                Some(idx) => (&key_expr[0..(idx)], &key_expr[(idx)..]),
+                None => (key_expr, ""),
             }
         }
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> ResKey<'static> {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> KeyExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -369,41 +369,44 @@ impl Resource {
                     .or_insert_with(|| {
                         Arc::new(SessionContext {
                             face: face.clone(),
-                            local_rid: None,
-                            remote_rid: None,
+                            local_expr_id: None,
+                            remote_expr_id: None,
                             subs: None,
                             qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     });
 
-                let rid = match ctx.local_rid.or(ctx.remote_rid) {
-                    Some(rid) => rid,
+                let expr_id = match ctx.local_expr_id.or(ctx.remote_expr_id) {
+                    Some(expr_id) => expr_id,
                     None => {
-                        let rid = face.get_next_local_id();
-                        get_mut_unchecked(&mut ctx).local_rid = Some(rid);
+                        let expr_id = face.get_next_local_id();
+                        get_mut_unchecked(&mut ctx).local_expr_id = Some(expr_id);
                         get_mut_unchecked(face)
                             .local_mappings
-                            .insert(rid, nonwild_prefix.clone());
+                            .insert(expr_id, nonwild_prefix.clone());
                         face.primitives
-                            .decl_resource(rid, &nonwild_prefix.name().into());
-                        rid
+                            .decl_resource(expr_id, &nonwild_prefix.expr().into());
+                        expr_id
                     }
                 };
-                (rid, wildsuffix).into()
+                KeyExpr {
+                    scope: expr_id,
+                    suffix: wildsuffix.into(),
+                }
             }
             None => wildsuffix.into(),
         }
     }
 
     #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> ResKey<'a> {
+    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> KeyExpr<'a> {
         fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
             sid: usize,
             checkchilds: bool,
-        ) -> ResKey<'a> {
+        ) -> KeyExpr<'a> {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -411,53 +414,59 @@ impl Resource {
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
-                if let Some(rid) = ctx.local_rid {
-                    return (rid, suffix).into();
-                } else if let Some(rid) = ctx.remote_rid {
-                    return (rid, suffix).into();
+                if let Some(expr_id) = ctx.local_expr_id {
+                    return KeyExpr {
+                        scope: expr_id,
+                        suffix: suffix.into(),
+                    };
+                } else if let Some(expr_id) = ctx.remote_expr_id {
+                    return KeyExpr {
+                        scope: expr_id,
+                        suffix: suffix.into(),
+                    };
                 }
             }
             match &prefix.parent {
                 Some(parent) => {
                     get_best_key_(parent, &[&prefix.suffix, suffix].concat(), sid, false).to_owned()
                 }
-                None => (0, suffix).into(),
+                None => suffix.into(),
             }
         }
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches(tables: &Tables, rname: &str) -> Vec<Weak<Resource>> {
+    pub fn get_matches(tables: &Tables, key_expr: &str) -> Vec<Weak<Resource>> {
         fn get_matches_from(
-            rname: &str,
+            key_expr: &str,
             is_admin: bool,
             from: &Arc<Resource>,
         ) -> Vec<Weak<Resource>> {
             let mut matches = Vec::new();
             if from.parent.is_none() {
                 for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(rname, is_admin, child));
+                    matches.append(&mut get_matches_from(key_expr, is_admin, child));
                 }
                 return matches;
             }
-            if rname.is_empty() {
+            if key_expr.is_empty() {
                 if from.suffix == "/**" || from.suffix == "/" {
                     if from.context.is_some()
-                        && is_admin == from.name().starts_with(rname::ADMIN_PREFIX)
+                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
                     {
                         matches.push(Arc::downgrade(from));
                     }
                     for child in from.childs.values() {
-                        matches.append(&mut get_matches_from(rname, is_admin, child));
+                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
                     }
                 }
                 return matches;
             }
-            let (chunk, rest) = Resource::fst_chunk(rname);
-            if rname::intersect(chunk, &from.suffix) {
+            let (chunk, rest) = Resource::fst_chunk(key_expr);
+            if key_expr::intersect(chunk, &from.suffix) {
                 if rest.is_empty() || rest == "/" || rest == "/**" {
                     if from.context.is_some()
-                        && is_admin == from.name().starts_with(rname::ADMIN_PREFIX)
+                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
                     {
                         matches.push(Arc::downgrade(from));
                     }
@@ -467,22 +476,22 @@ impl Resource {
                 for child in from.childs.values() {
                     matches.append(&mut get_matches_from(rest, is_admin, child));
                     if chunk == "/**" || from.suffix == "/**" {
-                        matches.append(&mut get_matches_from(rname, is_admin, child));
+                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
                     }
                 }
             }
             matches
         }
         get_matches_from(
-            rname,
-            rname.starts_with(rname::ADMIN_PREFIX),
+            key_expr,
+            key_expr.starts_with(key_expr::ADMIN_PREFIX),
             &tables.root_res,
         )
     }
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         if res.context.is_some() {
-            let mut matches = Resource::get_matches(tables, &res.name());
+            let mut matches = Resource::get_matches(tables, &res.expr());
 
             fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
                 for match_ in matches {
@@ -504,7 +513,7 @@ impl Resource {
             }
             get_mut_unchecked(res).context_mut().matches = matches;
         } else {
-            log::error!("Call match_resource() on context less res {}", res.name());
+            log::error!("Call match_resource() on context less res {}", res.expr());
         }
     }
 
@@ -515,22 +524,21 @@ impl Resource {
     }
 }
 
-pub fn register_resource(
+pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    rid: ZInt,
-    prefixid: ZInt,
-    suffix: &str,
+    expr_id: ZInt,
+    expr: &KeyExpr,
 ) {
-    match tables.get_mapping(face, &prefixid).cloned() {
-        Some(mut prefix) => match face.remote_mappings.get(&rid) {
+    match tables.get_mapping(face, &expr.scope).cloned() {
+        Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
-                if res.name() != format!("{}{}", prefix.name(), suffix) {
-                    log::error!("Resource {} remapped. Remapping unsupported!", rid);
+                if res.expr() != format!("{}{}", prefix.expr(), expr.suffix) {
+                    log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
                 }
             }
             None => {
-                let mut res = Resource::make_resource(tables, &mut prefix, suffix);
+                let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
                 Resource::match_resource(tables, &mut res);
                 let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
@@ -538,8 +546,8 @@ pub fn register_resource(
                     .or_insert_with(|| {
                         Arc::new(SessionContext {
                             face: face.clone(),
-                            local_rid: None,
-                            remote_rid: Some(rid),
+                            local_expr_id: None,
+                            remote_expr_id: Some(expr_id),
                             subs: None,
                             qabl: HashMap::new(),
                             last_values: HashMap::new(),
@@ -547,29 +555,30 @@ pub fn register_resource(
                     })
                     .clone();
 
-                if face.local_mappings.get(&rid).is_some() && ctx.local_rid == None {
-                    let local_rid = get_mut_unchecked(face).get_next_local_id();
-                    get_mut_unchecked(&mut ctx).local_rid = Some(local_rid);
+                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id == None {
+                    let local_expr_id = get_mut_unchecked(face).get_next_local_id();
+                    get_mut_unchecked(&mut ctx).local_expr_id = Some(local_expr_id);
 
                     get_mut_unchecked(face)
                         .local_mappings
-                        .insert(local_rid, res.clone());
+                        .insert(local_expr_id, res.clone());
 
-                    face.primitives.decl_resource(local_rid, &res.name().into());
+                    face.primitives
+                        .decl_resource(local_expr_id, &res.expr().into());
                 }
 
                 get_mut_unchecked(face)
                     .remote_mappings
-                    .insert(rid, res.clone());
+                    .insert(expr_id, res.clone());
                 tables.compute_matches_routes(&mut res);
             }
         },
-        None => log::error!("Declare resource with unknown prefix {}!", prefixid),
+        None => log::error!("Declare resource with unknown scope {}!", expr.scope),
     }
 }
 
-pub fn unregister_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid: ZInt) {
-    match get_mut_unchecked(face).remote_mappings.remove(&rid) {
+pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: ZInt) {
+    match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
     }
@@ -595,7 +604,7 @@ pub fn unregister_resource(_tables: &mut Tables, face: &mut Arc<FaceState>, rid:
 // }
 
 #[inline]
-pub(super) fn elect_router<'a>(res_name: &str, routers: &'a [PeerId]) -> &'a PeerId {
+pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [PeerId]) -> &'a PeerId {
     if routers.len() == 1 {
         &routers[0]
     } else {
@@ -603,7 +612,7 @@ pub(super) fn elect_router<'a>(res_name: &str, routers: &'a [PeerId]) -> &'a Pee
             .iter()
             .map(|router| {
                 let mut hasher = DefaultHasher::new();
-                for b in res_name.as_bytes() {
+                for b in key_expr.as_bytes() {
                     hasher.write_u8(*b);
                 }
                 for b in router.as_slice() {

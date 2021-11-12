@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use clap::{App, Arg};
-use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 use zenoh::publisher::CongestionControl;
 
@@ -24,18 +23,18 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    // The resource to read the data from
-    let reskey_ping = RId(session.register_resource("/test/ping").wait().unwrap());
+    // The key expression to read the data from
+    let key_expr_ping = session.register_expr("/test/ping").wait().unwrap();
 
-    // The resource to echo the data back
-    let reskey_pong = RId(session.register_resource("/test/pong").wait().unwrap());
-    let _publ = session.publishing(&reskey_pong).wait().unwrap();
+    // The key expression to echo the data back
+    let key_expr_pong = session.register_expr("/test/pong").wait().unwrap();
+    let _publ = session.publishing(&key_expr_pong).wait().unwrap();
 
-    let mut sub = session.subscribe(&reskey_ping).wait().unwrap();
+    let mut sub = session.subscribe(&key_expr_ping).wait().unwrap();
 
     while let Ok(sample) = sub.receiver().recv() {
         session
-            .put(&reskey_ping, sample.value)
+            .put(&key_expr_ping, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .wait()

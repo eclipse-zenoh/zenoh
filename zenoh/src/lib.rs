@@ -12,23 +12,38 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! The zenoh API.
+//! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
+//! rest and computations. It elegantly blends traditional pub/sub with geo distributed
+//! storage, queries and computations, while retaining a level of time and space efficiency
+//! that is well beyond any of the mainstream stacks.
+//!
+//! Below are some examples that highlight the its key comcepts and show how easy it is to get
+//! started with it.
 //!
 //! # Examples
+//! Before delving into the examples, we need to introduce few **zenoh** concepts.
+//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a
+//! key and a value.  The other concept you'll have to familiarize yourself with are
+//! **key expressions**, such as ```/robot/sensor/temp```, ```/robot/sensor/*```, ```/robot/**```, etc.
+//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**```
+//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/```
+//! separator, and (2) an arbitrary sequence of characters including separators.
 //!
-//! ### Publish
+//! ### Publishing Data
+//! The example below shows how to produce a value for a key expression.
 //! ```
 //! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     session.put("/resource/name", "value").await.unwrap();
+//!     session.put("/key/expression", "value").await.unwrap();
 //!     session.close().await.unwrap();
 //! }
 //! ```
 //!
 //! ### Subscribe
+//! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;
@@ -36,7 +51,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+//!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
 //!     while let Some(sample) = subscriber.receiver().next().await {
 //!         println!("Received : {}", sample);
 //!     };
@@ -51,7 +66,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut replies = session.get("/resource/name").await.unwrap();
+//!     let mut replies = session.get("/key/expression").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
 //!         println!(">> Received {}", reply.data);
 //!     }

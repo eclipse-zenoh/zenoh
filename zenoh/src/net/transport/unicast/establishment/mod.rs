@@ -121,7 +121,7 @@ impl Cookie {
         let mut wbuf = WBuf::new(64, false);
 
         zwrite!(wbuf.write_zint(self.whatami.into()));
-        zwrite!(wbuf.write_peerid(&self.pid));
+        zwrite!(wbuf.write_peeexpr_id(&self.pid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
         zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
         zwrite!(wbuf.write_zint(self.nonce));
@@ -154,7 +154,7 @@ impl Cookie {
                 descr: "Invalid Cookie".to_string()
             })
         })?;
-        let pid = zread!(zbuf.read_peerid());
+        let pid = zread!(zbuf.read_peeexpr_id());
         let sn_resolution = zread!(zbuf.read_zint());
         let is_qos = zread!(zbuf.read()) == 1;
         let nonce = zread!(zbuf.read_zint());

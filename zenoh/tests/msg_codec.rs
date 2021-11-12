@@ -96,10 +96,12 @@ fn gen_attachment() -> Attachment {
 fn gen_declarations() -> Vec<Declaration> {
     vec![
         Declaration::Resource(Resource {
-            rid: gen!(ZInt),
+            expr_id: gen!(ZInt),
             key: gen_key(),
         }),
-        Declaration::ForgetResource(ForgetResource { rid: gen!(ZInt) }),
+        Declaration::ForgetResource(ForgetResource {
+            expr_id: gen!(ZInt),
+        }),
         Declaration::Publisher(Publisher { key: gen_key() }),
         Declaration::ForgetPublisher(ForgetPublisher { key: gen_key() }),
         Declaration::Subscriber(Subscriber {
@@ -182,12 +184,12 @@ fn gen_declarations() -> Vec<Declaration> {
     ]
 }
 
-fn gen_key() -> ResKey<'static> {
+fn gen_key() -> KeyExpr<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
-        0 => ResKey::from(gen!(ZInt)),
-        1 => ResKey::from("my_resource".to_string()),
-        _ => ResKey::from((gen!(ZInt), "my_resource".to_string())),
+        0 => KeyExpr::from(gen!(ZInt)),
+        1 => KeyExpr::from("my_resource"),
+        _ => KeyExpr::from(gen!(ZInt)).with_suffix("my_resource"),
     }
 }
 
@@ -643,7 +645,7 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&mut frame));
 
         // Create data message
-        let key = ResKey::RName("test".into());
+        let key = "test".into();
         let payload = ZBuf::from(vec![0_u8; 1]);
         let data_info = None;
         let routing_context = None;

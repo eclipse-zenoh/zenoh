@@ -110,11 +110,11 @@ fn parse_args() -> (Properties, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to publish.'")
+            Arg::from_usage("-p, --path=[PATH]        'The key expression to publish onto.'")
                 .default_value("/demo/example/zenoh-rs-pub"),
         )
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value of the resource to publish.'")
+            Arg::from_usage("-v, --value=[VALUE]      'The value of to publish.'")
                 .default_value("Pub from SharedMemory Rust!"),
         )
         .arg(Arg::from_usage(

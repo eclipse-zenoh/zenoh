@@ -45,8 +45,8 @@ pub(crate) enum SubscriberInvoker {
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey<'static>,
-    pub(crate) resname: String,
+    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr_str: String,
     pub(crate) invoker: SubscriberInvoker,
 }
 
@@ -54,8 +54,8 @@ impl fmt::Debug for SubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Subscriber{{ id:{}, resname:{} }}",
-            self.id, self.resname
+            "Subscriber{{ id:{}, key_expr:{} }}",
+            self.id, self.key_expr_str
         )
     }
 }
@@ -77,7 +77,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut subscriber = session.subscribe("/resource/name").wait().unwrap();
+    /// let mut subscriber = session.subscribe("/key/expression").wait().unwrap();
     /// while let Ok(sample) = subscriber.receiver().recv() {
     ///      println!(">> Received sample '{}'", sample);
     /// }
@@ -90,7 +90,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// while let Some(sample) = subscriber.receiver().next().await {
     ///      println!(">> Received sample '{}'", sample);
     /// }
@@ -125,7 +125,7 @@ impl Subscriber<'_> {
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe("/resource/name")
+    /// let mut subscriber = session.subscribe("/key/expression")
     ///                             .mode(SubMode::Pull).await.unwrap();
     /// async_std::task::spawn(subscriber.receiver().clone().for_each(
     ///     move |sample| async move { println!("Received : {:?}", sample); }
@@ -135,7 +135,7 @@ impl Subscriber<'_> {
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
-        self.session.pull(&self.state.reskey)
+        self.session.pull(&self.state.key_expr)
     }
 
     /// Undeclare a [`Subscriber`](Subscriber) previously declared with [`subscribe`](Session::subscribe).
@@ -149,7 +149,7 @@ impl Subscriber<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe("/resource/name").await.unwrap();
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
     /// ```
@@ -194,15 +194,15 @@ impl CallbackSubscriber<'_> {
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe("/resource/name")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
+    /// let subscriber = session.subscribe("/key/expression")
+    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .mode(SubMode::Pull).await.unwrap();
     /// subscriber.pull();
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
-        self.session.pull(&self.state.reskey)
+        self.session.pull(&self.state.key_expr)
     }
 
     /// Undeclare a [`CallbackSubscriber`](CallbackSubscriber).
@@ -217,7 +217,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
-    /// let subscriber = session.subscribe("/resource/name")
+    /// let subscriber = session.subscribe("/key/expression")
     ///     .callback(data_handler).await.unwrap();
     /// subscriber.unregister().await.unwrap();
     /// # })
@@ -257,7 +257,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/resource/name")
+    ///     .subscribe("/key/expression")
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await
@@ -267,7 +267,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct SubscriberBuilder<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) reskey: ResKey<'b>,
+        pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) reliability: Reliability,
         pub(crate) mode: SubMode,
         pub(crate) period: Option<Period>,
@@ -284,7 +284,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     {
         CallbackSubscriberBuilder {
             session: self.session,
-            reskey: self.reskey,
+            key_expr: self.key_expr,
             reliability: self.reliability,
             mode: self.mode,
             period: self.period,
@@ -355,12 +355,12 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
     type Output = ZResult<Subscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("subscribe({:?})", self.reskey);
+        log::trace!("subscribe({:?})", self.key_expr);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
 
         if self.local {
             self.session
-                .register_any_local_subscriber(&self.reskey, SubscriberInvoker::Sender(sender))
+                .register_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| Subscriber {
                     session: self.session,
                     state: sub_state,
@@ -370,7 +370,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
         } else {
             self.session
                 .register_any_subscriber(
-                    &self.reskey,
+                    &self.key_expr,
                     SubscriberInvoker::Sender(sender),
                     &SubInfo {
                         reliability: self.reliability,
@@ -401,8 +401,8 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/resource/name")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.res_name, sample.value); })
+    ///     .subscribe("/key/expression")
+    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .best_effort()
     ///     .pull_mode()
     ///     .await
@@ -412,7 +412,7 @@ derive_zfuture! {
     #[derive(Clone)]
     pub struct CallbackSubscriberBuilder<'a, 'b> {
         session: &'a Session,
-        reskey: ResKey<'b>,
+        key_expr: KeyExpr<'b>,
         reliability: Reliability,
         mode: SubMode,
         period: Option<Period>,
@@ -425,7 +425,7 @@ impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
             .field("session", self.session)
-            .field("reskey", &self.reskey)
+            .field("key_expr", &self.key_expr)
             .field("reliability", &self.reliability)
             .field("mode", &self.mode)
             .field("period", &self.period)
@@ -496,12 +496,12 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
     type Output = ZResult<CallbackSubscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("declare_callback_subscriber({:?})", self.reskey);
+        log::trace!("declare_callback_subscriber({:?})", self.key_expr);
 
         if self.local {
             self.session
                 .register_any_local_subscriber(
-                    &self.reskey,
+                    &self.key_expr,
                     SubscriberInvoker::Handler(self.handler.clone()),
                 )
                 .map(|sub_state| CallbackSubscriber {
@@ -512,7 +512,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
         } else {
             self.session
                 .register_any_subscriber(
-                    &self.reskey,
+                    &self.key_expr,
                     SubscriberInvoker::Handler(self.handler.clone()),
                     &SubInfo {
                         reliability: self.reliability,

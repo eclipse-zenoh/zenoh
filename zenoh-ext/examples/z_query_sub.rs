@@ -22,24 +22,24 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, selector, query) = parse_args();
+    let (config, key_expr, query) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
     println!(
         "Register a QueryingSubscriber on {} with an initial query on {}",
-        selector,
-        query.as_ref().unwrap_or(&selector)
+        key_expr,
+        query.as_ref().unwrap_or(&key_expr)
     );
-    let mut subscriber = if let Some(reskey) = query {
+    let mut subscriber = if let Some(selector) = query {
         session
-            .subscribe_with_query(selector)
-            .query_selector(&reskey)
+            .subscribe_with_query(key_expr)
+            .query_selector(&selector)
             .await
             .unwrap()
     } else {
-        session.subscribe_with_query(selector).await.unwrap()
+        session.subscribe_with_query(key_expr).await.unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");
@@ -50,7 +50,7 @@ async fn main() {
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.to_vec()));
+                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.to_vec()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -77,11 +77,11 @@ fn parse_args() -> (Properties, String, Option<String>) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
                 .default_value("/demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selection of resources to query on (by default it's same than 'selector' option)'"),
+            Arg::from_usage("-q, --query=[SELECTOR] 'The selector to use for queries (by default it's same than 'selector' option)'"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -102,8 +102,8 @@ fn parse_args() -> (Properties, String, Option<String>) {
         config.insert("multicast_scouting".to_string(), "false".to_string());
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
     let query = args.value_of("query").map(ToString::to_string);
 
-    (config, selector, query)
+    (config, key_expr, query)
 }
