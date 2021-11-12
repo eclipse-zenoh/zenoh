@@ -275,7 +275,24 @@ pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
-/// A resource key expression.
+/// A zenoh **resource** is represented by a pair composed by a **key** and a
+/// **value**, such as, ```(/car/telemetry/speed, 320)```.  A **resource key**
+/// is an arbitrary array of characters, with the exclusion of the symbols
+/// ```*```, ```**```, ```?```, ```[```, ```]```, and ```#```,
+/// which have special meaning in the context of zenoh.
+///
+/// A key including any number of the wildcard symbols, ```*``` and ```**```,
+/// such as, ```/car/telemetry/*```, is called a **key expression** as it
+/// denotes a set of keys. The wildcard character ```*``` expands to an
+/// arbitrary string not including zenoh's reserved characters and the ```/```
+/// character, while the ```**``` expands to  strings that may also include the
+/// ```/``` character.  
+///
+/// Finally, it is worth mentioning that for time and space efficiency matters,
+/// zenoh will automatically map key expressions to small integers. The mapping is automatic,
+/// but it can be triggered excplicily by with [`register_expr`](crate::Session::register_expr).
+///
+//
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
 // ~      id       — if Expr : id=0
