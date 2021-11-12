@@ -12,25 +12,25 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at 
-//! rest and computations. It elegantly blends traditional pub/sub with geo distributed 
-//! storage, queries and computations, while retaining a level of time and space efficiency 
-//! that is well beyond any of the mainstream stacks. 
-//! 
-//! Below are some examples that highlight the its key comcepts and show how easy it is to get 
+//! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
+//! rest and computations. It elegantly blends traditional pub/sub with geo distributed
+//! storage, queries and computations, while retaining a level of time and space efficiency
+//! that is well beyond any of the mainstream stacks.
+//!
+//! Below are some examples that highlight the its key comcepts and show how easy it is to get
 //! started with it.
 //!
 //! # Examples
-//! Before delving into the examples, we need to introduce few **zenoh** concepts. 
-//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a 
-//! key and a value.  The other concept you'll have to familiarize yourself with are 
+//! Before delving into the examples, we need to introduce few **zenoh** concepts.
+//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a
+//! key and a value.  The other concept you'll have to familiarize yourself with are
 //! **key expressions**, such as ```/robot/sensor/temp```, ```/robot/sensor/*```, ```/robot/**```, etc.
-//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**``` 
-//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/``` 
+//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**```
+//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/```
 //! separator, and (2) an arbitrary sequence of characters including separators.
-//! 
+//!
 //! ### Publishing Data
-//! The example below shows how to produce a value for a key expression. 
+//! The example below shows how to produce a value for a key expression.
 //! ```
 //! use zenoh::prelude::*;
 //!
@@ -43,7 +43,7 @@
 //! ```
 //!
 //! ### Subscribe
-//! The example below shows how to consume values for a key expresison. 
+//! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;
