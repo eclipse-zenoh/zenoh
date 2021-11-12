@@ -102,7 +102,7 @@ zreceiver! {
 
 /// A subscriber that provides data through a stream.
 ///
-/// Subscribers are automatically unregistered when dropped.
+/// Subscribers are automatically undeclared when dropped.
 pub struct Subscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
@@ -140,8 +140,8 @@ impl Subscriber<'_> {
 
     /// Undeclare a [`Subscriber`](Subscriber) previously declared with [`subscribe`](Session::subscribe).
     ///
-    /// Subscribers are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the Subscriber asynchronously.
+    /// Subscribers are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Subscriber asynchronously.
     ///
     /// # Examples
     /// ```
@@ -150,12 +150,12 @@ impl Subscriber<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// subscriber.unregister().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unsubscribe(self.state.id)
     }
@@ -177,7 +177,7 @@ impl fmt::Debug for Subscriber<'_> {
 
 /// A subscriber that provides data through a callback.
 ///
-/// Subscribers are automatically unregistered when dropped.
+/// Subscribers are automatically undeclared when dropped.
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<SubscriberState>,
@@ -207,8 +207,8 @@ impl CallbackSubscriber<'_> {
 
     /// Undeclare a [`CallbackSubscriber`](CallbackSubscriber).
     ///
-    /// `CallbackSubscribers` are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the `CallbackSubscriber` asynchronously.
+    /// `CallbackSubscribers` are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the `CallbackSubscriber` asynchronously.
     ///
     /// # Examples
     /// ```
@@ -219,12 +219,12 @@ impl CallbackSubscriber<'_> {
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session.subscribe("/key/expression")
     ///     .callback(data_handler).await.unwrap();
-    /// subscriber.unregister().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unsubscribe(self.state.id)
     }
@@ -360,7 +360,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
 
         if self.local {
             self.session
-                .register_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
+                .declare_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| Subscriber {
                     session: self.session,
                     state: sub_state,
@@ -369,7 +369,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                 })
         } else {
             self.session
-                .register_any_subscriber(
+                .declare_any_subscriber(
                     &self.key_expr,
                     SubscriberInvoker::Sender(sender),
                     &SubInfo {
@@ -500,7 +500,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
 
         if self.local {
             self.session
-                .register_any_local_subscriber(
+                .declare_any_local_subscriber(
                     &self.key_expr,
                     SubscriberInvoker::Handler(self.handler.clone()),
                 )
@@ -511,7 +511,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                 })
         } else {
             self.session
-                .register_any_subscriber(
+                .declare_any_subscriber(
                     &self.key_expr,
                     SubscriberInvoker::Handler(self.handler.clone()),
                     &SubInfo {

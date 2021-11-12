@@ -42,7 +42,7 @@ pub(crate) async fn start_backend(
     task::spawn(async move {
         // admin_key is "/@/.../backend/<beid>"
         // answer to GET on 'admin_key'
-        let mut backend_admin = match zenoh.register_queryable(&admin_key).await {
+        let mut backend_admin = match zenoh.declare_queryable(&admin_key).await {
             Ok(backend_admin) => backend_admin,
             Err(e) => {
                 error!("Error starting backend {} : {}", admin_key, e);

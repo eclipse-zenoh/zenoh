@@ -270,7 +270,7 @@ pub mod whatami {
     }
 }
 
-/// A numerical Id mapped to a key expression with [`register_expr`](crate::Session::register_expr).
+/// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
@@ -290,7 +290,7 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 ///
 /// Finally, it is worth mentioning that for time and space efficiency matters,
 /// zenoh will automatically map key expressions to small integers. The mapping is automatic,
-/// but it can be triggered excplicily by with [`register_expr`](crate::Session::register_expr).
+/// but it can be triggered excplicily by with [`declare_expr`](crate::Session::declare_expr).
 ///
 //
 //  7 6 5 4 3 2 1 0

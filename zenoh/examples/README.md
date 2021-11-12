@@ -51,7 +51,7 @@
 
 ### z_pub
 
-   Registers a key expression and a publisher. Then writes values periodically on the registered key expression.
+   Declares a key expression and a publisher. Then writes values periodically on the declared key expression.
    The published value will be received by all matching subscribers, for instance the [z_sub](#z_sub) and [z_storage](#z_storage) examples.
 
    Typical usage:
@@ -65,7 +65,7 @@
 
 ### z_sub
 
-   Registers a key expression and a susbcriber.  
+   Declares a key expression and a susbcriber.  
    The subscriber will be notified of each `put` or `delete` made on any key expression matching the subscriber key expression, and will print this notification.
 
    Typical usage:
@@ -79,7 +79,7 @@
 
 ### z_pull
 
-   Registers a key expression and a pull susbcriber.  
+   Declares a key expression and a pull susbcriber.  
    On each pull, the pull subsciber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
 
@@ -109,7 +109,7 @@
 
 ### z_eval
 
-   Registers a queryable function with a path.  
+   Declares a queryable function with a path.  
    This queryable function will be triggered by each call to get
    with a selector that matches the path, and will return a value to the querier.
 
@@ -125,7 +125,7 @@
 ### z_storage
 
    Trivial implementation of a storage in memory.  
-   This examples registers a subscriber and a queryable on the same selector.
+   This examples declares a subscriber and a queryable on the same selector.
    The subscriber callback will store the received paths/values in an hashmap.
    The queryable callback will answer to queries with the paths/values stored in the hashmap
    and that match the queried selector.

@@ -33,12 +33,12 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Subscriber on {}", key_expr);
+    println!("Declare Subscriber on {}", key_expr);
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
-    println!("Register Queryable on {}", key_expr);
+    println!("Declare Queryable on {}", key_expr);
     let mut queryable = session
-        .register_queryable(&key_expr)
+        .declare_queryable(&key_expr)
         .kind(STORAGE)
         .await
         .unwrap();

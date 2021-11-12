@@ -140,7 +140,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/key/expression").wait().unwrap();
+    /// let mut queryable = session.declare_queryable("/key/expression").wait().unwrap();
     /// while let Ok(query) = queryable.receiver().recv() {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -153,7 +153,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -165,7 +165,7 @@ zreceiver! {
 
 /// An entity able to reply to queries.
 ///
-/// Queryables are automatically unregistered when dropped.
+/// Queryables are automatically undeclared when dropped.
 pub struct Queryable<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
@@ -185,7 +185,7 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     ///      query.reply(Sample::new("/key/expression".to_string(), "some value"));
@@ -196,10 +196,10 @@ impl Queryable<'_> {
         &mut self.receiver
     }
 
-    /// Undeclare a [`Queryable`](Queryable) previously declared with [`register_queryable`](Session::register_queryable).
+    /// Undeclare a [`Queryable`](Queryable) previously declared with [`declare_queryable`](Session::declare_queryable).
     ///
-    /// Queryables are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the Queryable asynchronously.
+    /// Queryables are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Queryable asynchronously.
     ///
     /// # Examples
     /// ```
@@ -207,22 +207,22 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let queryable = session.register_queryable("/key/expression").await.unwrap();
-    /// queryable.unregister().await.unwrap();
+    /// let queryable = session.declare_queryable("/key/expression").await.unwrap();
+    /// queryable.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
-        self.session.unregister_queryable(self.state.id)
+        self.session.undeclare_queryable(self.state.id)
     }
 }
 
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unregister_queryable(self.state.id).wait();
+            let _ = self.session.undeclare_queryable(self.state.id).wait();
         }
     }
 }
@@ -314,7 +314,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session
-    ///     .register_queryable("/key/expression")
+    ///     .declare_queryable("/key/expression")
     ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();
@@ -349,7 +349,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = ZResult<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("register_queryable({:?}, {:?})", self.key_expr, self.kind);
+        log::trace!("declare_queryable({:?}, {:?})", self.key_expr, self.kind);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);

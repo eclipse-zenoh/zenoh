@@ -26,11 +26,11 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    print!("Register key expression {}", key_expr);
-    let expr_id = session.register_expr(&key_expr).await.unwrap();
+    print!("Declare key expression {}", key_expr);
+    let expr_id = session.declare_expr(&key_expr).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Register Publisher on {}", expr_id);
+    println!("Declare Publisher on {}", expr_id);
     let _publisher = session.publishing(expr_id).await.unwrap();
 
     for idx in 0..u32::MAX {

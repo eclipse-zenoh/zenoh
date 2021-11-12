@@ -82,7 +82,7 @@ pub(crate) async fn start_storage(
 
         // admin_key is "/@/.../storage/<stid>"
         // answer to GET on 'admin_key'
-        let mut storage_admin = match zenoh.register_queryable(&admin_key).await {
+        let mut storage_admin = match zenoh.declare_queryable(&admin_key).await {
             Ok(storages_admin) => storages_admin,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);
@@ -92,7 +92,7 @@ pub(crate) async fn start_storage(
 
         // answer to queries on key_expr
         let mut storage_queryable = match zenoh
-            .register_queryable(&key_expr)
+            .declare_queryable(&key_expr)
             .kind(queryable::STORAGE)
             .await
         {

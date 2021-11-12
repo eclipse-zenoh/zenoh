@@ -132,7 +132,7 @@ impl<'a> PublicationCache<'a> {
         };
         let mut queryable = conf
             .session
-            .register_queryable(&queryable_key_expr)
+            .declare_queryable(&queryable_key_expr)
             .kind(PublicationCache::QUERYABLE_KIND)
             .wait()?;
 
@@ -216,7 +216,7 @@ impl<'a> PublicationCache<'a> {
 
     /// Undeclare this PublicationCache
     #[inline]
-    pub fn unregister(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
         // just drop self and all its content
         zready(Ok(()))
     }

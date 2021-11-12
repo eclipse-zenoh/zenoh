@@ -217,8 +217,8 @@ impl<'a> QueryingSubscriber<'a> {
 
     /// Undeclare this QueryingSubscriber
     #[inline]
-    pub fn unregister(self) -> impl ZFuture<Output = ZResult<()>> {
-        self.subscriber.unregister()
+    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
+        self.subscriber.undeclare()
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.

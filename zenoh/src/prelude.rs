@@ -51,7 +51,7 @@ pub use super::net::protocol::core::Encoding;
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
 
-/// A numerical Id mapped to a key expression with [`register_expr`](Session::register_expr).
+/// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
 pub use super::net::protocol::core::ExprId;
 
 /// A key expression.
@@ -654,7 +654,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// use std::convert::TryInto;
 ///
-/// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
+/// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.receiver().next().await {
 ///     let value_selector = query.selector().parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);

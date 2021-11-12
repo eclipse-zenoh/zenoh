@@ -38,7 +38,7 @@ pub(crate) struct PublisherState {
 
 /// A publisher.
 ///
-/// Publishers are automatically unregistered when dropped.
+/// Publishers are automatically undeclared when dropped.
 pub struct Publisher<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<PublisherState>,
@@ -48,8 +48,8 @@ pub struct Publisher<'a> {
 impl Publisher<'_> {
     /// Undeclare a [`Publisher`](Publisher) previously declared with [`publishing`](Session::publishing).
     ///
-    /// Publishers are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the Publisher asynchronously.
+    /// Publishers are automatically undeclared when dropped, but you may want to use this function to handle errors or
+    /// undeclare the Publisher asynchronously.
     ///
     /// # Examples
     /// ```
@@ -58,12 +58,12 @@ impl Publisher<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let publisher = session.publishing("/key/expression").await.unwrap();
-    /// publisher.unregister().await.unwrap();
+    /// publisher.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unpublishing(self.state.id)
     }

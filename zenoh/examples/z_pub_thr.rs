@@ -27,7 +27,7 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    let key_expr = session.register_expr("/test/thr").wait().unwrap();
+    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
     let _publ = session.publishing(&key_expr).wait().unwrap();
 
     loop {

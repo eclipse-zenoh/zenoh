@@ -420,11 +420,11 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let expr_id = session.register_expr("/key/expression").await.unwrap();
+    /// let expr_id = session.declare_expr("/key/expression").await.unwrap();
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn register_expr<'a, IntoKeyExpr>(
+    pub fn declare_expr<'a, IntoKeyExpr>(
         &self,
         key_expr: IntoKeyExpr,
     ) -> impl ZFuture<Output = ZResult<ExprId>>
@@ -432,7 +432,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        trace!("register_expr({:?})", key_expr);
+        trace!("declare_expr({:?})", key_expr);
         let mut state = zwrite!(self.state);
 
         zready(state.localkey_to_expr(&key_expr).map(|expr| {
@@ -464,7 +464,7 @@ impl Session {
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
-    /// with [`register_expr`](Session::register_expr).
+    /// with [`declare_expr`](Session::declare_expr).
     ///
     /// # Arguments
     ///
@@ -476,13 +476,13 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let expr_id = session.register_expr("/key/expression").await.unwrap();
-    /// session.unregister_expr(expr_id).await;
+    /// let expr_id = session.declare_expr("/key/expression").await.unwrap();
+    /// session.undeclare_expr(expr_id).await;
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
-        trace!("unregister_expr({:?})", expr_id);
+    pub fn undeclare_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
+        trace!("undeclare_expr({:?})", expr_id);
         let mut state = zwrite!(self.state);
         state.local_resources.remove(&expr_id);
 
@@ -571,7 +571,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn register_any_subscriber(
+    pub(crate) fn declare_any_subscriber(
         &self,
         key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
@@ -626,16 +626,14 @@ impl Session {
             let key_expr = if key_expr.scope == EMPTY_EXPR_ID {
                 match key_expr.suffix.as_ref().find('*') {
                     Some(pos) => {
-                        let scope = self
-                            .register_expr(&key_expr.suffix.as_ref()[..pos])
-                            .wait()?;
+                        let scope = self.declare_expr(&key_expr.suffix.as_ref()[..pos]).wait()?;
                         KeyExpr {
                             scope,
                             suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
                         }
                     }
                     None => {
-                        let scope = self.register_expr(key_expr.suffix.as_ref()).wait()?;
+                        let scope = self.declare_expr(key_expr.suffix.as_ref()).wait()?;
                         KeyExpr {
                             scope,
                             suffix: "".into(),
@@ -652,7 +650,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn register_any_local_subscriber(
+    pub(crate) fn declare_any_local_subscriber(
         &self,
         key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
@@ -827,7 +825,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///     query.reply_async(Sample::new(
     ///         "/key/expression".to_string(),
@@ -836,7 +834,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn register_queryable<'a, 'b, IntoKeyExpr>(
+    pub fn declare_queryable<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>
@@ -851,10 +849,10 @@ impl Session {
         }
     }
 
-    pub(crate) fn unregister_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
+    pub(crate) fn undeclare_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
-            trace!("unregister_queryable({:?})", qable_state);
+            trace!("undeclare_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
                 // There still exist Queryables on the same KeyExpr.
                 if qable_state.complete {

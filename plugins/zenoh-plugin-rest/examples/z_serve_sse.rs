@@ -43,8 +43,8 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Queryable on {}", key);
-    let mut queryable = session.register_queryable(key).kind(EVAL).await.unwrap();
+    println!("Declare Queryable on {}", key);
+    let mut queryable = session.declare_queryable(key).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
         queryable
@@ -59,11 +59,11 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Register key expression {}", event_key);
-    let expr_id = session.register_expr(&event_key).await.unwrap();
+    print!("Declare key expression {}", event_key);
+    let expr_id = session.declare_expr(&event_key).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Register Publisher on {}", expr_id);
+    println!("Declare Publisher on {}", expr_id);
     let _publ = session.publishing(expr_id).await.unwrap();
 
     println!("Put Data periodically ('{}': '{}')...", expr_id, value);

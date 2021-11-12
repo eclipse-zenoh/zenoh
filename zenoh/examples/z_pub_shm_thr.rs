@@ -31,7 +31,7 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let key_expr = z.register_expr("/test/thr").await.unwrap();
+    let key_expr = z.declare_expr("/test/thr").await.unwrap();
     let _publ = z.publishing(&key_expr).await.unwrap();
 
     loop {

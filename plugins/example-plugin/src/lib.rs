@@ -84,12 +84,12 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     debug!("Run example-plugin with storage-selector={}", selector);
 
-    debug!("Register Subscriber on {}", selector);
+    debug!("Declare Subscriber on {}", selector);
     let mut sub = session.subscribe(&selector).await.unwrap();
 
-    debug!("Register Queryable on {}", selector);
+    debug!("Declare Queryable on {}", selector);
     let mut queryable = session
-        .register_queryable(&selector)
+        .declare_queryable(&selector)
         .kind(STORAGE)
         .await
         .unwrap();

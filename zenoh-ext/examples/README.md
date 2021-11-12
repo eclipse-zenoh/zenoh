@@ -17,7 +17,7 @@
 
 ### z_pub_cache
 
-   Registers a publisher and an assiciated publication cache with a given key expression.  
+   Declares a publisher and an assiciated publication cache with a given key expression.  
    All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource). The cache can be queried by a QueryingSubscriber at startup (see next example).
 
    Typical usage:
@@ -31,7 +31,7 @@
 
 ### z_query_sub
 
-   Registers a querying subscriber with a selector.  
+   Declares a querying subscriber with a selector.  
    At startup, the subscriber issuez a query (by default on the same selector than the subscription) and merge/sort/de-duplicate the query results with the publications received in parallel.
 
    Typical usage:
