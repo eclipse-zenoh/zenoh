@@ -140,7 +140,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut queryable = session.declare_queryable("/key/expression").wait().unwrap();
+    /// let mut queryable = session.queryable("/key/expression").wait().unwrap();
     /// while let Ok(query) = queryable.receiver().recv() {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -153,7 +153,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -185,7 +185,7 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     ///      query.reply(Sample::new("/key/expression".to_string(), "some value"));
@@ -196,7 +196,7 @@ impl Queryable<'_> {
         &mut self.receiver
     }
 
-    /// Undeclare a [`Queryable`](Queryable) previously declared with [`declare_queryable`](Session::declare_queryable).
+    /// Undeclare a [`Queryable`](Queryable) previously declared with [`queryable`](Session::queryable).
     ///
     /// Queryables are automatically undeclared when dropped, but you may want to use this function to handle errors or
     /// undeclare the Queryable asynchronously.
@@ -207,7 +207,7 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let queryable = session.declare_queryable("/key/expression").await.unwrap();
+    /// let queryable = session.queryable("/key/expression").await.unwrap();
     /// queryable.undeclare().await.unwrap();
     /// # })
     /// ```
@@ -314,7 +314,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session
-    ///     .declare_queryable("/key/expression")
+    ///     .queryable("/key/expression")
     ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();
@@ -349,7 +349,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = ZResult<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("declare_queryable({:?}, {:?})", self.key_expr, self.kind);
+        log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);

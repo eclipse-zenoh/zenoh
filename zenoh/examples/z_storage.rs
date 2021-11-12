@@ -38,7 +38,7 @@ async fn main() {
 
     println!("Declare Queryable on {}", key_expr);
     let mut queryable = session
-        .declare_queryable(&key_expr)
+        .queryable(&key_expr)
         .kind(STORAGE)
         .await
         .unwrap();

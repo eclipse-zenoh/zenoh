@@ -89,7 +89,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     debug!("Declare Queryable on {}", selector);
     let mut queryable = session
-        .declare_queryable(&selector)
+        .queryable(&selector)
         .kind(STORAGE)
         .await
         .unwrap();

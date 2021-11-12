@@ -825,7 +825,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.declare_queryable("/key/expression").await.unwrap();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///     query.reply_async(Sample::new(
     ///         "/key/expression".to_string(),
@@ -834,7 +834,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn declare_queryable<'a, 'b, IntoKeyExpr>(
+    pub fn queryable<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>

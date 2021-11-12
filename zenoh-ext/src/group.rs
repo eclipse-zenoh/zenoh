@@ -182,7 +182,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.declare_queryable(&qres).kind(EVAL).await.unwrap();
+    let mut queryable = z.queryable(&qres).kind(EVAL).await.unwrap();
 
     while let Some(query) = queryable.receiver().next().await {
         log::debug!("Serving query for: {}", &qres);

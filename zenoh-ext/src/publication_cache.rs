@@ -132,7 +132,7 @@ impl<'a> PublicationCache<'a> {
         };
         let mut queryable = conf
             .session
-            .declare_queryable(&queryable_key_expr)
+            .queryable(&queryable_key_expr)
             .kind(PublicationCache::QUERYABLE_KIND)
             .wait()?;
 
