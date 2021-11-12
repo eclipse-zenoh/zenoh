@@ -58,7 +58,7 @@
 //! ```
 //!
 //! ### Query
-//! The example below shows how to make a distributed query to collect the values associated with the 
+//! The example below shows how to make a distributed query to collect the values associated with the
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
@@ -113,7 +113,7 @@ pub mod queryable;
 pub mod subscriber;
 pub mod utils;
 
-/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate 
+/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub mod buf {
     /// A read-only bytes buffer.
