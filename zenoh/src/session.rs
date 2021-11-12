@@ -189,7 +189,7 @@ impl Resource {
     }
 }
 
-/// A zenoh session.
+/// A zenoh session. 
 ///
 pub struct Session {
     pub(crate) runtime: Runtime,

@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest and computations. It elegantly blends traditional pub/sub with geo distributed
 //! storage, queries and computations, while retaining a level of time and space efficiency
@@ -59,6 +58,8 @@
 //! ```
 //!
 //! ### Query
+//! The example below shows how to make a distributed query to collect the values associated with the 
+//! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;
@@ -112,7 +113,8 @@ pub mod queryable;
 pub mod subscriber;
 pub mod utils;
 
-/// Some zenoh buffers.
+/// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate 
+/// reading and writing data.
 pub mod buf {
     /// A read-only bytes buffer.
     pub use super::net::protocol::io::ZBuf;
