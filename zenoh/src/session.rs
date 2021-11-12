@@ -681,7 +681,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    /// Declare a [`Subscriber`](Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -811,7 +811,7 @@ impl Session {
             .count() as ZInt
     }
 
-    /// Declare a [`Queryable`](Queryable) for the given key expression.
+    /// Create a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -849,10 +849,10 @@ impl Session {
         }
     }
 
-    pub(crate) fn undeclare_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
+    pub(crate) fn close_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
-            trace!("undeclare_queryable({:?})", qable_state);
+            trace!("close_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
                 // There still exist Queryables on the same KeyExpr.
                 if qable_state.complete {

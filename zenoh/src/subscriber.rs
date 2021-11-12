@@ -138,10 +138,10 @@ impl Subscriber<'_> {
         self.session.pull(&self.state.key_expr)
     }
 
-    /// Undeclare a [`Subscriber`](Subscriber) previously declared with [`subscribe`](Session::subscribe).
+    /// Close a [`Subscriber`](Subscriber) previously created with [`subscribe`](Session::subscribe).
     ///
-    /// Subscribers are automatically undeclared when dropped, but you may want to use this function to handle errors or
-    /// undeclare the Subscriber asynchronously.
+    /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
+    /// close the Subscriber asynchronously.
     ///
     /// # Examples
     /// ```
@@ -150,12 +150,12 @@ impl Subscriber<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// subscriber.undeclare().await.unwrap();
+    /// subscriber.close().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
         self.session.unsubscribe(self.state.id)
     }

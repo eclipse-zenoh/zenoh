@@ -196,10 +196,10 @@ impl Queryable<'_> {
         &mut self.receiver
     }
 
-    /// Undeclare a [`Queryable`](Queryable) previously declared with [`queryable`](Session::queryable).
+    /// Close a [`Queryable`](Queryable) previously created with [`queryable`](Session::queryable).
     ///
-    /// Queryables are automatically undeclared when dropped, but you may want to use this function to handle errors or
-    /// undeclare the Queryable asynchronously.
+    /// Queryables are automatically closed when dropped, but you may want to use this function to handle errors or
+    /// close the Queryable asynchronously.
     ///
     /// # Examples
     /// ```
@@ -208,21 +208,21 @@ impl Queryable<'_> {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let queryable = session.queryable("/key/expression").await.unwrap();
-    /// queryable.undeclare().await.unwrap();
+    /// queryable.close().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
-        self.session.undeclare_queryable(self.state.id)
+        self.session.close_queryable(self.state.id)
     }
 }
 
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.undeclare_queryable(self.state.id).wait();
+            let _ = self.session.close_queryable(self.state.id).wait();
         }
     }
 }

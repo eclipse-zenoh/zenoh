@@ -215,10 +215,10 @@ impl<'a> QueryingSubscriber<'a> {
         Ok(query_subscriber)
     }
 
-    /// Undeclare this QueryingSubscriber
+    /// Close this QueryingSubscriber
     #[inline]
-    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
-        self.subscriber.undeclare()
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+        self.subscriber.close()
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.
