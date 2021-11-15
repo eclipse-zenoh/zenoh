@@ -34,7 +34,7 @@ fn main() {
 
     while let Ok(sample) = sub.receiver().recv() {
         session
-            .put(&key_expr_ping, sample.value)
+            .put(&key_expr_pong, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .wait()
