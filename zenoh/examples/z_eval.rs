@@ -28,11 +28,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Declare Queryable on {}", key_expr);
-    let mut queryable = session
-        .queryable(&key_expr)
-        .kind(EVAL)
-        .await
-        .unwrap();
+    let mut queryable = session.queryable(&key_expr).kind(EVAL).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];

@@ -37,11 +37,7 @@ async fn main() {
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
     println!("Declare Queryable on {}", key_expr);
-    let mut queryable = session
-        .queryable(&key_expr)
-        .kind(STORAGE)
-        .await
-        .unwrap();
+    let mut queryable = session.queryable(&key_expr).kind(STORAGE).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];

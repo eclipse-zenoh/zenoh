@@ -91,10 +91,7 @@ pub(crate) async fn start_storage(
         };
 
         // answer to queries on key_expr
-        let mut storage_queryable = match zenoh
-            .queryable(&key_expr)
-            .kind(queryable::STORAGE)
-            .await
+        let mut storage_queryable = match zenoh.queryable(&key_expr).kind(queryable::STORAGE).await
         {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
