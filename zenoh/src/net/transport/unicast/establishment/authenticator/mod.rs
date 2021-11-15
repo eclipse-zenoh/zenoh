@@ -234,7 +234,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     ///
     /// * `cookie`          - The Cookie containing the internal state
     ///
-    /// * `property`        - The optional [`Property`][Property] included in the InitSyn message
+    /// * `property`        - The optional `Property` included in the InitSyn message
     ///
     async fn handle_init_syn(
         &self,
@@ -253,7 +253,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     ///
     /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitAck message
     ///
-    /// * `properties`      - The optional [`Property`][Property] included in the InitAck message
+    /// * `properties`      - The optional `Property` included in the InitAck message
     ///
     async fn handle_init_ack(
         &self,
@@ -269,9 +269,9 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenSyn message was received on
     ///
-    /// * `properties`      - The optional [`Property`][Property] included in the OpenSyn message
+    /// * `properties`      - The optional `Property` included in the OpenSyn message
     ///
-    /// * `cookie`          - The optional [`Property`][Property] included in the OpenSyn message
+    /// * `cookie`          - The optional `Property` included in the OpenSyn message
     ///
     async fn handle_open_syn(
         &self,
@@ -285,7 +285,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenAck message was received on
     ///
-    /// * `properties`      - The optional [`Property`][Property] included in the OpenAck message
+    /// * `properties`      - The optional `Property` included in the OpenAck message
     ///
     async fn handle_open_ack(
         &self,
