@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::info::*;
-use super::publisher::*;
+use super::publication::*;
 use super::query::*;
 use super::queryable::*;
 use super::subscriber::*;
@@ -58,7 +58,7 @@ pub(crate) struct SessionState {
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
-    pub(crate) publishers: HashMap<Id, Arc<PublisherState>>,
+    pub(crate) publications: Vec<String>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) local_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
@@ -81,7 +81,7 @@ impl SessionState {
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
-            publishers: HashMap::new(),
+            publications: Vec::new(),
             subscribers: HashMap::new(),
             local_subscribers: HashMap::new(),
             queryables: HashMap::new(),
@@ -493,7 +493,7 @@ impl Session {
         zready(Ok(()))
     }
 
-    /// Declare a [`Publisher`](Publisher) for the given key expression.
+    /// Declare a publication for the given key expression.
     ///
     /// Puts that match the given key expression will only be sent on the network
     /// if matching subscribers exist in the system.
@@ -508,42 +508,89 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/key/expression").await.unwrap();
+    /// session.declare_publication("/key/expression").await.unwrap();
     /// session.put("/key/expression", "value").await.unwrap();
     /// # })
     /// ```
-    pub fn publishing<'a, 'b, IntoKeyExpr>(
-        &'a self,
+    pub fn declare_publication<'a, IntoKeyExpr>(
+        &self,
         key_expr: IntoKeyExpr,
-    ) -> PublisherBuilder<'a, 'b>
+    ) -> impl ZFuture<Output = ZResult<()>>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<KeyExpr<'a>>,
     {
-        PublisherBuilder {
-            session: self,
-            key_expr: key_expr.into(),
-        }
+        let key_expr = key_expr.into();
+        log::trace!("declare_publication({:?})", key_expr);
+        zready({
+            let mut state = zwrite!(self.state);
+            state.localkey_to_expr(&key_expr).map(|key_expr_str| {
+                if !state.publications.iter().any(|p| *p == key_expr_str) {
+                    let declared_pub = if let Some(join_pub) = state
+                        .join_publications
+                        .iter()
+                        .find(|s| key_expr::include(s, &key_expr_str))
+                    {
+                        let joined_pub = state
+                            .publications
+                            .iter()
+                            .any(|p| key_expr::include(join_pub, p));
+                        (!joined_pub).then(|| join_pub.clone().into())
+                    } else {
+                        Some(key_expr.clone())
+                    };
+                    state.publications.push(key_expr_str);
+
+                    if let Some(res) = declared_pub {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.decl_publisher(&res, None);
+                    }
+                }
+            })
+        })
     }
 
-    pub(crate) fn unpublishing(&self, pid: usize) -> impl ZFuture<Output = ZResult<()>> {
+    /// Undeclare a publication previously declared
+    /// with [`declare_publication`](Session::declare_publication).
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression of the publication to undeclarte
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// session.declare_publication("/key/expression").await.unwrap();
+    /// session.put("/key/expression", "value").await.unwrap();
+    /// session.undeclare_publication("/key/expression").await.unwrap();
+    /// # })
+    /// ```
+    pub fn undeclare_publication<'a, IntoKeyExpr>(
+        &self,
+        key_expr: IntoKeyExpr,
+    ) -> impl ZFuture<Output = ZResult<()>>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        let key_expr = key_expr.into();
         let mut state = zwrite!(self.state);
-        zready(if let Some(pub_state) = state.publishers.remove(&pid) {
-            trace!("unpublishing({:?})", pub_state);
-            // Note: there might be several Publishers on the same KeyExpr.
-            // Before calling forget_publisher(key_expr), check if this was the last one.
-            state.localkey_to_expr(&pub_state.key_expr).map(|key_expr| {
+        zready(state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
+            if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
+                trace!("undeclare_publication({:?})", key_expr_str);
+                state.publications.remove(idx);
                 match state
                     .join_publications
                     .iter()
-                    .find(|s| key_expr::include(s, &key_expr))
+                    .find(|s| key_expr::include(s, &key_expr_str))
                 {
                     Some(join_pub) => {
-                        let joined_pub = state.publishers.values().any(|p| {
-                            key_expr::include(
-                                join_pub,
-                                &state.localkey_to_expr(&p.key_expr).unwrap(),
-                            )
-                        });
+                        let joined_pub = state
+                            .publications
+                            .iter()
+                            .any(|p| key_expr::include(join_pub, p));
                         if !joined_pub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             let key_expr = join_pub.clone().into();
@@ -552,23 +599,18 @@ impl Session {
                         }
                     }
                     None => {
-                        let twin_pub = state.publishers.values().any(|p| {
-                            state.localkey_to_expr(&p.key_expr).unwrap()
-                                == state.localkey_to_expr(&pub_state.key_expr).unwrap()
-                        });
-                        if !twin_pub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            drop(state);
-                            primitives.forget_publisher(&pub_state.key_expr, None);
-                        }
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.forget_publisher(&key_expr, None);
                     }
                 };
-            })
-        } else {
-            zerror!(ZErrorKind::Other {
-                descr: "Unable to find publisher".into()
-            })
-        })
+                Ok(())
+            } else {
+                zerror!(ZErrorKind::Other {
+                    descr: "Unable to find publication".into()
+                })
+            }
+        }))
     }
 
     pub(crate) fn declare_any_subscriber(

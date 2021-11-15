@@ -107,7 +107,7 @@ pub mod net;
 pub mod config;
 pub mod info;
 pub mod prelude;
-pub mod publisher;
+pub mod publication;
 pub mod query;
 pub mod queryable;
 pub mod subscriber;

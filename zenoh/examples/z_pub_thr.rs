@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 
 fn main() {
     // initiate logging
@@ -28,7 +28,6 @@ fn main() {
     let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = session.declare_expr("/test/thr").wait().unwrap();
-    let _publ = session.publishing(&key_expr).wait().unwrap();
 
     loop {
         session

@@ -15,7 +15,7 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 use zenoh::queryable::EVAL;
 
 const HTML: &str = r#"
@@ -63,8 +63,8 @@ async fn main() {
     let expr_id = session.declare_expr(&event_key).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Declare Publisher on {}", expr_id);
-    let _publ = session.publishing(expr_id).await.unwrap();
+    println!("Declare publication on {}", expr_id);
+    session.declare_publication(expr_id).await.unwrap();
 
     println!("Put Data periodically ('{}': '{}')...", expr_id, value);
 

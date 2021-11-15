@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 
 fn main() {
     // initiate logging

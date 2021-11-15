@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 
 fn main() {
     // initiate logging
@@ -28,7 +28,6 @@ fn main() {
 
     // The key expression to echo the data back
     let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
-    let _publ = session.publishing(&key_expr_pong).wait().unwrap();
 
     let mut sub = session.subscribe(&key_expr_ping).wait().unwrap();
 

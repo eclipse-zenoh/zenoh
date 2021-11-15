@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 
 #[async_std::main]
 async fn main() {
@@ -32,7 +32,6 @@ async fn main() {
     }
 
     let key_expr = z.declare_expr("/test/thr").await.unwrap();
-    let _publ = z.publishing(&key_expr).await.unwrap();
 
     loop {
         z.put(&key_expr, buf.clone())

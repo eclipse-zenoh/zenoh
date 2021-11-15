@@ -14,141 +14,17 @@
 
 //! Publishing primitives.
 
-use super::net::protocol::core::{key_expr, Channel};
+use super::net::protocol::core::Channel;
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
 use super::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
-use crate::sync::ZFuture;
 use crate::Encoding;
 use crate::Session;
-use async_std::sync::Arc;
-use std::fmt;
-use std::sync::atomic::Ordering;
 use zenoh_util::sync::Runnable;
 
 /// The kind of congestion control.
 pub use super::net::protocol::core::CongestionControl;
-
-#[derive(Debug)]
-pub(crate) struct PublisherState {
-    pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
-}
-
-/// A publisher.
-///
-/// Publishers are automatically undeclared when dropped.
-pub struct Publisher<'a> {
-    pub(crate) session: &'a Session,
-    pub(crate) state: Arc<PublisherState>,
-    pub(crate) alive: bool,
-}
-
-impl Publisher<'_> {
-    /// Undeclare a [`Publisher`](Publisher) previously declared with [`publishing`](Session::publishing).
-    ///
-    /// Publishers are automatically undeclared when dropped, but you may want to use this function to handle errors or
-    /// undeclare the Publisher asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/key/expression").await.unwrap();
-    /// publisher.undeclare().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
-        self.alive = false;
-        self.session.unpublishing(self.state.id)
-    }
-}
-
-impl Drop for Publisher<'_> {
-    fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.unpublishing(self.state.id).wait();
-        }
-    }
-}
-
-impl fmt::Debug for Publisher<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
-    }
-}
-
-derive_zfuture! {
-    /// A builder for initializing a [`Publisher`](Publisher).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.publishing("/key/expression").await.unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct PublisherBuilder<'a, 'b> {
-        pub(crate) session: &'a Session,
-        pub(crate) key_expr: KeyExpr<'b>,
-    }
-}
-
-impl<'a> Runnable for PublisherBuilder<'a, '_> {
-    type Output = ZResult<Publisher<'a>>;
-
-    fn run(&mut self) -> Self::Output {
-        log::trace!("publishing({:?})", self.key_expr);
-        let mut state = zwrite!(self.session.state);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let key_expr = state.localkey_to_expr(&self.key_expr)?;
-        let pub_state = Arc::new(PublisherState {
-            id,
-            key_expr: self.key_expr.to_owned(),
-        });
-        let declared_pub = if let Some(join_pub) = state
-            .join_publications
-            .iter()
-            .find(|s| key_expr::include(s, &key_expr))
-        {
-            let joined_pub = state.publishers.values().any(|p| {
-                key_expr::include(join_pub, &state.localkey_to_expr(&p.key_expr).unwrap())
-            });
-            (!joined_pub).then(|| join_pub.clone().into())
-        } else {
-            let twin_pub = state.publishers.values().any(|p| {
-                state.localkey_to_expr(&p.key_expr).unwrap()
-                    == state.localkey_to_expr(&pub_state.key_expr).unwrap()
-            });
-            (!twin_pub).then(|| self.key_expr.clone())
-        };
-
-        state.publishers.insert(id, pub_state.clone());
-
-        if let Some(res) = declared_pub {
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.decl_publisher(&res, None);
-        }
-
-        Ok(Publisher {
-            session: self.session,
-            state: pub_state,
-            alive: true,
-        })
-    }
-}
 
 derive_zfuture! {
     /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
@@ -159,7 +35,7 @@ derive_zfuture! {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
-    /// use zenoh::publisher::CongestionControl;
+    /// use zenoh::publication::CongestionControl;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session

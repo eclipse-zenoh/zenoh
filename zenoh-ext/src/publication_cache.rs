@@ -21,7 +21,6 @@ use futures_lite::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use zenoh::prelude::*;
-use zenoh::publisher::Publisher;
 use zenoh::queryable::Queryable;
 use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
@@ -87,7 +86,6 @@ impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
 }
 
 pub struct PublicationCache<'a> {
-    _publisher: Publisher<'a>,
     _local_sub: Subscriber<'a>,
     _queryable: Queryable<'a>,
     _stoptx: Sender<bool>,
@@ -113,9 +111,6 @@ impl<'a> PublicationCache<'a> {
                 )
             });
         }
-
-        // declare the publisher
-        let publisher = conf.session.publishing(&conf.pub_key_expr).wait()?;
 
         // declare the local subscriber that will store the local publications
         let mut local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
@@ -207,7 +202,6 @@ impl<'a> PublicationCache<'a> {
         });
 
         Ok(PublicationCache {
-            _publisher: publisher,
             _local_sub: local_sub,
             _queryable: queryable,
             _stoptx: stoptx,

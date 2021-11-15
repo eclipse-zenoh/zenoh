@@ -31,7 +31,7 @@ mod tests {
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh::publisher::CongestionControl;
+    use zenoh::publication::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
