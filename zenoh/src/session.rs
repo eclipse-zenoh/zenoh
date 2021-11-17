@@ -1148,11 +1148,17 @@ impl Session {
     where
         IntoSelector: Into<Selector<'b>>,
     {
+        let selector = selector.into();
+        let consolidation = if selector.has_time_range() {
+            Some(QueryConsolidation::none())
+        } else {
+            Some(QueryConsolidation::default())
+        };
         Getter {
             session: self,
-            selector: selector.into(),
+            selector,
             target: Some(QueryTarget::default()),
-            consolidation: Some(QueryConsolidation::default()),
+            consolidation,
         }
     }
 
