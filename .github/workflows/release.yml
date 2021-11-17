@@ -303,7 +303,7 @@ jobs:
 
   publication:
     name: Publish the release
-    if: needs.checks.outputs.IS_RELEASE == "true"
+    if: needs.checks.outputs.IS_RELEASE == 'true'
     needs: [checks, tests, builds]
     runs-on: ubuntu-latest
     steps:
