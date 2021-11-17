@@ -13,7 +13,7 @@
 //
 use async_std::prelude::*;
 use async_std::stream::StreamExt;
-use zenoh::config;
+use zenoh::config::Config;
 use zenoh::scouting::WhatAmI;
 
 #[async_std::main]
@@ -22,7 +22,7 @@ async fn main() {
     env_logger::init();
 
     println!("Scouting...");
-    let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
         .await
         .unwrap();
 

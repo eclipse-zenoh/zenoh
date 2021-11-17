@@ -17,11 +17,11 @@
 
 use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
+use serde_json::Value;
 use std::{
     any::Any,
     borrow::Cow,
     collections::HashMap,
-    convert::TryFrom,
     io::Read,
     net::SocketAddr,
     path::Path,
@@ -29,7 +29,6 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_util::properties::config::*;
-use zenoh_util::properties::{IntKeyProperties, Properties};
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -40,42 +39,28 @@ use zenoh_util::properties::{IntKeyProperties, Properties};
 /// [`Properties`](crate::properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
-pub fn empty() -> ConfigProperties {
-    ConfigProperties::default()
+pub fn empty() -> Config {
+    Config::default()
 }
 
-/// Creates a default zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "peer")`
-pub fn default() -> ConfigProperties {
+/// Creates a default zenoh net Session configuration (equivalent to `peer`).
+pub fn default() -> Config {
     peer()
 }
 
 /// Creates a default `'peer'` mode zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "peer")`
-pub fn peer() -> ConfigProperties {
-    let mut props = ConfigProperties::default();
-    props.insert(ZN_MODE_KEY, "peer".to_string());
-    props
+pub fn peer() -> Config {
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Peer)).unwrap();
+    config
 }
 
 /// Creates a default `'client'` mode zenoh net Session configuration.
-///
-/// The returned configuration contains :
-///  - `(ZN_MODE_KEY, "client")`
-///
-/// If the given peer locator is not `None`, the returned configuration also contains :
-///  - `(ZN_PEER_KEY, <peer>)`
-pub fn client(peer: Option<String>) -> ConfigProperties {
-    let mut props = ConfigProperties::default();
-    props.insert(ZN_MODE_KEY, "client".to_string());
-    if let Some(peer) = peer {
-        props.insert(ZN_PEER_KEY, peer);
-    }
-    props
+pub fn client<I: IntoIterator<Item = T>, T: Into<Locator>>(peers: I) -> Config {
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    config.peers.extend(peers.into_iter().map(|t| t.into()));
+    config
 }
 
 #[test]
@@ -248,6 +233,12 @@ validated_struct::validator! {
                 },
             },
         },
+        #[serde(default)]
+        #[intkey(skip)]
+        plugins_search_dirs: Vec<String>,
+        #[intkey(skip)]
+        #[serde(default)]
+        plugins: PluginsConfig,
     }
 }
 
@@ -291,6 +282,16 @@ impl Config {
         validated_struct::InsertionError: From<json5::Error>,
     {
         self.insert(key.as_ref(), &mut json5::Deserializer::from_str(value)?)
+    }
+
+    pub fn plugin(&self, name: &str) -> Option<&Value> {
+        self.plugins.values.get(name)
+    }
+
+    pub fn sift_privates(&self) -> Self {
+        let mut copy = self.clone();
+        copy.plugins.sift_privates();
+        copy
     }
 }
 
@@ -487,78 +488,6 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     }
 }
 
-impl<'a> TryFrom<&'a HashMap<ZInt, String>> for Config {
-    type Error = Config;
-    fn try_from(value: &'a HashMap<ZInt, String>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value {
-            s.iset(*key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<HashMap<ZInt, String>> for Config {
-    type Error = Config;
-    fn try_from(value: HashMap<ZInt, String>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value {
-            s.iset(key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<Properties> for Config {
-    type Error = Config;
-    fn try_from(value: Properties) -> Result<Self, Self::Error> {
-        let props: IntKeyProperties<ConfigTranscoder> = value.into();
-        Config::try_from(props)
-    }
-}
-
-impl<'a> TryFrom<&'a IntKeyProperties<ConfigTranscoder>> for Config {
-    type Error = Config;
-    fn try_from(value: &'a IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in &value.0 {
-            s.iset(*key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
-impl TryFrom<IntKeyProperties<ConfigTranscoder>> for Config {
-    type Error = Config;
-    fn try_from(value: IntKeyProperties<ConfigTranscoder>) -> Result<Self, Self::Error> {
-        let mut s: Self = Default::default();
-        let mut merge_error = false;
-        for (key, value) in value.0 {
-            s.iset(key, value).is_err().then(|| merge_error = true);
-        }
-        if merge_error || s.validate_rec() {
-            Ok(s)
-        } else {
-            Err(s)
-        }
-    }
-}
-
 impl<'a> From<&'a Config> for ConfigProperties {
     fn from(c: &'a Config) -> Self {
         let mut result = ConfigProperties::default();
@@ -716,4 +645,200 @@ fn addr_to_cowstr(s: &Option<SocketAddr>) -> Option<Cow<str>> {
 
 fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
     s.parse().ok().map(Some)
+}
+
+#[derive(Clone)]
+pub struct PluginsConfig {
+    values: Value,
+    validators: HashMap<String, zenoh_plugin_trait::ValidationFunction>,
+}
+fn sift_privates(value: &mut serde_json::Value) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+        Value::Array(a) => a.iter_mut().for_each(sift_privates),
+        Value::Object(o) => {
+            o.remove("private");
+            o.values_mut().for_each(sift_privates);
+        }
+    }
+}
+impl PluginsConfig {
+    pub fn sift_privates(&mut self) {
+        sift_privates(&mut self.values);
+    }
+}
+impl serde::Serialize for PluginsConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut value = self.values.clone();
+        sift_privates(&mut value);
+        value.serialize(serializer)
+    }
+}
+impl Default for PluginsConfig {
+    fn default() -> Self {
+        Self {
+            values: Value::Object(Default::default()),
+            validators: Default::default(),
+        }
+    }
+}
+impl<'a> serde::Deserialize<'a> for PluginsConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        Ok(PluginsConfig {
+            validators: Default::default(),
+            values: serde::Deserialize::deserialize(deserializer)?,
+        })
+    }
+}
+impl std::fmt::Debug for PluginsConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", &self.values)
+    }
+}
+impl IntKeyMapLike for PluginsConfig {
+    type Keys = Option<u64>;
+    fn iget(&self, _: u64) -> Option<Cow<'_, str>> {
+        None
+    }
+    fn iset<S: Into<String> + AsRef<str>>(&mut self, _: u64, _: S) -> Result<(), ()> {
+        Err(())
+    }
+    fn ikeys(&self) -> Self::Keys {
+        None
+    }
+}
+trait PartialMerge: Sized {
+    fn merge(self, path: &str, value: Self) -> Result<Self, validated_struct::InsertionError>;
+}
+impl PartialMerge for serde_json::Value {
+    fn merge(
+        mut self,
+        path: &str,
+        new_value: Self,
+    ) -> Result<Self, validated_struct::InsertionError> {
+        let mut value = &mut self;
+        let mut key = path;
+        let key_not_found = || {
+            Err(validated_struct::InsertionError::String(format!(
+                "{} not found",
+                path
+            )))
+        };
+        while !key.is_empty() {
+            let (current, new_key) = validated_struct::split_once(key, '/');
+            key = new_key;
+            if current.is_empty() {
+                continue;
+            }
+            value = match value {
+                Value::Bool(_) | Value::Number(_) | Value::String(_) => return key_not_found(),
+                Value::Null => match current {
+                    "0" | "+" => {
+                        *value = Value::Array(vec![Value::Null]);
+                        &mut value[0]
+                    }
+                    _ => {
+                        *value = Value::Object(Default::default());
+                        value
+                            .as_object_mut()
+                            .unwrap()
+                            .entry(current)
+                            .or_insert(Value::Null)
+                    }
+                },
+                Value::Array(a) => match current {
+                    "+" => {
+                        a.push(Value::Null);
+                        a.last_mut().unwrap()
+                    }
+                    "0" if a.is_empty() => {
+                        a.push(Value::Null);
+                        a.last_mut().unwrap()
+                    }
+                    _ => match current.parse::<usize>() {
+                        Ok(i) => match a.get_mut(i) {
+                            Some(r) => r,
+                            None => return key_not_found(),
+                        },
+                        Err(_) => return key_not_found(),
+                    },
+                },
+                Value::Object(v) => v.entry(current).or_insert(Value::Null),
+            }
+        }
+        *value = new_value;
+        Ok(self)
+    }
+}
+impl validated_struct::ValidatedMap for PluginsConfig {
+    fn insert<'d, D: serde::Deserializer<'d>>(
+        &mut self,
+        key: &str,
+        deserializer: D,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<D::Error>,
+    {
+        let (plugin, key) = validated_struct::split_once(key, '/');
+        let validator = self.validators.get(plugin);
+        let new_value: Value = serde::Deserialize::deserialize(deserializer)?;
+        let value = self
+            .values
+            .as_object_mut()
+            .unwrap()
+            .entry(plugin)
+            .or_insert(Value::Null);
+        let mut new_value = value.clone().merge(key, new_value)?;
+        if let Some(validator) = validator {
+            match validator(
+                key,
+                value.as_object().unwrap(),
+                new_value.as_object().unwrap(),
+            ) {
+                Ok(Some(val)) => new_value = Value::Object(val),
+                Ok(None) => {}
+                Err(e) => return Err(format!("{}", e).into()),
+            }
+        }
+        *value = new_value;
+        Ok(())
+    }
+    fn get<'a>(&'a self, mut key: &str) -> Result<&'a dyn Any, GetError> {
+        let (current, new_key) = validated_struct::split_once(key, '/');
+        key = new_key;
+        let mut value = match self.values.get(current) {
+            Some(matched) => matched,
+            None => return Err(GetError::NoMatchingKey),
+        };
+        while !key.is_empty() {
+            let (current, new_key) = validated_struct::split_once(key, '/');
+            key = new_key;
+            let matched = match value {
+                serde_json::Value::Null
+                | serde_json::Value::Bool(_)
+                | serde_json::Value::Number(_)
+                | serde_json::Value::String(_) => return Err(GetError::NoMatchingKey),
+                serde_json::Value::Array(a) => a.get(match current.parse::<usize>() {
+                    Ok(i) => i,
+                    Err(_) => return Err(GetError::NoMatchingKey),
+                }),
+                serde_json::Value::Object(v) => v.get(current),
+            };
+            value = match matched {
+                Some(matched) => matched,
+                None => return Err(GetError::NoMatchingKey),
+            }
+        }
+        Ok(value)
+    }
+    type Keys = Vec<String>;
+    fn keys(&self) -> Self::Keys {
+        self.values.as_object().unwrap().keys().cloned().collect()
+    }
 }

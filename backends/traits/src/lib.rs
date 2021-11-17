@@ -21,24 +21,21 @@
 //!
 //! # Example
 //! ```
+//! use std::sync::Arc;
 //! use async_trait::async_trait;
 //! use zenoh::prelude::*;
 //! use zenoh::properties::properties_to_json_value;
 //! use zenoh_backend_traits::*;
+//! use zenoh_backend_traits::config::*;
 //!
 //! #[no_mangle]
-//! pub fn create_backend(properties: &Properties) -> ZResult<Box<dyn Backend>> {
-//!     // The properties are the ones passed via a PUT in the admin space for Backend creation.
-//!     // Here we re-expose them in the admin space for GET operations, adding the PROP_BACKEND_TYPE entry.
-//!     let mut p = properties.clone();
-//!     p.insert(PROP_BACKEND_TYPE.into(), "my_backend_type".into());
-//!     let admin_status = properties_to_json_value(&p);
-//!     Ok(Box::new(MyBackend { admin_status }))
+//! pub fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+//!     Ok(Box::new(MyBackend { config }))
 //! }
 //!
 //! // Your Backend implementation
 //! struct MyBackend {
-//!     admin_status: Value,
+//!     config: BackendConfig,
 //! }
 //!
 //! #[async_trait]
@@ -47,20 +44,20 @@
 //!         // This operation is called on GET operation on the admin space for the Backend
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Backend monitoring.
-//!         self.admin_status.clone()
+//!         self.config.to_json_value().into()
 //!     }
 //!
-//!     async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
+//!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
 //!
-//!     fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
+//!     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
 //!         // No interception point for incoming data (on PUT operations)
 //!         None
 //!     }
 //!
-//!     fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>> {
+//!     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
 //!         // No interception point for outgoing data (on GET operations)
 //!         None
 //!     }
@@ -68,16 +65,12 @@
 //!
 //! // Your Storage implementation
 //! struct MyStorage {
-//!     admin_status: Value,
+//!     config: StorageConfig,
 //! }
 //!
 //! impl MyStorage {
-//!     async fn new(properties: Properties) -> ZResult<MyStorage> {
-//!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
-//!         // They contain at least a PROP_STORAGE_KEY_EXPR entry (i.e. "key_expr").
-//!         // Here we choose to re-expose them as they are in the admin space for GET operations.
-//!         let admin_status = properties_to_json_value(&properties);
-//!         Ok(MyStorage { admin_status })
+//!     async fn new(config: StorageConfig) -> ZResult<MyStorage> {
+//!         Ok(MyStorage { config })
 //!     }
 //! }
 //!
@@ -87,7 +80,7 @@
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.admin_status.clone()
+//!         self.config.to_json_value().into()
 //!     }
 //!
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
@@ -132,25 +125,17 @@
 //! }
 //! ```
 
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use zenoh::prelude::*;
 
+pub mod config;
 pub mod utils;
+use config::{BackendConfig, StorageConfig};
 
-/// The `"type"` property key to be used in admin status reported by Backends.
-pub const PROP_BACKEND_TYPE: &str = "type";
-
-/// The `"key_expr"` property key to be used for configuration of each storage.
-pub const PROP_STORAGE_KEY_EXPR: &str = "key_expr";
-
-/// The `"key_prefix"` property key that could be used to specify the common key prefix
-/// to be stripped from keys before storing them as keys in the Storage.
-///
-/// Note that it shall be a prefix of the `"key_expr"`.
-/// If you use it, you should also adapt in [`Storage::on_query()`] implementation the incoming
-/// queries' key expression to the stored keys calling [`crate::utils::get_sub_key_selectors()`].
-pub const PROP_STORAGE_KEY_PREFIX: &str = "key_prefix";
+/// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
+pub const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
+pub type CreateBackend = fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
 
 /// Trait to be implemented by a Backend.
 ///
@@ -161,15 +146,15 @@ pub trait Backend: Send + Sync {
     async fn get_admin_status(&self) -> Value;
 
     /// Creates a storage configured with some properties.
-    async fn create_storage(&mut self, props: Properties) -> ZResult<Box<dyn Storage>>;
+    async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
 
     /// Returns an [`IncomingDataInterceptor`] that will be called before pushing any data
     /// into a storage created by this backend. `None` can be returned for no interception point.
-    fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>>;
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 
     /// Returns an [`OutgoingDataInterceptor`] that will be called before sending any reply
     /// to a query from a storage created by this backend. `None` can be returned for no interception point.
-    fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>>;
+    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
 
 /// Trait to be implemented by a Storage.
@@ -187,29 +172,17 @@ pub trait Storage: Send + Sync {
     async fn on_query(&mut self, query: Query) -> ZResult<()>;
 }
 
-/// An interceptor allowing to modify the data pushed into a storage before it's actually stored.
-#[async_trait]
-pub trait IncomingDataInterceptor: Send + Sync {
-    async fn on_sample(&self, sample: Sample) -> Sample;
-}
-
-/// An interceptor allowing to modify the data going out of a storage before it's sent as a reply to a query.
-#[async_trait]
-pub trait OutgoingDataInterceptor: Send + Sync {
-    async fn on_reply(&self, sample: Sample) -> Sample;
-}
-
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
 /// OutgoingDataInterceptor (if any) before to send the reply
 pub struct Query {
     q: zenoh::queryable::Query,
-    interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
+    interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
 }
 
 impl Query {
     pub fn new(
         q: zenoh::queryable::Query,
-        interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
+        interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     ) -> Query {
         Query { q, interceptor }
     }
@@ -236,7 +209,7 @@ impl Query {
     pub async fn reply(&self, sample: Sample) {
         // Call outgoing intercerceptor
         let sample = if let Some(ref interceptor) = self.interceptor {
-            interceptor.read().await.on_reply(sample).await
+            interceptor(sample)
         } else {
             sample
         };

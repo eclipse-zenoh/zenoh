@@ -13,7 +13,6 @@
 //
 
 use async_std::sync::Arc;
-use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use http_types::Method;
 use std::str::FromStr;
@@ -24,7 +23,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
-use zenoh_plugin_trait::prelude::*;
+use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -134,6 +133,16 @@ impl std::fmt::Display for StrError {
         write!(f, "{}", self.err)
     }
 }
+#[derive(Debug, Clone)]
+struct StringError {
+    err: String,
+}
+impl std::error::Error for StringError {}
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
+}
 
 impl Plugin for RestPlugin {
     fn compatibility() -> zenoh_plugin_trait::PluginId {
@@ -141,29 +150,60 @@ impl Plugin for RestPlugin {
             uid: "zenoh-plugin-rest",
         }
     }
-
-    type Requirements = Vec<Arg<'static, 'static>>;
-    type StartArgs = (Runtime, ArgMatches<'static>);
-
-    fn get_requirements() -> Self::Requirements {
-        vec![
-            Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
-                .default_value(DEFAULT_HTTP_PORT),
-        ]
-    }
+    type StartArgs = Runtime;
+    const STATIC_NAME: &'static str = "rest";
 
     fn start(
-        (runtime, args): &Self::StartArgs,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
-        match args.value_of("rest-http-port") {
-            None => Err(Box::new(StrError {
-                err: "No --rest-http-port argument found",
-            })),
-            Some(port) => {
-                async_std::task::spawn(run(runtime.clone(), port.to_owned()));
-                Ok(Box::new(()))
+        name: &str,
+        runtime: &Self::StartArgs,
+    ) -> Result<Box<dyn RunningPluginTrait>, Box<dyn std::error::Error>> {
+        let config = runtime.config.lock();
+        let self_cfg: &serde_json::Value = match config.plugin(name) {
+            Some(value) => value,
+            None => {
+                return Err(Box::new(StringError {
+                    err: format!("No configuration found for plugin '{}'", name),
+                }))
             }
+        };
+        if let Some(port) = self_cfg.as_object().unwrap().get("port") {
+            let port = match port {
+                serde_json::Value::Null
+                | serde_json::Value::Bool(_)
+                | serde_json::Value::Array(_)
+                | serde_json::Value::Object(_) => {
+                    return Err(Box::new(StrError {
+                        err: r#""port" option must be an integer"#,
+                    }))
+                }
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => {
+                    if let Some(port) = n.as_u64() {
+                        port.to_string()
+                    } else {
+                        return Err(Box::new(StrError {
+                            err: r#""port" option must be a positive integer"#,
+                        }));
+                    }
+                }
+            };
+            std::mem::drop(config);
+            async_std::task::spawn(run(runtime.clone(), port));
+            Ok(Box::new(RunningPlugin))
+        } else {
+            std::mem::drop(config);
+            Err(Box::new(StrError {
+                err: r#"Plugin option "port" is required"#,
+            }))
         }
+    }
+}
+struct RunningPlugin;
+impl RunningPluginTrait for RunningPlugin {
+    fn config_checker(&self) -> ValidationFunction {
+        Arc::new(|_, _, _| {
+            Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
+        })
     }
 }
 
@@ -325,17 +365,8 @@ pub async fn run(runtime: Runtime, port: String) {
             .allow_credentials(false),
     );
 
-    app.at("/").get(query);
-    app.at("*").get(query);
-
-    app.at("/").put(write);
-    app.at("*").put(write);
-
-    app.at("/").patch(write);
-    app.at("*").patch(write);
-
-    app.at("/").delete(write);
-    app.at("*").delete(write);
+    app.at("/").get(query).put(write).patch(write).delete(write);
+    app.at("*").get(query).put(write).patch(write).delete(write);
 
     if let Err(e) = app.listen(http_port).await {
         log::error!("Unable to start http server for REST : {:?}", e);

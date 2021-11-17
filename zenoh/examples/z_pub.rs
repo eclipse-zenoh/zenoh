@@ -14,7 +14,7 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::prelude::*;
+use zenoh::config::Config;
 
 #[async_std::main]
 async fn main() {
@@ -41,7 +41,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Properties, String, String) {
+fn parse_args() -> (Config, String, String) {
     let args = App::new("zenoh pub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -67,17 +67,28 @@ fn parse_args() -> (Properties, String, String) {
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
-        Properties::from(std::fs::read_to_string(conf_file).unwrap())
+        Config::from_file(conf_file).unwrap()
     } else {
-        Properties::default()
+        Config::default()
     };
-    for key in ["mode", "peer", "listener"].iter() {
-        if let Some(value) = args.values_of(key) {
-            config.insert(key.to_string(), value.collect::<Vec<&str>>().join(","));
+    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+        config.set_mode(Some(mode)).unwrap();
+    }
+    match args.value_of("mode").map(|m| m.parse()) {
+        Some(Ok(mode)) => {
+            config.set_mode(Some(mode)).unwrap();
         }
+        Some(Err(())) => panic!("Invalid mode"),
+        None => {}
+    };
+    if let Some(values) = args.values_of("peer") {
+        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    }
+    if let Some(values) = args.values_of("listeners") {
+        config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
-        config.insert("multicast_scouting".to_string(), "false".to_string());
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
     let key_expr = args.value_of("key").unwrap().to_string();

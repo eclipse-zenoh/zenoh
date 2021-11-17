@@ -361,6 +361,7 @@ pipeline {
         sh '''
         cd zenoh-util && cargo publish && cd - && sleep 30
         cd zenoh && cargo publish && cd - && sleep 30
+        cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
         cd backends/traits && cargo publish && cd -
         cd plugins/zenoh-plugin-rest && cargo publish && cd -
         '''

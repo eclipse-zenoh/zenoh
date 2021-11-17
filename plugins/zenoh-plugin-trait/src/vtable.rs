@@ -2,17 +2,18 @@ use super::*;
 pub use no_mangle::*;
 
 pub type PluginVTableVersion = u16;
-type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;
-pub type LoadPluginResult<A, B> = Result<PluginVTable<A, B>, PluginVTableVersion>;
+type LoadPluginResultInner = Result<PluginVTableInner<()>, PluginVTableVersion>;
+pub type LoadPluginResult<A> = Result<PluginVTable<A>, PluginVTableVersion>;
 
 /// This number should change any time the internal structure of [`PluginVTable`] changes
-pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 0;
+pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 1;
+
+type StartFn<StartArgs> = fn(&str, &StartArgs) -> Result<RunningPlugin, Box<dyn Error>>;
 
 #[repr(C)]
-struct PluginVTableInner<Requirements, StartArgs> {
+struct PluginVTableInner<StartArgs> {
     is_compatible_with: fn(&[PluginId]) -> Result<PluginId, Incompatibility>,
-    get_requirements: fn() -> Requirements,
-    start: fn(&StartArgs) -> Result<BoxedAny, Box<dyn Error>>,
+    start: StartFn<StartArgs>,
 }
 
 /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
@@ -35,18 +36,16 @@ impl PluginVTablePadding {
 ///
 /// To ensure compatibility, its size and alignment must allow `size_of::<Result<PluginVTable, PluginVTableVersion>>() == 64` (one cache line).
 #[repr(C)]
-pub struct PluginVTable<Requirements, StartArgs> {
-    inner: PluginVTableInner<Requirements, StartArgs>,
+pub struct PluginVTable<StartArgs> {
+    inner: PluginVTableInner<StartArgs>,
     padding: PluginVTablePadding,
 }
 
-impl<Requirements, StartArgs> PluginVTable<Requirements, StartArgs> {
-    pub fn new<ConcretePlugin: Plugin<Requirements = Requirements, StartArgs = StartArgs>>() -> Self
-    {
+impl<StartArgs> PluginVTable<StartArgs> {
+    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs>>() -> Self {
         PluginVTable {
             inner: PluginVTableInner {
                 is_compatible_with: ConcretePlugin::is_compatible_with,
-                get_requirements: ConcretePlugin::get_requirements,
                 start: ConcretePlugin::start,
             },
             padding: PluginVTablePadding::new(),
@@ -66,12 +65,12 @@ impl<Requirements, StartArgs> PluginVTable<Requirements, StartArgs> {
         (self.inner.is_compatible_with)(others)
     }
 
-    pub fn get_requirements(&self) -> Requirements {
-        (self.inner.get_requirements)()
-    }
-
-    pub fn start(&self, start_args: &StartArgs) -> Result<BoxedAny, Box<dyn Error>> {
-        (self.inner.start)(start_args)
+    pub fn start(
+        &self,
+        name: &str,
+        start_args: &StartArgs,
+    ) -> Result<RunningPlugin, Box<dyn Error>> {
+        (self.inner.start)(name, start_args)
     }
 }
 
@@ -85,7 +84,7 @@ pub mod no_mangle {
             #[no_mangle]
             fn load_plugin(
                 version: PluginVTableVersion,
-            ) -> LoadPluginResult<<$ty as Plugin>::Requirements, <$ty as Plugin>::StartArgs> {
+            ) -> LoadPluginResult<<$ty as Plugin>::StartArgs> {
                 if version == PLUGIN_VTABLE_VERSION {
                     Ok(PluginVTable::new::<$ty>())
                 } else {

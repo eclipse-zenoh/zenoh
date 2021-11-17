@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::Arc;
 use async_std::task;
 use futures::select;
 use futures::stream::StreamExt;
@@ -22,19 +22,19 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, Target};
 use zenoh::queryable;
 use zenoh::Session;
-use zenoh_backend_traits::{IncomingDataInterceptor, OutgoingDataInterceptor, Query};
+use zenoh_backend_traits::Query;
 
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
     admin_key: String,
     key_expr: String,
-    in_interceptor: Option<Arc<RwLock<Box<dyn IncomingDataInterceptor>>>>,
-    out_interceptor: Option<Arc<RwLock<Box<dyn OutgoingDataInterceptor>>>>,
+    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
-) -> ZResult<Sender<bool>> {
+) -> ZResult<Sender<()>> {
     debug!("Start storage {} on {}", admin_key, key_expr);
 
-    let (tx, rx) = bounded::<bool>(1);
+    let (tx, rx) = bounded::<()>(1);
     task::spawn(async move {
         // subscribe on key_expr
         let mut storage_sub = match zenoh.subscribe(&key_expr).await {
@@ -67,7 +67,7 @@ pub(crate) async fn start_storage(
             log::trace!("Storage {} aligns data {}", admin_key, reply.data.key_expr);
             // Call incoming data interceptor (if any)
             let sample = if let Some(ref interceptor) = in_interceptor {
-                interceptor.read().await.on_sample(reply.data).await
+                interceptor(reply.data)
             } else {
                 reply.data
             };
@@ -111,7 +111,7 @@ pub(crate) async fn start_storage(
                 sample = storage_sub.receiver().next() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
-                        interceptor.read().await.on_sample(sample.unwrap()).await
+                        interceptor(sample.unwrap())
                     } else {
                         sample.unwrap()
                     };
