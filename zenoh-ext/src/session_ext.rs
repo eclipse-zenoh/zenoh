@@ -52,7 +52,7 @@ pub trait SessionExt {
     where
         IntoKeyExpr: Into<KeyExpr<'b>>;
 
-    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
         pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
@@ -71,7 +71,7 @@ impl SessionExt for Session {
         QueryingSubscriberBuilder::new(self, sub_key_expr.into())
     }
 
-    fn publishing_with_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, IntoKeyExpr>(
         &'a self,
         pub_key_expr: IntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>

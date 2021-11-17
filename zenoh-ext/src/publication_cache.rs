@@ -96,7 +96,7 @@ impl<'a> PublicationCache<'a> {
 
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!(
-            "Declare PublicationCache on {} with history={} resource_limit={:?}",
+            "Create PublicationCache on {} with history={} resource_limit={:?}",
             conf.pub_key_expr,
             conf.history,
             conf.resources_limit
@@ -208,9 +208,9 @@ impl<'a> PublicationCache<'a> {
         })
     }
 
-    /// Undeclare this PublicationCache
+    /// Close this PublicationCache
     #[inline]
-    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
         // just drop self and all its content
         zready(Ok(()))
     }
