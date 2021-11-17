@@ -36,7 +36,7 @@ pub use super::net::protocol::core::queryable::*;
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: String,
+    pub(crate) key_selector: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
     /// The sender to use to send replies to this query.
@@ -49,14 +49,14 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_selector: &self.key_selector,
+            key_selector: self.key_selector.clone(),
             value_selector: &self.value_selector,
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &str {
+    pub fn key_selector(&self) -> &KeyExpr<'_> {
         &self.key_selector
     }
 
@@ -107,7 +107,7 @@ impl fmt::Display for Query {
 
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) reskey: ResKey<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) sender: Sender<Query>,
@@ -115,7 +115,11 @@ pub(crate) struct QueryableState {
 
 impl fmt::Debug for QueryableState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Queryable{{ id:{}, reskey:{} }}", self.id, self.reskey)
+        write!(
+            f,
+            "Queryable{{ id:{}, key_expr:{} }}",
+            self.id, self.key_expr
+        )
     }
 }
 
@@ -136,7 +140,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/resource/name").wait().unwrap();
+    /// let mut queryable = session.queryable("/key/expression").wait().unwrap();
     /// while let Ok(query) = queryable.receiver().recv() {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -149,7 +153,7 @@ zreceiver! {
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
-    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
@@ -161,7 +165,7 @@ zreceiver! {
 
 /// An entity able to reply to queries.
 ///
-/// Queryables are automatically unregistered when dropped.
+/// Queryables are automatically undeclared when dropped.
 pub struct Queryable<'a> {
     pub(crate) session: &'a Session,
     pub(crate) state: Arc<QueryableState>,
@@ -181,10 +185,10 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.receiver().next().await {
     ///      println!(">> Handling query '{}'", query.selector());
-    ///      query.reply(Sample::new("/resource/name".to_string(), "some value"));
+    ///      query.reply(Sample::new("/key/expression".to_string(), "some value"));
     /// }
     /// # })
     /// ```
@@ -192,10 +196,10 @@ impl Queryable<'_> {
         &mut self.receiver
     }
 
-    /// Undeclare a [`Queryable`](Queryable) previously declared with [`register_queryable`](Session::register_queryable).
+    /// Close a [`Queryable`](Queryable) previously created with [`queryable`](Session::queryable).
     ///
-    /// Queryables are automatically unregistered when dropped, but you may want to use this function to handle errors or
-    /// unregister the Queryable asynchronously.
+    /// Queryables are automatically closed when dropped, but you may want to use this function to handle errors or
+    /// close the Queryable asynchronously.
     ///
     /// # Examples
     /// ```
@@ -203,22 +207,22 @@ impl Queryable<'_> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let queryable = session.register_queryable("/resource/name").await.unwrap();
-    /// queryable.unregister().await.unwrap();
+    /// let queryable = session.queryable("/key/expression").await.unwrap();
+    /// queryable.close().await.unwrap();
     /// # })
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn unregister(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.alive = false;
-        self.session.unregister_queryable(self.state.id)
+        self.session.close_queryable(self.state.id)
     }
 }
 
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unregister_queryable(self.state.id).wait();
+            let _ = self.session.close_queryable(self.state.id).wait();
         }
     }
 }
@@ -310,7 +314,7 @@ derive_zfuture! {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session
-    ///     .register_queryable("/resource/name")
+    ///     .queryable("/key/expression")
     ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();
@@ -319,7 +323,7 @@ derive_zfuture! {
     #[derive(Debug, Clone)]
     pub struct QueryableBuilder<'a, 'b> {
         pub(crate) session: &'a Session,
-        pub(crate) reskey: ResKey<'b>,
+        pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) kind: ZInt,
         pub(crate) complete: bool,
     }
@@ -345,13 +349,13 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = ZResult<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("register_queryable({:?}, {:?})", self.reskey, self.kind);
+        log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {
             id,
-            reskey: self.reskey.to_owned(),
+            key_expr: self.key_expr.to_owned(),
             kind: self.kind,
             complete: self.complete,
             sender,
@@ -362,20 +366,20 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
 
             if self.complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, &self.reskey, self.kind);
+                let complete = Session::complete_twin_qabls(&state, &self.key_expr, self.kind);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
             }
         }
         #[cfg(not(feature = "complete_n"))]
         {
-            let twin_qabl = Session::twin_qabl(&state, &self.reskey, self.kind);
+            let twin_qabl = Session::twin_qabl(&state, &self.key_expr, self.kind);
             let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, &self.reskey, self.kind);
+                twin_qabl && Session::complete_twin_qabl(&state, &self.key_expr, self.kind);
 
             state.queryables.insert(id, qable_state.clone());
 
@@ -391,7 +395,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(&self.reskey, self.kind, &qabl_info, None);
+                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
             }
         }
 

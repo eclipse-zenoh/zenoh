@@ -21,14 +21,14 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, key_expr) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Subscriber on {}", selector);
+    println!("Declare Subscriber on {}", key_expr);
 
-    let mut subscriber = session.subscribe(&selector).await.unwrap();
+    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
@@ -37,7 +37,7 @@ async fn main() {
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -60,7 +60,7 @@ fn parse_args() -> (Config, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to subscribe'")
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
                 .default_value("/demo/example/**"),
         )
         .arg(Arg::from_usage(
@@ -93,7 +93,7 @@ fn parse_args() -> (Config, String) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
 
-    (config, selector)
+    (config, key_expr)
 }

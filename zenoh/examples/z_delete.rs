@@ -19,13 +19,13 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, path) = parse_args();
+    let (config, key_expr) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Delete resource '{}'...\n", path);
-    session.delete(&path).await.unwrap();
+    println!("Delete resources matching '{}'", key_expr);
+    session.delete(&key_expr).await.unwrap();
 
     session.close().await.unwrap();
 }
@@ -46,8 +46,10 @@ fn parse_args() -> (Config, String) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to delete.'")
-                .default_value("/demo/example/zenoh-rs-put"),
+            Arg::from_usage(
+                "-k, --key=[KEYEXPR]        'The key expression matching resources to delete.'",
+            )
+            .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
@@ -79,7 +81,7 @@ fn parse_args() -> (Config, String) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let path = args.value_of("path").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
 
-    (config, path)
+    (config, key_expr)
 }

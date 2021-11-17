@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod rname;
+pub mod key_expr;
 
 use http_types::Mime;
 use std::borrow::Cow;
@@ -270,145 +270,193 @@ pub mod whatami {
     }
 }
 
-/// A numerical Id mapped to a resource name with [`register_resource`](crate::Session::register_resource).
-pub type ResourceId = ZInt;
+/// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
+pub type ExprId = ZInt;
 
-pub const NO_RESOURCE_ID: ResourceId = 0;
+pub const EMPTY_EXPR_ID: ExprId = 0;
 
-/// A resource key.
+/// A zenoh **resource** is represented by a pair composed by a **key** and a
+/// **value**, such as, ```(/car/telemetry/speed, 320)```.  A **resource key**
+/// is an arbitrary array of characters, with the exclusion of the symbols
+/// ```*```, ```**```, ```?```, ```[```, ```]```, and ```#```,
+/// which have special meaning in the context of zenoh.
+///
+/// A key including any number of the wildcard symbols, ```*``` and ```**```,
+/// such as, ```/car/telemetry/*```, is called a **key expression** as it
+/// denotes a set of keys. The wildcard character ```*``` expands to an
+/// arbitrary string not including zenoh's reserved characters and the ```/```
+/// character, while the ```**``` expands to  strings that may also include the
+/// ```/``` character.  
+///
+/// Finally, it is worth mentioning that for time and space efficiency matters,
+/// zenoh will automatically map key expressions to small integers. The mapping is automatic,
+/// but it can be triggered excplicily by with [`declare_expr`](crate::Session::declare_expr).
+///
+//
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~      id       — if ResName{name} : id=0
+// ~      id       — if Expr : id=0
 // +-+-+-+-+-+-+-+-+
-// ~  name/suffix  ~ if flag K==1 in Message's header
+// ~    suffix     ~ if flag K==1 in Message's header
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub enum ResKey<'a> {
-    RName(Cow<'a, str>),
-    RId(ResourceId),
-    RIdWithSuffix(ResourceId, Cow<'a, str>),
-}
-use ResKey::*;
-
-impl ResKey<'_> {
-    #[inline(always)]
-    pub fn rid(&self) -> ResourceId {
-        match self {
-            RName(_) => NO_RESOURCE_ID,
-            RId(rid) | RIdWithSuffix(rid, _) => *rid,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_string(&self) -> bool {
-        match self {
-            RName(_) | RIdWithSuffix(_, _) => true,
-            RId(_) => false,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_numeric(&self) -> bool {
-        match self {
-            RId(_) => true,
-            RName(_) | RIdWithSuffix(_, _) => false,
-        }
-    }
-
-    pub fn to_owned(&self) -> ResKey<'static> {
-        match self {
-            Self::RId(id) => ResKey::RId(*id),
-            Self::RName(s) => ResKey::RName(s.to_string().into()),
-            Self::RIdWithSuffix(id, s) => ResKey::RIdWithSuffix(*id, s.to_string().into()),
-        }
-    }
+pub struct KeyExpr<'a> {
+    pub(crate) scope: ExprId, // 0 marks global scope
+    pub(crate) suffix: Cow<'a, str>,
 }
 
-impl fmt::Debug for ResKey<'_> {
+impl<'a> KeyExpr<'a> {
+    pub fn as_str(&'a self) -> &'a str {
+        if self.scope == 0 {
+            self.suffix.as_ref()
+        } else {
+            "<encoded_expr>"
+        }
+    }
+
+    pub fn try_as_str(&'a self) -> ZResult<&'a str> {
+        if self.scope == 0 {
+            Ok(self.suffix.as_ref())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Scoped key expression".to_string()
+            })
+        }
+    }
+
+    pub fn as_id(&'a self) -> ExprId {
+        self.scope
+    }
+
+    pub fn try_as_id(&'a self) -> ZResult<ExprId> {
+        if self.has_suffix() {
+            zerror!(ZErrorKind::Other {
+                descr: "Suffixed key expression".to_string()
+            })
+        } else {
+            Ok(self.scope)
+        }
+    }
+
+    pub fn as_id_and_suffix(&'a self) -> (ExprId, &'a str) {
+        (self.scope, self.suffix.as_ref())
+    }
+
+    pub(crate) fn has_suffix(&self) -> bool {
+        !self.suffix.as_ref().is_empty()
+    }
+
+    pub fn to_owned(&self) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: self.scope,
+            suffix: self.suffix.to_string().into(),
+        }
+    }
+
+    pub fn with_suffix(mut self, suffix: &'a str) -> Self {
+        if self.suffix.is_empty() {
+            self.suffix = suffix.into();
+        } else {
+            self.suffix += suffix;
+        }
+        self
+    }
+}
+
+impl TryInto<String> for KeyExpr<'_> {
+    type Error = ZError;
+    fn try_into(self) -> Result<String, Self::Error> {
+        if self.scope == 0 {
+            Ok(self.suffix.into_owned())
+        } else {
+            zerror!(ZErrorKind::Other {
+                descr: "Scoped key expression".to_string()
+            })
+        }
+    }
+}
+
+impl TryInto<ExprId> for KeyExpr<'_> {
+    type Error = ZError;
+    fn try_into(self) -> Result<ExprId, Self::Error> {
+        self.try_as_id()
+    }
+}
+
+impl fmt::Debug for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RName(name) => write!(f, "{}", name),
-            RId(rid) => write!(f, "{}", rid),
-            RIdWithSuffix(rid, suffix) => write!(f, "{}, {}", rid, suffix),
+        if self.scope == 0 {
+            write!(f, "{}", self.suffix)
+        } else {
+            write!(f, "{}:{}", self.scope, self.suffix)
         }
     }
 }
 
-impl fmt::Display for ResKey<'_> {
+impl fmt::Display for KeyExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        if self.scope == 0 {
+            write!(f, "{}", self.suffix)
+        } else {
+            write!(f, "{}:{}", self.scope, self.suffix)
+        }
     }
 }
 
-impl<'a> From<&ResKey<'a>> for ResKey<'a> {
+impl<'a> From<&KeyExpr<'a>> for KeyExpr<'a> {
     #[inline]
-    fn from(key: &ResKey<'a>) -> ResKey<'a> {
+    fn from(key: &KeyExpr<'a>) -> KeyExpr<'a> {
         key.clone()
     }
 }
 
-impl From<ResourceId> for ResKey<'_> {
+impl From<ExprId> for KeyExpr<'_> {
     #[inline]
-    fn from(rid: ResourceId) -> ResKey<'static> {
-        RId(rid)
-    }
-}
-
-impl<'a> From<&'a str> for ResKey<'a> {
-    #[inline]
-    fn from(name: &'a str) -> ResKey<'a> {
-        RName(name.into())
-    }
-}
-
-impl From<String> for ResKey<'_> {
-    #[inline]
-    fn from(name: String) -> ResKey<'static> {
-        RName(name.into())
-    }
-}
-
-impl<'a> From<&'a String> for ResKey<'a> {
-    #[inline]
-    fn from(name: &'a String) -> ResKey<'a> {
-        RName(name.as_str().into())
-    }
-}
-
-impl<'a> From<(ResourceId, &'a str)> for ResKey<'a> {
-    #[inline]
-    fn from(tuple: (ResourceId, &'a str)) -> ResKey<'a> {
-        if tuple.1.is_empty() {
-            RId(tuple.0)
-        } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.into())
-        } else {
-            RIdWithSuffix(tuple.0, tuple.1.into())
+    fn from(rid: ExprId) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: rid,
+            suffix: "".into(),
         }
     }
 }
 
-impl From<(ResourceId, String)> for ResKey<'_> {
+impl From<&ExprId> for KeyExpr<'_> {
     #[inline]
-    fn from(tuple: (ResourceId, String)) -> ResKey<'static> {
-        if tuple.1.is_empty() {
-            RId(tuple.0)
-        } else if tuple.0 == NO_RESOURCE_ID {
-            RName(tuple.1.into())
-        } else {
-            RIdWithSuffix(tuple.0, tuple.1.into())
+    fn from(rid: &ExprId) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: *rid,
+            suffix: "".into(),
         }
     }
 }
 
-impl<'a> From<&'a ResKey<'a>> for (ResourceId, &'a str) {
+impl<'a> From<&'a str> for KeyExpr<'a> {
     #[inline]
-    fn from(key: &'a ResKey<'a>) -> (ResourceId, &'a str) {
-        match key {
-            RId(rid) => (*rid, ""),
-            RName(name) => (NO_RESOURCE_ID, &name[..]), //(&(0 as ZInt)
-            RIdWithSuffix(rid, suffix) => (*rid, &suffix[..]),
+    fn from(name: &'a str) -> KeyExpr<'a> {
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
+        }
+    }
+}
+
+impl From<String> for KeyExpr<'_> {
+    #[inline]
+    fn from(name: String) -> KeyExpr<'static> {
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
+        }
+    }
+}
+
+impl<'a> From<&'a String> for KeyExpr<'a> {
+    #[inline]
+    fn from(name: &'a String) -> KeyExpr<'a> {
+        KeyExpr {
+            scope: 0,
+            suffix: name.into(),
         }
     }
 }

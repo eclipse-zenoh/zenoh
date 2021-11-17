@@ -16,7 +16,7 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use zenoh::config::Config;
 use zenoh::prelude::*;
-use zenoh::publisher::CongestionControl;
+use zenoh::publication::CongestionControl;
 use zenoh::queryable::EVAL;
 
 const HTML: &str = r#"
@@ -44,8 +44,8 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Queryable on {}", key);
-    let mut queryable = session.register_queryable(key).kind(EVAL).await.unwrap();
+    println!("Declare Queryable on {}", key);
+    let mut queryable = session.queryable(key).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
         queryable
@@ -60,14 +60,14 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Register Resource {}", event_key);
-    let rid = session.register_resource(&event_key).await.unwrap();
-    println!(" => RId {}", rid);
+    print!("Declare key expression {}", event_key);
+    let expr_id = session.declare_expr(&event_key).await.unwrap();
+    println!(" => ExprId {}", expr_id);
 
-    println!("Register Publisher on {}", rid);
-    let _publ = session.publishing(rid).await.unwrap();
+    println!("Declare publication on {}", expr_id);
+    session.declare_publication(expr_id).await.unwrap();
 
-    println!("Put Data periodically ('{}': '{}')...", rid, value);
+    println!("Put Data periodically ('{}': '{}')...", expr_id, value);
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
@@ -75,7 +75,7 @@ async fn main() {
     );
     loop {
         session
-            .put(rid, value)
+            .put(expr_id, value)
             .encoding(Encoding::TEXT_PLAIN)
             .congestion_control(CongestionControl::Block)
             .await

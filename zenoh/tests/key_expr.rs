@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use zenoh::net::protocol::core::rname::intersect;
+use zenoh::net::protocol::core::key_expr::intersect;
 
 #[test]
-fn rname_test() {
+fn key_expr_test() {
     assert!(intersect("/", "/"));
     assert!(intersect("/a", "/a"));
     assert!(intersect("/a/", "/a"));

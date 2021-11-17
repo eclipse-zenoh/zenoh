@@ -23,13 +23,13 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (config, key_expr, value) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Queryable on {}", path);
-    let mut queryable = session.register_queryable(&path).kind(EVAL).await.unwrap();
+    println!("Declare Queryable on {}", key_expr);
+    let mut queryable = session.queryable(&key_expr).kind(EVAL).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
@@ -38,7 +38,7 @@ async fn main() {
             query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
-                query.reply(Sample::new(path.clone(), value.clone()));
+                query.reply(Sample::new(key_expr.clone(), value.clone()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -61,8 +61,10 @@ fn parse_args() -> (Config, String, String) {
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to evaluate.'")
-                .default_value("/demo/example/zenoh-rs-eval"),
+            Arg::from_usage(
+                "-k, --key=[KEYEXPR]        'The key expression matching queries to evaluate.'",
+            )
+            .default_value("/demo/example/zenoh-rs-eval"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
@@ -98,8 +100,8 @@ fn parse_args() -> (Config, String, String) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let path = args.value_of("path").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();
 
-    (config, path, value)
+    (config, key_expr, value)
 }

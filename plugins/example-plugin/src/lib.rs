@@ -25,7 +25,7 @@ use std::sync::{
 use zenoh::net::runtime::Runtime;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
-use zenoh::utils::resource_name;
+use zenoh::utils::key_expr;
 use zenoh_plugin_trait::prelude::*;
 use zenoh_plugin_trait::RunningPluginTrait;
 use zenoh_plugin_trait::ValidationFunction;
@@ -127,7 +127,7 @@ impl Drop for RunningPlugin {
     }
 }
 
-async fn run(runtime: Runtime, selector: ResKey<'_>, flag: Arc<AtomicBool>) {
+async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
@@ -136,29 +136,25 @@ async fn run(runtime: Runtime, selector: ResKey<'_>, flag: Arc<AtomicBool>) {
 
     debug!("Run example-plugin with storage-selector={}", selector);
 
-    debug!("Register Subscriber on {}", selector);
+    debug!("Declare Subscriber on {}", selector);
     let mut sub = session.subscribe(&selector).await.unwrap();
 
-    debug!("Register Queryable on {}", selector);
-    let mut queryable = session
-        .register_queryable(&selector)
-        .kind(STORAGE)
-        .await
-        .unwrap();
+    debug!("Declare Queryable on {}", selector);
+    let mut queryable = session.queryable(&selector).kind(STORAGE).await.unwrap();
 
     while flag.load(Relaxed) {
         select!(
             sample = sub.receiver().next() => {
                 let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.res_name, sample.value);
-                stored.insert(sample.res_name.clone(), sample);
+                info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
+                stored.insert(sample.key_expr.to_string(), sample);
             },
 
             query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
-                for (rname, sample) in stored.iter() {
-                    if resource_name::intersect(query.selector().key_selector, rname) {
+                for (key_expr, sample) in stored.iter() {
+                    if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                         query.reply_async(sample.clone()).await;
                     }
                 }

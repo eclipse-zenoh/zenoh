@@ -21,11 +21,10 @@ use futures_lite::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use zenoh::prelude::*;
-use zenoh::publisher::Publisher;
 use zenoh::queryable::Queryable;
 use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
-use zenoh::utils::resource_name;
+use zenoh::utils::key_expr;
 use zenoh::Session;
 use zenoh_util::zerror;
 
@@ -33,7 +32,7 @@ use zenoh_util::zerror;
 #[derive(Clone)]
 pub struct PublicationCacheBuilder<'a, 'b> {
     session: &'a Session,
-    pub_reskey: ResKey<'b>,
+    pub_key_expr: KeyExpr<'b>,
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
@@ -42,11 +41,11 @@ pub struct PublicationCacheBuilder<'a, 'b> {
 impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
-        pub_reskey: ResKey<'b>,
+        pub_key_expr: KeyExpr<'b>,
     ) -> PublicationCacheBuilder<'a, 'b> {
         PublicationCacheBuilder {
             session,
-            pub_reskey,
+            pub_key_expr,
             queryable_prefix: None,
             history: 1,
             resources_limit: None,
@@ -87,7 +86,6 @@ impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
 }
 
 pub struct PublicationCache<'a> {
-    _publisher: Publisher<'a>,
     _local_sub: Subscriber<'a>,
     _queryable: Queryable<'a>,
     _stoptx: Sender<bool>,
@@ -99,7 +97,7 @@ impl<'a> PublicationCache<'a> {
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!(
             "Declare PublicationCache on {} with history={} resource_limit={:?}",
-            conf.pub_reskey,
+            conf.pub_key_expr,
             conf.history,
             conf.resources_limit
         );
@@ -109,37 +107,34 @@ impl<'a> PublicationCache<'a> {
                 descr: format!(
                     "Failed requirement for PublicationCache on {}: \
                      the Session is not configured with 'add_timestamp=true'",
-                    conf.pub_reskey
+                    conf.pub_key_expr
                 )
             });
         }
 
-        // declare the publisher
-        let publisher = conf.session.publishing(&conf.pub_reskey).wait()?;
-
         // declare the local subscriber that will store the local publications
-        let mut local_sub = conf.session.subscribe(&conf.pub_reskey).local().wait()?;
+        let mut local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
 
         // declare the queryable that will answer to queries on cache
-        let queryable_reskey = if let Some(prefix) = &conf.queryable_prefix {
-            ResKey::from(format!(
+        let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
+            KeyExpr::from(format!(
                 "{}{}",
                 prefix,
-                conf.session.reskey_to_resname(&conf.pub_reskey)?
+                conf.session.key_expr_to_expr(&conf.pub_key_expr)?
             ))
         } else {
-            conf.pub_reskey.clone()
+            conf.pub_key_expr.clone()
         };
         let mut queryable = conf
             .session
-            .register_queryable(&queryable_reskey)
+            .queryable(&queryable_key_expr)
             .kind(PublicationCache::QUERYABLE_KIND)
             .wait()?;
 
         // take local ownership of stuff to be moved into task
         let mut sub_recv = local_sub.receiver().clone();
         let mut quer_recv = queryable.receiver().clone();
-        let pub_reskey = conf.pub_reskey.to_owned();
+        let pub_key_expr = conf.pub_key_expr.to_owned();
         let resources_limit = conf.resources_limit;
         let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;
@@ -155,24 +150,24 @@ impl<'a> PublicationCache<'a> {
                     // on publication received by the local subscriber, store it
                     sample = sub_recv.next().fuse() => {
                         if let Some(sample) = sample {
-                            let queryable_resname = if let Some(prefix) = &queryable_prefix {
-                                format!("{}{}", prefix, sample.res_name)
+                            let queryable_key_expr = if let Some(prefix) = &queryable_prefix {
+                                format!("{}{}", prefix, sample.key_expr)
                             } else {
-                                sample.res_name.clone()
+                                sample.key_expr.to_string()
                             };
 
-                            if let Some(queue) = cache.get_mut(&queryable_resname) {
+                            if let Some(queue) = cache.get_mut(&queryable_key_expr) {
                                 if queue.len() >= history {
                                     queue.pop_front();
                                 }
                                 queue.push_back(sample);
                             } else if cache.len() >= limit {
                                 log::error!("PublicationCache on {}: resource_limit exceeded - can't cache publication for a new resource",
-                                pub_reskey);
+                                pub_key_expr);
                             } else {
                                 let mut queue: VecDeque<Sample> = VecDeque::new();
                                 queue.push_back(sample);
-                                cache.insert(queryable_resname, queue);
+                                cache.insert(queryable_key_expr, queue);
                             }
                         }
                     },
@@ -180,15 +175,15 @@ impl<'a> PublicationCache<'a> {
                     // on query, reply with cach content
                     query = quer_recv.next().fuse() => {
                         if let Some(query) = query {
-                            if !query.selector().key_selector.contains('*') {
-                                if let Some(queue) = cache.get(query.selector().key_selector) {
+                            if !query.selector().key_selector.as_str().contains('*') {
+                                if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {
                                         query.reply(sample.clone());
                                     }
                                 }
                             } else {
-                                for (resname, queue) in cache.iter() {
-                                    if resource_name::intersect(query.selector().key_selector, resname) {
+                                for (key_expr, queue) in cache.iter() {
+                                    if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                                         for sample in queue {
                                             query.reply(sample.clone());
                                         }
@@ -207,7 +202,6 @@ impl<'a> PublicationCache<'a> {
         });
 
         Ok(PublicationCache {
-            _publisher: publisher,
             _local_sub: local_sub,
             _queryable: queryable,
             _stoptx: stoptx,
@@ -216,7 +210,7 @@ impl<'a> PublicationCache<'a> {
 
     /// Undeclare this PublicationCache
     #[inline]
-    pub fn unregister(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn undeclare(self) -> impl ZFuture<Output = ZResult<()>> {
         // just drop self and all its content
         zready(Ok(()))
     }

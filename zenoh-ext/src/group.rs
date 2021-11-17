@@ -121,9 +121,9 @@ struct GroupState {
     gid: String,
     local_member: Member,
     members: Mutex<HashMap<String, (Member, Instant)>>,
-    _group_resource: String,
-    _group_resource_id: u64,
-    event_resource: ResKey<'static>,
+    _group_expr: String,
+    _group_expr_id: u64,
+    event_expr: KeyExpr<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
 }
@@ -143,7 +143,7 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = z.put(&state.event_resource, buf.clone()).await;
+        let _ = z.put(&state.event_expr, buf.clone()).await;
     }
 }
 
@@ -182,7 +182,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.register_queryable(&qres).kind(EVAL).await.unwrap();
+    let mut queryable = z.queryable(&qres).kind(EVAL).await.unwrap();
 
     while let Some(query) = queryable.receiver().next().await {
         log::debug!("Serving query for: {}", &qres);
@@ -191,7 +191,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 }
 
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
-    let mut sub = z.subscribe(&state.event_resource).await.unwrap();
+    let mut sub = z.subscribe(&state.event_expr).await.unwrap();
     let stream = sub.receiver();
     while let Some(s) = stream.next().await {
         log::debug!("Handling Network Event...");
@@ -291,16 +291,16 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
 impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
-        let _group_resource = format!("{}/{}", GROUP_PREFIX, group);
-        let rid = z.register_resource(&_group_resource).await.unwrap();
-        let event_resource = ResKey::RIdWithSuffix(rid, EVENT_POSTFIX.into());
+        let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
+        let expr_id = z.declare_expr(&_group_expr).await.unwrap();
+        let event_expr = KeyExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),
             members: Mutex::new(Default::default()),
-            _group_resource,
-            _group_resource_id: rid,
-            event_resource: event_resource.clone(),
+            _group_expr,
+            _group_expr_id: expr_id,
+            event_expr: event_expr.clone(),
             user_events_tx: Mutex::new(Default::default()),
             cond: Condition::new(),
         });
@@ -310,7 +310,7 @@ impl Group {
         log::debug!("Sending Join Message for local member:\n{:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
-        let _ = z.put(&event_resource, buf).await;
+        let _ = z.put(&event_expr, buf).await;
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {

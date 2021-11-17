@@ -20,46 +20,42 @@ use std::collections::HashMap;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
-use zenoh::utils::resource_name;
+use zenoh::utils::key_expr;
 
 #[async_std::main]
 async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector) = parse_args();
+    let (config, key_expr) = parse_args();
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Register Subscriber on {}", selector);
-    let mut subscriber = session.subscribe(&selector).await.unwrap();
+    println!("Declare Subscriber on {}", key_expr);
+    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
-    println!("Register Queryable on {}", selector);
-    let mut queryable = session
-        .register_queryable(&selector)
-        .kind(STORAGE)
-        .await
-        .unwrap();
+    println!("Declare Queryable on {}", key_expr);
+    let mut queryable = session.queryable(&key_expr).kind(STORAGE).await.unwrap();
 
     let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
+    let mut input = [0u8];
     loop {
         select!(
             sample = subscriber.receiver().next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.res_name, String::from_utf8_lossy(&sample.value.payload.contiguous()));
-                stored.insert(sample.res_name.clone(), sample);
+                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                stored.insert(sample.key_expr.to_string(), sample);
             },
 
             query = queryable.receiver().next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if resource_name::intersect(query.selector().key_selector, stored_name) {
+                    if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
                         query.reply(sample.clone());
                     }
                 }
@@ -88,7 +84,7 @@ fn parse_args() -> (Config, String) {
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(
-            Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to store'")
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The selection of resources to store'")
                 .default_value("/demo/example/**"),
         )
         .arg(Arg::from_usage(
@@ -121,7 +117,7 @@ fn parse_args() -> (Config, String) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let selector = args.value_of("selector").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
 
-    (config, selector)
+    (config, key_expr)
 }

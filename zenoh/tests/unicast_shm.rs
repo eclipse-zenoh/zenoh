@@ -22,7 +22,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, ResKey, WhatAmI};
+    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
@@ -31,7 +31,7 @@ mod tests {
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh::publisher::CongestionControl;
+    use zenoh::publication::CongestionControl;
     use zenoh_util::core::ZResult;
     use zenoh_util::zasync_executor_init;
 
@@ -224,7 +224,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".into());
+            let key = "/test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -281,7 +281,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".into());
+            let key = "/test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),

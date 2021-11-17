@@ -206,7 +206,7 @@ impl StorageRuntimeInner {
             let flag = flag.clone();
             let keyexpr = self.status_key() + "/" + &backend_name + "/path";
             async move {
-                let mut queryable = match session.register_queryable(&keyexpr).await {
+                let mut queryable = match session.queryable(&keyexpr).await {
                     Ok(q) => q,
                     Err(e) => {
                         log::error!("Couldn't spawn {}", e);

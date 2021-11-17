@@ -51,11 +51,11 @@ pub use super::net::protocol::core::Encoding;
 /// The global unique id of a zenoh peer.
 pub use super::net::protocol::core::PeerId;
 
-/// A numerical Id mapped to a resource name with [`register_resource`](Session::register_resource).
-pub use super::net::protocol::core::ResourceId;
+/// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
+pub use super::net::protocol::core::ExprId;
 
-/// A resource key.
-pub use super::net::protocol::core::ResKey;
+/// A key expression.
+pub use super::net::protocol::core::KeyExpr;
 
 /// A zenoh error.
 pub use zenoh_util::core::ZError;
@@ -371,8 +371,8 @@ impl From<ZInt> for SampleKind {
 /// A zenoh sample.
 #[derive(Clone, Debug)]
 pub struct Sample {
-    // The name of the resource on which this Sample was published.
-    pub res_name: String,
+    // The key expression on which this Sample was published.
+    pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
     pub value: Value,
     // The kind of this Sample.
@@ -386,12 +386,13 @@ pub struct Sample {
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    pub fn new<IntoValue>(res_name: String, value: IntoValue) -> Self
+    pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
+        IntoKeyExpr: Into<KeyExpr<'static>>,
         IntoValue: Into<Value>,
     {
         Sample {
-            res_name,
+            key_expr: key_expr.into(),
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
@@ -400,14 +401,18 @@ impl Sample {
     }
 
     #[inline]
-    pub(crate) fn with_info(res_name: String, payload: ZBuf, data_info: Option<DataInfo>) -> Self {
+    pub(crate) fn with_info(
+        key_expr: KeyExpr<'static>,
+        payload: ZBuf,
+        data_info: Option<DataInfo>,
+    ) -> Self {
         let mut value: Value = payload.into();
         if let Some(data_info) = data_info {
             if let Some(encoding) = &data_info.encoding {
                 value.encoding = encoding.clone();
             }
             Sample {
-                res_name,
+                key_expr,
                 value,
                 kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
                 timestamp: data_info.timestamp,
@@ -415,7 +420,7 @@ impl Sample {
             }
         } else {
             Sample {
-                res_name,
+                key_expr,
                 value,
                 kind: SampleKind::default(),
                 timestamp: None,
@@ -425,7 +430,7 @@ impl Sample {
     }
 
     #[inline]
-    pub(crate) fn split(self) -> (String, ZBuf, DataInfo) {
+    pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
         let info = DataInfo {
             kind: None,
             encoding: Some(self.value.encoding),
@@ -437,7 +442,7 @@ impl Sample {
             first_router_id: self.source_info.first_router_id,
             first_router_sn: self.source_info.first_router_sn,
         };
-        (self.res_name, self.value.payload, info)
+        (self.key_expr, self.value.payload, info)
     }
 
     /// Gets the timestamp of this Sample.
@@ -473,8 +478,8 @@ impl Sample {
 impl fmt::Display for Sample {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            SampleKind::Delete => write!(f, "{}({})", self.kind, self.res_name),
-            _ => write!(f, "{}({}: {})", self.kind, self.res_name, self.value),
+            SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
+            _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
         }
     }
 }
@@ -518,7 +523,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 #[derive(Clone, Debug, PartialEq)]
 /// An expression identifying a selection of resources.
 ///
-/// A selector is the conjunction of an key selector identifying a set
+/// A selector is the conjunction of an key expression identifying a set
 /// of resource keys and a value selector filtering out the resource values.
 ///
 /// Structure of a selector:
@@ -543,7 +548,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     /// I.e. all characters before `?`.
-    pub key_selector: &'a str,
+    pub key_selector: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     /// I.e. all characters starting from `?`.
     pub value_selector: &'a str,
@@ -589,7 +594,7 @@ impl<'a> From<&'a str> for Selector<'a> {
         let (key_selector, value_selector) =
             s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
         Selector {
-            key_selector,
+            key_selector: key_selector.into(),
             value_selector,
         }
     }
@@ -604,123 +609,27 @@ impl<'a> From<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key_selector: &q.key_selector,
+            key_selector: q.key_selector.clone(),
             value_selector: &q.value_selector,
         }
     }
 }
 
-/// An expression identifying a selection of resources.
-///
-/// A `KeyedSelector` is similar to a [`Selector`] except that it's `key_selector`
-/// is represented as a [`ResKey`] rather than a [`&str`].
-#[derive(Clone, Debug, PartialEq)]
-pub struct KeyedSelector<'a> {
-    /// The part of this selector identifying which keys should be part of the selection.
-    /// I.e. all characters before `?`.
-    pub key_selector: ResKey<'a>,
-    /// the part of this selector identifying which values should be part of the selection.
-    /// I.e. all characters starting from `?`.
-    pub value_selector: &'a str,
-}
-
-impl<'a> KeyedSelector<'a> {
-    /// Creates a new `KeyedSelector` from a String.
-    #[inline(always)]
-    pub(crate) fn new(key_selector: ResKey<'a>, value_selector: &'a str) -> Self {
-        KeyedSelector {
-            key_selector,
-            value_selector,
-        }
-    }
-
-    /// Sets the `value_selector` part of this `KeyedSelector`.
-    #[inline(always)]
-    pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
-        self.value_selector = value_selector;
-        self
-    }
-
-    /// Parses the `value_selector` part of this `KeyedSelector`.
-    pub fn parse_value_selector(&self) -> Result<ValueSelector<'a>, ZError> {
-        ValueSelector::try_from(self.value_selector)
-    }
-
-    /// Returns true if the `KeyedSelector` specifies a time-range in its properties
-    /// (i.e. using `"starttime"` or `"stoptime"`)
-    pub fn has_time_range(&self) -> bool {
-        match ValueSelector::try_from(self.value_selector) {
-            Ok(value_selector) => value_selector.has_time_range(),
-            _ => false,
-        }
-    }
-}
-
-impl fmt::Display for KeyedSelector<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}", self.key_selector, self.value_selector)
-    }
-}
-
-impl<'a> From<&KeyedSelector<'a>> for KeyedSelector<'a> {
-    fn from(s: &KeyedSelector<'a>) -> Self {
-        s.clone()
-    }
-}
-
-impl<'a> From<&'a str> for KeyedSelector<'a> {
-    fn from(s: &'a str) -> Self {
-        let (key_selector, value_selector) =
-            s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
-        KeyedSelector {
-            key_selector: key_selector.into(),
-            value_selector,
-        }
-    }
-}
-
-impl<'a> From<&'a String> for KeyedSelector<'a> {
-    fn from(s: &'a String) -> Self {
-        Self::from(s.as_str())
-    }
-}
-
-impl<'a> From<&'a Query> for KeyedSelector<'a> {
-    fn from(q: &'a Query) -> Self {
-        KeyedSelector {
-            key_selector: q.key_selector.as_str().into(),
-            value_selector: &q.value_selector,
-        }
-    }
-}
-
-impl<'a> From<&ResKey<'a>> for KeyedSelector<'a> {
-    fn from(from: &ResKey<'a>) -> Self {
-        Self::new(from.clone(), "")
-    }
-}
-
-impl<'a> From<ResKey<'a>> for KeyedSelector<'a> {
-    fn from(key_selector: ResKey<'a>) -> Self {
+impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
+    fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
-            key_selector,
+            key_selector: key_selector.clone(),
             value_selector: "",
         }
     }
 }
 
-impl<'a> From<&Selector<'a>> for KeyedSelector<'a> {
-    fn from(s: &Selector<'a>) -> Self {
+impl<'a> From<KeyExpr<'a>> for Selector<'a> {
+    fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {
-            key_selector: s.key_selector.into(),
-            value_selector: s.value_selector,
+            key_selector,
+            value_selector: "",
         }
-    }
-}
-
-impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
-    fn from(s: Selector<'a>) -> Self {
-        Self::from(&s)
     }
 }
 
@@ -745,7 +654,7 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
 ///
 /// use std::convert::TryInto;
 ///
-/// let mut queryable = session.register_queryable("/resource/name").await.unwrap();
+/// let mut queryable = session.queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.receiver().next().await {
 ///     let value_selector = query.selector().parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
@@ -768,7 +677,7 @@ impl<'a> From<Selector<'a>> for KeyedSelector<'a> {
 ///     .with_fragment("x;y");
 ///
 /// let mut replies = session.get(
-///     &Selector::from("/resource/name").with_value_selector(&value_selector.to_string())
+///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
 /// ).await.unwrap();
 /// # })
 /// ```

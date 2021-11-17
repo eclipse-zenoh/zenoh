@@ -51,10 +51,8 @@
 
 ### z_pub
 
-   Registers a resource with a path and a publisher on this resource. Then writes values periodically 
-   sing the numerical resource id.
-   The path/value will be received by all matching subscribers, for instance the [z_sub](#z_sub)
-   and [z_storage](#z_storage) examples.
+   Declares a key expression and a publisher. Then writes values periodically on the declared key expression.
+   The published value will be received by all matching subscribers, for instance the [z_sub](#z_sub) and [z_storage](#z_storage) examples.
 
    Typical usage:
    ```bash
@@ -67,9 +65,8 @@
 
 ### z_sub
 
-   Registers a subscriber with a selector.  
-   The subscriber will be notified of each `put` or `delete` made on any path matching the selector,
-   and will print this notification.
+   Declares a key expression and a susbcriber.  
+   The subscriber will be notified of each `put` or `delete` made on any key expression matching the subscriber key expression, and will print this notification.
 
    Typical usage:
    ```bash
@@ -82,9 +79,9 @@
 
 ### z_pull
 
-   Registers a pull subscriber with a selector.  
-   The pull subscriber will receive each `put` or `delete` made on any path matching the selector,
-   and will pull on demand and print the received path/value.
+   Declares a key expression and a pull susbcriber.  
+   On each pull, the pull subsciber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
+
 
    Typical usage:
    ```bash
@@ -112,7 +109,7 @@
 
 ### z_eval
 
-   Registers a queryable function with a path.  
+   Declares a queryable function with a path.  
    This queryable function will be triggered by each call to get
    with a selector that matches the path, and will return a value to the querier.
 
@@ -128,7 +125,7 @@
 ### z_storage
 
    Trivial implementation of a storage in memory.  
-   This examples registers a subscriber and a queryable on the same selector.
+   This examples declares a subscriber and a queryable on the same selector.
    The subscriber callback will store the received paths/values in an hashmap.
    The queryable callback will answer to queries with the paths/values stored in the hashmap
    and that match the queried selector.
@@ -180,10 +177,10 @@
 
    Pub/Sub roundtrip time test.
    This example allows to perform roundtrip time measurements. The z_ping example 
-   performs a put operation on a first resource, waits for a reply from the pong 
-   example on a second resource and measures the time between the two.
-   The pong application waits for samples on the first resource and replies by
-   writing back the received data on the second resource.
+   performs a put operation on a first key expression, waits for a reply from the pong 
+   example on a second key expression and measures the time between the two.
+   The pong application waits for samples on the first key expression and replies by
+   writing back the received data on the second key expression.
 
    Typical Pong usage:
    ```bash

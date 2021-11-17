@@ -37,11 +37,11 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 #[derive(Clone)]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: &'a Session,
-    sub_reskey: ResKey<'b>,
+    sub_key_expr: KeyExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
-    query_reskey: ResKey<'b>,
+    query_key_expr: KeyExpr<'b>,
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -50,7 +50,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
-        sub_reskey: ResKey<'b>,
+        sub_key_expr: KeyExpr<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
@@ -64,11 +64,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
         QueryingSubscriberBuilder {
             session,
-            sub_reskey: sub_reskey.clone(),
+            sub_key_expr: sub_key_expr.clone(),
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
-            query_reskey: sub_reskey,
+            query_key_expr: sub_key_expr,
             query_value_selector: "".into(),
             query_target,
             query_consolidation,
@@ -125,14 +125,14 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the resource key to be used for queries.
+    /// Change the selector to be used for queries.
     #[inline]
-    pub fn query_selector<IntoKeyedSelector>(mut self, query_selector: IntoKeyedSelector) -> Self
+    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
-        IntoKeyedSelector: Into<KeyedSelector<'b>>,
+        IntoSelector: Into<Selector<'b>>,
     {
         let selector = query_selector.into();
-        self.query_reskey = selector.key_selector.to_owned();
+        self.query_key_expr = selector.key_selector.to_owned();
         self.query_value_selector = selector.value_selector.to_owned();
         self
     }
@@ -154,11 +154,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
         QueryingSubscriberBuilder {
             session: self.session,
-            sub_reskey: self.sub_reskey.to_owned(),
+            sub_key_expr: self.sub_key_expr.to_owned(),
             reliability: self.reliability,
             mode: self.mode,
             period: self.period,
-            query_reskey: self.query_reskey.to_owned(),
+            query_key_expr: self.query_key_expr.to_owned(),
             query_value_selector: "".to_string(),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
@@ -195,7 +195,7 @@ impl<'a> QueryingSubscriber<'a> {
         // declare subscriber at first
         let mut subscriber = conf
             .session
-            .subscribe(&conf.sub_reskey)
+            .subscribe(&conf.sub_key_expr)
             .reliability(conf.reliability)
             .mode(conf.mode)
             .period(conf.period)
@@ -215,10 +215,10 @@ impl<'a> QueryingSubscriber<'a> {
         Ok(query_subscriber)
     }
 
-    /// Undeclare this QueryingSubscriber
+    /// Close this QueryingSubscriber
     #[inline]
-    pub fn unregister(self) -> impl ZFuture<Output = ZResult<()>> {
-        self.subscriber.unregister()
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+        self.subscriber.close()
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.
@@ -227,12 +227,12 @@ impl<'a> QueryingSubscriber<'a> {
         &mut self.receiver
     }
 
-    /// Issue a new query using the configured resource key and value_selector.
+    /// Issue a new query using the configured selector.
     #[inline]
     pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
         self.query_on_selector(
-            KeyedSelector {
-                key_selector: self.conf.query_reskey.clone(),
+            Selector {
+                key_selector: self.conf.query_key_expr.clone(),
                 value_selector: &self.conf.query_value_selector.clone(),
             },
             self.conf.query_target.clone(),
@@ -240,16 +240,16 @@ impl<'a> QueryingSubscriber<'a> {
         )
     }
 
-    /// Issue a new query on the specified resource key and value_selector.
+    /// Issue a new query on the specified selector.
     #[inline]
-    pub fn query_on<'c, IntoKeyedSelector>(
+    pub fn query_on<'c, IntoSelector>(
         &mut self,
-        selector: IntoKeyedSelector,
+        selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>>
     where
-        IntoKeyedSelector: Into<KeyedSelector<'c>>,
+        IntoSelector: Into<Selector<'c>>,
     {
         self.query_on_selector(selector.into(), target, consolidation)
     }
@@ -257,7 +257,7 @@ impl<'a> QueryingSubscriber<'a> {
     #[inline]
     fn query_on_selector(
         &mut self,
-        selector: KeyedSelector,
+        selector: Selector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
@@ -357,7 +357,7 @@ impl Stream for InnerState {
                 loop {
                     match mself.replies_recv_queue[i].poll_next(cx) {
                         Poll::Ready(Some(mut reply)) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.key_expr);
                             reply.data.ensure_timestamp();
                             mself.merge_queue.push(reply.data);
                         }
@@ -383,7 +383,7 @@ impl Stream for InnerState {
 
             // get all publications received during the queries and add them to merge_queue
             while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next(cx) {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
             }
@@ -431,7 +431,7 @@ impl InnerState {
             // get all replies and add them to merge_queue
             for recv in self.replies_recv_queue.drain(..) {
                 while let Ok(mut reply) = recv.recv() {
-                    log::trace!("Reply received: {}", reply.data.res_name);
+                    log::trace!("Reply received: {}", reply.data.key_expr);
                     reply.data.ensure_timestamp();
                     self.merge_queue.push(reply.data);
                 }
@@ -443,7 +443,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
@@ -483,7 +483,7 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].try_recv() {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.key_expr);
                             reply.data.ensure_timestamp();
                             self.merge_queue.push(reply.data);
                         }
@@ -509,7 +509,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
@@ -554,7 +554,7 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].recv_deadline(deadline) {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.res_name);
+                            log::trace!("Reply received: {}", reply.data.key_expr);
                             reply.data.ensure_timestamp();
                             self.merge_queue.push(reply.data);
                         }
@@ -580,7 +580,7 @@ impl InnerState {
 
             // get all publications received during the query and add them to merge_queue
             while let Ok(mut sample) = self.subscriber_recv.try_recv() {
-                log::trace!("Pub received in parallel of query: {}", sample.res_name);
+                log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }

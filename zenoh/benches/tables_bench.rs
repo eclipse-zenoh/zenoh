@@ -29,19 +29,17 @@ fn tables_bench(c: &mut Criterion) {
     let primitives = Arc::new(DummyPrimitives {});
 
     let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives.clone());
-    register_resource(
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
-        0,
-        "/bench/tables",
+        &"/bench/tables".into(),
     );
-    register_resource(
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        0,
-        "/bench/tables/*",
+        &"/bench/tables/*".into(),
     );
 
     let face1 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
@@ -55,18 +53,16 @@ fn tables_bench(c: &mut Criterion) {
 
     for p in [8, 32, 256, 1024, 8192].iter() {
         for i in 1..(*p) {
-            register_resource(
+            register_expr(
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
                 i,
-                0,
-                &["/bench/tables/AA", &i.to_string()].concat(),
+                &["/bench/tables/AA", &i.to_string()].concat().into(),
             );
             declare_client_subscription(
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
-                i,
-                "",
+                &i.into(),
                 &sub_info,
             );
         }
@@ -79,8 +75,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    2,
-                    "",
+                    &2.into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,
@@ -95,8 +90,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0,
-                    "/bench/tables/*",
+                    &"/bench/tables/*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,
@@ -111,8 +105,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0,
-                    "/bench/tables/A*",
+                    &"/bench/tables/A*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,

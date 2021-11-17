@@ -19,13 +19,13 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (config, key_expr, value) = parse_args();
 
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Put Float ('{}': '{}')", path, value);
-    session.put(&path, value).await.unwrap();
+    println!("Put Float ('{}': '{}')", key_expr, value);
+    session.put(&key_expr, value).await.unwrap();
 
     session.close().await.unwrap();
 }
@@ -51,11 +51,11 @@ fn parse_args() -> (Config, String, f64) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(
-            Arg::from_usage("-p, --path=[PATH]        'The name of the resource to put.'")
+            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to put.'")
                 .default_value("/demo/example/zenoh-rs-put"),
         )
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The float value of the resource to put.'")
+            Arg::from_usage("-v, --value=[VALUE]      'The float value to put.'")
                 .default_value(&default_value),
         )
         .arg(Arg::from_usage(
@@ -88,8 +88,8 @@ fn parse_args() -> (Config, String, f64) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let path = args.value_of("path").unwrap().to_string();
+    let key_expr = args.value_of("key").unwrap().to_string();
     let value: f64 = args.value_of("value").unwrap().parse().unwrap();
 
-    (config, path, value)
+    (config, key_expr, value)
 }

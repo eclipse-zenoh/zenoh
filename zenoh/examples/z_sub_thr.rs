@@ -14,7 +14,6 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::prelude::ResKey::*;
 use zenoh::prelude::*;
 
 fn main() {
@@ -25,14 +24,14 @@ fn main() {
 
     let session = zenoh::open(config).wait().unwrap();
 
-    let reskey = RId(session.register_resource("/test/thr").wait().unwrap());
+    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
 
     let mut count = 0u128;
     let mut start = Instant::now();
 
     let mut nm = 0;
     let _sub = session
-        .subscribe(&reskey)
+        .subscribe(&key_expr)
         .callback(move |_sample| {
             if count == 0 {
                 start = Instant::now();

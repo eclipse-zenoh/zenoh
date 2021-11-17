@@ -187,7 +187,7 @@ pub mod zmsg {
         pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
+        pub const K: u8 = 1 << 7; // 0x80 KeySuffix     if K==1 then key_expr has suffix
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
@@ -631,7 +631,7 @@ impl PartialOrd for DataInfo {
 /// +-+-+-+-+-+-+-+-+
 /// |K|I|D|  DATA   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 -- Only numerical id
+/// ~    KeyExpr     ~ if K==1 -- Only numerical id
 /// +---------------+
 /// ~    DataInfo   ~ if I==1
 /// +---------------+
@@ -641,7 +641,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -655,7 +655,7 @@ impl Header for Data {
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         if self.congestion_control == CongestionControl::Drop {
@@ -710,20 +710,20 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
-    pub rid: ZInt,
-    pub key: ResKey<'static>,
+    pub expr_id: ZInt,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Resource {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -740,7 +740,7 @@ impl Header for Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetResource {
-    pub rid: ZInt,
+    pub expr_id: ZInt,
 }
 
 impl Header for ForgetResource {
@@ -755,19 +755,19 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Publisher {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Publisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -779,19 +779,19 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetPublisher {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetPublisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -803,7 +803,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -812,7 +812,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscriber {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub info: SubInfo,
 }
 
@@ -826,7 +826,7 @@ impl Header for Subscriber {
         if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
             header |= zmsg::flag::S;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -838,19 +838,19 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetSubscriber {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetSubscriber {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -862,7 +862,7 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
@@ -871,7 +871,7 @@ impl Header for ForgetSubscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub kind: ZInt,
     pub info: QueryableInfo,
 }
@@ -883,7 +883,7 @@ impl Header for Queryable {
         if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -895,14 +895,14 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~     Kind      ~
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub kind: ZInt,
 }
 
@@ -913,7 +913,7 @@ impl Header for ForgetQueryable {
         if self.kind != queryable::EVAL {
             header |= zmsg::flag::Q
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K
         }
         header
@@ -949,7 +949,7 @@ impl Header for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -958,7 +958,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -974,7 +974,7 @@ impl Header for Pull {
         if self.max_samples.is_some() {
             header |= zmsg::flag::N;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -988,7 +988,7 @@ impl Header for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~ value_selector~
 /// +---------------+
@@ -1001,7 +1001,7 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
-    pub key: ResKey<'static>,
+    pub key: KeyExpr<'static>,
     pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
@@ -1015,7 +1015,7 @@ impl Header for Query {
         if self.target.is_some() {
             header |= zmsg::flag::T;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -1153,7 +1153,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1199,7 +1199,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1221,7 +1221,7 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: ResKey<'static>,
+        key: KeyExpr<'static>,
         value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,

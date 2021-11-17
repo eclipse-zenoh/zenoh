@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
-use zenoh::utils::resource_name;
+use zenoh::utils::key_expr;
 use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
@@ -134,11 +134,11 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
-        trace!("on_sample for {}", sample.res_name);
+        trace!("on_sample for {}", sample.key_expr);
         sample.ensure_timestamp();
         let timestamp = sample.timestamp.unwrap();
         match sample.kind {
-            SampleKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Put => match self.map.write().await.entry(sample.key_expr.to_string()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -161,16 +161,16 @@ impl Storage for MemoryStorage {
                             ts: timestamp,
                         });
                     } else {
-                        debug!("PUT on {} dropped: out-of-date", sample.res_name);
+                        debug!("PUT on {} dropped: out-of-date", sample.key_expr);
                     }
                 }
             },
-            SampleKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Delete => match self.map.write().await.entry(sample.key_expr.to_string()) {
                 Entry::Vacant(v) => {
                     // NOTE: even if key is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
                     // we must drop the put.
-                    let cleanup_handle = self.schedule_cleanup(sample.res_name.clone()).await;
+                    let cleanup_handle = self.schedule_cleanup(sample.key_expr.to_string()).await;
                     v.insert(Removed {
                         ts: timestamp,
                         cleanup_handle,
@@ -185,20 +185,20 @@ impl Storage for MemoryStorage {
                         Present { sample: _, ts } => {
                             if ts < &timestamp {
                                 let cleanup_handle =
-                                    self.schedule_cleanup(sample.res_name.clone()).await;
+                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
                                 o.insert(Removed {
                                     ts: timestamp,
                                     cleanup_handle,
                                 });
                             } else {
-                                debug!("DEL on {} dropped: out-of-date", sample.res_name);
+                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
                             }
                         }
                     }
                 }
             },
             SampleKind::Patch => {
-                warn!("Received PATCH for {}: not yet supported", sample.res_name);
+                warn!("Received PATCH for {}: not yet supported", sample.key_expr);
             }
         }
         Ok(())
@@ -206,15 +206,17 @@ impl Storage for MemoryStorage {
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         trace!("on_query for {}", query.key_selector());
-        if !query.key_selector().contains('*') {
-            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(query.key_selector())
+        if !query.key_selector().as_str().contains('*') {
+            if let Some(Present { sample, ts: _ }) =
+                self.map.read().await.get(query.key_selector().as_str())
             {
                 query.reply(sample.clone()).await;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if resource_name::intersect(query.key_selector(), &sample.res_name) {
+                    if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
+                    {
                         let s: Sample = sample.clone();
                         query.reply(s).await;
                     }
