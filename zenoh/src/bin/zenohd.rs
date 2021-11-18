@@ -18,7 +18,8 @@ use clap::{App, Arg};
 use git_version::git_version;
 use validated_struct::ValidatedMap;
 use zenoh::config::Config;
-use zenoh::net::plugins::{PluginsManager, PLUGIN_PREFIX};
+use zenoh::config::PluginLoad;
+use zenoh::net::plugins::PluginsManager;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh_util::LibLoader;
 
@@ -30,36 +31,6 @@ lazy_static::lazy_static!(
 
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
-fn get_plugin_search_dirs_from_args() -> Vec<String> {
-    let mut result: Vec<String> = vec![];
-    let mut iter = std::env::args();
-    while let Some(arg) = iter.next() {
-        if arg == "--plugin-search-dir" {
-            if let Some(arg2) = iter.next() {
-                result.push(arg2);
-            }
-        } else if let Some(name) = arg.strip_prefix("--plugin-search-dir=") {
-            result.push(name.to_string());
-        }
-    }
-    result
-}
-
-fn get_plugins_from_args() -> Vec<String> {
-    let mut result: Vec<String> = vec![];
-    let mut iter = std::env::args();
-    while let Some(arg) = iter.next() {
-        if arg == "-P" || arg == "--plugin" {
-            if let Some(arg2) = iter.next() {
-                result.push(arg2);
-            }
-        } else if let Some(name) = arg.strip_prefix("--plugin=") {
-            result.push(name.to_string());
-        }
-    }
-    result
-}
-
 fn main() {
     task::block_on(async {
         #[cfg(feature = "stats")]
@@ -68,14 +39,6 @@ fn main() {
         env_logger::init();
 
         log::debug!("zenohd {}", *LONG_VERSION);
-
-        let plugin_search_dir_usage = format!(
-            "--plugin-search-dir=[DIRECTORY]... \
-            'A directory where to search for plugins libraries to load. \
-            Repeat this option to specify several search directories'. \
-            By default, the plugins libraries will be searched in: '{}' .",
-            LibLoader::default_search_paths()
-        );
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
@@ -110,7 +73,9 @@ fn main() {
              'When set, zenohd will not look for plugins nor try to load any plugin except the \
              ones explicitely configured with -P or --plugin.'",
             ))
-            .arg(Arg::from_usage(&plugin_search_dir_usage).conflicts_with("plugin-nolookup"))
+            .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
+            'A directory where to search for plugins libraries to load. \
+            Repeat this option to specify several search directories'.").conflicts_with("plugin-nolookup"))
             .arg(Arg::from_usage(
                 "--no-timestamp \
              'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
@@ -142,21 +107,25 @@ fn main() {
         let args = app.get_matches();
         let config = config_from_args(&args);
 
-        // Get plugins search directories from the command line, and create LibLoader
-        let plugin_search_dirs = get_plugin_search_dirs_from_args();
-        let lib_loader = if !plugin_search_dirs.is_empty() {
-            LibLoader::new(plugin_search_dirs.as_slice(), false)
-        } else {
-            LibLoader::default()
-        };
-
         let mut plugins = PluginsManager::builder()
             // Static plugins are to be added here, with `.add_static::<PluginType>()`
-            .into_dynamic(lib_loader)
-            .load_plugins(&get_plugins_from_args(), &PLUGIN_PREFIX);
-        // Also search for plugins if no "--plugin-nolookup" arg
-        if !args.is_present("plugin-nolookup") {
-            plugins = plugins.search_and_load_plugins(Some(&PLUGIN_PREFIX));
+            .into_dynamic(config.libloader());
+        for plugin_load in config.plugins().load_requests() {
+            let PluginLoad {
+                name,
+                paths,
+                required,
+            } = plugin_load;
+            if let Err(e) = match paths {
+                None => plugins.load_plugin_by_name(name),
+                Some(paths) => plugins.load_plugin_by_paths(name, &paths),
+            } {
+                if required {
+                    panic!("Plugin load failure: {}", e)
+                } else {
+                    log::error!("Plugin load failure: {}", e)
+                }
+            }
         }
 
         let runtime = match Runtime::new(0, config, args.value_of("id")).await {
@@ -199,6 +168,14 @@ fn config_from_args(args: &ArgMatches) -> Config {
         config
             .insert_json5("/plugins/dds/domain-id", &format!("\"{}\"", value))
             .unwrap();
+    }
+    if let Some(plugins_search_dirs) = args.values_of("plugin-search-dir") {
+        config
+            .set_plugins_search_dirs(plugins_search_dirs.map(|c| c.to_owned()).collect())
+            .unwrap();
+    }
+    if !args.is_present("plugin-nolookup") {
+        config.set_plugins_search_dirs(Vec::new()).unwrap();
     }
     if let Some(paths) = args.values_of("plugin") {
         for path in paths {

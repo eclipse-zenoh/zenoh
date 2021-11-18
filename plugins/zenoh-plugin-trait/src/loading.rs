@@ -2,8 +2,8 @@ use crate::vtable::*;
 use crate::*;
 use libloading::Library;
 use std::path::PathBuf;
-use zenoh_util::core::ZResult;
-use zenoh_util::LibLoader;
+use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::{zerror, LibLoader};
 
 type Compats = (Vec<PluginId>, Vec<Option<Incompatibility>>);
 
@@ -219,25 +219,26 @@ pub struct DynamicLoader<Statics: MultipleStaticPlugins> {
 }
 
 impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
-    pub fn load_plugins<P: AsRef<str>>(mut self, paths: &[P], plugin_prefix: &str) -> Self {
-        let prefix = format!("{}{}", *zenoh_util::LIB_PREFIX, plugin_prefix);
-        let suffix = &*zenoh_util::LIB_SUFFIX;
-        self.dynamic_plugins.extend(
-            paths
-                .iter()
-                .map(|path| -> ZResult<DynamicPlugin<StaticPlugins::StartArgs>> {
-                    let (lib, p) = unsafe { LibLoader::load_file(path.as_ref())? };
-                    let filename = p.file_name().unwrap().to_str().unwrap();
-                    let name = if filename.starts_with(&prefix) && path.as_ref().ends_with(suffix) {
-                        filename[(prefix.len())..(filename.len() - suffix.len())].to_string()
-                    } else {
-                        filename.to_string()
-                    };
-                    DynamicPlugin::new(name.clone(), lib, p).map_err(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION))
-                })
-                .filter_map(ZResult::ok),
-        );
-        self
+    pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<()> {
+        let (lib, p) = unsafe { self.loader.search_and_load(&name)? };
+        let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
+        self.dynamic_plugins.push(plugin);
+        Ok(())
+    }
+    pub fn load_plugin_by_paths<P: AsRef<str> + std::fmt::Debug>(
+        &mut self,
+        name: String,
+        paths: &[P],
+    ) -> ZResult<()> {
+        for path in paths {
+            if let Ok((lib, p)) = unsafe { LibLoader::load_file(path.as_ref()) } {
+                self.dynamic_plugins.push(
+                    DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)))
+            }
+        }
+        zerror!(ZErrorKind::Other {
+            descr: format!("Plugin '{}' not found in {:?}", name, &paths)
+        })
     }
     pub fn search_and_load_plugins(mut self, prefix: Option<&str>) -> Self {
         let libs = unsafe { self.loader.load_all_with_prefix(prefix) };
