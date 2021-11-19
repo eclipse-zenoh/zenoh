@@ -29,6 +29,7 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_util::properties::config::*;
+use zenoh_util::LibLoader;
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -238,7 +239,20 @@ validated_struct::validator! {
         plugins_search_dirs: Vec<String>,
         #[intkey(skip)]
         #[serde(default)]
+        #[validated(recursive_accessors)]
         plugins: PluginsConfig,
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PluginSearchDirs(Vec<String>);
+impl Default for PluginSearchDirs {
+    fn default() -> Self {
+        Self(
+            (*zenoh_util::LIB_DEFAULT_SEARCH_PATHS)
+                .split(':')
+                .map(|c| c.to_string())
+                .collect(),
+        )
     }
 }
 
@@ -337,6 +351,9 @@ impl Config {
             }
             Err(e) => Err(ConfigOpenErr::IoError(e)),
         }
+    }
+    pub fn libloader(&self) -> LibLoader {
+        LibLoader::new(&self.plugins_search_dirs, true)
     }
 }
 
@@ -662,9 +679,34 @@ fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+pub struct PluginLoad {
+    pub name: String,
+    pub paths: Option<Vec<String>>,
+    pub required: bool,
+}
 impl PluginsConfig {
     pub fn sift_privates(&mut self) {
         sift_privates(&mut self.values);
+    }
+    pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
+        self.values.as_object().unwrap().iter().map(|(name, value)| {
+            let value = value.as_object().expect("Plugin configurations must be objects");
+            let required = match value.get("__required__") {
+                None => false,
+                Some(Value::Bool(b)) => *b,
+                _ => panic!("Plugin '{}' has an invalid '__required__' configuration property (must be a boolean)", name)
+            };
+            if let Some(paths) = value.get("__path__"){
+                let paths = match paths {
+                    Value::String(s) => vec![s.clone()],
+                    Value::Array(a) => a.iter().map(|s| if let Value::String(s) = s {s.clone()} else {panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)}).collect(),
+                    _ => panic!("Plugin '{}' has an invalid '__path__' configuration property (must be either string or array of strings)", name)
+                };
+                PluginLoad {name: name.clone(), paths: Some(paths), required}
+            } else {
+                PluginLoad {name: name.clone(), paths: None, required}
+            }
+        })
     }
 }
 impl serde::Serialize for PluginsConfig {
