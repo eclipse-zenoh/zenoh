@@ -231,9 +231,14 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
         paths: &[P],
     ) -> ZResult<()> {
         for path in paths {
-            if let Ok((lib, p)) = unsafe { LibLoader::load_file(path.as_ref()) } {
-                self.dynamic_plugins.push(
-                    DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)))
+            let path = path.as_ref();
+            match unsafe { LibLoader::load_file(path) } {
+                Ok((lib, p)) => {
+                    self.dynamic_plugins.push(
+                        DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)));
+                    return Ok(());
+                }
+                Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
         }
         zerror!(ZErrorKind::Other {

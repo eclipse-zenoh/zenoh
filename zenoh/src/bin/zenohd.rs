@@ -95,7 +95,8 @@ fn main() {
                 .required(false)
                 .takes_value(true)
                 .value_name("PORT")
-                .help("Maps to --cfg=/plugins/rest/port:PORT")
+                .default_value("8000")
+                .help("Maps to `--cfg=/plugins/rest/port:PORT`. To disable the rest plugin, pass `--port=None`")
             ).arg(Arg::with_name("domain-id")
                 .long("domain-id")
                 .required(false)
@@ -162,7 +163,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .unwrap();
     }
     if let Some(value) = args.value_of("rest-port") {
-        config.insert_json5("plugins/rest/port", value).unwrap();
+        if value.parse::<usize>().is_ok() {
+            config.insert_json5("plugins/rest/port", value).unwrap();
+        }
     }
     if let Some(value) = args.value_of("domain-id") {
         config
