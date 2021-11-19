@@ -141,11 +141,7 @@
 
 ### z_pub_shm & z_sub_shm
 
-<<<<<<< HEAD
-   A pub/sub example involving the shared-memory feature based on shared memory.
-=======
    A pub/sub example involving the shared-memory feature.
->>>>>>> upstream/apis-merge
 
    Typical Subscriber usage:
    ```bash
@@ -194,11 +190,7 @@
 
 ### z_pub_shm_thr & z_sub_shm_thr
 
-<<<<<<< HEAD
-   Pub/Sub throughput test involving the shared-memory feature based on shared memory.
-=======
    Pub/Sub throughput test involving the shared-memory feature.
->>>>>>> upstream/apis-merge
    This example allows to perform throughput measurements between a pubisher performing
    put operations with the shared-memory feature and a subscriber receiving notifications
    of those puts.
