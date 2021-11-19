@@ -220,7 +220,7 @@ pub struct DynamicLoader<Statics: MultipleStaticPlugins> {
 
 impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<()> {
-        let (lib, p) = unsafe { self.loader.search_and_load(&name)? };
+        let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", name))? };
         let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
         self.dynamic_plugins.push(plugin);
         Ok(())

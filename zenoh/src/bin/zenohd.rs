@@ -162,11 +162,11 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .unwrap();
     }
     if let Some(value) = args.value_of("rest-port") {
-        config.insert_json5("/plugins/rest/port", value).unwrap();
+        config.insert_json5("plugins/rest/port", value).unwrap();
     }
     if let Some(value) = args.value_of("domain-id") {
         config
-            .insert_json5("/plugins/dds/domain-id", &format!("\"{}\"", value))
+            .insert_json5("plugins/dds/domain-id", &format!("\"{}\"", value))
             .unwrap();
     }
     if let Some(plugins_search_dirs) = args.values_of("plugin-search-dir") {
@@ -183,13 +183,13 @@ fn config_from_args(args: &ArgMatches) -> Config {
                 let name = LibLoader::plugin_name(&path).unwrap();
                 config
                     .insert_json5(
-                        format!("/plugins/{}", name),
+                        format!("plugins/{}", name),
                         &format!(r#"{{"__path__": "{}", "__required__": true}}"#, path),
                     )
                     .unwrap();
             } else {
                 config
-                    .insert_json5(format!("/plugins/{}", path), r#"{"__required__": true}"#)
+                    .insert_json5(format!("plugins/{}", path), r#"{"__required__": true}"#)
                     .unwrap();
             }
         }

@@ -239,6 +239,7 @@ validated_struct::validator! {
         plugins_search_dirs: Vec<String>,
         #[intkey(skip)]
         #[serde(default)]
+        #[validated(recursive_accessors)]
         plugins: PluginsConfig,
     }
 }
