@@ -17,7 +17,7 @@ use zenoh::Session;
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
-    /// Declare a [QueryingSubscriber](super::QueryingSubscriber) with the given key expression.
+    /// Create a [QueryingSubscriber](super::QueryingSubscriber) with the given key expression.
     ///
     /// This operation returns a [QueryingSubscriberBuilder](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
     /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscriberBuilder), the QueryingSubscriber

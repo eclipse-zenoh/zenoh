@@ -34,10 +34,10 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declare Subscriber on {}", key_expr);
+    println!("Create Subscriber on {}", key_expr);
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
-    println!("Declare Queryable on {}", key_expr);
+    println!("Create Queryable on {}", key_expr);
     let mut queryable = session.queryable(&key_expr).kind(STORAGE).await.unwrap();
 
     let mut stdin = async_std::io::stdin();

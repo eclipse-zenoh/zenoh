@@ -28,7 +28,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!(
-        "Declare a QueryingSubscriber on {} with an initial query on {}",
+        "Create a QueryingSubscriber on {} with an initial query on {}",
         key_expr,
         query.as_ref().unwrap_or(&key_expr)
     );

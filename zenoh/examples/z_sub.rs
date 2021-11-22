@@ -26,7 +26,7 @@ async fn main() {
     println!("Open session");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declare Subscriber on {}", key_expr);
+    println!("Create Subscriber on {}", key_expr);
 
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
