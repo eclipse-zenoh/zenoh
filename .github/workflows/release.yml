@@ -170,6 +170,8 @@ jobs:
     steps:
       - name: Checkout source code
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # NOTE: get all history for git-version crate to correctly compute a version
 
       - name: Install prerequisites
         shell: bash
