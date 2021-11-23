@@ -31,7 +31,7 @@ use super::transport::{
 pub use adminspace::AdminSpace;
 use async_std::sync::Arc;
 use std::any::Any;
-use uhlc::HLC;
+use uhlc::{HLCBuilder, HLC};
 use zenoh_util::core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::get_mut_unchecked;
@@ -93,7 +93,9 @@ impl Runtime {
             .to_lowercase()
             == ZN_TRUE
         {
-            Some(Arc::new(HLC::with_system_time(uhlc::ID::from(&pid))))
+            Some(Arc::new(
+                HLCBuilder::new().with_id(uhlc::ID::from(&pid)).build(),
+            ))
         } else {
             None
         };
