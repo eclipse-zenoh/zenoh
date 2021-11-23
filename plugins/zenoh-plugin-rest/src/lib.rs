@@ -61,7 +61,7 @@ fn value_to_json(value: Value) -> String {
     use Value::*;
 
     match value {
-        Raw(_, buf) => base64::encode(buf.to_vec()),
+        Raw(_, buf) => format!("{}", base64::encode(buf.to_vec())),
         Custom {
             encoding_descr,
             data,
