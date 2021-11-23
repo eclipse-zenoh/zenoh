@@ -61,11 +61,11 @@ fn value_to_json(value: Value) -> String {
     use Value::*;
 
     match value {
-        Raw(_, buf) => format!("{}", base64::encode(buf.to_vec())),
+        Raw(_, buf) => format!(r#""{}""#, base64::encode(buf.to_vec())),
         Custom {
             encoding_descr,
             data,
-        } => format!("{}:{}", encoding_descr, base64::encode(data.to_vec())),
+        } => format!(r#""{}:{}""#, encoding_descr, base64::encode(data.to_vec())),
         StringUtf8(s) => {
             // convert to Json string for special characters escaping
             let js = serde_json::json!(s);
