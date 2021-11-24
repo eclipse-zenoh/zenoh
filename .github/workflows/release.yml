@@ -309,30 +309,44 @@ jobs:
     needs: [checks, tests, builds]
     runs-on: ubuntu-latest
     steps:
+      - name: Download result of previous builds
+        uses: actions/download-artifact@v2
+        with:
+          path: ARTIFACTS
+      - name: Publish as github release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ARTIFACTS/*/*.*
+      - name: Publish to download.eclipse.org/zenoh
+        env:
+          SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
+          ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
+        shell: bash
+        run: |
+          echo "--- setup ssh-agent"
+          eval "$(ssh-agent -s)"
+          echo 'echo ${{ secrets.SSH_PASSPHRASE }}' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | DISPLAY=NONE SSH_ASKPASS=~/.ssh_askpass ssh-add - > /dev/null 2>&1
+          rm -f ~/.ssh_askpass
+          echo "--- test ssh:"
+          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} ls -al
+          echo "---- list artifacts to upload:"
+          ls -R ARTIFACTS || true
+          echo "---- copy artifacts into ${DOWNLOAD_DIR}"
+          DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
+          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} mkdir -p ${DOWNLOAD_DIR}
+          cd ARTIFACTS
+          sha256sum */* > sha256sums.txt
+          scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
       - name: Publish to crates.io
         shell: bash
         run: |
-          echo cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          cd zenoh-util && echo cargo publish && cd - && sleep 30
-          cd zenoh && echo cargo publish && cd - && sleep 30
-          cd plugins/zenoh-plugin-trait && echo cargo publish && cd - && sleep 30
-          cd backends/traits && echo cargo publish && cd -
-          cd plugins/zenoh-plugin-rest && echo cargo publish && cd -
-      - uses: actions/download-artifact@v2
-        with:
-          path: ARTIFACTS
-      - name: Publish to download.eclipse.org/zenoh
-        shell: bash
-        run: |
-          echo "ls -R $(pwd)/ARTIFACTS"
-          ls -R ARTIFACTS || true
-          ECLIPSE_BASE_DIR=/home/data/httpd/download.eclipse.org/zenoh
-          DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
-          cd ARTIFACTS
-          echo ssh genie.zenoh@projects-storage.eclipse.org mkdir -p ${DOWNLOAD_DIR}
-          for target in *; do
-            echo scp -r $target genie.zenoh@projects-storage.eclipse.org:${DOWNLOAD_DIR}/
-          done
+          cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cd zenoh-util && cargo publish && cd - && sleep 30
+          cd zenoh && cargo publish && cd - && sleep 30
+          cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
+          cd backends/traits && cargo publish && cd -
+          cd plugins/zenoh-plugin-rest && cargo publish && cd -
