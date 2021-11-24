@@ -13,7 +13,9 @@
 #
 [package]
 name = "zenoh-plugin-trait"
-version = "0.1.0-dev"
+version = "0.5.0-dev"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",
@@ -22,6 +24,9 @@ authors = [
     "Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
 [lib]
 name = "zenoh_plugin_trait"
