@@ -99,32 +99,6 @@ jobs:
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
-  docker-build:
-    name: Build Docker image
-    needs: checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 0 # NOTE: get all history for git-version crate to correctly compute a version
-      - name: Docker meta - set tags and labels
-        id: meta
-        uses: docker/metadata-action@v3
-        with:
-          images: eclipse/zenoh
-      - name: Login to DockerHub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_COM_USERNAME }}
-          password: ${{ secrets.DOCKER_COM_PASSWORD }}
-      - name: Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
     needs: checks
@@ -303,6 +277,32 @@ jobs:
             ${{ steps.package.outputs.EXPL_PKG_NAME }}
             ${{ steps.package.outputs.DEBS_PKG_NAME }}
 
+  docker-build:
+    name: Publish the Docker image
+    needs: [checks, tests, builds]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 # NOTE: get all history for git-version crate to correctly compute a version
+      - name: Docker meta - set tags and labels
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: eclipse/zenoh
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_COM_USERNAME }}
+          password: ${{ secrets.DOCKER_COM_PASSWORD }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
   publication:
     name: Publish the release
     if: needs.checks.outputs.IS_RELEASE == 'true'
@@ -325,7 +325,7 @@ jobs:
         run: |
           echo "--- setup ssh-agent"
           eval "$(ssh-agent -s)"
-          echo 'echo ${{ secrets.SSH_PASSPHRASE }}' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
+          echo 'echo "${{ secrets.SSH_PASSPHRASE }}"' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
           echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | DISPLAY=NONE SSH_ASKPASS=~/.ssh_askpass ssh-add - > /dev/null 2>&1
           rm -f ~/.ssh_askpass
           echo "--- test ssh:"
@@ -338,6 +338,8 @@ jobs:
           cd ARTIFACTS
           sha256sum */* > sha256sums.txt
           scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
+          echo "---- cleanup identity"
+          ssh-add -D
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
