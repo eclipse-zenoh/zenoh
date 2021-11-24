@@ -13,7 +13,7 @@
 #
 [package]
 name = "zplugin-example"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",

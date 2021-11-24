@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh_backend_traits"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -31,4 +31,4 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 async-std = "=1.9.0"
 async-trait = "0.1.51"
-zenoh = { path = "../../zenoh" }
+zenoh = { version = "0.5.0-beta.9", path = "../../zenoh" }

@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-ext"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = ["kydos <angelo@icorsaro.net>",
@@ -35,8 +35,8 @@ futures = "0.3.12"
 futures-lite = "1.11.3"
 log = "0.4"
 serde = "1.0.126"
-zenoh = { path = "../zenoh" }
-zenoh-util = { path = "../zenoh-util" }
+zenoh = { version = "0.5.0-beta.9", path = "../zenoh" }
+zenoh-util = { version = "0.5.0-beta.9", path = "../zenoh-util" }
 
 [dev-dependencies]
 clap = "2.33.3"

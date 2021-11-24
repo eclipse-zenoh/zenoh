@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -52,8 +52,8 @@ default = [
 ]
 
 [dependencies]
-zenoh-util = { path = "../zenoh-util" }
-zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
+zenoh-util = { version = "0.5.0-beta.9", path = "../zenoh-util" }
+zenoh-plugin-trait = { version = "0.5.0-beta.9", path = "../plugins/zenoh-plugin-trait", default-features = false }
 async-global-executor = "2.0.2"
 async-rustls = { version = "=0.2.0", optional = true }
 async-std = { version = "=1.9.0", default-features = false, features = [

@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-plugin-trait"
-version = "0.1.0-dev"
+version = "0.5.0-beta.9"
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",
@@ -34,4 +34,4 @@ default = ["no_mangle"]
 clap = "2.33.3"
 libloading = "0.7.0"
 log = "0.4"
-zenoh-util = { path = "../../zenoh-util" }
+zenoh-util = { version = "0.5.0-beta.9", path = "../../zenoh-util" }

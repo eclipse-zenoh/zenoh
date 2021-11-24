@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-plugin-rest"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -49,8 +49,8 @@ http-types = "2.10.0"
 log = "0.4"
 serde_json = "1.0"
 tide = "0.16.0"
-zenoh = { path = "../../zenoh" }
-zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
+zenoh = { version = "0.5.0-beta.9", path = "../../zenoh" }
+zenoh-plugin-trait = { version = "0.5.0-beta.9", path = "../zenoh-plugin-trait", default-features = false }
 
 [[example]]
 name = "zn_serve_sse"
@@ -62,4 +62,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.5.0-dev)"
+depends = "zenohd (=0.5.0-beta.9)"
