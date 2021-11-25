@@ -332,8 +332,8 @@ jobs:
           ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} ls -al
           echo "---- list artifacts to upload:"
           ls -R ARTIFACTS || true
-          echo "---- copy artifacts into ${DOWNLOAD_DIR}"
           DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
+          echo "---- copy artifacts into ${DOWNLOAD_DIR}"
           ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} mkdir -p ${DOWNLOAD_DIR}
           cd ARTIFACTS
           sha256sum */* > sha256sums.txt
@@ -350,5 +350,6 @@ jobs:
           cd zenoh-util && cargo publish && cd - && sleep 30
           cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
           cd zenoh && cargo publish && cd - && sleep 30
+          cd zenoh-ext && cargo publish && cd - && sleep 30
           cd backends/traits && cargo publish && cd -
           cd plugins/zenoh-plugin-rest && cargo publish && cd -
