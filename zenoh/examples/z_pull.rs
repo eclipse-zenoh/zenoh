@@ -24,10 +24,10 @@ async fn main() {
 
     let (config, key_expr) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declare Subscriber on {}", key_expr);
+    println!("Creating Subscriber on '{}'...", key_expr);
 
     let mut subscriber = session
         .subscribe(&key_expr)

@@ -21,10 +21,10 @@ async fn main() {
 
     let (config, key_expr) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Delete resources matching '{}'", key_expr);
+    println!("Deleting resources matching '{}'...", key_expr);
     session.delete(&key_expr).await.unwrap();
 
     session.close().await.unwrap();

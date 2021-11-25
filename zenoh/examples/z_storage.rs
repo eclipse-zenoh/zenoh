@@ -31,15 +31,16 @@ async fn main() {
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declare Subscriber on {}", key_expr);
+    println!("Creating Subscriber on '{}'...", key_expr);
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
-    println!("Declare Queryable on {}", key_expr);
+    println!("Creating Queryable on '{}'...", key_expr);
     let mut queryable = session.queryable(&key_expr).kind(STORAGE).await.unwrap();
 
+    println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {

@@ -41,10 +41,10 @@ async fn main() {
     let key = "/demo/sse";
     let value = "Pub from sse server!";
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declare Queryable on {}", key);
+    println!("Creating Queryable on '{}'...", key);
     let mut queryable = session.queryable(key).kind(EVAL).await.unwrap();
 
     async_std::task::spawn(
@@ -60,14 +60,14 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Declare key expression {}", event_key);
+    print!("Declaring key expression '{}'...", event_key);
     let expr_id = session.declare_expr(&event_key).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Declare publication on {}", expr_id);
+    println!("Declaring publication on '{}'...", expr_id);
     session.declare_publication(expr_id).await.unwrap();
 
-    println!("Put Data periodically ('{}': '{}')...", expr_id, value);
+    println!("Putting Data periodically ('{}': '{}')...", expr_id, value);
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",

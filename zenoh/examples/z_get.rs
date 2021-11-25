@@ -24,10 +24,10 @@ async fn main() {
 
     let (config, selector, target) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Send Query '{}'", selector);
+    println!("Sending Query '{}'...", selector);
     let mut replies = session.get(&selector).target(target).await.unwrap();
     while let Some(reply) = replies.next().await {
         println!(
