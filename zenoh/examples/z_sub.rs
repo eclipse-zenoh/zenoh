@@ -23,13 +23,14 @@ async fn main() {
 
     let (config, key_expr) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Create Subscriber on {}", key_expr);
+    println!("Creating Subscriber on '{}'...", key_expr);
 
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
+    println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {

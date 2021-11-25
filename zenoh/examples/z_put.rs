@@ -21,10 +21,10 @@ async fn main() {
 
     let (config, key_expr, value) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Put Data ('{}': '{}')", key_expr, value);
+    println!("Putting Data ('{}': '{}')...", key_expr, value);
     session.put(&key_expr, value).await.unwrap();
 }
 

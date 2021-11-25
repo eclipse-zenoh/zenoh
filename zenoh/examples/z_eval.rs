@@ -25,12 +25,13 @@ async fn main() {
 
     let (config, key_expr, value) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Create Queryable on {}", key_expr);
+    println!("Creating Queryable on '{}'...", key_expr);
     let mut queryable = session.queryable(&key_expr).kind(EVAL).await.unwrap();
 
+    println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {

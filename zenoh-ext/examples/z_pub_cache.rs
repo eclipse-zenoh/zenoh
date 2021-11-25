@@ -24,14 +24,14 @@ async fn main() {
 
     let (config, key_expr, value, history, prefix) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
     print!("Declare key expression {}", key_expr);
     let expr_id = session.declare_expr(&key_expr).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Create PublicationCache on {}", expr_id);
+    println!("Creating PublicationCache on {}", expr_id);
     let mut publication_cache_builder = session.publication_cache(expr_id).history(history);
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);

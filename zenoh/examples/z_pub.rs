@@ -23,20 +23,20 @@ async fn main() {
 
     let (config, key_expr, value) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    print!("Declare key expression {}", key_expr);
+    print!("Declaring key expression '{}'...", key_expr);
     let expr_id = session.declare_expr(&key_expr).await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Declare publication on {}", expr_id);
+    println!("Declaring publication on '{}'...", expr_id);
     session.declare_publication(expr_id).await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Put Data ('{}': '{}')", expr_id, buf);
+        println!("Putting Data ('{}': '{}')...", expr_id, buf);
         session.put(expr_id, buf).await.unwrap();
     }
 }

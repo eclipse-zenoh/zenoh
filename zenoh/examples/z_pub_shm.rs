@@ -27,14 +27,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (config, path, value) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Create Shared Memory Manager");
+    println!("Creating Shared Memory Manager...");
     let id = session.id().await;
     let mut shm = SharedMemoryManager::new(id, N * 1024).unwrap();
 
-    println!("Allocate Shared Memory Buffer");
+    println!("Allocating Shared Memory Buffer...");
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {

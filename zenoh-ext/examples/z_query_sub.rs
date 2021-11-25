@@ -24,11 +24,11 @@ async fn main() {
 
     let (config, key_expr, query) = parse_args();
 
-    println!("Open session");
+    println!("Openning session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!(
-        "Create a QueryingSubscriber on {} with an initial query on {}",
+        "Creating a QueryingSubscriber on {} with an initial query on {}",
         key_expr,
         query.as_ref().unwrap_or(&key_expr)
     );
