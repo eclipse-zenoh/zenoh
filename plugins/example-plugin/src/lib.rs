@@ -13,7 +13,6 @@
 //
 #![recursion_limit = "256"]
 
-use anyhow::anyhow;
 use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
@@ -106,13 +105,11 @@ impl RunningPluginTrait for RunningPlugin {
                         guard.flag.store(false, Relaxed);
                     }
                     _ => {
-                        return Err(
-                            anyhow!("storage-selector for {} must be a string", &name).into()
-                        )
+                        bail!("storage-selector for {} must be a string", &name)
                     }
                 }
             }
-            Err(anyhow!("unknown option {} for {}", path, &name).into())
+            bail!("unknown option {} for {}", path, &name)
         })
     }
 }

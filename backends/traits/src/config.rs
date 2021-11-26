@@ -1,7 +1,8 @@
-use anyhow::{anyhow, bail, Error};
 use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
+use zenoh::Result as ZResult;
+use zenoh_util::{bail, core::Error, zerror};
 
 #[derive(Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {
@@ -61,7 +62,7 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
     type Error = Error;
     fn try_from((name, value): (S, &V)) -> Result<Self, Self::Error> {
         let value = value.as_object().ok_or_else(|| {
-            anyhow!(
+            zerror!(
                 "Configuration for plugin {} must be an object",
                 name.as_ref()
             )
@@ -70,7 +71,7 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
             .get("__required__")
             .map(|r| {
                 r.as_bool().ok_or_else(|| {
-                    anyhow!(
+                    zerror!(
                         "`__required__` field of {}'s configuration must be a boolean",
                         name.as_ref()
                     )
@@ -176,9 +177,9 @@ impl BackendConfig {
         );
         Value::Object(result)
     }
-    fn try_from<V: AsObject>(plugin_name: &str, configs: &V) -> anyhow::Result<Vec<Self>> {
+    fn try_from<V: AsObject>(plugin_name: &str, configs: &V) -> ZResult<Vec<Self>> {
         let configs = configs.as_object().ok_or_else(|| {
-            anyhow!(
+            zerror!(
                 "Configuration for plugin `{}`'s `backends` field must be an object",
                 plugin_name
             )
@@ -261,9 +262,9 @@ impl StorageConfig {
         backend_name: &str,
         storage_name: &str,
         config: &V,
-    ) -> anyhow::Result<Self> {
+    ) -> ZResult<Self> {
         let config = config.as_object().ok_or_else(|| {
-            anyhow!(
+            zerror!(
                 "`storages` field of `{}`'s `{}` backend configuration must be an array of objects",
                 plugin_name,
                 backend_name

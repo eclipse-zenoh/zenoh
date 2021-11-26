@@ -3369,7 +3369,6 @@ dependencies = [
 name = "zenoh-plugin-storages"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "async-trait",
  "clap",
@@ -3429,12 +3428,12 @@ dependencies = [
 name = "zenoh_backend_traits"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "async-trait",
  "derive_more",
  "serde_json",
  "zenoh",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -3462,7 +3461,6 @@ dependencies = [
 name = "zplugin-example"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "clap",
  "env_logger",

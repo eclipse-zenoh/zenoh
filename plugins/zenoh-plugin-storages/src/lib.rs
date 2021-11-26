@@ -142,7 +142,7 @@ impl StorageRuntimeInner {
         }
         std::mem::drop(self.backends.remove(&backend.name));
     }
-    fn spawn_backend(&mut self, backend: BackendConfig) -> anyhow::Result<()> {
+    fn spawn_backend(&mut self, backend: BackendConfig) -> ZResult<()> {
         let backend_name = backend.name.clone();
         let (backend, lib_path) = if backend_name == MEMORY_BACKEND_NAME {
             match create_memory_backend(backend) {
@@ -279,14 +279,8 @@ impl RunningPluginTrait for StorageRuntime {
         let name = { zlock!(self.0).name.clone() };
         let runtime = self.0.clone();
         Arc::new(move |_path, old, new| {
-            let old = match PluginConfig::try_from((&name, old)) {
-                Ok(v) => v,
-                Err(e) => return Err(e.into()),
-            };
-            let new = match PluginConfig::try_from((&name, new)) {
-                Ok(v) => v,
-                Err(e) => return Err(e.into()),
-            };
+            let old = PluginConfig::try_from((&name, old))?;
+            let new = PluginConfig::try_from((&name, new))?;
             let diffs = ConfigDiff::diffs(old, new);
             { zlock!(runtime).update(diffs) }?;
             Ok(None)
