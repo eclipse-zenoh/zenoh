@@ -57,17 +57,8 @@ pub use super::net::protocol::core::ExprId;
 /// A key expression.
 pub use super::net::protocol::core::KeyExpr;
 
-/// A zenoh error.
-pub use zenoh_util::core::ZError;
-
-/// The kind of zenoh error.
-pub use zenoh_util::core::ZErrorKind;
-
 /// A zenoh integer.
 pub use super::net::protocol::core::ZInt;
-
-/// A zenoh result.
-pub use zenoh_util::core::ZResult;
 
 /// A zenoh Value.
 #[derive(Clone)]
@@ -563,7 +554,7 @@ impl<'a> Selector<'a> {
     }
 
     /// Parses the `value_selector` part of this `Selector`.
-    pub fn parse_value_selector(&self) -> Result<ValueSelector<'a>, ZError> {
+    pub fn parse_value_selector(&self) -> crate::Result<ValueSelector<'a>> {
         ValueSelector::try_from(self.value_selector)
     }
 
@@ -750,9 +741,9 @@ impl fmt::Display for ValueSelector<'_> {
 }
 
 impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
-    type Error = ZError;
+    type Error = zenoh_util::core::Error;
 
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+    fn try_from(s: &'a str) -> crate::Result<Self> {
         const REGEX_PROJECTION: &str = r"[^\[\]\(\)\[\]]+";
         const REGEX_PROPERTIES: &str = ".*";
         const REGEX_FRAGMENT: &str = ".*";
@@ -775,17 +766,15 @@ impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
                 fragment: caps.name("frag").map_or("", |s| s.as_str()),
             })
         } else {
-            zerror!(ZErrorKind::InvalidSelector {
-                selector: s.to_string(),
-            })
+            bail!("invalid selector: {}", &s)
         }
     }
 }
 
 impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
-    type Error = ZError;
+    type Error = zenoh_util::core::Error;
 
-    fn try_from(s: &'a String) -> Result<Self, Self::Error> {
+    fn try_from(s: &'a String) -> crate::Result<Self> {
         ValueSelector::try_from(s.as_str())
     }
 }

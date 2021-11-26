@@ -34,9 +34,9 @@ use async_std::stream::StreamExt;
 use async_std::sync::Arc;
 use std::any::Any;
 use uhlc::HLC;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{zerror, zerror2};
+use zenoh_util::{bail, zerror};
 
 pub struct RuntimeState {
     pub pid: PeerId,
@@ -65,25 +65,17 @@ impl Runtime {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
-        config.set_version(Some(version)).map_err(|e| {
-            zerror2!(ZErrorKind::Other {
-                descr: format!("Unable to set version: {:?}", e)
-            })
-        })?;
+        config
+            .set_version(Some(version))
+            .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
             let s = s.replace('-', "");
-            let vec = hex::decode(&s).map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Invalid id: {} - {}", s, e)
-                })
-            })?;
+            let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
             let size = vec.len();
             if size > PeerId::MAX_SIZE {
-                return zerror!(ZErrorKind::Other {
-                    descr: format!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
-                });
+                bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
             }
             let mut id = [0_u8; PeerId::MAX_SIZE];
             id[..size].copy_from_slice(vec.as_slice());
@@ -204,9 +196,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                 locator: std::sync::RwLock::new(None),
                 sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
-            None => zerror!(ZErrorKind::Other {
-                descr: "Runtime not yet ready!".to_string()
-            }),
+            None => bail!("Runtime not yet ready!"),
         }
     }
 

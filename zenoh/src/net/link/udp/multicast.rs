@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link
@@ -59,9 +59,9 @@ impl LinkMulticastTrait for LinkMulticastUdp {
             IpAddr::V6(dst_ip6) => self.mcast_sock.leave_multicast_v6(&dst_ip6, 0),
         }
         .map_err(|e| {
-            let e = format!("Close error on UDP link {}: {}", self, e);
+            let e = zerror!("Close error on UDP link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
@@ -70,9 +70,9 @@ impl LinkMulticastTrait for LinkMulticastUdp {
             .send_to(buffer, self.multicast_addr)
             .await
             .map_err(|e| {
-                let e = format!("Write error on UDP link {}: {}", self, e);
+                let e = zerror!("Write error on UDP link {}: {}", self, e);
                 log::trace!("{}", e);
-                zerror2!(ZErrorKind::IoError { descr: e })
+                e.into()
             })
     }
 
@@ -87,9 +87,9 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<(usize, Locator)> {
         loop {
             let (n, addr) = (&self.mcast_sock).recv_from(buffer).await.map_err(|e| {
-                let e = format!("Read error on UDP link {}: {}", self, e);
+                let e = zerror!("Read error on UDP link {}: {}", self, e);
                 log::trace!("{}", e);
-                zerror2!(ZErrorKind::IoError { descr: e })
+                e
             })?;
 
             if self.unicast_addr == addr {
@@ -164,9 +164,9 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         macro_rules! zerrmsg {
             ($err:expr) => {{
-                let e = format!("Can not create a new UDP link bound to {}: {}", mcast_addr, $err);
+                let e = zerror!("Can not create a new UDP link bound to {}: {}", mcast_addr, $err);
                 log::warn!("{}", e);
-                zerror2!(ZErrorKind::InvalidLink { descr: e })
+                e
             }};
         }
 

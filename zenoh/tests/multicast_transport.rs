@@ -33,7 +33,7 @@ mod tests {
         TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh_util::core::ZResult;
+    use zenoh_util::core::Result as ZResult;
     use zenoh_util::properties::config::*;
     use zenoh_util::zasync_executor_init;
 

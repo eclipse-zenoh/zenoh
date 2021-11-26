@@ -8,7 +8,7 @@ pub type LoadPluginResult<A> = Result<PluginVTable<A>, PluginVTableVersion>;
 /// This number should change any time the internal structure of [`PluginVTable`] changes
 pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 1;
 
-type StartFn<StartArgs> = fn(&str, &StartArgs) -> Result<RunningPlugin, Box<dyn Error>>;
+type StartFn<StartArgs> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
 
 #[repr(C)]
 struct PluginVTableInner<StartArgs> {
@@ -65,11 +65,7 @@ impl<StartArgs> PluginVTable<StartArgs> {
         (self.inner.is_compatible_with)(others)
     }
 
-    pub fn start(
-        &self,
-        name: &str,
-        start_args: &StartArgs,
-    ) -> Result<RunningPlugin, Box<dyn Error>> {
+    pub fn start(&self, name: &str, start_args: &StartArgs) -> ZResult<RunningPlugin> {
         (self.inner.start)(name, start_args)
     }
 }

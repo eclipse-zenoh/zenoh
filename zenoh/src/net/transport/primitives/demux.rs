@@ -18,8 +18,7 @@ use super::Primitives;
 use crate::net::link::Link;
 use crate::net::transport::TransportPeerEventHandler;
 use std::any::Any;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::core::Result as ZResult;
 
 pub struct DeMux<P: Primitives> {
     primitives: P,
@@ -103,9 +102,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                         );
                     }
                     None => {
-                        return zerror!(ZErrorKind::Other {
-                            descr: "ReplyData with no replier_id".to_string()
-                        })
+                        bail!("ReplyData with no replier_id")
                     }
                 },
             },

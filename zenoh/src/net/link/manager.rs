@@ -25,8 +25,8 @@ use super::{EndPoint, LinkMulticast, LinkUnicast, Locator, LocatorProtocol};
 use crate::net::transport::TransportManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::bail;
+use zenoh_util::core::Result as ZResult;
 
 /*************************************/
 /*             UNICAST               */
@@ -82,9 +82,7 @@ impl LinkManagerBuilderMulticast {
         match protocol {
             #[cfg(feature = "transport_udp")]
             LocatorProtocol::Udp => Ok(Arc::new(LinkManagerMulticastUdp::default())),
-            _ => zerror!(ZErrorKind::InvalidLocator {
-                descr: format!("Multicast not supported for {} protocol", protocol)
-            }),
+            _ => bail!("Multicast not supported for {} protocol", protocol),
         }
     }
 }

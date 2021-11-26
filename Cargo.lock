@@ -88,9 +88,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.47"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38d9ff5d688f1c13395289f67db01d4826b46dd694e7580accdc3e8430f2d98e"
+checksum = "62e1f47f7dc0422027a4e370dd4548d4d66b26782e513e98dca1e689e058a80e"
 
 [[package]]
 name = "arrayref"
@@ -3362,13 +3362,13 @@ dependencies = [
  "tide",
  "zenoh",
  "zenoh-plugin-trait",
+ "zenoh-util",
 ]
 
 [[package]]
 name = "zenoh-plugin-storages"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "async-trait",
  "clap",
@@ -3399,6 +3399,7 @@ name = "zenoh-util"
 version = "0.5.0-dev"
 dependencies = [
  "aes 0.7.5",
+ "anyhow",
  "async-std",
  "async-trait",
  "clap",
@@ -3427,12 +3428,12 @@ dependencies = [
 name = "zenoh_backend_traits"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "async-trait",
  "derive_more",
  "serde_json",
  "zenoh",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -3460,7 +3461,6 @@ dependencies = [
 name = "zplugin-example"
 version = "0.5.0-dev"
 dependencies = [
- "anyhow",
  "async-std",
  "clap",
  "env_logger",

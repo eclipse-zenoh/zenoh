@@ -23,9 +23,9 @@ use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::LinkUnicast;
 use authenticator::AuthenticatedPeerLink;
 use std::ops::{Deref, DerefMut};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
-use zenoh_util::{zerror, zerror2};
+use zenoh_util::{bail, zerror};
 
 const WBUF_SIZE: usize = 64;
 
@@ -55,8 +55,7 @@ impl EstablishmentProperties {
 
     pub(crate) fn insert(&mut self, p: Property) -> ZResult<()> {
         if self.0.iter().any(|x| x.key == p.key) {
-            let e = format!("Property {} already exists", p.key);
-            return zerror!(ZErrorKind::Other { descr: e });
+            bail!("Property {} already exists", p.key)
         }
         self.0.push(p);
         Ok(())
@@ -72,8 +71,7 @@ impl EstablishmentProperties {
 
 pub(super) fn attachment_from_properties(ps: &EstablishmentProperties) -> ZResult<Attachment> {
     if ps.is_empty() {
-        let e = "Can not create an attachment with zero properties".to_string();
-        return zerror!(ZErrorKind::Other { descr: e });
+        bail!("Can not create an attachment with zero properties")
     }
 
     let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -84,10 +82,10 @@ pub(super) fn attachment_from_properties(ps: &EstablishmentProperties) -> ZResul
 }
 
 pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<EstablishmentProperties> {
-    let ps = att.buffer.read_properties().ok_or_else(|| {
-        let e = "Error while decoding attachment properties".to_string();
-        zerror2!(ZErrorKind::Other { descr: e })
-    })?;
+    let ps = att
+        .buffer
+        .read_properties()
+        .ok_or_else(|| zerror!("Error while decoding attachment properties"))?;
     Ok(EstablishmentProperties(ps))
 }
 
@@ -112,8 +110,7 @@ impl Cookie {
         macro_rules! zwrite {
             ($op:expr) => {
                 if !$op {
-                    let e = "Invalid Cookie".to_string();
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Invalid Cookie")
                 }
             };
         }
@@ -138,10 +135,7 @@ impl Cookie {
     ) -> ZResult<(Cookie, EstablishmentProperties)> {
         macro_rules! zread {
             ($op:expr) => {
-                $op.ok_or_else(|| {
-                    let e = "Invalid Cookie".to_string();
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                })?
+                $op.ok_or_else(|| zerror!("Invalid Cookie"))?
             };
         }
 
@@ -149,11 +143,8 @@ impl Cookie {
 
         let mut zbuf = ZBuf::from(decrypted);
 
-        let whatami = WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidMessage {
-                descr: "Invalid Cookie".to_string()
-            })
-        })?;
+        let whatami =
+            WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| zerror!("Invalid Cookie"))?;
         let pid = zread!(zbuf.read_peeexpr_id());
         let sn_resolution = zread!(zbuf.read_zint());
         let is_qos = zread!(zbuf.read()) == 1;

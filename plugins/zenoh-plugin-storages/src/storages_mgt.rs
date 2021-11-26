@@ -23,6 +23,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget, Target};
 use zenoh::queryable;
 use zenoh::Session;
 use zenoh_backend_traits::Query;
+use zenoh_util::core::Result as ZResult;
 
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,

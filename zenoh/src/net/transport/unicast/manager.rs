@@ -264,21 +264,20 @@ impl TransportManager {
     fn get_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
         match zlock!(self.state.unicast.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
-            None => zerror!(ZErrorKind::InvalidLocator {
-                descr: format!(
-                    "Can not get the link manager for protocol ({}) because it has not been found",
-                    protocol
-                )
-            }),
+            None => bail!(
+                "Can not get the link manager for protocol ({}) because it has not been found",
+                protocol
+            ),
         }
     }
 
     fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
         match zlock!(self.state.unicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
-            None => zerror!(ZErrorKind::InvalidLocator {
-                descr: format!("Can not delete the link manager for protocol ({}) because it has not been found.", protocol)
-            })
+            None => bail!(
+                "Can not delete the link manager for protocol ({}) because it has not been found.",
+                protocol
+            ),
         }
     }
 
@@ -345,30 +344,34 @@ impl TransportManager {
         // First verify if the transport already exists
         if let Some(transport) = guard.get(&config.peer) {
             if transport.whatami != config.whatami {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
-                    config.peer, config.whatami, transport.whatami
+                    config.peer,
+                    config.whatami,
+                    transport.whatami
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             if transport.sn_resolution != config.sn_resolution {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
                     config.peer, config.sn_resolution, transport.sn_resolution
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             if transport.is_shm != config.is_shm {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    config.peer, config.is_shm, transport.is_shm
+                    config.peer,
+                    config.is_shm,
+                    transport.is_shm
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             return Ok(transport.into());
@@ -376,12 +379,13 @@ impl TransportManager {
 
         // Then verify that we haven't reached the transport number limit
         if guard.len() >= self.config.unicast.max_sessions {
-            let e = format!(
+            let e = zerror!(
                 "Max transports reached ({}). Denying new transport with peer: {}",
-                self.config.unicast.max_sessions, config.peer
+                self.config.unicast.max_sessions,
+                config.peer
             );
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other { descr: e });
+            return Err(e.into());
         }
 
         // Create the transport transport
@@ -421,12 +425,10 @@ impl TransportManager {
         mut endpoint: EndPoint,
     ) -> ZResult<TransportUnicast> {
         if endpoint.locator.address.is_multicast() {
-            return zerror!(ZErrorKind::InvalidLocator {
-                descr: format!(
-                    "Can not open a unicast transport with a multicast endpoint: {}.",
-                    endpoint
-                )
-            });
+            bail!(
+                "Can not open a unicast transport with a multicast endpoint: {}.",
+                endpoint
+            )
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
@@ -473,9 +475,9 @@ impl TransportManager {
         let _ = zlock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
-                let e = format!("Can not delete the transport of peer: {}", peer);
+                let e = zerror!("Can not delete the transport of peer: {}", peer);
                 log::trace!("{}", e);
-                zerror2!(ZErrorKind::Other { descr: e })
+                e
             })?;
 
         for pa in self.config.unicast.peer_authenticator.iter() {

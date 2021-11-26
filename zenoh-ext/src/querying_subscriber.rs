@@ -18,13 +18,14 @@ use futures_lite::StreamExt;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use zenoh::prelude::*;
+use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};
 use zenoh::queryable::STORAGE;
 use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
+use zenoh::Result as ZResult;
 use zenoh::Session;
 use zenoh_util::{zread, zwrite};
 

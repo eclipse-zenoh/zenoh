@@ -21,7 +21,7 @@ use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::hmac;
 use zenoh_util::properties::Properties;
 use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
@@ -183,11 +183,9 @@ impl UserPasswordAuthenticator {
 
         let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         if let Some(dict) = c.dictionary_file() {
-            let content = fs::read_to_string(dict).await.map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("Invalid user-password dictionary file: {}", e)
-                })
-            })?;
+            let content = fs::read_to_string(dict)
+                .await
+                .map_err(|e| zerror!("Invalid user-password dictionary file: {}", e))?;
             // Populate the user-password dictionary
             let mut ps = Properties::from(content);
             for (user, password) in ps.drain() {
@@ -247,25 +245,15 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
         let mut zbuf: ZBuf = match property {
             Some(p) => p.into(),
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitSyn with no attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitSyn with no attachment on link: {}", link),
         };
         let init_syn_property = match zbuf.read_init_syn_property_usrpwd() {
             Some(isa) => isa,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitSyn with invalid attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitSyn with invalid attachment on link: {}", link),
         };
 
         if init_syn_property.version > USRPWD_VERSION {
-            return zerror!(ZErrorKind::InvalidMessage {
-                descr: format!("Rejected InitSyn with invalid attachment on link: {}", link),
-            });
+            bail!("Rejected InitSyn with invalid attachment on link: {}", link)
         }
 
         // Create the InitAck attachment
@@ -295,19 +283,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         let mut zbuf: ZBuf = match property {
             Some(p) => p.into(),
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitAck with no attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitAck with no attachment on link: {}", link),
         };
         let init_ack_property = match zbuf.read_init_ack_property_usrpwd() {
             Some(isa) => isa,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitAck with invalid attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitAck with invalid attachment on link: {}", link),
         };
 
         // Create the HMAC of the password using the nonce received as a key (it's a challenge)
@@ -335,36 +315,22 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         let (attachment, _cookie) = property;
         let mut zbuf: ZBuf = match attachment {
             Some(p) => p.into(),
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received OpenSyn with no attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received OpenSyn with no attachment on link: {}", link),
         };
         let open_syn_property = match zbuf.read_open_syn_property_usrpwd() {
             Some(osp) => osp,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitAck with invalid attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitAck with invalid attachment on link: {}", link),
         };
         let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
             Some(password) => password.clone(),
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received OpenSyn with invalid user on link: {}", link),
-                });
-            }
+            None => bail!("Received OpenSyn with invalid user on link: {}", link),
         };
 
         // Create the HMAC of the password using the nonce received as challenge
         let key = cookie.nonce.to_le_bytes();
         let hmac = hmac::sign(&key, &password)?;
         if hmac != open_syn_property.hmac {
-            return zerror!(ZErrorKind::InvalidMessage {
-                descr: format!("Received OpenSyn with invalid password on link: {}", link),
-            });
+            bail!("Received OpenSyn with invalid password on link: {}", link)
         }
 
         // Check PID validity
@@ -374,9 +340,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 if open_syn_property.user != auth.credentials.user
                     || password != auth.credentials.password
                 {
-                    return zerror!(ZErrorKind::InvalidMessage {
-                        descr: format!("Received OpenSyn with invalid password on link: {}", link),
-                    });
+                    bail!("Received OpenSyn with invalid password on link: {}", link)
                 }
                 auth.links.insert((link.src.clone(), link.dst.clone()));
             }

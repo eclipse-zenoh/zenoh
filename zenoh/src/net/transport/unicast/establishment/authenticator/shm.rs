@@ -24,7 +24,8 @@ use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::zresult::ShmError;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
 use zenoh_util::zcheck;
 
@@ -161,19 +162,11 @@ impl SharedMemoryAuthenticator {
             let challenge = prng.gen::<ZInt>();
 
             let mut _manager =
-                SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).map_err(
-                    |e| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: e.to_string()
-                        })
-                    },
-                )?;
+                SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
 
-            let mut buffer = _manager.alloc(SHM_SIZE).ok_or_else(|| {
-                zerror2!(ZErrorKind::Other {
-                    descr: format!("unable to allocate shm segment of size {}", SHM_SIZE)
-                })
-            })?;
+            let mut buffer = _manager
+                .alloc(SHM_SIZE)
+                .ok_or_else(|| zerror!("unable to allocate shm segment of size {}", SHM_SIZE))?;
             let slice = unsafe { buffer.as_mut_slice() };
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
@@ -236,17 +229,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
         let mut init_syn_property = match zbuf.read_init_syn_property_shm() {
             Some(isa) => isa,
-            None => {
-                return zerror!(ZErrorKind::InvalidMessage {
-                    descr: format!("Received InitSyn with invalid attachment on link: {}", link),
-                });
-            }
+            None => bail!("Received InitSyn with invalid attachment on link: {}", link),
         };
 
         if init_syn_property.version > SHM_VERSION {
-            return zerror!(ZErrorKind::InvalidMessage {
-                descr: format!("Rejected InitSyn with invalid attachment on link: {}", link),
-            });
+            bail!("Rejected InitSyn with invalid attachment on link: {}", link)
         }
 
         // Try to read from the shared memory
@@ -303,35 +290,26 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
 
-        let mut init_ack_property = zbuf.read_init_ack_property_shm().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidMessage {
-                descr: format!("Received InitAck with invalid attachment on link: {}", link),
-            })
-        })?;
+        let mut init_ack_property = zbuf
+            .read_init_ack_property_shm()
+            .ok_or_else(|| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
 
         // Try to read from the shared memory
         match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
             Ok(res) => {
                 if !res {
-                    return zerror!(ZErrorKind::SharedMemory {
-                        descr: format!("No SHM on link: {}", link),
-                    });
+                    return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
                 }
             }
-            Err(e) => {
-                return zerror!(ZErrorKind::SharedMemory {
-                    descr: format!("No SHM on link {}: {}", link, e),
-                })
-            }
+            Err(e) => return Err(ShmError(zerror!("No SHM on link {}: {}", link, e)).into()),
         }
 
         let bytes: [u8; SHM_SIZE] = init_ack_property.shm.as_slice().try_into().map_err(|e| {
-            zerror2!(ZErrorKind::InvalidMessage {
-                descr: format!(
-                    "Received InitAck with invalid attachment on link {}: {}",
-                    link, e
-                ),
-            })
+            zerror!(
+                "Received InitAck with invalid attachment on link {}: {}",
+                link,
+                e
+            )
         })?;
         let challenge = ZInt::from_le_bytes(bytes);
 
@@ -345,9 +323,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
             Ok(Some(attachment.to_vec()))
         } else {
-            zerror!(ZErrorKind::SharedMemory {
-                descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
-            })
+            Err(ShmError(zerror!(
+                "Received OpenSyn with invalid attachment on link: {}",
+                link
+            ))
+            .into())
         }
     }
 
@@ -365,18 +345,18 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
                 return Ok(None);
             }
         };
-        let open_syn_property = zbuf.read_open_syn_property_shm().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidMessage {
-                descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
-            })
-        })?;
+        let open_syn_property = zbuf
+            .read_open_syn_property_shm()
+            .ok_or_else(|| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
 
         if open_syn_property.challenge == self.challenge {
             Ok(None)
         } else {
-            zerror!(ZErrorKind::SharedMemory {
-                descr: format!("Received OpenSyn with invalid attachment on link: {}", link),
-            })
+            Err(ShmError(zerror!(
+                "Received OpenSyn with invalid attachment on link: {}",
+                link
+            ))
+            .into())
         }
     }
 

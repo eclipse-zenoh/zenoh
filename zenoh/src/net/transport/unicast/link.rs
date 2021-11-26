@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_util::collections::RecyclingObjectPool;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
@@ -216,10 +216,7 @@ async fn tx_task(
             .write_all(b.as_bytes())
             .timeout(keep_alive)
             .await
-            .map_err(|_| {
-                let e = format!("{}: flush failed after {} ms", link, keep_alive.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
+            .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
 
         #[cfg(feature = "stats")]
         {
@@ -276,16 +273,11 @@ async fn rx_task_stream(
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
-            .map_err(|_| {
-                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         match action {
             Action::Read(n) => {
-                let zs = ZSlice::make(buffer.into(), 0, n).map_err(|_| {
-                    let e = format!("{}: decoding error", link);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
+                let zs = ZSlice::make(buffer.into(), 0, n)
+                    .map_err(|_| zerror!("{}: decoding error", link))?;
                 zbuf.add_zslice(zs);
 
                 #[cfg(feature = "stats")]
@@ -300,8 +292,7 @@ async fn rx_task_stream(
                             transport.receive_message(msg, &link)?
                         }
                         None => {
-                            let e = format!("{}: decoding error", link);
-                            return zerror!(ZErrorKind::IoError { descr: e });
+                            bail!("{}: decoding error", link);
                         }
                     }
                 }
@@ -352,26 +343,20 @@ async fn rx_task_dgram(
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
-            .map_err(|_| {
-                let e = format!("{}: expired after {} milliseconds", link, lease.as_millis());
-                zerror2!(ZErrorKind::IoError { descr: e })
-            })??;
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         match action {
             Action::Read(n) => {
                 if n == 0 {
                     // Reading 0 bytes means error
-                    let e = format!("{}: zero bytes reading", link);
-                    return zerror!(ZErrorKind::IoError { descr: e });
+                    bail!("{}: zero bytes reading", link)
                 }
 
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(n);
 
                 // Add the received bytes to the ZBuf for deserialization
-                let zs = ZSlice::make(buffer.into(), 0, n).map_err(|_| {
-                    let e = format!("{}: decoding error", link);
-                    zerror2!(ZErrorKind::IoError { descr: e })
-                })?;
+                let zs = ZSlice::make(buffer.into(), 0, n)
+                    .map_err(|_| zerror!("{}: decoding error", link))?;
                 zbuf.add_zslice(zs);
 
                 // Deserialize all the messages from the current ZBuf
@@ -384,8 +369,7 @@ async fn rx_task_dgram(
                             transport.receive_message(msg, &link)?
                         }
                         None => {
-                            let e = format!("{}: decoding error", link);
-                            return zerror!(ZErrorKind::IoError { descr: e });
+                            bail!("{}: decoding error", link)
                         }
                     }
                 }

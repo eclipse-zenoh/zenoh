@@ -2,8 +2,8 @@ use crate::vtable::*;
 use crate::*;
 use libloading::Library;
 use std::path::PathBuf;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror, LibLoader};
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::{bail, LibLoader};
 
 type Compats = (Vec<PluginId>, Vec<Option<Incompatibility>>);
 
@@ -231,14 +231,17 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
         paths: &[P],
     ) -> ZResult<()> {
         for path in paths {
-            if let Ok((lib, p)) = unsafe { LibLoader::load_file(path.as_ref()) } {
-                self.dynamic_plugins.push(
-                    DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)))
+            let path = path.as_ref();
+            match unsafe { LibLoader::load_file(path) } {
+                Ok((lib, p)) => {
+                    self.dynamic_plugins.push(
+                        DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)));
+                    return Ok(());
+                }
+                Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
         }
-        zerror!(ZErrorKind::Other {
-            descr: format!("Plugin '{}' not found in {:?}", name, &paths)
-        })
+        bail!("Plugin '{}' not found in {:?}", name, &paths)
     }
     pub fn search_and_load_plugins(mut self, prefix: Option<&str>) -> Self {
         let libs = unsafe { self.loader.load_all_with_prefix(prefix) };
@@ -383,7 +386,7 @@ impl<StartArgs> DynamicPlugin<StartArgs> {
         self.vtable.is_compatible_with(others)
     }
 
-    fn start(&self, args: &StartArgs) -> Result<RunningPlugin, Box<dyn Error>> {
+    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         self.vtable.start(&self.name, args)
     }
 }

@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::PseudoRng;
-use crate::core::{ZError, ZErrorKind, ZResult};
-use crate::zerror;
+use crate::bail;
+use crate::core::Result as ZResult;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::NewBlockCipher;
 use aes::{Aes128, BlockDecrypt, BlockEncrypt};
@@ -52,8 +52,7 @@ impl BlockCipher {
 
     pub fn decrypt(&self, mut bytes: Vec<u8>) -> ZResult<Vec<u8>> {
         if bytes.len() % Self::BLOCK_SIZE != 0 {
-            let e = format!("Invalid bytes lenght to decode: {}", bytes.len());
-            return zerror!(ZErrorKind::Other { descr: e });
+            bail!("Invalid bytes lenght to decode: {}", bytes.len());
         }
 
         let mut start: usize = 0;

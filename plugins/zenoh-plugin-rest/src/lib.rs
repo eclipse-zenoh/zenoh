@@ -24,6 +24,7 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
 use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
+use zenoh_util::{bail, core::Result as ZResult};
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -153,17 +154,12 @@ impl Plugin for RestPlugin {
     type StartArgs = Runtime;
     const STATIC_NAME: &'static str = "rest";
 
-    fn start(
-        name: &str,
-        runtime: &Self::StartArgs,
-    ) -> Result<Box<dyn RunningPluginTrait>, Box<dyn std::error::Error>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
         let config = runtime.config.lock();
         let self_cfg: &serde_json::Value = match config.plugin(name) {
             Some(value) => value,
             None => {
-                return Err(Box::new(StringError {
-                    err: format!("No configuration found for plugin '{}'", name),
-                }))
+                bail!("No configuration found for plugin '{}'", name)
             }
         };
         if let Some(port) = self_cfg.as_object().unwrap().get("port") {

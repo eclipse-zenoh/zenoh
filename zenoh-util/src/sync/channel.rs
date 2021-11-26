@@ -118,22 +118,22 @@ macro_rules! zreceiver{
 
         impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
-            fn recv(&self) -> Result<$recv_type, RecvError> {
+            fn recv(&self) -> core::result::Result<$recv_type, RecvError> {
                 self.receiver.recv()
             }
 
             #[inline(always)]
-            fn try_recv(&self) -> Result<$recv_type, TryRecvError> {
+            fn try_recv(&self) -> core::result::Result<$recv_type, TryRecvError> {
                 self.receiver.try_recv()
             }
 
             #[inline(always)]
-            fn recv_timeout(&self, timeout: std::time::Duration) -> Result<$recv_type, RecvTimeoutError> {
+            fn recv_timeout(&self, timeout: std::time::Duration) -> core::result::Result<$recv_type, RecvTimeoutError> {
                 self.receiver.recv_timeout(timeout)
             }
 
             #[inline(always)]
-            fn recv_deadline(&self, deadline: std::time::Instant) -> Result<$recv_type, RecvTimeoutError> {
+            fn recv_deadline(&self, deadline: std::time::Instant) -> core::result::Result<$recv_type, RecvTimeoutError> {
                 self.receiver.recv_deadline(deadline)
             }
         }

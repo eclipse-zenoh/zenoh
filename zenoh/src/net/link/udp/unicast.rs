@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::{Mvar, Signal};
 use zenoh_util::{zasynclock, zerror};
 
@@ -39,19 +39,17 @@ struct LinkUnicastUdpConnected {
 
 impl LinkUnicastUdpConnected {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        (&self.socket).recv(buffer).await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })
+        (&self.socket)
+            .recv(buffer)
+            .await
+            .map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        (&self.socket).send(buffer).await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })
+        (&self.socket)
+            .send(buffer)
+            .await
+            .map_err(|e| zerror!(e).into())
     }
 
     async fn close(&self) -> ZResult<()> {
@@ -97,14 +95,11 @@ impl LinkUnicastUdpUnconnected {
 
     async fn write(&self, buffer: &[u8], dst_addr: SocketAddr) -> ZResult<usize> {
         match self.socket.upgrade() {
-            Some(socket) => socket.send_to(buffer, &dst_addr).await.map_err(|e| {
-                zerror2!(ZErrorKind::IoError {
-                    descr: e.to_string()
-                })
-            }),
-            None => zerror!(ZErrorKind::IoError {
-                descr: "UDP listener has been dropped".to_string()
-            }),
+            Some(socket) => socket
+                .send_to(buffer, &dst_addr)
+                .await
+                .map_err(|e| zerror!(e).into()),
+            None => bail!("UDP listener has been dropped"),
         }
     }
 
@@ -288,29 +283,29 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             UdpSocket::bind(":::0").await
         }
         .map_err(|e| {
-            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Connect the socket to the remote address
         socket.connect(dst_addr).await.map_err(|e| {
-            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Get source and destination UDP addresses
         let src_addr = socket.local_addr().map_err(|e| {
-            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         let dst_addr = socket.peer_addr().map_err(|e| {
-            let e = format!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
+            let e = zerror!("Can not create a new UDP link bound to {}: {}", dst_addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Create UDP link
@@ -330,15 +325,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
-            let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
+            let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         let local_addr = socket.local_addr().map_err(|e| {
-            let e = format!("Can not create a new UDP listener on {}: {}", addr, e);
+            let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Update the endpoint locator address
@@ -373,12 +368,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = format!(
+            let e = zerror!(
                 "Can not delete the UDP listener because it has not been found: {}",
                 addr
             );
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Send the stop signal
@@ -476,11 +471,7 @@ async fn accept_read_task(
     }
 
     async fn receive(socket: Arc<UdpSocket>, buffer: &mut [u8]) -> ZResult<Action> {
-        let res = socket.recv_from(buffer).await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })?;
+        let res = socket.recv_from(buffer).await.map_err(|e| zerror!(e))?;
         Ok(Action::Receive(res))
     }
 
@@ -490,9 +481,9 @@ async fn accept_read_task(
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
-        let e = format!("Can not accept UDP connections: {}", e);
+        let e = zerror!("Can not accept UDP connections: {}", e);
         log::warn!("{}", e);
-        zerror2!(ZErrorKind::IoError { descr: e })
+        e
     })?;
 
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);

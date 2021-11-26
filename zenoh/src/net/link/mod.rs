@@ -34,7 +34,7 @@ use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 
 const WBUF_SIZE: usize = 64;
 
@@ -169,8 +169,7 @@ impl LinkUnicast {
             match zbuf.read_transport_message() {
                 Some(msg) => messages.push(msg),
                 None => {
-                    let e = format!("Decoding error on link: {}", self);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Invalid Message: Decoding error on link: {}", self);
                 }
             }
         }

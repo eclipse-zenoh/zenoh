@@ -13,9 +13,10 @@
 //
 use super::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
+use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -28,19 +29,16 @@ pub(super) async fn get_tcp_addr(address: &LocatorAddress) -> ZResult<SocketAddr
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TCP locator address: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        bail!("Couldn't resolve TCP locator address: {}", addr);
                     }
                 }
                 Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
+                    bail!("{}: {}", e, addr);
                 }
             },
         },
         _ => {
-            let e = format!("Not a TCP locator address: {}", address);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            bail!("Not a TCP locator address: {}", address);
         }
     }
 }
@@ -58,7 +56,7 @@ impl LocatorTcp {
 }
 
 impl FromStr for LocatorTcp {
-    type Err = ZError;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {

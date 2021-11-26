@@ -15,4 +15,5 @@ pub mod macros;
 pub use macros::*;
 
 pub mod zresult;
-pub use zresult::*;
+pub use zresult::BoxedStdErr as Error;
+pub use zresult::ZResult as Result;

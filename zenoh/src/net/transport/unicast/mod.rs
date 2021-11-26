@@ -30,8 +30,8 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
 
 /*************************************/
 /*              STATS                */
@@ -95,11 +95,9 @@ pub struct TransportUnicast(Weak<TransportUnicastInner>);
 impl TransportUnicast {
     #[inline(always)]
     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
-        self.0.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport unicast closed".to_string()
-            })
-        })
+        self.0
+            .upgrade()
+            .ok_or_else(|| zerror!("Transport unicast closed").into())
     }
 
     #[inline(always)]
@@ -178,11 +176,7 @@ impl TransportUnicast {
             .get_links()
             .into_iter()
             .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
-            .ok_or_else(|| {
-                zerror2!(ZErrorKind::InvalidLink {
-                    descr: "Invalid link".to_string()
-                })
-            })?;
+            .ok_or_else(|| zerror!("Invalid link"))?;
         transport
             .close_link(&link, tmsg::close_reason::GENERIC)
             .await?;

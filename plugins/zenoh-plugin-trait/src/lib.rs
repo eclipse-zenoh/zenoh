@@ -23,6 +23,7 @@ use std::error::Error;
 use std::sync::Arc;
 pub mod loading;
 pub mod vtable;
+use zenoh_util::core::Result as ZResult;
 
 pub mod prelude {
     pub use crate::{loading::*, vtable::*, Plugin};
@@ -96,7 +97,7 @@ pub trait Plugin: Sized + 'static {
     }
 
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> Result<RunningPlugin, Box<dyn Error>>;
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<RunningPlugin>;
 }
 
 pub type RunningPlugin = Box<dyn RunningPluginTrait>;
@@ -105,8 +106,7 @@ pub type ValidationFunction = Arc<
             &str,
             &serde_json::Map<String, serde_json::Value>,
             &serde_json::Map<String, serde_json::Value>,
-        )
-            -> Result<Option<serde_json::Map<String, serde_json::Value>>, Box<dyn std::error::Error>>
+        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
         + Send
         + Sync,
 >;

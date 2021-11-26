@@ -33,6 +33,7 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 zenoh-macros = { path = "../zenoh-macros" }
 aes = "0.7.4"
+anyhow = "1.0.48"
 async-std = { version = "=1.9.0", features = ["unstable"] }
 async-trait = "0.1.42"
 clap = "2.33.3"
@@ -41,7 +42,7 @@ flume = "0.10.5"
 futures = "0.3.12"
 futures-lite = "1.11.3"
 hex = "0.4.2"
-hmac = "0.11.0"
+hmac = { version = "0.11.0", features = ["std"] }
 home = "0.5.3"
 humantime = "2.1.0"
 lazy_static = "1.4.0"

@@ -95,7 +95,7 @@ impl<'a> Writer<'a> {
 }
 
 impl Runnable for Writer<'_> {
-    type Output = ZResult<()>;
+    type Output = zenoh_util::core::Result<()>;
 
     fn run(&mut self) -> Self::Output {
         log::trace!("write({:?}, [...])", self.key_expr);

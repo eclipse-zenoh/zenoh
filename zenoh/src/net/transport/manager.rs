@@ -33,7 +33,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::{config::*, Properties};
 use zenoh_util::zparse;
@@ -44,7 +44,7 @@ use zenoh_util::zparse;
 /// use std::time::Duration;
 /// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
 /// use zenoh::net::transport::*;
-/// use zenoh_util::core::ZResult;
+/// use zenoh::Result as ZResult;
 ///
 /// // Create my transport handler to be notified when a new transport is initiated with me
 /// #[derive(Default)]

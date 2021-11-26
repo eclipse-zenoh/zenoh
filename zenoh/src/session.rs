@@ -40,7 +40,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::zpinbox;
 
 zconfigurable! {
@@ -120,9 +120,7 @@ impl SessionState {
     fn localid_to_expr(&self, id: &ExprId) -> ZResult<String> {
         match self.local_resources.get(id) {
             Some(res) => Ok(res.name.clone()),
-            None => zerror!(ZErrorKind::UnkownExprId {
-                id: format!("{}", id)
-            }),
+            None => bail!("{}", id),
         }
     }
 
@@ -213,13 +211,11 @@ impl Session {
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
         debug!("Zenoh Rust API {}", GIT_VERSION);
-        zpinbox(async {
+        zpinbox(async move {
             let config: Config = match config.try_into() {
                 Ok(c) => c,
                 Err(e) => {
-                    return zerror!(ZErrorKind::Other {
-                        descr: format!("invalid configuration {:?}", &e)
-                    })
+                    bail!("invalid configuration {:?}", &e)
                 }
             };
             debug!("Config: {:?}", &config);
@@ -606,9 +602,7 @@ impl Session {
                 };
                 Ok(())
             } else {
-                zerror!(ZErrorKind::Other {
-                    descr: "Unable to find publication".into()
-                })
+                bail!("Unable to find publication")
             }
         }))
     }
@@ -815,9 +809,7 @@ impl Session {
             }
             Ok(())
         } else {
-            zerror!(ZErrorKind::Other {
-                descr: "Unable to find subscriber".into()
-            })
+            Err(zerror!("Unable to find subscriber").into())
         })
     }
 
@@ -945,9 +937,7 @@ impl Session {
             }
             Ok(())
         } else {
-            zerror!(ZErrorKind::Other {
-                descr: "Unable to find queryable".into()
-            })
+            Err(zerror!("Unable to find queryable").into())
         })
     }
 

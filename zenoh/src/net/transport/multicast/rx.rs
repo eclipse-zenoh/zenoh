@@ -21,8 +21,8 @@ use super::protocol::proto::{
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
 use std::sync::MutexGuard;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -100,11 +100,11 @@ impl TransportMulticastInner {
                 if is_final {
                     // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!(
+                        zerror!(
                             "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.pid, self.locator
-                        );
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                            self.manager.config.pid,
+                            self.locator
+                        )
                     })?;
                     self.trigger_callback(msg, peer)
                 } else {
@@ -185,11 +185,13 @@ impl TransportMulticastInner {
                         } else if channel.priority == Priority::default() {
                             &peer.conduit_rx[0]
                         } else {
-                            let e = format!(
+                            bail!(
                                 "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.pid, self.locator, channel.priority, locator
+                                self.manager.config.pid,
+                                self.locator,
+                                channel.priority,
+                                locator
                             );
-                            return zerror!(ZErrorKind::InvalidMessage { descr: e });
                         };
 
                         let guard = match channel.reliability {

@@ -28,7 +28,7 @@ use zenoh::net::transport::{
     TransportMulticast, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     TransportUnicast,
 };
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 

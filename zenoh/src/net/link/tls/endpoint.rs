@@ -17,12 +17,13 @@ use crate::config::Config;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
+use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::{ZN_FALSE, ZN_TRUE};
 use zenoh_util::properties::Properties;
-use zenoh_util::{zerror, zerror2};
+use zenoh_util::{bail, zerror};
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_tls_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {
@@ -34,19 +35,16 @@ pub(super) async fn get_tls_addr(address: &LocatorAddress) -> ZResult<SocketAddr
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve TLS locator address: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        bail!("Couldn't resolve TLS locator address: {}", addr);
                     }
                 }
                 Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
+                    bail!("{}: {}", e, addr);
                 }
             },
         },
         _ => {
-            let e = format!("Not a TLS locator address: {}", address);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            bail!("Not a TLS locator address: {}", address);
         }
     }
 }
@@ -56,8 +54,7 @@ pub(super) async fn get_tls_dns(address: &LocatorAddress) -> ZResult<DNSName> {
     match &address {
         LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => {
-                let e = format!("Couldn't get domain from SocketAddr: {}", addr);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
+                bail!("Couldn't get domain from SocketAddr: {}", addr);
             }
             LocatorTls::DnsName(addr) => {
                 // Separate the domain from the port.
@@ -65,22 +62,17 @@ pub(super) async fn get_tls_dns(address: &LocatorAddress) -> ZResult<DNSName> {
                 let split: Vec<&str> = addr.split(':').collect();
                 match split.get(0) {
                     Some(dom) => {
-                        let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| {
-                            let e = e.to_string();
-                            zerror2!(ZErrorKind::InvalidLocator { descr: e })
-                        })?;
+                        let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| zerror!(e))?;
                         Ok(domain.to_owned())
                     }
                     None => {
-                        let e = format!("Couldn't get domain for: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        bail!("Couldn't get domain for: {}", addr);
                     }
                 }
             }
         },
         _ => {
-            let e = format!("Not a TLS locator address: {}", address);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            bail!("Not a TLS locator address: {}", address);
         }
     }
 }
@@ -98,7 +90,7 @@ impl LocatorTls {
 }
 
 impl FromStr for LocatorTls {
-    type Err = ZError;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {

@@ -22,8 +22,8 @@ use super::transport::TransportUnicastInner;
 use crate::net::link::LinkUnicast;
 use async_std::task;
 use std::sync::MutexGuard;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror2, zread};
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::{zerror, zread};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -146,8 +146,7 @@ impl TransportUnicastInner {
                 if is_final {
                     // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!("Transport: {}. Defragmentation error.", self.pid);
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                        zerror!("Transport: {}. Defragmentation error.", self.pid)
                     })?;
                     self.trigger_callback(msg)
                 } else {
@@ -177,11 +176,11 @@ impl TransportUnicastInner {
                 } else if channel.priority == Priority::default() {
                     &self.conduit_rx[0]
                 } else {
-                    let e = format!(
+                    bail!(
                         "Transport: {}. Unknown conduit: {:?}.",
-                        self.pid, channel.priority
+                        self.pid,
+                        channel.priority
                     );
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
                 };
 
                 match channel.reliability {
