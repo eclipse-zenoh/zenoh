@@ -84,9 +84,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                err_code => zerror!(ZErrorKind::IoError {
-                    descr: format!("setsockopt returned {}", err_code)
-                }),
+                err_code => bail!("setsockopt returned {}", err_code),
             }
         }
     }
@@ -142,9 +140,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
             }
 
             if ret != 0 {
-                return zerror!(ZErrorKind::IoError {
-                    descr: format!("GetAdaptersAddresses returned {}", ret)
-                });
+                bail!("GetAdaptersAddresses returned {}", ret)
             }
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
@@ -247,9 +243,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             }
 
             if ret != 0 {
-                return zerror!(ZErrorKind::IoError {
-                    descr: format!("GetAdaptersAddresses returned {}", ret)
-                });
+                bail!("GetAdaptersAddresses returned {}", ret)
             }
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
@@ -343,9 +337,7 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
             }
 
             if ret != 0 {
-                return zerror!(ZErrorKind::IoError {
-                    descr: format!("GetAdaptersAddresses returned {}", ret)
-                });
+                bail!("GetAdaptersAddresses returned {}", ret);
             }
 
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
