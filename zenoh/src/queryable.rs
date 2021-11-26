@@ -74,7 +74,7 @@ impl Query {
 
     /// Tries sending a reply to this Query.
     #[inline(always)]
-    pub fn try_reply(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
+    pub fn try_reply(&self, msg: Sample) -> core::result::Result<(), TrySendError<Sample>> {
         self.replies_sender.try_send(msg)
     }
 
@@ -213,7 +213,7 @@ impl Queryable<'_> {
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(mut self) -> impl ZFuture<Output = crate::Result<()>> {
         self.alive = false;
         self.session.close_queryable(self.state.id)
     }
@@ -251,7 +251,7 @@ impl RepliesSender {
 
     /// Attempt to send a reply. If the channel is full, an error is returned.
     #[inline(always)]
-    pub fn try_send(&self, msg: Sample) -> Result<(), TrySendError<Sample>> {
+    pub fn try_send(&self, msg: Sample) -> core::result::Result<(), TrySendError<Sample>> {
         match self.sender.try_send((self.kind, msg)) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(sample)) => Err(TrySendError::Full(sample.1)),
@@ -346,7 +346,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
 }
 
 impl<'a> Runnable for QueryableBuilder<'a, '_> {
-    type Output = ZResult<Queryable<'a>>;
+    type Output = crate::Result<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
         log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);

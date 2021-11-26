@@ -2,8 +2,8 @@ use crate::vtable::*;
 use crate::*;
 use libloading::Library;
 use std::path::PathBuf;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror, LibLoader};
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::{bail, LibLoader};
 
 type Compats = (Vec<PluginId>, Vec<Option<Incompatibility>>);
 
@@ -241,9 +241,7 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
                 Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
         }
-        zerror!(ZErrorKind::Other {
-            descr: format!("Plugin '{}' not found in {:?}", name, &paths)
-        })
+        bail!("Plugin '{}' not found in {:?}", name, &paths)
     }
     pub fn search_and_load_plugins(mut self, prefix: Option<&str>) -> Self {
         let libs = unsafe { self.loader.load_all_with_prefix(prefix) };
@@ -388,7 +386,7 @@ impl<StartArgs> DynamicPlugin<StartArgs> {
         self.vtable.is_compatible_with(others)
     }
 
-    fn start(&self, args: &StartArgs) -> Result<RunningPlugin, Box<dyn Error>> {
+    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         self.vtable.start(&self.name, args)
     }
 }

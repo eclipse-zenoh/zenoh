@@ -13,7 +13,6 @@
 //
 #![recursion_limit = "512"]
 
-use anyhow::{anyhow, bail};
 use async_std::channel::Sender;
 use async_std::sync::Arc;
 use futures::StreamExt;
@@ -33,9 +32,10 @@ use zenoh_backend_traits::{config::*, Backend};
 use zenoh_plugin_trait::prelude::*;
 use zenoh_plugin_trait::RunningPluginTrait;
 use zenoh_plugin_trait::ValidationFunction;
-use zenoh_util::zlock;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::LibLoader;
 use zenoh_util::LIB_SUFFIX;
+use zenoh_util::{bail, zerror, zlock};
 
 mod backends_mgt;
 use backends_mgt::*;
@@ -54,10 +54,7 @@ impl Plugin for StoragesPlugin {
 
     type StartArgs = Runtime;
 
-    fn start(
-        name: &str,
-        runtime: &Self::StartArgs,
-    ) -> Result<Box<dyn RunningPluginTrait>, Box<dyn std::error::Error>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
         std::mem::drop(env_logger::try_init());
         let config =
             { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
@@ -83,7 +80,7 @@ impl StorageRuntimeInner {
             &self.runtime.pid, &self.name
         )
     }
-    fn new(runtime: Runtime, config: PluginConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -110,10 +107,7 @@ impl StorageRuntimeInner {
         new_self.update(backends.into_iter().map(ConfigDiff::AddBackend))?;
         Ok(new_self)
     }
-    fn update<I: IntoIterator<Item = ConfigDiff>>(
-        &mut self,
-        diffs: I,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
         for diff in diffs {
             match diff {
                 ConfigDiff::DeleteBackend(backend) => self.kill_backend(backend),
@@ -156,7 +150,7 @@ impl StorageRuntimeInner {
                 Err(e) => bail!("{}", e),
             }
         } else {
-            let mut loaded_backend = Err(anyhow!("file not found"));
+            let mut loaded_backend: ZResult<_> = Err(zerror!("file not found").into());
             let mut lib_path = MaybeUninit::uninit();
             match &backend.paths {
                 Some(paths) => {
@@ -167,7 +161,7 @@ impl StorageRuntimeInner {
                                     lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME)
                                 {
                                     loaded_backend = create_backend(backend.clone())
-                                        .map_err(|e| anyhow!("{}", e));
+                                        .map_err(|e| zerror!("{}", e).into());
                                     if loaded_backend.is_ok() {
                                         lib_path = MaybeUninit::new(path);
                                         break;
@@ -186,8 +180,8 @@ impl StorageRuntimeInner {
                     )) {
                         if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME)
                         {
-                            loaded_backend =
-                                create_backend(backend.clone()).map_err(|e| anyhow!("{}", e));
+                            loaded_backend = create_backend(backend.clone())
+                                .map_err(|e| zerror!("{}", e).into());
                             lib_path = MaybeUninit::new(path);
                         }
                     }
@@ -236,7 +230,7 @@ impl StorageRuntimeInner {
             }
         }
     }
-    fn spawn_storage(&mut self, backend_name: &str, storage: StorageConfig) -> anyhow::Result<()> {
+    fn spawn_storage(&mut self, backend_name: &str, storage: StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + backend_name + "/storages/" + &storage.name;
         if let Some(backend) = self.backends.get_mut(backend_name) {
             let storage_name = storage.key_expr.clone();

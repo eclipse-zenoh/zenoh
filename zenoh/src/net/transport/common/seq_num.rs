@@ -12,8 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::ZInt;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::core::Result as ZResult;
 
 /// Sequence Number
 ///
@@ -66,9 +65,7 @@ impl SeqNum {
     #[inline(always)]
     pub(crate) fn set(&mut self, value: ZInt) -> ZResult<()> {
         if value >= self.resolution {
-            return zerror!(ZErrorKind::InvalidResolution {
-                descr: "The sequence number value must be smaller than the resolution".to_string()
-            });
+            bail!("The sequence number value must be smaller than the resolution");
         }
 
         self.value = value;
@@ -101,9 +98,7 @@ impl SeqNum {
     /// * `value` -  The sequence number which should be checked for precedence relation.
     pub(crate) fn precedes(&self, value: ZInt) -> ZResult<bool> {
         if value >= self.resolution {
-            return zerror!(ZErrorKind::InvalidResolution {
-                descr: "The sequence number value must be smaller than the resolution".to_string()
-            });
+            bail!("The sequence number value must be smaller than the resolution");
         }
 
         let res = if value > self.value {
@@ -133,9 +128,7 @@ impl SeqNum {
     #[cfg(test)] // @TODO: remove once reliability is implemented
     pub(crate) fn gap(&self, value: ZInt) -> ZResult<ZInt> {
         if value >= self.resolution {
-            return zerror!(ZErrorKind::InvalidResolution {
-                descr: "The sequence number value must be smaller than the resolution".to_string()
-            });
+            bail!("The sequence number value must be smaller than the resolution")
         }
 
         let gap = if value >= self.value {

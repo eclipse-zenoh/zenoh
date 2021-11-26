@@ -27,6 +27,7 @@
 //! use zenoh::properties::properties_to_json_value;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
+//! use zenoh::Result as ZResult;
 //!
 //! #[no_mangle]
 //! pub fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
@@ -127,7 +128,8 @@
 
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh::prelude::*;
+use zenoh::prelude::{KeyExpr, Sample, Selector, Value};
+use zenoh::Result as ZResult;
 
 pub mod config;
 pub mod utils;

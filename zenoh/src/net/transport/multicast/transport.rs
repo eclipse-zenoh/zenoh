@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 
 /*************************************/
 /*             TRANSPORT             */
@@ -267,12 +267,11 @@ impl TransportMulticastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!(
-                        "Can not start multicast Link TX of peer {}: {}",
-                        self.manager.config.pid, self.locator
-                    )
-                })
+                bail!(
+                    "Can not start multicast Link TX of peer {}: {}",
+                    self.manager.config.pid,
+                    self.locator
+                )
             }
         }
     }
@@ -285,12 +284,11 @@ impl TransportMulticastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!(
-                        "Can not stop multicast Link TX of peer {}: {}",
-                        self.manager.config.pid, self.locator
-                    )
-                })
+                bail!(
+                    "Can not stop multicast Link TX of peer {}: {}",
+                    self.manager.config.pid,
+                    self.locator
+                )
             }
         }
     }
@@ -303,12 +301,11 @@ impl TransportMulticastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!(
-                        "Can not start multicast Link RX of peer {}: {}",
-                        self.manager.config.pid, self.locator
-                    )
-                })
+                bail!(
+                    "Can not start multicast Link RX of peer {}: {}",
+                    self.manager.config.pid,
+                    self.locator
+                )
             }
         }
     }
@@ -321,12 +318,11 @@ impl TransportMulticastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!(
-                        "Can not stop multicast Link RX of peer {}: {}",
-                        self.manager.config.pid, self.locator
-                    )
-                })
+                bail!(
+                    "Can not stop multicast Link RX of peer {}: {}",
+                    self.manager.config.pid,
+                    self.locator
+                )
             }
         }
     }

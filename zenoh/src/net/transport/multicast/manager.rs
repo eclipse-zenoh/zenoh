@@ -19,7 +19,7 @@ use crate::net::link::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::*;
 use zenoh_util::{zerror, zlock, zparse};
 
@@ -162,9 +162,10 @@ impl TransportManager {
     fn del_link_manager_multicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
         match zlock!(self.state.multicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
-            None => zerror!(ZErrorKind::Other {
-                descr: format!("Can not delete the link manager for protocol ({}) because it has not been found.", protocol)
-            })
+            None => bail!(
+                "Can not delete the link manager for protocol ({}) because it has not been found.",
+                protocol
+            ),
         }
     }
 
@@ -176,12 +177,10 @@ impl TransportManager {
         mut endpoint: EndPoint,
     ) -> ZResult<TransportMulticast> {
         if !endpoint.locator.address.is_multicast() {
-            return zerror!(ZErrorKind::InvalidLocator {
-                descr: format!(
-                    "Can not open a multicast transport with a unicast unicast: {}.",
-                    endpoint
-                )
-            });
+            bail!(
+                "Can not open a multicast transport with a unicast unicast: {}.",
+                endpoint
+            )
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
@@ -233,9 +232,9 @@ impl TransportManager {
         }
 
         res.map(|_| ()).ok_or_else(|| {
-            let e = format!("Can not delete the transport for locator: {}", locator);
+            let e = zerror!("Can not delete the transport for locator: {}", locator);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::Other { descr: e })
+            e.into()
         })
     }
 }

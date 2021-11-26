@@ -29,8 +29,8 @@ use zenoh::utils::key_expr;
 use zenoh_plugin_trait::prelude::*;
 use zenoh_plugin_trait::RunningPluginTrait;
 use zenoh_plugin_trait::ValidationFunction;
-use zenoh_util::zerror2;
-use zenoh_util::zlock;
+use zenoh_util::bail;
+use zenoh_util::{core::Result as ZResult, zlock};
 
 pub struct ExamplePlugin {}
 
@@ -46,10 +46,7 @@ impl Plugin for ExamplePlugin {
     }
     const STATIC_NAME: &'static str = "example";
 
-    fn start(
-        name: &str,
-        runtime: &Self::StartArgs,
-    ) -> Result<Box<dyn RunningPluginTrait>, Box<dyn std::error::Error>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         let selector;
@@ -59,9 +56,7 @@ impl Plugin for ExamplePlugin {
             }
             None => selector = DEFAULT_SELECTOR.into(),
             _ => {
-                return Err(Box::new(zerror2!(ZErrorKind::Other {
-                    descr: format!("storage-selector is a mandatory option for {}", name)
-                })))
+                bail!("storage-selector is a mandatory option for {}", name)
             }
         }
         std::mem::drop(config);

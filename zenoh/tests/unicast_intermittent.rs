@@ -30,7 +30,7 @@ use zenoh::net::transport::{
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::zasync_executor_init;
 
 const MSG_SIZE: usize = 8;

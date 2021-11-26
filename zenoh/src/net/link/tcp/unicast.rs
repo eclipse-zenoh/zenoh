@@ -25,9 +25,9 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror2, zread, zwrite};
+use zenoh_util::{zerror, zread, zwrite};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the async-std library
@@ -80,41 +80,41 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         log::trace!("Closing TCP link: {}", self);
         // Close the underlying TCP socket
         self.socket.shutdown(Shutdown::Both).map_err(|e| {
-            let e = format!("TCP link shutdown {}: {:?}", self, e);
+            let e = zerror!("TCP link shutdown {}: {:?}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).write(buffer).await.map_err(|e| {
-            let e = format!("Write error on TCP link {}: {}", self, e);
+            let e = zerror!("Write error on TCP link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         (&self.socket).write_all(buffer).await.map_err(|e| {
-            let e = format!("Write error on TCP link {}: {}", self, e);
+            let e = zerror!("Write error on TCP link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).read(buffer).await.map_err(|e| {
-            let e = format!("Read error on TCP link {}: {}", self, e);
+            let e = zerror!("Read error on TCP link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         (&self.socket).read_exact(buffer).await.map_err(|e| {
-            let e = format!("Read error on TCP link {}: {}", self, e);
+            let e = zerror!("Read error on TCP link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
@@ -218,20 +218,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addr = get_tcp_addr(&endpoint.locator.address).await?;
 
-        let stream = TcpStream::connect(dst_addr).await.map_err(|e| {
-            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-            zerror2!(ZErrorKind::Other { descr: e })
-        })?;
+        let stream = TcpStream::connect(dst_addr)
+            .await
+            .map_err(|e| zerror!("Can not create a new TCP link bound to {}: {}", dst_addr, e))?;
 
-        let src_addr = stream.local_addr().map_err(|e| {
-            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let src_addr = stream
+            .local_addr()
+            .map_err(|e| zerror!("Can not create a new TCP link bound to {}: {}", dst_addr, e))?;
 
-        let dst_addr = stream.peer_addr().map_err(|e| {
-            let e = format!("Can not create a new TCP link bound to {}: {}", dst_addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let dst_addr = stream
+            .peer_addr()
+            .map_err(|e| zerror!("Can not create a new TCP link bound to {}: {}", dst_addr, e))?;
 
         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
@@ -242,15 +239,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let addr = get_tcp_addr(&endpoint.locator.address).await?;
 
         // Bind the TCP socket
-        let socket = TcpListener::bind(addr).await.map_err(|e| {
-            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let socket = TcpListener::bind(addr)
+            .await
+            .map_err(|e| zerror!("Can not create a new TCP listener on {}: {}", addr, e))?;
 
-        let local_addr = socket.local_addr().map_err(|e| {
-            let e = format!("Can not create a new TCP listener on {}: {}", addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let local_addr = socket
+            .local_addr()
+            .map_err(|e| zerror!("Can not create a new TCP listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
         endpoint.locator.address = LocatorAddress::Tcp(LocatorTcp::SocketAddr(local_addr));
@@ -284,12 +279,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = format!(
+            let e = zerror!(
                 "Can not delete the TCP listener because it has not been found: {}",
                 addr
             );
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Send the stop signal
@@ -366,11 +361,7 @@ async fn accept_task(
     }
 
     async fn accept(socket: &TcpListener) -> ZResult<Action> {
-        let res = socket.accept().await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })?;
+        let res = socket.accept().await.map_err(|e| zerror!(e))?;
         Ok(Action::Accept(res))
     }
 
@@ -380,9 +371,9 @@ async fn accept_task(
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
-        let e = format!("Can not accept TCP connections: {}", e);
+        let e = zerror!("Can not accept TCP connections: {}", e);
         log::warn!("{}", e);
-        zerror2!(ZErrorKind::IoError { descr: e })
+        e
     })?;
 
     log::trace!("Ready to accept TCP connections on: {:?}", src_addr);

@@ -15,10 +15,11 @@
 //! Subscribing primitives.
 
 use super::net::protocol::core::SubInfo;
-use crate::prelude::*;
+use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
 use crate::time::Period;
+use crate::Result as ZResult;
 use crate::Session;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use async_std::sync::Arc;

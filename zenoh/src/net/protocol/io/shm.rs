@@ -20,7 +20,8 @@ use std::fmt;
 use std::mem::align_of;
 use std::sync::atomic;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::zresult::ShmError;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::zerror;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
@@ -224,12 +225,13 @@ impl SharedMemoryReader {
                 Ok(())
             }
             Err(e) => {
-                let e = format!(
+                let e = zerror!(
                     "Unable to bind shared memory segment {}: {:?}",
-                    info.shm_manager, e
+                    info.shm_manager,
+                    e
                 );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemory { descr: e })
+                Err(ShmError(e).into())
             }
         }
     }
@@ -252,9 +254,9 @@ impl SharedMemoryReader {
                 Ok(shmb)
             }
             None => {
-                let e = format!("Unable to find shared memory segment: {}", info.shm_manager);
+                let e = zerror!("Unable to find shared memory segment: {}", info.shm_manager);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemory { descr: e })
+                Err(ShmError(e).into())
             }
         }
     }
@@ -306,11 +308,7 @@ impl SharedMemoryManager {
         temp_dir.push(file_name);
         let path: String = temp_dir
             .to_str()
-            .ok_or_else(|| {
-                zerror2!(ZErrorKind::SharedMemory {
-                    descr: format!("Unable to parse tmp directory: {:?}", temp_dir)
-                })
-            })?
+            .ok_or_else(|| ShmError(zerror!("Unable to parse tmp directory: {:?}", temp_dir)))?
             .to_string();
         log::trace!("Creating file at: {}", path);
         let real_size = size + ACCOUNTED_OVERHEAD;
@@ -322,16 +320,13 @@ impl SharedMemoryManager {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
                 log::trace!("SharedMemory already exists, opening it");
-                ShmemConf::new().flink(path.clone()).open().map_err(|e| {
-                    zerror2!(ZErrorKind::SharedMemory {
-                        descr: format!("Unable to open SharedMemoryManager: {}", e)
-                    })
-                })?
+                ShmemConf::new()
+                    .flink(path.clone())
+                    .open()
+                    .map_err(|e| ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)))?
             }
             Err(e) => {
-                return zerror!(ZErrorKind::SharedMemory {
-                    descr: format!("Unable to open SharedMemoryManager: {}", e)
-                })
+                return Err(ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)).into())
             }
         };
         let base_ptr = shmem.as_ptr();

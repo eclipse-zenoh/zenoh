@@ -23,8 +23,8 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::bail;
+use zenoh_util::core::Result as ZResult;
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -319,9 +319,7 @@ impl<'a> KeyExpr<'a> {
         if self.scope == 0 {
             Ok(self.suffix.as_ref())
         } else {
-            zerror!(ZErrorKind::Other {
-                descr: "Scoped key expression".to_string()
-            })
+            bail!("Scoped key expression")
         }
     }
 
@@ -331,9 +329,7 @@ impl<'a> KeyExpr<'a> {
 
     pub fn try_as_id(&'a self) -> ZResult<ExprId> {
         if self.has_suffix() {
-            zerror!(ZErrorKind::Other {
-                descr: "Suffixed key expression".to_string()
-            })
+            bail!("Suffixed key expression")
         } else {
             Ok(self.scope)
         }
@@ -365,20 +361,18 @@ impl<'a> KeyExpr<'a> {
 }
 
 impl TryInto<String> for KeyExpr<'_> {
-    type Error = ZError;
+    type Error = zenoh_util::core::Error;
     fn try_into(self) -> Result<String, Self::Error> {
         if self.scope == 0 {
             Ok(self.suffix.into_owned())
         } else {
-            zerror!(ZErrorKind::Other {
-                descr: "Scoped key expression".to_string()
-            })
+            bail!("Scoped key expression")
         }
     }
 }
 
 impl TryInto<ExprId> for KeyExpr<'_> {
-    type Error = ZError;
+    type Error = zenoh_util::core::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
     }
@@ -589,36 +583,16 @@ impl Encoding {
     /// Converts the given encoding to [`Mime`](http_types::Mime).
     pub fn to_mime(&self) -> ZResult<Mime> {
         if self.prefix == 0 {
-            Mime::from_str(self.suffix.as_ref()).map_err(|e| {
-                ZError::new(
-                    ZErrorKind::Other {
-                        descr: e.to_string(),
-                    },
-                    file!(),
-                    line!(),
-                    None,
-                )
-            })
+            Mime::from_str(self.suffix.as_ref()).map_err(|e| zerror!("{}", &e).into())
         } else if self.prefix <= encoding::MIMES.len() as ZInt {
             Mime::from_str(&format!(
                 "{}{}",
                 &encoding::MIMES[self.prefix as usize],
                 self.suffix
             ))
-            .map_err(|e| {
-                ZError::new(
-                    ZErrorKind::Other {
-                        descr: e.to_string(),
-                    },
-                    file!(),
-                    line!(),
-                    None,
-                )
-            })
+            .map_err(|e| zerror!("{}", &e).into())
         } else {
-            zerror!(ZErrorKind::Other {
-                descr: format!("Unknown encoding prefix {}", self.prefix)
-            })
+            bail!("Unknown encoding prefix {}", self.prefix)
         }
     }
 
@@ -761,14 +735,10 @@ impl From<uuid::Uuid> for PeerId {
 }
 
 impl FromStr for PeerId {
-    type Err = ZError;
+    type Err = zenoh_util::core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = s.parse::<Uuid>().map_err(|e| {
-            zerror2!(ZErrorKind::ValueDecodingFailed {
-                descr: e.to_string()
-            })
-        })?;
+        let id = s.parse::<Uuid>().map_err(|e| zerror!(e))?;
         let pid = PeerId {
             size: 16,
             id: *id.as_bytes(),
@@ -833,7 +803,7 @@ impl Default for Priority {
 }
 
 impl TryFrom<u8> for Priority {
-    type Error = ZError;
+    type Error = zenoh_util::core::Error;
 
     fn try_from(conduit: u8) -> Result<Self, Self::Error> {
         match conduit {
@@ -845,12 +815,10 @@ impl TryFrom<u8> for Priority {
             5 => Ok(Priority::Data),
             6 => Ok(Priority::DataLow),
             7 => Ok(Priority::Background),
-            unknown => zerror!(ZErrorKind::Other {
-                descr: format!(
-                    "{} is not a valid conduit value. Admitted values are [0-7].",
-                    unknown
-                )
-            }),
+            unknown => bail!(
+                "{} is not a valid conduit value. Admitted values are [0-7].",
+                unknown
+            ),
         }
     }
 }

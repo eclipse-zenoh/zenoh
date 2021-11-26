@@ -19,7 +19,7 @@ use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use crate::net::link::Locator;
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 #[cfg(feature = "shared-memory")]
 use zenoh_util::zerror;
 
@@ -56,19 +56,14 @@ macro_rules! read_zint {
 #[cfg(feature = "shared-memory")]
 impl SharedMemoryBufInfo {
     pub fn serialize(&self) -> ZResult<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| {
-            zerror2!(ZErrorKind::ValueEncodingFailed {
-                descr: format!("Unable to serialize SharedMemoryBufInfo: {}", e)
-            })
-        })
+        bincode::serialize(self)
+            .map_err(|e| zerror!("Unable to serialize SharedMemoryBufInfo: {}", e).into())
     }
 
     pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
         match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
             Ok(info) => Ok(info),
-            Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: format!("Unable to deserialize SharedMemoryBufInfo: {}", e)
-            }),
+            Err(e) => bail!("Unable to deserialize SharedMemoryBufInfo: {}", e),
         }
     }
 }

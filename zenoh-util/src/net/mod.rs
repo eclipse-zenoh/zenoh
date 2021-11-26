@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{ZError, ZErrorKind, ZResult};
-use crate::{zconfigurable, zerror};
+use crate::core::Result as ZResult;
+use crate::{bail, zconfigurable};
 use async_std::net::TcpStream;
 use std::net::IpAddr;
 use std::time::Duration;
@@ -50,9 +50,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
             );
             match ret {
                 0 => Ok(()),
-                err_code => zerror!(ZErrorKind::IoError {
-                    descr: format!("setsockopt returned {}", err_code)
-                }),
+                err_code => bail!("setsockopt returned {}", err_code),
             }
         }
     }

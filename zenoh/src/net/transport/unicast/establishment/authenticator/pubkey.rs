@@ -24,7 +24,7 @@ use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
 use zenoh_util::properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_util::zasynclock;
@@ -198,16 +198,8 @@ impl PubKeyAuthenticator {
 
     pub fn init() -> ZResult<PubKeyAuthenticator> {
         let mut prng = PseudoRng::from_entropy();
-        let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT).map_err(|e| {
-            zerror2!(ZErrorKind::Other {
-                descr: e.to_string()
-            })
-        })?;
-        let pri_key = RsaPrivateKey::new(&mut prng, bits).map_err(|e| {
-            zerror2!(ZErrorKind::Other {
-                descr: e.to_string()
-            })
-        })?;
+        let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT)?;
+        let pri_key = RsaPrivateKey::new(&mut prng, bits)?;
         let pub_key = RsaPublicKey::from(&pri_key);
 
         let pka = PubKeyAuthenticator {
@@ -253,27 +245,17 @@ impl PubKeyAuthenticator {
         // First, check if PEM keys are provided
         match (c.public_key_pem(), c.private_key_pem()) {
             (Some(public), Some(private)) => {
-                let pub_key = RsaPublicKey::from_pkcs1_pem(public).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Rsa Public Key: {}", e)
-                    })
-                })?;
-                let pri_key = RsaPrivateKey::from_pkcs1_pem(private).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Rsa Private Key: {}", e)
-                    })
-                })?;
+                let pub_key = RsaPublicKey::from_pkcs1_pem(public)
+                    .map_err(|e| zerror!("Rsa Public Key: {}", e))?;
+                let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
+                    .map_err(|e| zerror!("Rsa Private Key: {}", e))?;
                 return Ok(Some(Self::new(pub_key, pri_key)));
             }
             (Some(_), None) => {
-                return zerror!(ZErrorKind::Other {
-                    descr: "Missing Rsa Private Key: PEM".to_string()
-                })
+                bail!("Missing Rsa Private Key: PEM")
             }
             (None, Some(_)) => {
-                return zerror!(ZErrorKind::Other {
-                    descr: "Missing Rsa Public Key: PEM".to_string()
-                });
+                bail!("Missing Rsa Public Key: PEM")
             }
             (None, None) => {}
         }
@@ -282,28 +264,18 @@ impl PubKeyAuthenticator {
         match (c.public_key_file(), c.private_key_file()) {
             (Some(public), Some(private)) => {
                 let path = Path::new(public);
-                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Rsa Public Key: {}", e)
-                    })
-                })?;
+                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
+                    .map_err(|e| zerror!("Rsa Public Key: {}", e))?;
                 let path = Path::new(private);
-                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path).map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: format!("Rsa Private Key: {}", e)
-                    })
-                })?;
+                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
+                    .map_err(|e| zerror!("Rsa Private Key: {}", e))?;
                 return Ok(Some(Self::new(pub_key, pri_key)));
             }
             (Some(_), None) => {
-                return zerror!(ZErrorKind::Other {
-                    descr: "Missing Rsa Private Key: file".to_string()
-                })
+                bail!("Missing Rsa Private Key: file")
             }
             (None, Some(_)) => {
-                return zerror!(ZErrorKind::Other {
-                    descr: "Missing Rsa Public Key: file".to_string()
-                });
+                bail!("Missing Rsa Public Key: file")
             }
             (None, None) => {}
         }
@@ -331,8 +303,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         let res = wbuf.write_init_syn_property_multilink(&init_syn_property);
         if !res {
-            let e = format!("Failed to serialize InitSyn on link: {}", link);
-            return zerror!(ZErrorKind::InvalidMessage { descr: e });
+            bail!("Failed to serialize InitSyn on link: {}", link);
         }
 
         let attachment: ZBuf = wbuf.into();
@@ -351,16 +322,13 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 // Decode the multilink attachment
                 let mut zbuf: ZBuf = pk.into();
 
-                let init_syn_property =
-                    zbuf.read_init_syn_property_multilink().ok_or_else(|| {
-                        let e = format!("Received invalid InitSyn on link: {}", link);
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                    })?;
+                let init_syn_property = zbuf
+                    .read_init_syn_property_multilink()
+                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
                 // Check if we are compatible
                 if init_syn_property.version != MULTILINK_VERSION {
-                    let e = format!("PubKey version not supported on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("PubKey version not supported on link: {}", link);
                 }
 
                 // Check if the peer is already present
@@ -372,15 +340,13 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                             Some(apk) => {
                                 // Check if pub key is used consistently
                                 if apk != &init_syn_property.alice_pubkey {
-                                    let e = format!("Invalid multilink pub key on link: {}", link);
-                                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                                    bail!("Invalid multilink pub key on link: {}", link);
                                 }
                             }
                             None => {
                                 // The peer is already present but no previous multilink intereset
                                 // was declared. Rejecting for inconsistent declaration.
-                                let e = format!("Unexpected multilink pub key on link: {}", link);
-                                return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                                bail!("Unexpected multilink pub key on link: {}", link);
                             }
                         }
                     }
@@ -390,8 +356,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                             if kk.get(&init_syn_property.alice_pubkey).is_none() {
                                 // The peer is already present but no previous multilink intereset
                                 // was declared. Rejecting for inconsistent declaration.
-                                let e = format!("Unauthorized multilink pub key on link: {}", link);
-                                return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                                bail!("Unauthorized multilink pub key on link: {}", link);
                             }
                         }
 
@@ -405,23 +370,15 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 let mut wbuf = WBuf::new(WBUF_SIZE, false);
                 let res = wbuf.write_zint(cookie.nonce);
                 if !res {
-                    let e = format!("Failed to serialize InitAck on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Failed to serialize InitAck on link: {}", link);
                 }
 
                 let nonce_bytes: ZBuf = wbuf.into();
-                let nonce_encrypted_with_alice_pubkey = init_syn_property
-                    .alice_pubkey
-                    .encrypt(
-                        &mut guard.prng,
-                        PaddingScheme::PKCS1v15Encrypt,
-                        nonce_bytes.contiguous().as_slice(),
-                    )
-                    .map_err(|e| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: e.to_string()
-                        })
-                    })?;
+                let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
+                    &mut guard.prng,
+                    PaddingScheme::PKCS1v15Encrypt,
+                    nonce_bytes.contiguous().as_slice(),
+                )?;
 
                 let init_ack_property = InitAckProperty {
                     bob_pubkey: self.pub_key.clone(),
@@ -432,8 +389,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 let mut wbuf = WBuf::new(WBUF_SIZE, false);
                 let res = wbuf.write_rsa_pub_key(&init_syn_property.alice_pubkey);
                 if !res {
-                    let e = format!("Failed to serialize InitAck on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Failed to serialize InitAck on link: {}", link);
                 }
                 let cookie: ZBuf = wbuf.into();
 
@@ -441,8 +397,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 let mut wbuf = WBuf::new(WBUF_SIZE, false);
                 let res = wbuf.write_init_ack_property_multilink(&init_ack_property);
                 if !res {
-                    let e = format!("Failed to serialize InitAck on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Failed to serialize InitAck on link: {}", link);
                 }
                 let attachment: ZBuf = wbuf.into();
 
@@ -455,8 +410,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     println!("\nERROR: {:?}\n", guard.authenticated);
                     // The peer is already present but no multilink intereset is declared.
                     // Rejecting for inconsistent declaration.
-                    let e = format!("No multilink supported on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("No multilink supported on link: {}", link);
                 }
 
                 // No properties need to be included in the InitAck attachment
@@ -478,35 +432,24 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         };
 
         let mut zbuf: ZBuf = pk.into();
-        let init_ack_property = zbuf.read_init_ack_property_multilink().ok_or_else(|| {
-            let e = format!("Received invalid InitSyn on link: {}", link);
-            zerror2!(ZErrorKind::InvalidMessage { descr: e })
-        })?;
+        let init_ack_property = zbuf
+            .read_init_ack_property_multilink()
+            .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-        let nonce = self
-            .pri_key
-            .decrypt(
-                PaddingScheme::PKCS1v15Encrypt,
-                init_ack_property
-                    .nonce_encrypted_with_alice_pubkey
-                    .as_slice(),
-            )
-            .map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: e.to_string()
-                })
-            })?;
+        let nonce = self.pri_key.decrypt(
+            PaddingScheme::PKCS1v15Encrypt,
+            init_ack_property
+                .nonce_encrypted_with_alice_pubkey
+                .as_slice(),
+        )?;
 
         // Create the OpenSyn attachment
         let mut guard = zasynclock!(self.state);
-        let nonce_encrypted_with_bob_pubkey = init_ack_property
-            .bob_pubkey
-            .encrypt(&mut guard.prng, PaddingScheme::PKCS1v15Encrypt, &nonce[..])
-            .map_err(|e| {
-                zerror2!(ZErrorKind::Other {
-                    descr: e.to_string()
-                })
-            })?;
+        let nonce_encrypted_with_bob_pubkey = init_ack_property.bob_pubkey.encrypt(
+            &mut guard.prng,
+            PaddingScheme::PKCS1v15Encrypt,
+            &nonce[..],
+        )?;
         drop(guard);
 
         let open_syn_property = OpenSynProperty {
@@ -517,8 +460,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         let res = wbuf.write_open_syn_property_multilink(&open_syn_property);
         if !res {
-            let e = format!("Failed to serialize OpenSyn on link: {}", link);
-            return zerror!(ZErrorKind::InvalidMessage { descr: e });
+            bail!("Failed to serialize OpenSyn on link: {}", link);
         }
 
         let attachment: ZBuf = wbuf.into();
@@ -535,39 +477,29 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         match property {
             (Some(att), Some(cke)) => {
                 let mut zbuf: ZBuf = att.into();
-                let open_syn_property =
-                    zbuf.read_open_syn_property_multilink().ok_or_else(|| {
-                        let e = format!("Received invalid InitSyn on link: {}", link);
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                    })?;
+                let open_syn_property = zbuf
+                    .read_open_syn_property_multilink()
+                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
                 let mut nonce_bytes: ZBuf = self
                     .pri_key
                     .decrypt(
                         PaddingScheme::PKCS1v15Encrypt,
                         open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),
-                    )
-                    .map_err(|e| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: e.to_string()
-                        })
-                    })?
+                    )?
                     .into();
-                let nonce = nonce_bytes.read_zint().ok_or_else(|| {
-                    let e = format!("Received invalid InitSyn on link: {}", link);
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                })?;
+                let nonce = nonce_bytes
+                    .read_zint()
+                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
                 if nonce != cookie.nonce {
-                    let e = format!("Received invalid nonce on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Received invalid nonce on link: {}", link);
                 }
 
                 let mut zbuf: ZBuf = cke.into();
-                let alice_pubkey = zbuf.read_rsa_pub_key().ok_or_else(|| {
-                    let e = format!("Received invalid InitSyn on link: {}", link);
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e })
-                })?;
+                let alice_pubkey = zbuf
+                    .read_rsa_pub_key()
+                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
                 let mut guard = zasynclock!(self.state);
                 match guard.authenticated.get(&cookie.pid) {
@@ -575,14 +507,12 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                         Some(apk) => {
                             // Check if the public key is still correct
                             if apk != &alice_pubkey {
-                                let e = format!("Invalid multilink pub key on link: {}", link);
-                                return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                                bail!("Invalid multilink pub key on link: {}", link);
                             }
                         }
                         None => {
                             // The peer did not previously express interest in multilink
-                            let e = format!("Invalid multilink pub key on link: {}", link);
-                            return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                            bail!("Invalid multilink pub key on link: {}", link);
                         }
                     },
                     None => {
@@ -597,15 +527,13 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 println!("\nINSERTING: {} {:?}\n", cookie.pid, guard.authenticated);
                 if guard.authenticated.get(&cookie.pid).is_some() {
                     // The peer did not previously express interest in multilink
-                    let e = format!("Invalid multilink pub key on link: {}", link);
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                    bail!("Invalid multilink pub key on link: {}", link);
                 }
                 // Finally store the public key
                 guard.authenticated.insert(cookie.pid, None);
             }
             _ => {
-                let e = format!("Received invalid nonce on link: {}", link);
-                return zerror!(ZErrorKind::InvalidMessage { descr: e });
+                bail!("Received invalid nonce on link: {}", link);
             }
         }
 

@@ -18,7 +18,7 @@ use super::msg::*;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 
 #[cfg(feature = "shared-memory")]
 macro_rules! unset_sliced {

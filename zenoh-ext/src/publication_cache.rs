@@ -26,7 +26,8 @@ use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
-use zenoh_util::zerror;
+use zenoh_util::bail;
+use zenoh_util::core::Result as ZResult;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -103,13 +104,11 @@ impl<'a> PublicationCache<'a> {
         );
 
         if conf.session.hlc().is_none() {
-            return zerror!(ZErrorKind::Other {
-                descr: format!(
-                    "Failed requirement for PublicationCache on {}: \
+            bail!(
+                "Failed requirement for PublicationCache on {}: \
                      the Session is not configured with 'add_timestamp=true'",
-                    conf.pub_key_expr
-                )
-            });
+                conf.pub_key_expr
+            )
         }
 
         // declare the local subscriber that will store the local publications

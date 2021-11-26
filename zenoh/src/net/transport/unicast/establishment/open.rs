@@ -26,10 +26,10 @@ use crate::net::transport::unicast::manager::Opened;
 use crate::net::transport::{TransportManager, TransportPeer};
 use rand::Rng;
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zasynclock, zerror2};
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::{zasynclock, zerror};
 
-type IError = (ZError, Option<u8>);
+type IError = (zenoh_util::core::Error, Option<u8>);
 type IResult<T> = Result<T, IError>;
 
 /*************************************/
@@ -98,12 +98,13 @@ async fn open_recv_init_ack(
     // Wait to read an InitAck
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        let e = format!(
-            "Received multiple messages in response to an InitSyn on {}: {:?}",
-            link, messages,
-        );
         return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            zerror!(
+                "Received multiple messages in response to an InitSyn on {}: {:?}",
+                link,
+                messages,
+            )
+            .into(),
             Some(tmsg::close_reason::INVALID),
         ));
     }
@@ -112,19 +113,24 @@ async fn open_recv_init_ack(
     let init_ack = match msg.body {
         TransportBody::InitAck(init_ack) => init_ack,
         TransportBody::Close(Close { reason, .. }) => {
-            let e = format!(
-                "Received a close message (reason {}) in response to an InitSyn on: {}",
-                reason, link,
-            );
-            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+            return Err((
+                zerror!(
+                    "Received a close message (reason {}) in response to an InitSyn on: {}",
+                    reason,
+                    link,
+                )
+                .into(),
+                None,
+            ));
         }
         _ => {
-            let e = format!(
-                "Received an invalid message in response to an InitSyn on {}: {:?}",
-                link, msg.body
-            );
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!(
+                    "Received an invalid message in response to an InitSyn on {}: {:?}",
+                    link,
+                    msg.body
+                )
+                .into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }
@@ -138,12 +144,13 @@ async fn open_recv_init_ack(
     let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack.pid) {
         if let Some(sn_resolution) = init_ack.sn_resolution {
             if sn_resolution != s.sn_resolution {
-                let e = format!(
-                    "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                    link, sn_resolution
-                );
                 return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    zerror!(
+                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
+                        link,
+                        sn_resolution
+                    )
+                    .into(),
                     Some(tmsg::close_reason::INVALID),
                 ));
             }
@@ -153,12 +160,13 @@ async fn open_recv_init_ack(
         let sn_resolution = match init_ack.sn_resolution {
             Some(sn_resolution) => {
                 if sn_resolution > input.sn_resolution {
-                    let e = format!(
-                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                        link, sn_resolution
-                    );
                     return Err((
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                        zerror!(
+                            "Rejecting InitAck on {}. Invalid sn resolution: {}",
+                            link,
+                            sn_resolution
+                        )
+                        .into(),
                         Some(tmsg::close_reason::INVALID),
                     ));
                 }
@@ -197,13 +205,14 @@ async fn open_recv_init_ack(
                     is_shm = att.is_some();
                     Ok(att)
                 }
-                Err(e) => match e.get_kind() {
-                    ZErrorKind::SharedMemory { .. } => {
+                Err(e) => {
+                    if e.is::<zenoh_util::core::zresult::ShmError>() {
                         is_shm = false;
                         Ok(None)
+                    } else {
+                        Err(e)
                     }
-                    _ => Err(e),
-                },
+                }
             };
         }
 
@@ -301,12 +310,13 @@ async fn open_recv_open_ack(
     // Wait to read an OpenAck
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        let e = format!(
-            "Received multiple messages in response to an InitSyn on {}: {:?}",
-            link, messages,
-        );
         return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            zerror!(
+                "Received multiple messages in response to an InitSyn on {}: {:?}",
+                link,
+                messages,
+            )
+            .into(),
             Some(tmsg::close_reason::INVALID),
         ));
     }
@@ -315,19 +325,24 @@ async fn open_recv_open_ack(
     let (lease, initial_sn_rx) = match msg.body {
         TransportBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
         TransportBody::Close(Close { reason, .. }) => {
-            let e = format!(
-                "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                reason, link,
-            );
-            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+            return Err((
+                zerror!(
+                    "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
+                    reason,
+                    link,
+                )
+                .into(),
+                None,
+            ));
         }
         _ => {
-            let e = format!(
-                "Received an invalid message in response to an OpenSyn on {}: {:?}",
-                link, msg.body
-            );
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!(
+                    "Received an invalid message in response to an OpenSyn on {}: {:?}",
+                    link,
+                    msg.body
+                )
+                .into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }

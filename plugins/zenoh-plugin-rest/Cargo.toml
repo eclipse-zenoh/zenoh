@@ -51,6 +51,7 @@ serde_json = "1.0"
 tide = "0.16.0"
 zenoh = { path = "../../zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
+zenoh-util = { path = "../../zenoh-util/" }
 
 [[example]]
 name = "z_serve_sse"

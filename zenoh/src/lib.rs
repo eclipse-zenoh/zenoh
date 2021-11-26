@@ -92,8 +92,12 @@ use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::zpinbox;
+
+/// A zenoh result.
+pub use zenoh_util::core::Result;
 
 pub use validated_struct;
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -292,11 +296,7 @@ where
     let what = what.into();
     let config: crate::config::Config = match config.try_into() {
         Ok(config) => config,
-        Err(e) => {
-            return zready(zerror!(ZErrorKind::Other {
-                descr: format!("invalid configuration {:?}", &e)
-            }))
-        }
+        Err(e) => return zready(Err(zerror!("invalid configuration {:?}", &e).into())),
     };
 
     trace!("scout({}, {})", what, &config);
@@ -304,12 +304,12 @@ where
     let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
         Ok(addr) => addr,
         Err(e) => {
-            return zready(zerror!(ZErrorKind::Other {
-                descr: format!(
-                    "invalid default addr {}: {:?}",
-                    ZN_MULTICAST_IPV4_ADDRESS_DEFAULT, &e
-                )
-            }))
+            return zready(Err(zerror!(
+                "invalid default addr {}: {:?}",
+                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+                &e
+            )
+            .into()))
         }
     };
 

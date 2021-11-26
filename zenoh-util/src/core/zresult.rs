@@ -11,160 +11,44 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use anyhow::Error;
 use std::fmt;
 
-pub type ZResult<T> = Result<T, ZError>;
+pub type BoxedStdErr = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-#[derive(Debug, PartialEq)]
-pub enum ZErrorKind {
-    BufferOverflow {
-        missing: usize,
-    },
-    BufferUnderflow {
-        missing: usize,
-    },
-    InvalidLink {
-        descr: String,
-    },
-    InvalidLocator {
-        descr: String,
-    },
-    InvalidMessage {
-        descr: String,
-    },
-    InvalidReference {
-        descr: String,
-    },
-    InvalidResolution {
-        descr: String,
-    },
-    InvalidSession {
-        descr: String,
-    },
-    InvalidKey {
-        key: String,
-    },
-    InvalidKeyExpr {
-        key: String,
-    },
-    InvalidSelector {
-        selector: String,
-    },
-    IoError {
-        descr: String,
-    },
-    Other {
-        descr: String,
-    },
-    Timeout {},
-    UnkownExprId {
-        id: String,
-    },
-    ValueEncodingFailed {
-        descr: String,
-    },
-    ValueDecodingFailed {
-        descr: String,
-    },
-    TranscodingFailed {
-        origin_encoding: String,
-        target_encoding: String,
-    },
-    SharedMemory {
-        descr: String,
-    },
-}
-
-impl fmt::Display for ZErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ZErrorKind::BufferOverflow { missing } => write!(
-                f,
-                "Failed to write in full buffer ({} bytes missing)",
-                missing
-            ),
-            ZErrorKind::BufferUnderflow { missing } => write!(
-                f,
-                "Failed to read from empty buffer ({} bytes missing)",
-                (if *missing == 0 {
-                    "some".to_string()
-                } else {
-                    missing.to_string()
-                })
-            ),
-            ZErrorKind::InvalidLocator { descr } => write!(f, "Invalid locator ({})", descr),
-            ZErrorKind::InvalidLink { descr } => write!(f, "Invalid link ({})", descr),
-            ZErrorKind::InvalidMessage { descr } => write!(f, "Invalid message ({})", descr),
-            ZErrorKind::InvalidReference { descr } => write!(f, "Invalid Reference ({})", descr),
-            ZErrorKind::InvalidResolution { descr } => write!(f, "Invalid Resolution ({})", descr),
-            ZErrorKind::InvalidSession { descr } => write!(f, "Invalid Session ({})", descr),
-            ZErrorKind::InvalidKey { key } => write!(f, "Invalid key ({})", key),
-            ZErrorKind::InvalidKeyExpr { key } => write!(f, "Invalid key expression ({})", key),
-            ZErrorKind::InvalidSelector { selector } => {
-                write!(f, "Invalid Selector ({})", selector)
-            }
-            ZErrorKind::IoError { descr } => write!(f, "IO error ({})", descr),
-            ZErrorKind::Other { descr } => write!(f, "zenoh error: ({})", descr),
-            ZErrorKind::Timeout {} => write!(f, "Timeout"),
-            ZErrorKind::UnkownExprId { id } => write!(f, "Unkown ExprId ({})", id),
-            ZErrorKind::ValueEncodingFailed { descr } => {
-                write!(f, "Failed to encode Value ({})", descr)
-            }
-            ZErrorKind::ValueDecodingFailed { descr } => {
-                write!(f, "Failed to decode Value ({})", descr)
-            }
-            ZErrorKind::TranscodingFailed {
-                origin_encoding,
-                target_encoding,
-            } => write!(
-                f,
-                "Failed to transcode Value from {} to {}",
-                origin_encoding, target_encoding
-            ),
-            ZErrorKind::SharedMemory { descr } => write!(f, "Shared Memory error ({})", descr),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ZErrorNoLife {
-    file: &'static str,
-}
+pub type ZResult<T> = Result<T, BoxedStdErr>;
 
 #[derive(Debug)]
 pub struct ZError {
-    kind: ZErrorKind,
+    error: Error,
     file: &'static str,
     line: u32,
-    source: Option<Box<dyn std::error::Error>>,
+    source: Option<BoxedStdErr>,
 }
 
 unsafe impl Send for ZError {}
 unsafe impl Sync for ZError {}
 
 impl ZError {
-    pub fn new(
-        kind: ZErrorKind,
-        file: &'static str,
-        line: u32,
-        source: Option<Box<dyn std::error::Error>>,
-    ) -> ZError {
+    pub fn new<E: Into<Error>>(error: E, file: &'static str, line: u32) -> ZError {
         ZError {
-            kind,
+            error: error.into(),
             file,
             line,
-            source,
+            source: None,
         }
     }
-
-    pub fn get_kind(&self) -> &ZErrorKind {
-        &self.kind
+    pub fn set_source<S: Into<BoxedStdErr>>(mut self, source: S) -> Self {
+        self.source = Some(source.into());
+        self
     }
 }
 
 impl std::error::Error for ZError {
     fn source(&self) -> Option<&'_ (dyn std::error::Error + 'static)> {
-        self.source.as_ref().map(|bx| bx.as_ref())
+        self.source
+            .as_ref()
+            .map(|r| unsafe { std::mem::transmute(r.as_ref()) })
     }
 }
 
@@ -173,7 +57,7 @@ impl fmt::Display for ZError {
         write!(
             f,
             "{} at {}:{}.",
-            self.kind.to_string(),
+            self.error.to_string(),
             self.file,
             self.line
         )?;
@@ -181,5 +65,18 @@ impl fmt::Display for ZError {
             write!(f, " - Caused by {}", *s)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct ShmError(pub ZError);
+impl fmt::Display for ShmError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl std::error::Error for ShmError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
     }
 }

@@ -32,7 +32,7 @@ mod tests {
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh::publication::CongestionControl;
-    use zenoh_util::core::ZResult;
+    use zenoh_util::core::Result as ZResult;
     use zenoh_util::zasync_executor_init;
 
     const TIMEOUT: Duration = Duration::from_secs(60);

@@ -13,11 +13,12 @@
 //
 use super::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
+use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::bail;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
-use zenoh_util::zerror;
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_udp_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {
@@ -29,19 +30,14 @@ pub(super) async fn get_udp_addr(address: &LocatorAddress) -> ZResult<SocketAddr
                     if let Some(addr) = addr_iter.next() {
                         Ok(addr)
                     } else {
-                        let e = format!("Couldn't resolve UDP locator address: {}", addr);
-                        zerror!(ZErrorKind::InvalidLocator { descr: e })
+                        bail!("Couldn't resolve UDP locator address: {}", addr);
                     }
                 }
-                Err(e) => {
-                    let e = format!("{}: {}", e, addr);
-                    zerror!(ZErrorKind::InvalidLocator { descr: e })
-                }
+                Err(e) => bail!("{}: {}", e, addr),
             },
         },
         _ => {
-            let e = format!("Not a UDP locator address: {}", address);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            bail!("Not a UDP locator address: {}", address);
         }
     }
 }
@@ -62,7 +58,7 @@ impl LocatorUdp {
 }
 
 impl FromStr for LocatorUdp {
-    type Err = ZError;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {

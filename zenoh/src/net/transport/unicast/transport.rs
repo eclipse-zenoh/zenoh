@@ -26,8 +26,7 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncM
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::core::Result as ZResult;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -221,12 +220,11 @@ impl TransportUnicastInner {
 
     pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
         if !self.can_add_link(&link) {
-            return zerror!(ZErrorKind::InvalidLink {
-                descr: format!(
-                    "Can not add Link {} with peer {}: max num of links reached",
-                    link, self.pid,
-                )
-            });
+            bail!(
+                "Can not add Link {} with peer {}: max num of links reached",
+                link,
+                self.pid,
+            )
         }
 
         // Create a channel link from a link
@@ -256,9 +254,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not start Link TX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not start Link TX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -271,9 +267,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not stop Link TX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not stop Link TX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -286,9 +280,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not start Link RX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not start Link RX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -301,9 +293,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not stop Link RX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not stop Link RX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -337,9 +327,7 @@ impl TransportUnicastInner {
                     Target::Link(stl.into())
                 }
             } else {
-                return zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
-                });
+                bail!("Can not delete Link {} with peer: {}", link, self.pid)
             }
         };
 

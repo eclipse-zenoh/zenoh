@@ -13,7 +13,6 @@
 //
 pub mod config;
 
-use crate::core::*;
 use std::collections::HashMap;
 use std::convert::{From, TryFrom};
 use std::fmt;
@@ -299,13 +298,9 @@ impl From<&[(&str, &str)]> for Properties {
 }
 
 impl TryFrom<&std::path::Path> for Properties {
-    type Error = ZError;
+    type Error = crate::core::Error;
     fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
-        std::fs::read_to_string(p).map(Self::from).map_err(|e| {
-            crate::zerror2!(ZErrorKind::Other {
-                descr: format!("Failed to parse config file {} : {}", p.display(), e)
-            })
-        })
+        Ok(Self::from(std::fs::read_to_string(p)?))
     }
 }
 

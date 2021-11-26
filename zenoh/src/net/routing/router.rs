@@ -27,7 +27,7 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, RwLock};
 use uhlc::HLC;
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zconfigurable;
 

@@ -16,7 +16,7 @@ use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
 
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {
@@ -59,20 +59,17 @@ impl DefragBuffer {
     pub(crate) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
-            return zerror!(ZErrorKind::InvalidMessage {
-                descr: format!("Expected SN {}, received {}", self.sn.get(), sn)
-            });
+            bail!("Expected SN {}, received {}", self.sn.get(), sn)
         }
 
         let new_len = zslice.len() + self.buffer.len();
         if new_len > self.capacity {
             self.clear();
-            return zerror!(ZErrorKind::InvalidMessage {
-                descr: format!(
-                    "Defragmentation buffer full: {} bytes. Capacity: {}.",
-                    new_len, self.capacity
-                )
-            });
+            bail!(
+                "Defragmentation buffer full: {} bytes. Capacity: {}.",
+                new_len,
+                self.capacity
+            )
         }
 
         self.buffer.add_zslice(zslice);

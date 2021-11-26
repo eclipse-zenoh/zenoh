@@ -28,9 +28,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror2, zread, zwrite};
+use zenoh_util::{zerror, zread, zwrite};
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library
@@ -58,42 +58,38 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         // Close the underlying UnixSocketStream socket
         let res = self.socket.shutdown(Shutdown::Both);
         log::trace!("UnixSocketStream link shutdown {}: {:?}", self, res);
-        res.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string(),
-            })
-        })
+        res.map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         (&self.socket).write(buffer).await.map_err(|e| {
-            let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
+            let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         (&self.socket).write_all(buffer).await.map_err(|e| {
-            let e = format!("Write error on UnixSocketStream link {}: {}", self, e);
+            let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         (&self.socket).read(buffer).await.map_err(|e| {
-            let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
+            let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         (&self.socket).read_exact(buffer).await.map_err(|e| {
-            let e = format!("Read error on UnixSocketStream link {}: {}", self, e);
+            let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e.into()
         })
     }
 
@@ -206,31 +202,34 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream link bound to {:?}: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::Other { descr: e })
+            e
         })?;
 
         let src_addr = stream.local_addr().map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream link bound to {:?}: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // We do need the dst_addr value, we just need to check that is valid
         let _dst_addr = stream.peer_addr().map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream link bound to {:?}: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         let local_path = match src_addr.as_pathname() {
@@ -248,24 +247,24 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let local_path_str = local_path
             .to_str()
             .ok_or_else(|| {
-                let e = format!(
+                let e = zerror!(
                     "Can not create a new UnixSocketStream link bound to {:?}",
                     path
                 );
                 log::warn!("{}", e);
-                zerror2!(ZErrorKind::InvalidLink { descr: e })
+                e
             })?
             .to_string();
 
         let remote_path_str = path
             .to_str()
             .ok_or_else(|| {
-                let e = format!(
+                let e = zerror!(
                     "Can not create a new UnixSocketStream link bound to {:?}",
                     path
                 );
                 log::warn!("{}", e);
-                zerror2!(ZErrorKind::InvalidLink { descr: e })
+                e
             })?
             .to_string();
 
@@ -313,23 +312,24 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             open_flags,
             open_mode,
         ).map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {} - Unable to open lock file: {}",
                 path, e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // We try to acquire the lock
         nix::fcntl::flock(lock_fd, nix::fcntl::FlockArg::LockExclusiveNonblock).map_err(|e| {
             let _ = nix::unistd::close(lock_fd);
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {} - Unable to acquire look: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         //Lock is acquired we can remove the socket file
@@ -339,35 +339,37 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         // Bind the Unix socket
         let socket = UnixListener::bind(&path).await.map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {}: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         let local_addr = socket.local_addr().map_err(|e| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream listener on {}: {}",
-                path, e
+                path,
+                e
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         let local_path = PathBuf::from(local_addr.as_pathname().ok_or_else(|| {
-            let e = format!("Can not create a new UnixSocketStream listener on {}", path);
+            let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?);
 
         let local_path_str = local_path
             .to_str()
             .ok_or_else(|| {
-                let e = format!("Can not create a new UnixSocketStream listener on {}", path);
+                let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
                 log::warn!("{}", e);
-                zerror2!(ZErrorKind::InvalidLink { descr: e })
+                e
             })?
             .to_string();
 
@@ -403,12 +405,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
-            let e = format!(
+            let e = zerror!(
                 "Can not delete the UnixSocketStream listener because it has not been found: {}",
                 path
             );
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Send the stop signal
@@ -455,11 +457,7 @@ async fn accept_task(
     }
 
     async fn accept(socket: &UnixListener) -> ZResult<Action> {
-        let (stream, _) = socket.accept().await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })?;
+        let (stream, _) = socket.accept().await.map_err(|e| zerror!(e))?;
         Ok(Action::Accept(stream))
     }
 
@@ -469,29 +467,29 @@ async fn accept_task(
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
-        let e = format!("Can not accept UnixSocketStream connections: {}", e);
+        zerror!("Can not accept UnixSocketStream connections: {}", e);
         log::warn!("{}", e);
-        zerror2!(ZErrorKind::IoError { descr: e })
+        e
     })?;
 
     let local_path = PathBuf::from(src_addr.as_pathname().ok_or_else(|| {
-        let e = format!(
+        let e = zerror!(
             "Can not create a new UnixSocketStream link bound to {:?}",
             src_addr
         );
         log::warn!("{}", e);
-        zerror2!(ZErrorKind::IoError { descr: e })
+        e
     })?);
 
     let src_path = local_path
         .to_str()
         .ok_or_else(|| {
-            let e = format!(
+            let e = zerror!(
                 "Can not create a new UnixSocketStream link bound to {:?}",
                 src_addr
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::IoError { descr: e })
+            e
         })?
         .to_string();
 

@@ -25,11 +25,11 @@ use crate::net::transport::unicast::manager::Opened;
 use crate::net::transport::{TransportManager, TransportPeer};
 use rand::Rng;
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::hmac;
-use zenoh_util::{zasynclock, zerror2};
+use zenoh_util::{zasynclock, zerror};
 
-type IError = (ZError, Option<u8>);
+type IError = (zenoh_util::core::Error, Option<u8>);
 type IResult<T> = Result<T, IError>;
 
 /*************************************/
@@ -52,12 +52,13 @@ async fn accept_recv_init_syn(
     // Wait to read an InitSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        let e = format!(
-            "Received multiple messages instead of a single InitSyn on {}: {:?}",
-            link, messages,
-        );
         return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            zerror!(
+                "Received multiple messages instead of a single InitSyn on {}: {:?}",
+                link,
+                messages,
+            )
+            .into(),
             Some(tmsg::close_reason::INVALID),
         ));
     }
@@ -66,12 +67,13 @@ async fn accept_recv_init_syn(
     let init_syn = match msg.body {
         TransportBody::InitSyn(init_syn) => init_syn,
         _ => {
-            let e = format!(
-                "Received invalid message instead of an InitSyn on {}: {:?}",
-                link, msg.body
-            );
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!(
+                    "Received invalid message instead of an InitSyn on {}: {:?}",
+                    link,
+                    msg.body
+                )
+                .into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }
@@ -81,12 +83,14 @@ async fn accept_recv_init_syn(
     match auth_link.peer_id {
         Some(pid) => {
             if pid != init_syn.pid {
-                let e = format!(
-                    "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
-                    link, pid, init_syn.pid
-                );
                 return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    zerror!(
+                        "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
+                        link,
+                        pid,
+                        init_syn.pid
+                    )
+                    .into(),
                     Some(tmsg::close_reason::INVALID),
                 ));
             }
@@ -102,12 +106,13 @@ async fn accept_recv_init_syn(
 
         // Check if we have reached maximum number of links for this transport
         if !t.can_add_link(link) {
-            let e = format!(
-                "Rejecting InitSyn on {} because of max num links for peer: {}",
-                link, init_syn.pid
-            );
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!(
+                    "Rejecting InitSyn on {} because of max num links for peer: {}",
+                    link,
+                    init_syn.pid
+                )
+                .into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }
@@ -115,12 +120,13 @@ async fn accept_recv_init_syn(
 
     // Check if the version is supported
     if init_syn.version != manager.config.version {
-        let e = format!(
-            "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
-            link, init_syn.pid
-        );
         return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            zerror!(
+                "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
+                link,
+                init_syn.pid
+            )
+            .into(),
             Some(tmsg::close_reason::INVALID),
         ));
     }
@@ -252,12 +258,13 @@ async fn accept_recv_open_syn(
     // Wait to read an OpenSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        let e = format!(
-            "Received multiple messages instead of a single OpenSyn on {}: {:?}",
-            link, messages,
-        );
         return Err((
-            zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+            zerror!(
+                "Received multiple messages instead of a single OpenSyn on {}: {:?}",
+                link,
+                messages,
+            )
+            .into(),
             Some(tmsg::close_reason::INVALID),
         ));
     }
@@ -270,19 +277,24 @@ async fn accept_recv_open_syn(
             cookie,
         }) => (lease, initial_sn, cookie),
         TransportBody::Close(Close { reason, .. }) => {
-            let e = format!(
-                "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
-                reason, link,
-            );
-            return Err((zerror2!(ZErrorKind::InvalidMessage { descr: e }), None));
+            return Err((
+                zerror!(
+                    "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
+                    reason,
+                    link,
+                )
+                .into(),
+                None,
+            ));
         }
         _ => {
-            let e = format!(
-                "Received invalid message instead of an OpenSyn on {}: {:?}",
-                link, msg.body
-            );
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!(
+                    "Received invalid message instead of an OpenSyn on {}: {:?}",
+                    link,
+                    msg.body
+                )
+                .into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }
@@ -294,25 +306,22 @@ async fn accept_recv_open_syn(
         Some(cookie_hash) => match cookie_hash {
             Some(cookie_hash) => {
                 if cookie_hash != &hmac::digest(&encrypted) {
-                    let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
                     return Err((
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                        zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link).into(),
                         Some(tmsg::close_reason::INVALID),
                     ));
                 }
             }
             None => {
-                let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,);
                 return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,).into(),
                     Some(tmsg::close_reason::INVALID),
                 ));
             }
         },
         None => {
-            let e = format!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,);
             return Err((
-                zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,).into(),
                 Some(tmsg::close_reason::INVALID),
             ));
         }
@@ -352,13 +361,14 @@ async fn accept_recv_open_syn(
                     is_shm = true;
                     Ok(att)
                 }
-                Err(e) => match e.get_kind() {
-                    ZErrorKind::SharedMemory { .. } => {
+                Err(e) => {
+                    if e.is::<zenoh_util::core::zresult::ShmError>() {
                         is_shm = false;
                         Ok(None)
+                    } else {
+                        Err(e)
                     }
-                    _ => Err(e),
-                },
+                }
             };
         }
 
@@ -404,23 +414,23 @@ async fn accept_init_transport(
     let open_ack_initial_sn = match guard.get(&input.cookie.pid) {
         Some(opened) => {
             if opened.sn_resolution != input.cookie.sn_resolution {
-                let e = format!(
-                "Rejecting OpenSyn cookie on {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
-                link, input.cookie.pid, input.cookie.sn_resolution, opened.sn_resolution
-            );
                 return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    zerror!(
+                        "Rejecting OpenSyn cookie on {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
+                        link, input.cookie.pid, input.cookie.sn_resolution, opened.sn_resolution
+                    ).into(),
                     Some(tmsg::close_reason::INVALID),
                 ));
             }
 
             if opened.whatami != input.cookie.whatami {
-                let e = format!(
-                    "Rejecting OpenSyn cookie on: {}. Invalid whatami: {}",
-                    link, input.cookie.pid
-                );
                 return Err((
-                    zerror2!(ZErrorKind::InvalidMessage { descr: e }),
+                    zerror!(
+                        "Rejecting OpenSyn cookie on: {}. Invalid whatami: {}",
+                        link,
+                        input.cookie.pid
+                    )
+                    .into(),
                     Some(tmsg::close_reason::INVALID),
                 ));
             }
@@ -553,11 +563,11 @@ async fn accept_finalize_transport(
                         .handler
                         .new_unicast(peer, input.transport.clone())
                         .map_err(|e| {
-                            let e = format!(
+                            zerror!(
                                 "Rejecting OpenSyn on: {}. New transport error: {:?}",
-                                link, e
-                            );
-                            zerror2!(ZErrorKind::InvalidSession { descr: e })
+                                link,
+                                e
+                            )
                         })?;
                     // Set the callback on the transport
                     transport.set_callback(callback);

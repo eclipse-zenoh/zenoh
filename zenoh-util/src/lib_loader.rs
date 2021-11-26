@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::{ZError, ZErrorKind, ZResult};
-use crate::{zconfigurable, zerror, zerror2};
+use crate::core::Result as ZResult;
+use crate::{bail, zconfigurable};
 use libloading::Library;
 use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
@@ -89,21 +89,11 @@ impl LibLoader {
         let path = dbg!(Self::str_to_canonical_path(path))?;
 
         if !path.exists() {
-            zerror!(ZErrorKind::Other {
-                descr: format!("Library file '{}' doesn't exist", path.display())
-            })
+            bail!("Library file '{}' doesn't exist", path.display())
         } else if !path.is_file() {
-            zerror!(ZErrorKind::Other {
-                descr: format!("Library file '{}' is not a file", path.display())
-            })
+            bail!("Library file '{}' is not a file", path.display())
         } else {
-            Library::new(path.clone())
-                .map_err(|e| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: e.to_string()
-                    })
-                })
-                .map(|lib| (lib, path))
+            Ok((Library::new(path.clone())?, path))
         }
     }
 
@@ -130,13 +120,7 @@ impl LibLoader {
                     for entry in read_dir.flatten() {
                         if entry.file_name() == filename_ostr {
                             let path = entry.path();
-                            return Library::new(path.clone())
-                                .map_err(|e| {
-                                    zerror2!(ZErrorKind::Other {
-                                        descr: e.to_string()
-                                    })
-                                })
-                                .map(|lib| (lib, path));
+                            return Ok((Library::new(path.clone())?, path));
                         }
                     }
                 }
@@ -146,9 +130,7 @@ impl LibLoader {
                 ),
             }
         }
-        zerror!(ZErrorKind::Other {
-            descr: format!("Library file '{}' not found", filename)
-        })
+        bail!("Library file '{}' not found", filename)
     }
 
     /// Search and load all librairies with filename starting with [struct@LIB_PREFIX]+`prefix` and ending with [struct@LIB_SUFFIX].
@@ -234,21 +216,8 @@ impl LibLoader {
     }
 
     fn str_to_canonical_path(s: &str) -> ZResult<PathBuf> {
-        shellexpand::full(s)
-            .map_err(|err| {
-                zerror2!(ZErrorKind::Other {
-                    descr: err.to_string()
-                })
-            })
-            .and_then(|cow_str| {
-                PathBuf::from(cow_str.deref())
-                    .canonicalize()
-                    .map_err(|err| {
-                        zerror2!(ZErrorKind::Other {
-                            descr: format!("{}: {}", cow_str, err)
-                        })
-                    })
-            })
+        let cow_str = shellexpand::full(s)?;
+        Ok(PathBuf::from(cow_str.deref()).canonicalize()?)
     }
 }
 

@@ -23,9 +23,9 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::*;
-use zenoh_util::zerror;
+use zenoh_util::{bail, zerror};
 
 const RCV_BUF_SIZE: usize = 65536;
 const SEND_BUF_INITIAL_SIZE: usize = 8;
@@ -80,28 +80,21 @@ impl Runtime {
                     log::info!("Scouting for router ...");
                     let ifaces = Runtime::get_interfaces(&ifaces);
                     if ifaces.is_empty() {
-                        zerror!(ZErrorKind::IoError {
-                            descr: "Unable to find multicast interface!".to_string()
-                        })
+                        bail!("Unable to find multicast interface!")
                     } else {
                         let sockets: Vec<UdpSocket> = ifaces
                             .into_iter()
                             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
                             .collect();
                         if sockets.is_empty() {
-                            zerror!(ZErrorKind::IoError {
-                                descr: "Unable to bind UDP port to any multicast interface!"
-                                    .to_string()
-                            })
+                            bail!("Unable to bind UDP port to any multicast interface!")
                         } else {
                             self.connect_first(&sockets, WhatAmI::Router, &addr, timeout)
                                 .await
                         }
                     }
                 } else {
-                    zerror!(ZErrorKind::Other {
-                        descr: "No peer specified and multicast scouting desactivated!".to_string()
-                    })
+                    bail!("No peer specified and multicast scouting desactivated!")
                 }
             }
             _ => {
@@ -115,10 +108,9 @@ impl Runtime {
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
                 }
-                log::error!("Unable to connect to any of {:?}! ", peers);
-                zerror!(ZErrorKind::IoError {
-                    descr: "".to_string()
-                })
+                let e = zerror!("Unable to connect to any of {:?}! ", peers);
+                log::error!("{}", &e);
+                Err(e.into())
             }
         }
     }
@@ -328,12 +320,7 @@ impl Runtime {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {} : {}", listener, err);
-                    return zerror!(
-                        ZErrorKind::IoError {
-                            descr: "".to_string()
-                        },
-                        err
-                    );
+                    return Err(err);
                 }
             }
         }
@@ -382,22 +369,12 @@ impl Runtime {
             Ok(socket) => socket,
             Err(err) => {
                 log::error!("Unable to create datagram socket : {}", err);
-                return zerror!(
-                    ZErrorKind::IoError {
-                        descr: "Unable to create datagram socket".to_string()
-                    },
-                    err
-                );
+                bail!(err => "Unable to create datagram socket");
             }
         };
         if let Err(err) = socket.set_reuse_address(true) {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
-            return zerror!(
-                ZErrorKind::IoError {
-                    descr: "Unable to set SO_REUSEADDR option".to_string()
-                },
-                err
-            );
+            bail!(err => "Unable to set SO_REUSEADDR option");
         }
         let addr = {
             #[cfg(unix)]
@@ -413,12 +390,7 @@ impl Runtime {
             Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
                 log::error!("Unable to bind udp port {} : {}", sockaddr, err);
-                return zerror!(
-                    ZErrorKind::IoError {
-                        descr: format!("Unable to bind udp port {}", sockaddr)
-                    },
-                    err
-                );
+                bail!(err => "Unable to bind udp port {}", sockaddr);
             }
         }
 
@@ -431,15 +403,10 @@ impl Runtime {
                         sockaddr.ip(),
                         err
                     );
-                    return zerror!(
-                        ZErrorKind::IoError {
-                            descr: format!(
-                                "Unable to join multicast group {} on interface 0",
-                                sockaddr.ip()
-                            )
-                        },
-                        err
-                    );
+                    bail!(err =>
+                        "Unable to join multicast group {} on interface 0",
+                        sockaddr.ip()
+                    )
                 }
             },
             IpAddr::V4(addr) => {
@@ -477,12 +444,7 @@ impl Runtime {
             Ok(socket) => socket,
             Err(err) => {
                 log::warn!("Unable to create datagram socket : {}", err);
-                return zerror!(
-                    ZErrorKind::IoError {
-                        descr: "Unable to create datagram socket".to_string()
-                    },
-                    err
-                );
+                bail!(err=> "Unable to create datagram socket");
             }
         };
         match socket.bind(&SocketAddr::new(addr, 0).into()) {
@@ -498,13 +460,8 @@ impl Runtime {
                 log::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
-                log::warn!("Unable to bind udp port {}:0 : {}", addr.to_string(), err);
-                return zerror!(
-                    ZErrorKind::IoError {
-                        descr: format!("Unable to bind udp port {}:0", addr.to_string())
-                    },
-                    err
-                );
+                log::warn!("Unable to bind udp port {}:0 : {}", addr, err);
+                bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
         Ok(std::net::UdpSocket::from(socket).into())
@@ -631,9 +588,7 @@ impl Runtime {
                 return transport;
             }
         }
-        zerror!(ZErrorKind::Other {
-            descr: format!("Unable to connect any of {:?}", locators)
-        })
+        bail!("Unable to connect any of {:?}", locators)
     }
 
     pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
@@ -677,7 +632,7 @@ impl Runtime {
         };
         let timeout = async {
             async_std::task::sleep(timeout).await;
-            zerror!(ZErrorKind::Timeout {})
+            bail!("timeout")
         };
         async_std::prelude::FutureExt::race(scout, timeout).await
     }

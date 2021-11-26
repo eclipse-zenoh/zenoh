@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_util::collections::RecyclingObject;
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 
 /*************************************/
 /*           ZSLICE BUFFER           */

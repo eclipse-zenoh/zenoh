@@ -30,8 +30,8 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
 
 /*************************************/
 /*              STATS                */
@@ -82,11 +82,9 @@ pub struct TransportMulticast(Weak<TransportMulticastInner>);
 impl TransportMulticast {
     #[inline(always)]
     fn get_transport(&self) -> ZResult<Arc<TransportMulticastInner>> {
-        self.0.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport multicast closed".to_string()
-            })
-        })
+        self.0
+            .upgrade()
+            .ok_or_else(|| zerror!("Transport multicast closed").into())
     }
 
     #[inline(always)]
