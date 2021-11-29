@@ -49,7 +49,11 @@ async fn main() {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
-                stored.insert(sample.key_expr.to_string(), sample);
+                if sample.kind == SampleKind::Delete {
+                    stored.remove(&sample.key_expr.to_string());
+                } else {
+                    stored.insert(sample.key_expr.to_string(), sample);
+                }
             },
 
             query = queryable.receiver().next() => {
