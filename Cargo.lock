@@ -3187,7 +3187,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-global-executor",
  "async-rustls",
@@ -3235,7 +3235,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-ext"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "bincode",
@@ -3252,7 +3252,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-macros"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3262,7 +3262,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-rest"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "base64 0.13.0",
@@ -3281,7 +3281,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-storages"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3300,7 +3300,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-trait"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "libloading",
  "log",
@@ -3310,7 +3310,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "aes 0.7.5",
  "anyhow",
@@ -3340,7 +3340,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3373,7 +3373,7 @@ dependencies = [
 
 [[package]]
 name = "zplugin-example"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "clap",
