@@ -68,11 +68,6 @@ fn main() {
                 "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
              'A plugin that must be loaded. Repeat this option to load several plugins.'",
             ))
-            .arg(Arg::from_usage(
-                "--plugin-nolookup \
-             'When set, zenohd will not look for plugins nor try to load any plugin except the \
-             ones explicitely configured with -P or --plugin.'",
-            ))
             .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
             'A directory where to search for plugins libraries to load. \
             Repeat this option to specify several search directories'.").conflicts_with("plugin-nolookup"))
@@ -186,13 +181,16 @@ fn config_from_args(args: &ArgMatches) -> Config {
                 let name = LibLoader::plugin_name(&path).unwrap();
                 config
                     .insert_json5(
-                        format!("plugins/{}", name),
-                        &format!(r#"{{"__path__": "{}", "__required__": true}}"#, path),
+                        format!("plugins/{}/__path__", name),
+                        &format!("\"{}\"", path),
                     )
+                    .unwrap();
+                config
+                    .insert_json5(format!("plugins/{}/__required__", name), "true")
                     .unwrap();
             } else {
                 config
-                    .insert_json5(format!("plugins/{}", path), r#"{"__required__": true}"#)
+                    .insert_json5(format!("plugins/{}/__required__", path), "true")
                     .unwrap();
             }
         }
