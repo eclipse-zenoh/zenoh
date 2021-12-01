@@ -86,7 +86,7 @@ impl LibLoader {
     /// This function calls [libloading::Library::new()](https://docs.rs/libloading/0.7.0/libloading/struct.Library.html#method.new)
     /// which is unsafe.
     pub unsafe fn load_file(path: &str) -> ZResult<(Library, PathBuf)> {
-        let path = dbg!(Self::str_to_canonical_path(path))?;
+        let path = Self::str_to_canonical_path(path)?;
 
         if !path.exists() {
             bail!("Library file '{}' doesn't exist", path.display())
