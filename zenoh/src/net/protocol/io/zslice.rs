@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
 use std::convert::AsRef;
 use std::fmt;
@@ -20,22 +20,22 @@ use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use zenoh_util::collections::RecyclingObject;
-#[cfg(feature = "zero-copy")]
-use zenoh_util::core::ZResult;
+#[cfg(feature = "shared-memory")]
+use zenoh_util::core::Result as ZResult;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ZSliceBuffer {
     NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     ShmInfo(Arc<Vec<u8>>),
 }
 
@@ -44,9 +44,9 @@ impl ZSliceBuffer {
         match self {
             Self::NetSharedBuffer(buf) => buf,
             Self::NetOwnedBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmInfo(buf) => buf.as_slice(),
         }
     }
@@ -59,11 +59,11 @@ impl ZSliceBuffer {
                 &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
             }
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => {
                 (&mut (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf))).as_mut_slice()
             }
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             Self::ShmInfo(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
         }
     }
@@ -163,33 +163,27 @@ impl From<Vec<u8>> for ZSliceBuffer {
     }
 }
 
-impl From<&[u8]> for ZSliceBuffer {
-    fn from(buf: &[u8]) -> Self {
-        Self::NetOwnedBuffer(buf.to_vec().into())
-    }
-}
-
 impl<'a> From<&IoSlice<'a>> for ZSliceBuffer {
     fn from(buf: &IoSlice) -> Self {
         Self::NetOwnedBuffer(buf.to_vec().into())
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZSliceBuffer {
     fn from(buf: Arc<SharedMemoryBuf>) -> Self {
         Self::ShmBuffer(buf)
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZSliceBuffer {
     fn from(buf: Box<SharedMemoryBuf>) -> Self {
         Self::ShmBuffer(buf.into())
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZSliceBuffer {
     fn from(buf: SharedMemoryBuf) -> Self {
         Self::ShmBuffer(buf.into())
@@ -223,9 +217,12 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
-    pub fn new(buf: ZSliceBuffer, start: usize, end: usize) -> ZSlice {
-        assert!(end <= buf.as_slice().len());
-        ZSlice { buf, start, end }
+    pub fn make(buf: ZSliceBuffer, start: usize, end: usize) -> Result<ZSlice, ZSliceBuffer> {
+        if end <= buf.as_slice().len() {
+            Ok(ZSlice { buf, start, end })
+        } else {
+            Err(buf)
+        }
     }
 
     #[inline]
@@ -263,21 +260,24 @@ impl ZSlice {
     pub fn get_kind(&self) -> ZSliceKind {
         match &self.buf {
             ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
         }
     }
 
-    pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> ZSlice {
-        assert!(end <= self.len());
-        ZSlice {
-            buf: self.buf.clone(),
-            start: self.start + start,
-            end: self.start + end,
+    pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> Option<ZSlice> {
+        if end <= self.len() {
+            Some(ZSlice {
+                buf: self.buf.clone(),
+                start: self.start + start,
+                end: self.start + end,
+            })
+        } else {
+            None
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
@@ -305,7 +305,7 @@ impl ZSlice {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         match &self.buf {
@@ -425,74 +425,99 @@ impl fmt::Debug for ZSlice {
 // From impls
 impl From<ZSliceBuffer> for ZSlice {
     fn from(buf: ZSliceBuffer) -> Self {
-        let len = buf.len();
-        Self::new(buf, 0, len)
+        let end = buf.len();
+        Self { buf, start: 0, end }
     }
 }
 
 impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
     fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
 impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
     fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
 impl From<Arc<Vec<u8>>> for ZSlice {
     fn from(buf: Arc<Vec<u8>>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
 impl From<Vec<u8>> for ZSlice {
     fn from(buf: Vec<u8>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
-    }
-}
-
-impl From<&[u8]> for ZSlice {
-    fn from(buf: &[u8]) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
 impl<'a> From<&IoSlice<'a>> for ZSlice {
     fn from(buf: &IoSlice) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZSlice {
     fn from(buf: Arc<SharedMemoryBuf>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZSlice {
     fn from(buf: Box<SharedMemoryBuf>) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZSlice {
     fn from(buf: SharedMemoryBuf) -> Self {
-        let len = buf.len();
-        Self::new(buf.into(), 0, len)
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
@@ -502,12 +527,12 @@ mod tests {
 
     #[test]
     fn zslice() {
-        let buf = vec![0u8; 16];
+        let buf = vec![0_u8; 16];
         let zslice: ZSlice = buf.clone().into();
         println!("[01] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
-        let buf: Vec<u8> = (0u8..16).into_iter().collect();
+        let buf: Vec<u8> = (0_u8..16).into_iter().collect();
         unsafe {
             let mbuf = zslice.as_mut_slice();
             mbuf[..buf.len()].clone_from_slice(&buf[..]);

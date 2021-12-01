@@ -16,13 +16,13 @@ use async_std::task;
 use std::any::Any;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
@@ -72,9 +72,10 @@ impl TransportPeerEventHandler for SC {
 async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::PEER)
-        .pid(PeerId::new(1, [0u8; PeerId::MAX_SIZE]))
-        .build(Arc::new(SH::default()));
+        .whatami(WhatAmI::Peer)
+        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .build(Arc::new(SH::default()))
+        .unwrap();
     let sm = TransportManager::new(config);
 
     for _ in 0..RUNS {

@@ -19,15 +19,14 @@ use super::common::{
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
+#[cfg(feature = "stats")]
+use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
-#[cfg(feature = "stats")]
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::core::Result as ZResult;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -45,65 +44,6 @@ macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         $guard.iter().position(|l| l.get_link() == $link)
     };
-}
-
-/*************************************/
-/*              STATS                */
-/*************************************/
-#[cfg(feature = "stats")]
-#[derive(Clone)]
-pub(crate) struct TransportUnicastStatsInner {
-    tx_msgs: Arc<AtomicUsize>,
-    tx_bytes: Arc<AtomicUsize>,
-    rx_msgs: Arc<AtomicUsize>,
-    rx_bytes: Arc<AtomicUsize>,
-}
-
-#[cfg(feature = "stats")]
-impl TransportUnicastStatsInner {
-    pub(crate) fn inc_tx_msgs(&self, messages: usize) {
-        self.tx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_msgs(&self) -> usize {
-        self.tx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_tx_bytes(&self, bytes: usize) {
-        self.tx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_tx_bytes(&self) -> usize {
-        self.tx_bytes.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_msgs(&self, messages: usize) {
-        self.rx_msgs.fetch_add(messages, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_msgs(&self) -> usize {
-        self.rx_msgs.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn inc_rx_bytes(&self, bytes: usize) {
-        self.rx_bytes.fetch_add(bytes, Ordering::Relaxed);
-    }
-
-    pub(crate) fn get_rx_bytes(&self) -> usize {
-        self.rx_bytes.load(Ordering::Relaxed)
-    }
-}
-
-#[cfg(feature = "stats")]
-impl Default for TransportUnicastStatsInner {
-    fn default() -> TransportUnicastStatsInner {
-        TransportUnicastStatsInner {
-            tx_msgs: Arc::new(AtomicUsize::new(0)),
-            tx_bytes: Arc::new(AtomicUsize::new(0)),
-            rx_msgs: Arc::new(AtomicUsize::new(0)),
-            rx_bytes: Arc::new(AtomicUsize::new(0)),
-        }
-    }
 }
 
 /*************************************/
@@ -133,7 +73,7 @@ pub(crate) struct TransportUnicastInner {
     pub(super) is_shm: bool,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: TransportUnicastStatsInner,
+    pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
 pub(crate) struct TransportUnicastConfig {
@@ -206,7 +146,7 @@ impl TransportUnicastInner {
             alive: AsyncArc::new(AsyncMutex::new(true)),
             is_shm: config.is_shm,
             #[cfg(feature = "stats")]
-            stats: TransportUnicastStatsInner::default(),
+            stats: Arc::new(TransportUnicastStatsAtomic::default()),
         }
     }
 
@@ -261,27 +201,37 @@ impl TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        if guard.len() >= self.manager.config.unicast.max_links {
-            return zerror!(ZErrorKind::InvalidLink {
-                descr: format!(
-                    "Can not add Link {} with peer {}: max num of links ({})",
-                    link, self.pid, self.manager.config.unicast.max_links
-                )
-            });
+    #[allow(unused_variables)]
+    pub(super) fn can_add_link(&self, link: &LinkUnicast) -> bool {
+        let guard = zread!(self.links);
+        #[cfg(feature = "transport_multilink")]
+        {
+            if guard.len() < self.manager.config.unicast.max_links {
+                zlinkget!(guard, link).is_none()
+            } else {
+                false
+            }
         }
+        #[cfg(not(feature = "transport_multilink"))]
+        {
+            guard.is_empty()
+        }
+    }
 
-        if zlinkget!(guard, &link).is_some() {
-            return zerror!(ZErrorKind::InvalidLink {
-                descr: format!("Can not add Link {} with peer: {}", link, self.pid)
-            });
+    pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
+        if !self.can_add_link(&link) {
+            bail!(
+                "Can not add Link {} with peer {}: max num of links reached",
+                link,
+                self.pid,
+            )
         }
 
         // Create a channel link from a link
         let link = TransportLinkUnicast::new(self.clone(), link);
 
         // Add the link to the channel
+        let mut guard = zwrite!(self.links);
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link);
@@ -304,9 +254,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not start Link TX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not start Link TX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -319,9 +267,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not stop Link TX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not stop Link TX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -334,9 +280,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not start Link RX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not start Link RX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -349,9 +293,7 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not stop Link RX {} with peer: {}", link, self.pid)
-                })
+                bail!("Can not stop Link RX {} with peer: {}", link, self.pid)
             }
         }
     }
@@ -365,6 +307,7 @@ impl TransportUnicastInner {
         // Try to remove the link
         let target = {
             let mut guard = zwrite!(self.links);
+
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
@@ -384,9 +327,7 @@ impl TransportUnicastInner {
                     Target::Link(stl.into())
                 }
             } else {
-                return zerror!(ZErrorKind::InvalidLink {
-                    descr: format!("Can not delete Link {} with peer: {}", link, self.pid)
-                });
+                bail!("Can not delete Link {} with peer: {}", link, self.pid)
             }
         };
 
@@ -484,22 +425,20 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "zero-copy")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        let res = if self.is_shm {
-            message.map_to_shminfo()
-        } else {
-            message.map_to_shmbuf(self.manager.shmr.clone())
-        };
-        if let Err(e) = res {
-            log::trace!("Failed SHM conversion: {}", e);
-            return;
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = if self.is_shm {
+                message.map_to_shminfo()
+            } else {
+                message.map_to_shmbuf(self.manager.shmr.clone())
+            };
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return;
+            }
         }
-        self.schedule_first_fit(message);
-    }
 
-    #[cfg(not(feature = "zero-copy"))]
-    pub(crate) fn schedule(&self, message: ZenohMessage) {
         self.schedule_first_fit(message);
     }
 

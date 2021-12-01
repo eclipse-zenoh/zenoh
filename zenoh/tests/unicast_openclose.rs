@@ -16,13 +16,13 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
-use zenoh::net::protocol::core::{whatami, PeerId};
+use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
@@ -78,50 +78,56 @@ impl TransportEventHandler for SHClientOpenClose {
 
 async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(2);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(2)
-                .build(),
-        )
-        .build(router_handler.clone());
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(2);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(2)
-                .build(),
-        )
-        .build(Arc::new(SHClientOpenClose::new()));
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build(),
-        )
-        .build(Arc::new(SHClientOpenClose::new()));
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
     let client02_manager = TransportManager::new(config);
 
     /* [1] */
@@ -137,6 +143,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Open a first transport from the client to the router
     // -> This should be accepted
+    let mut links_num = 1;
+
     println!("Transport Open Close [1c1]");
     let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [1c2]: {:?}", res);
@@ -150,7 +158,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     println!("Transport Open Close [1e1]");
     let links = c_ses1.get_links().unwrap();
     println!("Transport Open Close [1e2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    assert_eq!(links.len(), links_num);
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [1f1]");
@@ -164,7 +172,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             match s {
                 Some(s) => {
                     let links = s.get_links().unwrap();
-                    assert_eq!(links.len(), 1);
+                    assert_eq!(links.len(), links_num);
                     break;
                 }
                 None => task::sleep(SLEEP).await,
@@ -177,21 +185,26 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [2] */
     // Open a second transport from the client to the router
     // -> This should be accepted
-    println!("\nTransport Open Close [2a1]");
-    let res = client01_manager.open_transport(endpoint.clone()).await;
-    println!("Transport Open Close [2a2]: {:?}", res);
-    assert!(res.is_ok());
-    let c_ses2 = res.unwrap();
-    println!("Transport Open Close [2b1]");
-    let transports = client01_manager.get_transports();
-    println!("Transport Open Close [2b2]: {:?}", transports);
-    assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses2.get_pid().unwrap(), router_id);
-    println!("Transport Open Close [2c1]");
-    let links = c_ses2.get_links().unwrap();
-    println!("Transport Open Close [2c2]: {:?}", links);
-    assert_eq!(links.len(), 2);
-    assert_eq!(c_ses2, c_ses1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        links_num = 2;
+
+        println!("\nTransport Open Close [2a1]");
+        let res = client01_manager.open_transport(endpoint.clone()).await;
+        println!("Transport Open Close [2a2]: {:?}", res);
+        assert!(res.is_ok());
+        let c_ses2 = res.unwrap();
+        println!("Transport Open Close [2b1]");
+        let transports = client01_manager.get_transports();
+        println!("Transport Open Close [2b2]: {:?}", transports);
+        assert_eq!(transports.len(), 1);
+        assert_eq!(c_ses2.get_pid().unwrap(), router_id);
+        println!("Transport Open Close [2c1]");
+        let links = c_ses2.get_links().unwrap();
+        println!("Transport Open Close [2c2]: {:?}", links);
+        assert_eq!(links.len(), links_num);
+        assert_eq!(c_ses2, c_ses1);
+    }
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [2d1]");
@@ -204,7 +217,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 .unwrap();
 
             let links = s.get_links().unwrap();
-            if links.len() == 2 {
+            if links.len() == links_num {
                 break;
             }
             task::sleep(SLEEP).await;
@@ -228,7 +241,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     println!("Transport Open Close [3c1]");
     let links = c_ses1.get_links().unwrap();
     println!("Transport Open Close [3c2]: {:?}", links);
-    assert_eq!(links.len(), 2);
+    assert_eq!(links.len(), links_num);
 
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [3d1]");
@@ -241,7 +254,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 2);
+        assert_eq!(links.len(), links_num);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
     println!("Transport Open Close [3d2]: {:?}", res);
@@ -277,6 +290,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [5] */
     // Open transport -> This should be accepted because
     // the number of links should be back to 0
+    links_num = 1;
+
     println!("\nTransport Open Close [5a1]");
     let res = client01_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [5a2]: {:?}", res);
@@ -290,9 +305,9 @@ async fn openclose_transport(endpoint: &EndPoint) {
     println!("Transport Open Close [5c1]");
     let links = c_ses3.get_links().unwrap();
     println!("Transport Open Close [5c2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    assert_eq!(links.len(), links_num);
 
-    // Verify that the transport has not been open on the router
+    // Verify that the transport has been open on the router
     println!("Transport Open Close [5d1]");
     let check = async {
         task::sleep(SLEEP).await;
@@ -303,7 +318,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 1);
+        assert_eq!(links.len(), links_num);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
     println!("Transport Open Close [5d2]: {:?}", res);
@@ -331,7 +346,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .find(|s| s.get_pid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
-        assert_eq!(links.len(), 1);
+        assert_eq!(links.len(), links_num);
     };
     let res = check.timeout(TIMEOUT).await.unwrap();
     println!("Transport Open Close [6c2]: {:?}", res);
@@ -364,6 +379,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [8] */
     // Open transport -> This should be accepted because
     // the number of transports should be back to 0
+    links_num = 1;
+
     println!("\nTransport Open Close [8a1]");
     let res = client02_manager.open_transport(endpoint.clone()).await;
     println!("Transport Open Close [8a2]: {:?}", res);
@@ -376,7 +393,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     println!("Transport Open Close [8c1]");
     let links = c_ses4.get_links().unwrap();
     println!("Transport Open Close [8c2]: {:?}", links);
-    assert_eq!(links.len(), 1);
+    assert_eq!(links.len(), links_num);
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [8d1]");
@@ -389,7 +406,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             match s {
                 Some(s) => {
                     let links = s.get_links().unwrap();
-                    assert_eq!(links.len(), 1);
+                    assert_eq!(links.len(), links_num);
                     break;
                 }
                 None => task::sleep(SLEEP).await,

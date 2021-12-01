@@ -13,28 +13,22 @@
 //
 
 use async_std::sync::Arc;
-use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use http_types::Method;
-use runtime::Runtime;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::net::*;
-use zenoh::{Change, Selector, Value};
-use zenoh_plugin_trait::prelude::*;
+use zenoh::net::runtime::Runtime;
+use zenoh::prelude::*;
+use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::Session;
+use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
+use zenoh_util::{bail, core::Result as ZResult};
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
 const DEFAULT_HTTP_PORT: &str = "8000";
-
-const SSE_SUB_INFO: SubInfo = SubInfo {
-    reliability: Reliability::Reliable,
-    mode: SubMode::Push,
-    period: None,
-};
 
 fn parse_http_port(arg: &str) -> String {
     match arg.split(':').count() {
@@ -48,57 +42,40 @@ fn parse_http_port(arg: &str) -> String {
     }
 }
 
-fn get_kind_str(sample: &Sample) -> String {
-    let kind = match &sample.data_info {
-        Some(info) => info.kind.unwrap_or(data_kind::DEFAULT),
-        None => data_kind::DEFAULT,
-    };
-    data_kind::to_string(kind)
-}
-
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
-    use Value::*;
-
-    match value {
-        Raw(_, buf) => format!(r#""{}""#, base64::encode(buf.to_vec())),
-        Custom {
-            encoding_descr,
-            data,
-        } => format!(r#""{}:{}""#, encoding_descr, base64::encode(data.to_vec())),
-        StringUtf8(s) => {
+    match &value.encoding {
+        p if p.starts_with(&Encoding::STRING) => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(s);
-            js.to_string()
+            serde_json::json!(value.to_string()).to_string()
         }
-        Properties(p) => {
+        p if p.starts_with(&Encoding::APP_PROPERTIES) => {
             // convert to Json string for special characters escaping
-            let js = serde_json::json!(*p);
-            js.to_string()
+            serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        Json(s) => s,
-        Integer(i) => format!(r#"{}"#, i),
-        Float(f) => format!(r#"{}"#, f),
+        p if p.starts_with(&Encoding::APP_JSON) => value.to_string(),
+        p if p.starts_with(&Encoding::APP_INTEGER) || p.starts_with(&Encoding::APP_FLOAT) => {
+            value.to_string()
+        }
+        _ => {
+            format!(r#""{}""#, base64::encode(value.payload.to_vec()))
+        }
     }
 }
 
 fn sample_to_json(sample: Sample) -> String {
-    let res_name = sample.res_name.clone();
-    if let Ok(change) = Change::from_sample(sample, true) {
-        let (encoding, value) = match change.value {
-            Some(v) => (v.encoding_descr(), value_to_json(v)),
-            None => ("None".to_string(), r#""""#.to_string()),
-        };
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            change.path, value, encoding, change.timestamp
-        )
-    } else {
-        format!(
-            r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
-            res_name, "ERROR: Failed to decode Sample", "Unkown", "None"
-        )
-    }
+    let encoding = sample.value.encoding.to_string();
+    format!(
+        r#"{{ "key": "{}", "value": {}, "encoding": "{}", "time": "{}" }}"#,
+        sample.key_expr.as_str(),
+        value_to_json(sample.value),
+        encoding,
+        if let Some(ts) = sample.timestamp {
+            ts.to_string()
+        } else {
+            "None".to_string()
+        }
+    )
 }
 
 async fn to_json(results: ReplyReceiver) -> String {
@@ -113,8 +90,8 @@ async fn to_json(results: ReplyReceiver) -> String {
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
-        sample.res_name,
-        String::from_utf8_lossy(&sample.payload.contiguous())
+        sample.key_expr.as_str(),
+        String::from_utf8_lossy(&sample.value.payload.contiguous())
     )
 }
 
@@ -127,26 +104,12 @@ async fn to_html(results: ReplyReceiver) -> String {
     format!("<dl>\n{}\n</dl>\n", values)
 }
 
-fn enc_from_mime(mime: Option<Mime>) -> ZInt {
-    use zenoh::net::encoding::*;
-    match mime {
-        Some(mime) => match from_str(mime.essence()) {
-            Ok(encoding) => encoding,
-            _ => match mime.basetype() {
-                "text" => TEXT_PLAIN,
-                &_ => APP_OCTET_STREAM,
-            },
-        },
-        None => APP_OCTET_STREAM,
-    }
-}
-
-fn method_to_kind(method: Method) -> ZInt {
+fn method_to_kind(method: Method) -> SampleKind {
     match method {
-        Method::Put => data_kind::PUT,
-        Method::Patch => data_kind::PATCH,
-        Method::Delete => data_kind::DELETE,
-        _ => data_kind::DEFAULT,
+        Method::Put => SampleKind::Put,
+        Method::Patch => SampleKind::Patch,
+        Method::Delete => SampleKind::Delete,
+        _ => SampleKind::default(),
     }
 }
 
@@ -171,6 +134,16 @@ impl std::fmt::Display for StrError {
         write!(f, "{}", self.err)
     }
 }
+#[derive(Debug, Clone)]
+struct StringError {
+    err: String,
+}
+impl std::error::Error for StringError {}
+impl std::fmt::Display for StringError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.err)
+    }
+}
 
 impl Plugin for RestPlugin {
     fn compatibility() -> zenoh_plugin_trait::PluginId {
@@ -178,52 +151,60 @@ impl Plugin for RestPlugin {
             uid: "zenoh-plugin-rest",
         }
     }
+    type StartArgs = Runtime;
+    const STATIC_NAME: &'static str = "rest";
 
-    type Requirements = Vec<Arg<'static, 'static>>;
-    type StartArgs = (Runtime, ArgMatches<'static>);
-
-    fn get_requirements() -> Self::Requirements {
-        vec![
-            Arg::from_usage("--rest-http-port 'The REST plugin's http port'")
-                .default_value(DEFAULT_HTTP_PORT),
-        ]
-    }
-
-    fn start(
-        (runtime, args): &Self::StartArgs,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
-        match args.value_of("rest-http-port") {
-            None => Err(Box::new(StrError {
-                err: "No --rest-http-port argument found",
-            })),
-            Some(port) => {
-                async_std::task::spawn(run(runtime.clone(), port.to_owned()));
-                Ok(Box::new(()))
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+        let config = runtime.config.lock();
+        let self_cfg: &serde_json::Value = match config.plugin(name) {
+            Some(value) => value,
+            None => {
+                bail!("No configuration found for plugin '{}'", name)
             }
+        };
+        if let Some(port) = self_cfg.as_object().unwrap().get("port") {
+            let port = match port {
+                serde_json::Value::Null
+                | serde_json::Value::Bool(_)
+                | serde_json::Value::Array(_)
+                | serde_json::Value::Object(_) => {
+                    return Err(Box::new(StrError {
+                        err: r#""port" option must be an integer"#,
+                    }))
+                }
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => {
+                    if let Some(port) = n.as_u64() {
+                        port.to_string()
+                    } else {
+                        return Err(Box::new(StrError {
+                            err: r#""port" option must be a positive integer"#,
+                        }));
+                    }
+                }
+            };
+            std::mem::drop(config);
+            async_std::task::spawn(run(runtime.clone(), port));
+            Ok(Box::new(RunningPlugin))
+        } else {
+            std::mem::drop(config);
+            Err(Box::new(StrError {
+                err: r#"Plugin option "port" is required"#,
+            }))
         }
+    }
+}
+struct RunningPlugin;
+impl RunningPluginTrait for RunningPlugin {
+    fn config_checker(&self) -> ValidationFunction {
+        Arc::new(|_, _, _| {
+            Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
+        })
     }
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     log::trace!("Incoming GET request: {:?}", req);
-    // Reconstruct Selector from req.url() (no easier way...)
-    let url = req.url();
-    let mut s = String::with_capacity(url.as_str().len());
-    s.push_str(url.path());
-    if let Some(q) = url.query() {
-        s.push('?');
-        s.push_str(q);
-    }
-    let selector = match Selector::try_from(s) {
-        Ok(sel) => sel,
-        Err(e) => {
-            return Ok(response(
-                StatusCode::BadRequest,
-                Mime::from_str("text/plain").unwrap(),
-                &e.to_string(),
-            ))
-        }
-    };
 
     let first_accept = match req.header("accept") {
         Some(accept) => accept[0]
@@ -241,25 +222,20 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let resource = path_to_resource(req.url().path(), &req.state().1);
+                let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
-                        resource,
+                        key_expr,
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&resource, &SSE_SUB_INFO)
-                        .await
-                        .unwrap();
+                    let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.receiver().next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
-                                .send(&get_kind_str(&sample), sample_to_json(sample), None)
+                                .send(&sample.kind.to_string(), sample_to_json(sample), None)
                                 .await
                             {
                                 log::warn!("Error sending data from the SSE stream: {}", e);
@@ -275,7 +251,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.undeclare().await {
+                            if let Err(e) = sub.close().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;
@@ -286,7 +262,14 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             },
         ))
     } else {
-        let resource = path_to_resource(selector.path_expr.as_str(), &req.state().1);
+        let url = req.url();
+        let key_expr = path_to_key_expr(url.path(), &req.state().1);
+        let query_part = url.query().map(|q| format!("?{}", q));
+        let selector = if let Some(q) = &query_part {
+            Selector::from(key_expr).with_value_selector(q)
+        } else {
+            key_expr.into()
+        };
         let consolidation = if selector.has_time_range() {
             QueryConsolidation::none()
         } else {
@@ -295,12 +278,8 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         match req
             .state()
             .0
-            .query(
-                &resource,
-                &selector.predicate,
-                QueryTarget::default(),
-                consolidation,
-            )
+            .get(&selector)
+            .consolidation(consolidation)
             .await
         {
             Ok(receiver) => {
@@ -331,17 +310,16 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
-            let resource = path_to_resource(req.url().path(), &req.state().1);
+            let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
+            let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
+
+            // @TODO: Define the right congestion control value
             match req
                 .state()
                 .0
-                .write_ext(
-                    &resource,
-                    bytes.into(),
-                    enc_from_mime(req.content_type()),
-                    method_to_kind(req.method()),
-                    CongestionControl::Drop, // @TODO: Define the right congestion control value
-                )
+                .put(&key_expr, bytes)
+                .encoding(encoding)
+                .kind(method_to_kind(req.method()))
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -383,29 +361,20 @@ pub async fn run(runtime: Runtime, port: String) {
             .allow_credentials(false),
     );
 
-    app.at("/").get(query);
-    app.at("*").get(query);
-
-    app.at("/").put(write);
-    app.at("*").put(write);
-
-    app.at("/").patch(write);
-    app.at("*").patch(write);
-
-    app.at("/").delete(write);
-    app.at("*").delete(write);
+    app.at("/").get(query).put(write).patch(write).delete(write);
+    app.at("*").get(query).put(write).patch(write).delete(write);
 
     if let Err(e) = app.listen(http_port).await {
         log::error!("Unable to start http server for REST : {:?}", e);
     }
 }
 
-fn path_to_resource(path: &str, pid: &str) -> ResKey {
+fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
     if path == "/@/router/local" {
-        ResKey::from(format!("/@/router/{}", pid))
+        KeyExpr::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        ResKey::from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
     } else {
-        ResKey::from(path)
+        KeyExpr::from(path)
     }
 }

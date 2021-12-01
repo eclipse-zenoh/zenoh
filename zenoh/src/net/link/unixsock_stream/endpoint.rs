@@ -15,8 +15,7 @@ use super::*;
 use async_std::path::PathBuf;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -24,9 +23,9 @@ pub(super) fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {
     match &locator.address {
         LocatorAddress::UnixSocketStream(path) => Ok(path.path.clone()),
         _ => {
-            let e = format!("Not a UnixSocketStream locator: {:?}", locator);
+            let e = zerror!("Not a UnixSocketStream locator: {:?}", locator);
             log::debug!("{}", e);
-            return zerror!(ZErrorKind::InvalidLocator { descr: e });
+            Err(e.into())
         }
     }
 }
@@ -62,17 +61,16 @@ impl LocatorUnixSocketStream {
 }
 
 impl FromStr for LocatorUnixSocketStream {
-    type Err = ZError;
+    type Err = zenoh_util::core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let addr = match PathBuf::from(s).to_str() {
-            Some(path) => Ok(PathBuf::from(path)),
+            Some(path) => PathBuf::from(path),
             None => {
-                let e = format!("Invalid UnixSocketStream locator: {:?}", s);
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
+                bail!("Invalid UnixSocketStream locator: {:?}", s);
             }
         };
-        addr.map(|v| LocatorUnixSocketStream { path: v })
+        Ok(LocatorUnixSocketStream { path: addr })
     }
 }
 
@@ -91,7 +89,7 @@ impl fmt::Display for LocatorUnixSocketStream {
 pub struct LocatorConfigUnixSocketStream;
 
 impl LocatorConfigUnixSocketStream {
-    pub fn from_config(_config: &ConfigProperties) -> ZResult<Option<Properties>> {
+    pub fn from_config(_config: &crate::config::Config) -> ZResult<Option<Properties>> {
         Ok(None)
     }
 }

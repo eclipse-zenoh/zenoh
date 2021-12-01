@@ -11,18 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::shm::{SharedMemoryBuf, SharedMemoryReader};
 use super::ZSlice;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
-#[cfg(feature = "zero-copy")]
-use zenoh_util::core::ZResult;
+#[cfg(feature = "shared-memory")]
+use zenoh_util::core::Result as ZResult;
 
 /*************************************/
 /*           ZBUF POSITION           */
@@ -96,6 +96,8 @@ impl Default for ZBufInner {
 /*************************************/
 /*              ZBUF                 */
 /*************************************/
+/// A zenoh buffer.
+///
 /// [`ZBuf`][ZBuf] is a buffer that contains one or more [`ZSlice`][ZSlice]s. It is used
 /// to efficiently send and receive data in zenoh. It provides transparent usage for
 /// both network and shared memory operations through a simple API.
@@ -108,20 +110,20 @@ impl Default for ZBufInner {
 ///
 /// Example for creating a data buffer:
 /// ```
-/// use zenoh::net::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
-/// let zbuf: ZBuf = vec![0u8; 16].into();
-/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
+/// let zbuf: ZBuf = vec![0_u8; 16].into();
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// // Allocate first a vectore of bytes and convert it into a ZSlice.
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone()); // Cloning a ZSlice does not allocate
 /// zbuf.add_zslice(zslice);
 ///
-/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
 /// ```
 ///
 /// Calling [`contiguous()`][ZBuf::contiguous] allows to acces to the whole payload as a contigous `&[u8]` via the
@@ -130,21 +132,21 @@ impl Default for ZBufInner {
 /// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contigous in memory.
 ///
 /// ```
-/// use zenoh::net::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone());
 ///
 /// // contiguous() does not allocate since zbuf contains only one slice
-/// assert_eq!(&vec![0u8; 16], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
 ///
 /// // Add a second slice to zbuf
 /// zbuf.add_zslice(zslice.clone());
 ///
 /// // contiguous() allocates since zbuf contains two slices
-/// assert_eq!(&vec![0u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
 /// ```
 ///
 /// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice]s the [`ZBuf`][ZBuf] is composed of. If
@@ -154,9 +156,9 @@ impl Default for ZBufInner {
 /// dealing with shared memory access or with large data that has been likely fragmented on the network.
 ///
 /// ```
-/// use zenoh::net::protocol::io::{ZBuf, ZSlice};
+/// use zenoh::buf::{ZBuf, ZSlice};
 ///
-/// let zslice: ZSlice = vec![0u8; 16].into();
+/// let zslice: ZSlice = vec![0_u8; 16].into();
 ///
 /// let mut zbuf = ZBuf::new();
 /// zbuf.add_zslice(zslice.clone());
@@ -172,9 +174,9 @@ impl Default for ZBufInner {
 pub struct ZBuf {
     slices: ZBufInner,
     pos: ZBufPos,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     has_shminfo: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     has_shmbuf: bool,
 }
 
@@ -183,9 +185,9 @@ impl ZBuf {
         ZBuf {
             slices: ZBufInner::default(),
             pos: ZBufPos::default(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             has_shminfo: false,
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             has_shmbuf: false,
         }
     }
@@ -197,7 +199,7 @@ impl ZBuf {
 
     #[inline]
     pub fn add_zslice(&mut self, slice: ZSlice) {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         match &slice.buf {
             ZSliceBuffer::ShmInfo(_) => self.has_shminfo = true,
             ZSliceBuffer::ShmBuffer(_) => self.has_shmbuf = true,
@@ -389,7 +391,7 @@ impl ZBuf {
 
     #[inline(always)]
     pub fn read_vec(&mut self) -> Vec<u8> {
-        let mut vec = vec![0u8; self.readable()];
+        let mut vec = vec![0_u8; self.readable()];
         self.read_bytes(&mut vec);
         vec
     }
@@ -397,7 +399,7 @@ impl ZBuf {
     // returns a Vec<u8> containing a copy of ZBuf content (not considering read position)
     #[inline(always)]
     pub fn to_vec(&self) -> Vec<u8> {
-        let mut vec = vec![0u8; self.len()];
+        let mut vec = vec![0_u8; self.len()];
         self.copy_bytes(&mut vec[..], (0, 0));
         vec
     }
@@ -428,24 +430,28 @@ impl ZBuf {
             let slice_len = current.len();
             let remain_in_slice = slice_len - pos_1;
             let l = n.min(remain_in_slice);
-            dest.add_zslice(current.new_sub_slice(pos_1, pos_1 + l));
+            let zs = match current.new_sub_slice(pos_1, pos_1 + l) {
+                Some(zs) => zs,
+                None => return false,
+            };
+            dest.add_zslice(zs);
             self.skip_bytes_no_check(l);
             n -= l;
         }
         true
     }
 
-    // Read all the bytes from 'self' and add those to 'dest'
-    #[inline(always)]
-    pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
-        self.read_into_zbuf(dest, self.readable())
-    }
+    // // Read all the bytes from 'self' and add those to 'dest'
+    // #[inline(always)]
+    // pub(crate) fn drain_into_zbuf(&mut self, dest: &mut ZBuf) -> bool {
+    //     self.read_into_zbuf(dest, self.readable())
+    // }
 
     // Read a subslice of current slice
     pub(crate) fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
         let slice = self.curr_slice()?;
         if len <= slice.len() {
-            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len);
+            let slice = slice.new_sub_slice(self.pos.byte, self.pos.byte + len)?;
             self.skip_bytes_no_check(len);
             Some(slice)
         } else {
@@ -453,7 +459,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         if !self.has_shminfo() {
@@ -482,7 +488,7 @@ impl ZBuf {
         Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(never)]
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         if !self.has_shmbuf() {
@@ -511,13 +517,13 @@ impl ZBuf {
         Ok(res)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub(crate) fn has_shminfo(&self) -> bool {
         self.has_shminfo
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub(crate) fn has_shmbuf(&self) -> bool {
         self.has_shmbuf
@@ -544,7 +550,7 @@ impl fmt::Debug for ZBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         macro_rules! zsliceprint {
             ($slice:expr) => {
-                #[cfg(feature = "zero-copy")]
+                #[cfg(feature = "shared-memory")]
                 {
                     match $slice.buf {
                         ZSliceBuffer::NetSharedBuffer(_) => write!(f, " BUF:")?,
@@ -553,7 +559,7 @@ impl fmt::Debug for ZBuf {
                         ZSliceBuffer::ShmInfo(_) => write!(f, " SHM_INFO:")?,
                     }
                 }
-                #[cfg(not(feature = "zero-copy"))]
+                #[cfg(not(feature = "shared-memory"))]
                 {
                     write!(f, " BUF:")?;
                 }
@@ -587,7 +593,7 @@ impl Iterator for ZBuf {
     fn next(&mut self) -> Option<Self::Item> {
         let mut slice = self.curr_slice()?.clone();
         if self.pos.byte > 0 {
-            slice = slice.new_sub_slice(self.pos.byte, slice.len());
+            slice = slice.new_sub_slice(self.pos.byte, slice.len())?;
             self.pos.byte = 0;
         }
         self.pos.slice += 1;
@@ -662,14 +668,7 @@ impl From<ZSlice> for ZBuf {
 
 impl From<Vec<u8>> for ZBuf {
     fn from(buf: Vec<u8>) -> ZBuf {
-        let len = buf.len();
-        ZBuf::from(ZSlice::new(buf.into(), 0, len))
-    }
-}
-
-impl From<&[u8]> for ZBuf {
-    fn from(slice: &[u8]) -> ZBuf {
-        ZBuf::from(slice.to_vec())
+        ZBuf::from(ZSlice::from(buf))
     }
 }
 
@@ -690,15 +689,9 @@ impl<'a> From<Vec<IoSlice<'a>>> for ZBuf {
     }
 }
 
-impl From<&super::WBuf> for ZBuf {
-    fn from(wbuf: &super::WBuf) -> ZBuf {
-        ZBuf::from(wbuf.as_zslices())
-    }
-}
-
 impl From<super::WBuf> for ZBuf {
     fn from(wbuf: super::WBuf) -> ZBuf {
-        Self::from(&wbuf)
+        ZBuf::from(wbuf.to_zslices())
     }
 }
 
@@ -723,7 +716,7 @@ impl PartialEq for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Arc<SharedMemoryBuf>) -> ZBuf {
         let mut zbuf = ZBuf::new();
@@ -732,7 +725,7 @@ impl From<Arc<SharedMemoryBuf>> for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Box<SharedMemoryBuf>) -> ZBuf {
         let mut zbuf = ZBuf::new();
@@ -741,7 +734,7 @@ impl From<Box<SharedMemoryBuf>> for ZBuf {
     }
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZBuf {
     fn from(smb: SharedMemoryBuf) -> ZBuf {
         let mut zbuf = ZBuf::new();
@@ -756,9 +749,9 @@ mod tests {
 
     #[test]
     fn test_zbuf() {
-        let v1 = ZSlice::from(vec![0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        let v2 = ZSlice::from(vec![10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
-        let v3 = ZSlice::from(vec![20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+        let v1 = ZSlice::from(vec![0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        let v2 = ZSlice::from(vec![10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        let v3 = ZSlice::from(vec![20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
 
         // test a 1st buffer
         let mut buf1 = ZBuf::new();
@@ -778,7 +771,7 @@ mod tests {
         assert_eq!(10, buf1.len());
         assert_eq!(1, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            Some(&[0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
             buf1.as_ioslices()[0].get(0..10)
         );
 
@@ -791,7 +784,7 @@ mod tests {
         assert_eq!(20, buf1.len());
         assert_eq!(2, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            Some(&[10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
             buf1.as_ioslices()[1].get(0..10)
         );
 
@@ -804,14 +797,14 @@ mod tests {
         assert_eq!(30, buf1.len());
         assert_eq!(3, buf1.as_ioslices().len());
         assert_eq!(
-            Some(&[20u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
+            Some(&[20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
             buf1.as_ioslices()[2].get(0..10)
         );
 
         // test PartialEq
         let v4 = vec![
-            0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29,
+            0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+            23, 24, 25, 26, 27, 28, 29,
         ];
         assert_eq!(buf1, ZBuf::from(v4));
 
@@ -834,7 +827,7 @@ mod tests {
         buf1.reset();
         println!("[05] {:?}", buf1);
         assert_eq!(30, buf1.readable());
-        let mut bytes = [0u8; 10];
+        let mut bytes = [0_u8; 10];
         assert!(buf1.read_bytes(&mut bytes));
         assert_eq!(20, buf1.readable());
         let pos = buf1.get_pos();
@@ -859,7 +852,7 @@ mod tests {
         // test read_bytes
         buf1.reset();
         println!("[06] {:?}", buf1);
-        let mut bytes = [0u8; 3];
+        let mut bytes = [0_u8; 3];
         for i in 0..10 {
             assert!(buf1.read_bytes(&mut bytes));
             println!(
@@ -906,21 +899,21 @@ mod tests {
         let dest_slices = dest.as_ioslices();
         assert_eq!(3, dest_slices.len());
         assert_eq!(
-            Some(&[1u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
+            Some(&[1_u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
             dest_slices[0].get(..)
         );
         assert_eq!(
-            Some(&[10u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
+            Some(&[10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
             dest_slices[1].get(..)
         );
-        assert_eq!(Some(&[20u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
+        assert_eq!(Some(&[20_u8, 21, 22, 23, 24][..]), dest_slices[2].get(..));
 
         // test drain_into_zbuf
-        buf1.reset();
-        println!("[10] {:?}", buf1);
-        let mut dest = ZBuf::new();
-        assert!(buf1.drain_into_zbuf(&mut dest));
-        assert_eq!(buf1.readable(), 0);
-        assert_eq!(buf1.len(), dest.readable());
+        // buf1.reset();
+        // println!("[10] {:?}", buf1);
+        // let mut dest = ZBuf::new();
+        // assert!(buf1.drain_into_zbuf(&mut dest));
+        // assert_eq!(buf1.readable(), 0);
+        // assert_eq!(buf1.len(), dest.readable());
     }
 }

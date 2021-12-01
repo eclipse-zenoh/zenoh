@@ -14,13 +14,13 @@
 
 //! Some useful functions for Backend/Storage implementations.
 
-use zenoh::net::utils::resource_name::*;
+use zenoh::utils::key_expr::*;
 
-/// Returns the longest prefix in a Path expressions that doesn't contain any '*' character.  
-/// This would be the common prefix of all keys stored in a storage using this Path expression.
+/// Returns the longest prefix in a key selector that doesn't contain any '*' character.  
+/// This would be the common prefix of all keys stored in a storage using this key selector.
 ///
 /// Use this operation at creation of a Storage to get the keys prefix, and in [`Storage::on_sample()`](crate::Storage::on_sample())
-/// strip this prefix from all received [`Sample::res_name`](zenoh::net::Sample::res_name) to retrieve the corrsponding key.
+/// strip this prefix from all received [`Sample::key_expr`](zenoh::prelude::Sample::key_expr) to retrieve the corrsponding key.
 ///
 /// # Examples:
 /// ```
@@ -30,68 +30,69 @@ use zenoh::net::utils::resource_name::*;
 /// assert_eq!("/", get_keys_prefix("/**"));
 /// assert_eq!("/demo/example/test", get_keys_prefix("/demo/example/test"));
 /// ```
-pub fn get_keys_prefix(path_expr: &str) -> &str {
-    // keys_prefix is the longest prefix in path_expr without a '*'
-    path_expr
+pub fn get_keys_prefix(key_selector: &str) -> &str {
+    // keys_prefix is the longest prefix in key_selector without a '*'
+    key_selector
         .find('*')
-        .map(|i| &path_expr[..i])
-        .unwrap_or(path_expr)
+        .map(|i| &key_selector[..i])
+        .unwrap_or(key_selector)
 }
 
-/// Given a Path Expression and a prefix (usually returned from [`get_keys_prefix()`]) that is stripped from the paths to store,
-/// this operation returns a list of Path Expr allowing to match all the keys corresponding to the full paths that would have match
-/// the given Path Expr.
+/// Given a key selector and a prefix (usually returned from [`get_keys_prefix()`]) that is stripped from the keys to store,
+/// this operation returns a list of key selectors allowing to match all the keys corresponding to the full keys that would have match
+/// the given key selector.
 ///
-/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received [`Query::res_name`](zenoh::net::Query::res_name) in a list of path
-/// expressions that will match all the relevant stored keys (that correspond to paths stripped from the prefix).
+/// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
+/// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_selector`](zenoh::prelude::Selector::key_selector) in a list of key selectors
+/// that will match all the relevant stored keys (that correspond to keys stripped from the prefix).
 ///
 /// # See also
 /// [`get_keys_prefix()`]
 ///
 /// # Examples:
 /// ```
-/// # use zenoh_backend_traits::utils::get_sub_path_exprs;
+/// # use zenoh_backend_traits::utils::get_sub_key_selectors;
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_path_exprs("/demo/example/test/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/demo/example/test/**", "/demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_path_exprs("/demo/example/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/demo/example/**", "/demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_path_exprs("/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/**", "/demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**/xyz"],
-///     get_sub_path_exprs("/demo/**/xyz", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/demo/**/xyz", "/demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_path_exprs("/demo/**/test/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/demo/**/test/**", "/demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["xyz", "**/ex*/*/xyz"],
-///     get_sub_path_exprs("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
 /// );
 /// ```
-pub fn get_sub_path_exprs<'a>(path_expr: &'a str, prefix: &str) -> Vec<&'a str> {
-    if let Some(remaining) = path_expr.strip_prefix(prefix) {
+pub fn get_sub_key_selectors<'a>(key_selector: &'a str, prefix: &str) -> Vec<&'a str> {
+    if let Some(remaining) = key_selector.strip_prefix(prefix) {
         vec![remaining]
     } else {
         let mut result = vec![];
-        for (i, c) in path_expr.char_indices().rev() {
-            if c == '/' || i == path_expr.len() - 1 {
-                let sub_part = &path_expr[..i + 1];
+        for (i, c) in key_selector.char_indices().rev() {
+            if c == '/' || i == key_selector.len() - 1 {
+                let sub_part = &key_selector[..i + 1];
                 if intersect(sub_part, prefix) {
                     // if sub_part ends with "**" or "**/", keep those in remaining part
                     let remaining = if sub_part.ends_with("**/") {
-                        &path_expr[i - 2..]
+                        &key_selector[i - 2..]
                     } else if sub_part.ends_with("**") {
-                        &path_expr[i - 1..]
+                        &key_selector[i - 1..]
                     } else {
-                        &path_expr[i + 1..]
+                        &key_selector[i + 1..]
                     };
                     // if remaining is "**" return only this since it covers all
                     if remaining == "**" {
@@ -106,45 +107,45 @@ pub fn get_sub_path_exprs<'a>(path_expr: &'a str, prefix: &str) -> Vec<&'a str> 
 }
 
 #[test]
-fn test_get_sub_path_exprs() {
+fn test_get_sub_key_exprs() {
     assert_eq!(
         ["**"],
-        get_sub_path_exprs("/demo/example/test/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/example/test/**", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_path_exprs("/demo/example/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/example/**", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_path_exprs("/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/**", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**/x*/**"],
-        get_sub_path_exprs("/demo/example/test/**/x*/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/example/test/**/x*/**", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**/xyz"],
-        get_sub_path_exprs("/demo/**/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/**/xyz", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_path_exprs("/demo/**/test/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/**/test/**", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["xyz", "**/ex*/*/xyz"],
-        get_sub_path_exprs("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["xyz", "**/ex*/t*/xyz"],
-        get_sub_path_exprs("/demo/**/ex*/t*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/**/ex*/t*/xyz", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         ["*/xyz", "**/te*/*/xyz"],
-        get_sub_path_exprs("/demo/**/te*/*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/**/te*/*/xyz", "/demo/example/test/").as_slice()
     );
     assert_eq!(
         [""],
-        get_sub_path_exprs("/demo/example/test", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("/demo/example/test", "/demo/example/test/").as_slice()
     );
 }

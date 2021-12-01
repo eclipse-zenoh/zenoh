@@ -25,7 +25,7 @@ mod tests {
     use zenoh::net::link::EndPoint;
     use zenoh::net::link::Link;
     use zenoh::net::protocol::core::{
-        whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+        Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
@@ -33,7 +33,7 @@ mod tests {
         TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh_util::core::ZResult;
+    use zenoh_util::core::Result as ZResult;
     use zenoh_util::properties::config::*;
     use zenoh_util::zasync_executor_init;
 
@@ -132,23 +132,25 @@ mod tests {
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
         // Define peer01 and peer02 IDs
-        let peer01_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+        let peer01_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
         let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
         let config = TransportManagerConfig::builder()
             .pid(peer01_id)
-            .whatami(whatami::PEER)
-            .build(peer01_handler.clone());
+            .whatami(WhatAmI::Peer)
+            .build(peer01_handler.clone())
+            .unwrap();
         let peer01_manager = TransportManager::new(config);
 
         // Create the peer02 transport manager
         let peer02_handler = Arc::new(SHPeer::default());
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer02_id)
-            .build(peer02_handler.clone());
+            .build(peer02_handler.clone())
+            .unwrap();
         let peer02_manager = TransportManager::new(config);
 
         // Create an empty transport with the peer01
@@ -244,15 +246,15 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    async fn single_run(
+    async fn test_transport(
         peer01: &TransportMulticastPeer,
         peer02: &TransportMulticastPeer,
         channel: Channel,
         msg_size: usize,
     ) {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
-        let payload = ZBuf::from(vec![0u8; msg_size]);
+        let key = "/test".into();
+        let payload = ZBuf::from(vec![0_u8; msg_size]);
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -299,22 +301,26 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
+    async fn run_single(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
+        let (peer01, peer02) = open_transport(endpoint).await;
+        test_transport(&peer01, &peer02, channel, msg_size).await;
+
+        #[cfg(feature = "stats")]
+        {
+            let stats = peer01.transport.get_stats().unwrap();
+            println!("\tPeer 01: {:?}", stats);
+            let stats = peer02.transport.get_stats().unwrap();
+            println!("\tPeer 02: {:?}", stats);
+        }
+
+        close_transport(peer01, peer02, endpoint).await;
+    }
+
     async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
         for e in endpoints.iter() {
             for ch in channel.iter() {
                 for ms in msg_size.iter() {
-                    let (peer01, peer02) = open_transport(e).await;
-                    single_run(&peer01, &peer02, *ch, *ms).await;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        let stats = peer01.transport.get_stats().unwrap();
-                        println!("\tPeer 01: {:?}", stats);
-                        let stats = peer02.transport.get_stats().unwrap();
-                        println!("\tPeer 02: {:?}", stats);
-                    }
-
-                    close_transport(peer01, peer02, e).await;
+                    run_single(e, *ch, *ms).await;
                 }
             }
         }

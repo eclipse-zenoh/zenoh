@@ -13,6 +13,8 @@
 //
 use super::common::conduit::TransportChannelRx;
 use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
+#[cfg(feature = "stats")]
+use super::protocol::proto::ZenohBody;
 use super::protocol::proto::{
     Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
@@ -20,8 +22,8 @@ use super::transport::TransportUnicastInner;
 use crate::net::link::LinkUnicast;
 use async_std::task;
 use std::sync::MutexGuard;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::{zerror2, zread};
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::{zerror, zread};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -29,21 +31,44 @@ use zenoh_util::{zerror2, zread};
 impl TransportUnicastInner {
     #[allow(unused_mut)]
     fn trigger_callback(&self, mut msg: ZenohMessage) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        self.stats.inc_rx_z_msgs(1);
+        #[cfg(feature = "stats")]
+        match &msg.body {
+            ZenohBody::Data(data) => match data.reply_context {
+                Some(_) => {
+                    self.stats.inc_rx_z_data_reply_msgs(1);
+                    self.stats
+                        .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                }
+                None => {
+                    self.stats.inc_rx_z_data_msgs(1);
+                    self.stats
+                        .inc_rx_z_data_payload_bytes(data.payload.readable());
+                }
+            },
+            ZenohBody::Unit(unit) => match unit.reply_context {
+                Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
+                None => self.stats.inc_rx_z_unit_msgs(1),
+            },
+            ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
+            ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
+            ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
+            ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+        }
+
         let callback = zread!(self.callback).clone();
-        match callback.as_ref() {
-            Some(callback) => {
-                #[cfg(feature = "zero-copy")]
-                let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
-                callback.handle_message(msg)
-            }
-            None => {
-                log::debug!(
-                    "Transport: {}. No callback available, dropping message: {}",
-                    self.pid,
-                    msg
-                );
-                Ok(())
-            }
+        if let Some(callback) = callback.as_ref() {
+            #[cfg(feature = "shared-memory")]
+            let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+            callback.handle_message(msg)
+        } else {
+            log::debug!(
+                "Transport: {}. No callback available, dropping message: {}",
+                self.pid,
+                msg
+            );
+            Ok(())
         }
     }
 
@@ -119,10 +144,9 @@ impl TransportUnicastInner {
                 }
                 guard.defrag.push(sn, buffer)?;
                 if is_final {
-                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!("Transport: {}. Defragmentation error.", self.pid);
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                        zerror!("Transport: {}. Defragmentation error.", self.pid)
                     })?;
                     self.trigger_callback(msg)
                 } else {
@@ -152,11 +176,11 @@ impl TransportUnicastInner {
                 } else if channel.priority == Priority::default() {
                     &self.conduit_rx[0]
                 } else {
-                    let e = format!(
+                    bail!(
                         "Transport: {}. Unknown conduit: {:?}.",
-                        self.pid, channel.priority
+                        self.pid,
+                        channel.priority
                     );
-                    return zerror!(ZErrorKind::InvalidMessage { descr: e });
                 };
 
                 match channel.reliability {

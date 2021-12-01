@@ -19,6 +19,8 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
+#[cfg(feature = "stats")]
+use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::ZInt;
 use super::protocol::proto::{tmsg, ZenohMessage};
@@ -28,32 +30,61 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
+
+/*************************************/
+/*              STATS                */
+/*************************************/
+#[cfg(feature = "stats")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "stats")]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "stats")]
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TransportMulticastStats {
+        pub tx_t_msgs,
+        pub tx_z_msgs,
+        pub tx_z_data_msgs,
+        pub tx_z_data_payload_bytes,
+        pub tx_z_data_reply_msgs,
+        pub tx_z_data_reply_payload_bytes,
+        pub tx_z_pull_msgs,
+        pub tx_z_query_msgs,
+        pub tx_z_declare_msgs,
+        pub tx_z_linkstate_msgs,
+        pub tx_z_unit_msgs,
+        pub tx_z_unit_reply_msgs,
+        pub tx_bytes,
+        pub rx_t_msgs,
+        pub rx_z_msgs,
+        pub rx_z_data_msgs,
+        pub rx_z_data_payload_bytes,
+        pub rx_z_data_reply_msgs,
+        pub rx_z_data_reply_payload_bytes,
+        pub rx_z_pull_msgs,
+        pub rx_z_query_msgs,
+        pub rx_z_declare_msgs,
+        pub rx_z_linkstate_msgs,
+        pub rx_z_unit_msgs,
+        pub rx_z_unit_reply_msgs,
+        pub rx_bytes,
+    }
+}
 
 /*************************************/
 /*       TRANSPORT MULTICAST         */
 /*************************************/
-#[cfg(feature = "stats")]
-#[derive(Clone, Copy, Debug)]
-pub struct TransportStatsMulticast {
-    tx_msgs: usize,
-    tx_bytes: usize,
-    rx_msgs: usize,
-    rx_bytes: usize,
-}
-
 #[derive(Clone)]
 pub struct TransportMulticast(Weak<TransportMulticastInner>);
 
 impl TransportMulticast {
     #[inline(always)]
     fn get_transport(&self) -> ZResult<Arc<TransportMulticastInner>> {
-        self.0.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport multicast closed".to_string()
-            })
-        })
+        self.0
+            .upgrade()
+            .ok_or_else(|| zerror!("Transport multicast closed").into())
     }
 
     #[inline(always)]
@@ -114,15 +145,8 @@ impl TransportMulticast {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<TransportStatsMulticast> {
-        let transport = self.get_transport()?;
-        let stats = TransportStatsMulticast {
-            tx_msgs: transport.stats.get_tx_msgs(),
-            tx_bytes: transport.stats.get_tx_bytes(),
-            rx_msgs: transport.stats.get_rx_msgs(),
-            rx_bytes: transport.stats.get_rx_bytes(),
-        };
-        Ok(stats)
+    pub fn get_stats(&self) -> ZResult<TransportMulticastStats> {
+        Ok(self.get_transport()?.stats.snapshot())
     }
 }
 

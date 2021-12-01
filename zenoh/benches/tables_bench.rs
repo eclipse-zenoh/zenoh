@@ -16,7 +16,7 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::{BenchmarkId, Criterion};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode,
+    Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::routing::pubsub::*;
@@ -25,26 +25,24 @@ use zenoh::net::routing::router::Tables;
 use zenoh::net::transport::DummyPrimitives;
 
 fn tables_bench(c: &mut Criterion) {
-    let mut tables = Tables::new(PeerId::new(0, [0; 16]), whatami::ROUTER, None);
+    let mut tables = Tables::new(PeerId::new(0, [0; 16]), WhatAmI::Router, None);
     let primitives = Arc::new(DummyPrimitives {});
 
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives.clone());
-    declare_resource(
+    let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives.clone());
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
-        0,
-        "/bench/tables",
+        &"/bench/tables".into(),
     );
-    declare_resource(
+    register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        0,
-        "/bench/tables/*",
+        &"/bench/tables/*".into(),
     );
 
-    let face1 = tables.open_face(PeerId::new(0, [0; 16]), whatami::CLIENT, primitives);
+    let face1 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {
@@ -55,18 +53,16 @@ fn tables_bench(c: &mut Criterion) {
 
     for p in [8, 32, 256, 1024, 8192].iter() {
         for i in 1..(*p) {
-            declare_resource(
+            register_expr(
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
                 i,
-                0,
-                &["/bench/tables/AA", &i.to_string()].concat(),
+                &["/bench/tables/AA", &i.to_string()].concat().into(),
             );
             declare_client_subscription(
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
-                i,
-                "",
+                &i.into(),
                 &sub_info,
             );
         }
@@ -79,8 +75,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    2,
-                    "",
+                    &2.into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,
@@ -95,8 +90,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0,
-                    "/bench/tables/*",
+                    &"/bench/tables/*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,
@@ -111,8 +105,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    0,
-                    "/bench/tables/A*",
+                    &"/bench/tables/A*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,

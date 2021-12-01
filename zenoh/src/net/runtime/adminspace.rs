@@ -12,27 +12,23 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        queryable::EVAL, rname, Channel, CongestionControl, PeerId, QueryConsolidation,
-        QueryTarget, ResKey, SubInfo, ZInt,
+        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
     },
     io::ZBuf,
-    proto::{encoding, DataInfo, RoutingContext},
+    proto::{DataInfo, RoutingContext},
 };
 use super::routing::face::Face;
-use super::transport::Primitives;
+use super::transport::{Primitives, TransportUnicast};
 use super::Runtime;
 use async_std::sync::Arc;
 use async_std::task;
-use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<
-    super::plugins::Requirements,
-    super::plugins::StartArgs,
->;
+type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -41,7 +37,11 @@ pub struct AdminContext {
     version: String,
 }
 
-type Handler = Box<dyn Fn(&AdminContext) -> BoxFuture<'_, (ZBuf, ZInt)> + Send + Sync>;
+type Handler = Box<
+    dyn for<'a> Fn(&'a AdminContext, &'a KeyExpr<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
+        + Send
+        + Sync,
+>;
 
 pub struct AdminSpace {
     pid: PeerId,
@@ -54,20 +54,26 @@ pub struct AdminSpace {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
         let pid_str = runtime.get_pid_str();
-        let root_path = format!("/@/router/{}", pid_str);
+        let root_key = format!("/@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
-            root_path.clone(),
-            Arc::new(Box::new(|context| router_data(context).boxed())),
+            root_key.clone(),
+            Arc::new(Box::new(|context, key, args| {
+                router_data(context, key, args).boxed()
+            })),
         );
         handlers.insert(
-            [&root_path, "/linkstate/routers"].concat(),
-            Arc::new(Box::new(|context| linkstate_routers_data(context).boxed())),
+            [&root_key, "/linkstate/routers"].concat(),
+            Arc::new(Box::new(|context, key, args| {
+                linkstate_routers_data(context, key, args).boxed()
+            })),
         );
         handlers.insert(
-            [&root_path, "/linkstate/peers"].concat(),
-            Arc::new(Box::new(|context| linkstate_peers_data(context).boxed())),
+            [&root_key, "/linkstate/peers"].concat(),
+            Arc::new(Box::new(|context, key, args| {
+                linkstate_peers_data(context, key, args).boxed()
+            })),
         );
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
@@ -86,72 +92,88 @@ impl AdminSpace {
         let primitives = runtime.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.decl_queryable(&[&root_path, "/**"].concat().into(), EVAL, None);
+        primitives.decl_queryable(
+            &[&root_key, "/**"].concat().into(),
+            EVAL,
+            &QueryableInfo {
+                complete: 0,
+                distance: 0,
+            },
+            None,
+        );
     }
 
-    pub fn reskey_to_string(&self, key: &ResKey) -> Option<String> {
-        match key {
-            ResKey::RId(id) => zlock!(self.mappings).get(id).cloned(),
-            ResKey::RIdWithSuffix(id, suffix) => zlock!(self.mappings)
-                .get(id)
-                .map(|prefix| format!("{}{}", prefix, suffix)),
-            ResKey::RName(name) => Some(name.clone()),
+    pub fn key_expr_to_string(&self, key_expr: &KeyExpr) -> Option<String> {
+        if key_expr.scope == EMPTY_EXPR_ID {
+            Some(key_expr.suffix.to_string())
+        } else if key_expr.suffix.is_empty() {
+            zlock!(self.mappings).get(&key_expr.scope).cloned()
+        } else {
+            zlock!(self.mappings)
+                .get(&key_expr.scope)
+                .map(|prefix| format!("{}{}", prefix, key_expr.suffix.as_ref()))
         }
     }
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, rid: ZInt, reskey: &ResKey) {
-        trace!("recv Resource {} {:?}", rid, reskey);
-        match self.reskey_to_string(reskey) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+        trace!("recv Resource {} {:?}", expr_id, key_expr);
+        match self.key_expr_to_string(key_expr) {
             Some(s) => {
-                zlock!(self.mappings).insert(rid, s);
+                zlock!(self.mappings).insert(expr_id, s);
             }
-            None => error!("Unknown rid {}!", rid),
+            None => error!("Unknown expr_id {}!", expr_id),
         }
     }
 
-    fn forget_resource(&self, _rid: ZInt) {
-        trace!("recv Forget Resource {}", _rid);
+    fn forget_resource(&self, _expr_id: ZInt) {
+        trace!("recv Forget Resource {}", _expr_id);
     }
 
-    fn decl_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Publisher {:?}", _reskey);
+    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Publisher {:?}", _key_expr);
     }
 
-    fn forget_publisher(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Publisher {:?}", _reskey);
+    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Publisher {:?}", _key_expr);
     }
 
     fn decl_subscriber(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Subscriber {:?} , {:?}", _reskey, _sub_info);
+        trace!("recv Subscriber {:?} , {:?}", _key_expr, _sub_info);
     }
 
-    fn forget_subscriber(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", _reskey);
+    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Subscriber {:?}", _key_expr);
     }
 
     fn decl_queryable(
         &self,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
+        _kind: ZInt,
+        _qabl_info: &QueryableInfo,
+        _routing_context: Option<RoutingContext>,
+    ) {
+        trace!("recv Queryable {:?}", _key_expr);
+    }
+
+    fn forget_queryable(
+        &self,
+        _key_expr: &KeyExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Queryable {:?}", _reskey);
-    }
-
-    fn forget_queryable(&self, _reskey: &ResKey, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Queryable {:?}", _reskey);
+        trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
     fn send_data(
         &self,
-        reskey: &ResKey,
+        key_expr: &KeyExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -160,7 +182,7 @@ impl Primitives for AdminSpace {
     ) {
         trace!(
             "recv Data {:?} {:?} {:?} {:?} {:?}",
-            reskey,
+            key_expr,
             payload,
             channel,
             congestion_control,
@@ -170,8 +192,8 @@ impl Primitives for AdminSpace {
 
     fn send_query(
         &self,
-        reskey: &ResKey,
-        predicate: &str,
+        key_expr: &KeyExpr,
+        value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: QueryConsolidation,
@@ -179,8 +201,8 @@ impl Primitives for AdminSpace {
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
-            reskey,
-            predicate,
+            key_expr,
+            value_selector,
             target,
             _consolidation
         );
@@ -189,32 +211,28 @@ impl Primitives for AdminSpace {
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
-        match self.reskey_to_string(reskey) {
+        match self.key_expr_to_string(key_expr) {
             Some(name) => {
-                for (path, handler) in &self.handlers {
-                    if rname::intersect(&name, path) {
-                        matching_handlers.push((path.clone(), handler.clone()));
+                for (key, handler) in &self.handlers {
+                    if key_expr::intersect(&name, key) {
+                        matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
             }
-            None => error!("Unknown ResKey!!"),
+            None => error!("Unknown KeyExpr!!"),
         };
+
+        let key_expr = key_expr.to_owned();
+        let value_selector = value_selector.to_string();
 
         // router is not re-entrant
         task::spawn(async move {
-            for (path, handler) in matching_handlers {
-                let (payload, encoding) = handler(&context).await;
+            for (key, handler) in matching_handlers {
+                let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
                 let mut data_info = DataInfo::new();
                 data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(
-                    qid,
-                    EVAL,
-                    pid,
-                    ResKey::RName(path),
-                    Some(data_info),
-                    payload,
-                );
+                primitives.send_reply_data(qid, EVAL, pid, key.into(), Some(data_info), payload);
             }
 
             primitives.send_reply_final(qid);
@@ -226,7 +244,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: PeerId,
-        reskey: ResKey,
+        key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -235,7 +253,7 @@ impl Primitives for AdminSpace {
             qid,
             replier_kind,
             replier_id,
-            reskey,
+            key_expr,
             info,
             payload
         );
@@ -248,14 +266,14 @@ impl Primitives for AdminSpace {
     fn send_pull(
         &self,
         _is_final: bool,
-        _reskey: &ResKey,
+        _key_expr: &KeyExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {
         trace!(
             "recv Pull {:?} {:?} {:?} {:?}",
             _is_final,
-            _reskey,
+            _key_expr,
             _pull_id,
             _max_samples
         );
@@ -266,7 +284,11 @@ impl Primitives for AdminSpace {
     }
 }
 
-pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn router_data(
+    context: &AdminContext,
+    _key: &KeyExpr<'_>,
+    #[allow(unused_variables)] selector: &str,
+) -> (ZBuf, Encoding) {
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
@@ -290,16 +312,40 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
         .collect();
 
     // transports info
-    let transports = future::join_all(transport_mgr.get_transports().iter().map(move |transport| async move {
-        json!({
-            "peer": transport.get_pid().map_or_else(|_| "unavailable".to_string(), |p| p.to_string()),
+    let transport_to_json = |transport: &TransportUnicast| {
+        #[allow(unused_mut)]
+        let mut json = json!({
+            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
                 |links| links.iter().map(|link| link.dst.to_string()).collect()
-            )
-        })
-    }))
-    .await;
+            ),
+        });
+        #[cfg(feature = "stats")]
+        {
+            use std::convert::TryFrom;
+            let stats = crate::prelude::ValueSelector::try_from(selector)
+                .ok()
+                .map(|s| s.properties.get("stats").map(|v| v == "true"))
+                .flatten()
+                .unwrap_or(false);
+            if stats {
+                json.as_object_mut().unwrap().insert(
+                    "stats".to_string(),
+                    transport
+                        .get_stats()
+                        .map_or_else(|_| json!({}), |p| json!(p)),
+                );
+            }
+        }
+        json
+    };
+    let transports: Vec<serde_json::Value> = transport_mgr
+        .get_transports()
+        .iter()
+        .map(transport_to_json)
+        .collect();
 
     let json = json!({
         "pid": context.pid_str,
@@ -309,20 +355,39 @@ pub async fn router_data(context: &AdminContext) -> (ZBuf, ZInt) {
         "plugins": plugins,
     });
     log::trace!("AdminSpace router_data: {:?}", json);
-    (ZBuf::from(json.to_string().as_bytes()), encoding::APP_JSON)
+    (
+        ZBuf::from(json.to_string().as_bytes().to_vec()),
+        Encoding::APP_JSON,
+    )
 }
 
-pub async fn linkstate_routers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_routers_data(
+    context: &AdminContext,
+    _key: &KeyExpr<'_>,
+    _args: &str,
+) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
 
     let res = (
-        ZBuf::from(tables.routers_net.as_ref().unwrap().dot().as_bytes()),
-        encoding::TEXT_PLAIN,
+        ZBuf::from(
+            tables
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .dot()
+                .as_bytes()
+                .to_vec(),
+        ),
+        Encoding::TEXT_PLAIN,
     );
     res
 }
 
-pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
+pub async fn linkstate_peers_data(
+    context: &AdminContext,
+    _key: &KeyExpr<'_>,
+    _args: &str,
+) -> (ZBuf, Encoding) {
     (
         ZBuf::from(
             context
@@ -335,8 +400,9 @@ pub async fn linkstate_peers_data(context: &AdminContext) -> (ZBuf, ZInt) {
                 .as_ref()
                 .unwrap()
                 .dot()
-                .as_bytes(),
+                .as_bytes()
+                .to_vec(),
         ),
-        encoding::TEXT_PLAIN,
+        Encoding::TEXT_PLAIN,
     )
 }

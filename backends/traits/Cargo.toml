@@ -16,10 +16,12 @@ name = "zenoh_backend_traits"
 version = "0.5.0-dev"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com>",
-		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
@@ -31,4 +33,7 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 async-std = "=1.9.0"
 async-trait = "0.1.51"
-zenoh = { path = "../../zenoh" }
+derive_more = "0.99"
+serde_json = "1.0"
+zenoh = { path = "../../zenoh/" }
+zenoh-util = { path = "../../zenoh-util/" }

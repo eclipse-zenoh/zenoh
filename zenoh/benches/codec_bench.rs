@@ -17,7 +17,9 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ResKey, ZInt};
+use zenoh::net::protocol::core::{
+    Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt,
+};
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
@@ -40,13 +42,13 @@ fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
 
 fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v);
-    ZBuf::from(&*buf).read_zint()
+    ZBuf::from(buf.clone()).read_zint()
 }
 
 fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
-    let mut zbuf = ZBuf::from(&*buf);
+    let mut zbuf = ZBuf::from(buf.clone());
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
 }
@@ -55,7 +57,7 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
-    let mut zbuf = ZBuf::from(&*buf);
+    let mut zbuf = ZBuf::from(buf.clone());
     let _ = zbuf.read_zint()?;
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
@@ -63,7 +65,7 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
 
 fn bench_make_data(payload: ZBuf) {
     let _ = ZenohMessage::make_data(
-        ResKey::RId(10),
+        KeyExpr::from(10),
         payload,
         Channel::default(),
         CongestionControl::default(),
@@ -135,11 +137,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     ];
     let _ns: [ZInt; 4] = [0; 4];
     let len = String::from("u8");
-    let bytes = vec![0u8; 32];
+    let bytes = vec![0_u8; 32];
     let payload: ZBuf = bytes.clone().into();
     let fragment: ZSlice = bytes.into();
     let mut data = ZenohMessage::make_data(
-        ResKey::RId(10),
+        KeyExpr::from(10),
         payload.clone(),
         Channel::default(),
         CongestionControl::default(),

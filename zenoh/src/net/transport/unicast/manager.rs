@@ -12,10 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::TransportManager;
-use super::authenticator::*;
+use super::establishment::authenticator::*;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
+use crate::config::Config;
 use crate::net::link::*;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
@@ -23,8 +24,6 @@ use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
 use zenoh_util::properties::config::*;
 use zenoh_util::{zasynclock, zerror, zlock, zparse};
 
@@ -34,9 +33,10 @@ pub struct TransportManagerConfigUnicast {
     pub open_timeout: Duration,
     pub open_pending: usize,
     pub max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     pub is_qos: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
     pub peer_authenticator: HashSet<PeerAuthenticator>,
     pub link_authenticator: HashSet<LinkAuthenticator>,
@@ -44,7 +44,7 @@ pub struct TransportManagerConfigUnicast {
 
 impl Default for TransportManagerConfigUnicast {
     fn default() -> Self {
-        Self::builder().build()
+        Self::builder().build().unwrap()
     }
 }
 
@@ -60,25 +60,27 @@ pub struct TransportManagerConfigBuilderUnicast {
     pub(super) open_timeout: Duration,
     pub(super) open_pending: usize,
     pub(super) max_sessions: usize,
+    #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
     pub(super) link_authenticator: HashSet<LinkAuthenticator>,
 }
 
 impl Default for TransportManagerConfigBuilderUnicast {
-    fn default() -> TransportManagerConfigBuilderUnicast {
-        TransportManagerConfigBuilderUnicast {
+    fn default() -> Self {
+        Self {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
+            #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
             peer_authenticator: HashSet::new(),
             link_authenticator: HashSet::new(),
@@ -112,6 +114,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
+    #[cfg(feature = "transport_multilink")]
     pub fn max_links(mut self, max_links: usize) -> Self {
         self.max_links = max_links;
         self
@@ -132,7 +135,7 @@ impl TransportManagerConfigBuilderUnicast {
         self
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub fn shm(mut self, is_shm: bool) -> Self {
         self.is_shm = is_shm;
         self
@@ -140,34 +143,34 @@ impl TransportManagerConfigBuilderUnicast {
 
     pub async fn from_config(
         mut self,
-        properties: &ConfigProperties,
+        properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilderUnicast> {
-        if let Some(v) = properties.get(&ZN_LINK_LEASE_KEY) {
-            self = self.lease(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.transport().link().lease() {
+            self = self.lease(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_LINK_KEEP_ALIVE_KEY) {
-            self = self.keep_alive(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.transport().link().keep_alive() {
+            self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_OPEN_TIMEOUT_KEY) {
-            self = self.open_timeout(Duration::from_millis(zparse!(v)?));
+        if let Some(v) = properties.transport().unicast().open_timeout() {
+            self = self.open_timeout(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.get(&ZN_OPEN_INCOMING_PENDING_KEY) {
-            self = self.open_pending(zparse!(v)?);
+        if let Some(v) = properties.transport().unicast().open_pending() {
+            self = self.open_pending(*v);
         }
-        if let Some(v) = properties.get(&ZN_MAX_SESSIONS_KEY) {
-            self = self.max_sessions(zparse!(v)?);
+        if let Some(v) = properties.transport().unicast().max_sessions() {
+            self = self.max_sessions(*v);
         }
-        if let Some(v) = properties.get(&ZN_MAX_LINKS_KEY) {
-            self = self.max_links(zparse!(v)?);
+        #[cfg(feature = "transport_multilink")]
+        if let Some(v) = properties.transport().unicast().max_links() {
+            self = self.max_links(*v);
         }
-        if let Some(v) = properties.get(&ZN_QOS_KEY) {
-            self = self.qos(zparse!(v)?);
+        if let Some(v) = properties.transport().qos() {
+            self = self.qos(*v);
         }
-        #[cfg(feature = "zero-copy")]
-        if let Some(v) = properties.get(&ZN_SHM_KEY) {
-            self = self.shm(zparse!(v)?);
+        #[cfg(feature = "shared-memory")]
+        if let Some(v) = properties.shared_memory() {
+            self = self.shm(*v);
         }
-
         self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
         self = self.link_authenticator(LinkAuthenticator::from_config(properties).await?);
 
@@ -175,8 +178,18 @@ impl TransportManagerConfigBuilderUnicast {
     }
 
     #[allow(unused_mut)]
-    pub fn build(mut self) -> TransportManagerConfigUnicast {
-        #[cfg(feature = "zero-copy")]
+    pub fn build(mut self) -> ZResult<TransportManagerConfigUnicast> {
+        #[cfg(feature = "auth_pubkey")]
+        if !self
+            .peer_authenticator
+            .iter()
+            .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
+        {
+            self.peer_authenticator
+                .insert(PubKeyAuthenticator::init()?.into());
+        }
+
+        #[cfg(feature = "shared-memory")]
         if self.is_shm
             && !self
                 .peer_authenticator
@@ -186,19 +199,22 @@ impl TransportManagerConfigBuilderUnicast {
             self.peer_authenticator
                 .insert(SharedMemoryAuthenticator::new().into());
         }
-        TransportManagerConfigUnicast {
+
+        let tmcu = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
             open_pending: self.open_pending,
             max_sessions: self.max_sessions,
+            #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
+            is_qos: self.is_qos,
+            #[cfg(feature = "shared-memory")]
+            is_shm: self.is_shm,
             peer_authenticator: self.peer_authenticator,
             link_authenticator: self.link_authenticator,
-            is_qos: self.is_qos,
-            #[cfg(feature = "zero-copy")]
-            is_shm: self.is_shm,
-        }
+        };
+        Ok(tmcu)
     }
 }
 
@@ -224,10 +240,10 @@ impl Default for TransportManagerStateUnicast {
     }
 }
 
-pub(super) struct Opened {
-    pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
-    pub(super) initial_sn: ZInt,
+pub(crate) struct Opened {
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn: ZInt,
 }
 
 impl TransportManager {
@@ -236,34 +252,32 @@ impl TransportManager {
     /*************************************/
     fn new_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
-        match w_guard.get(protocol) {
-            Some(lm) => Ok(lm.clone()),
-            None => {
-                let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
-                w_guard.insert(protocol.clone(), lm.clone());
-                Ok(lm)
-            }
+        if let Some(lm) = w_guard.get(protocol) {
+            Ok(lm.clone())
+        } else {
+            let lm = LinkManagerBuilderUnicast::make(self.clone(), protocol)?;
+            w_guard.insert(protocol.clone(), lm.clone());
+            Ok(lm)
         }
     }
 
     fn get_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
         match zlock!(self.state.unicast.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
-            None => zerror!(ZErrorKind::InvalidLocator {
-                descr: format!(
-                    "Can not get the link manager for protocol ({}) because it has not been found",
-                    protocol
-                )
-            }),
+            None => bail!(
+                "Can not get the link manager for protocol ({}) because it has not been found",
+                protocol
+            ),
         }
     }
 
     fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
         match zlock!(self.state.unicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
-            None => zerror!(ZErrorKind::InvalidLocator {
-                descr: format!("Can not delete the link manager for protocol ({}) because it has not been found.", protocol)
-            })
+            None => bail!(
+                "Can not delete the link manager for protocol ({}) because it has not been found.",
+                protocol
+            ),
         }
     }
 
@@ -330,30 +344,34 @@ impl TransportManager {
         // First verify if the transport already exists
         if let Some(transport) = guard.get(&config.peer) {
             if transport.whatami != config.whatami {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
-                    config.peer, config.whatami, transport.whatami
+                    config.peer,
+                    config.whatami,
+                    transport.whatami
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             if transport.sn_resolution != config.sn_resolution {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
                     config.peer, config.sn_resolution, transport.sn_resolution
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             if transport.is_shm != config.is_shm {
-                let e = format!(
+                let e = zerror!(
                     "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
-                    config.peer, config.is_shm, transport.is_shm
+                    config.peer,
+                    config.is_shm,
+                    transport.is_shm
                 );
                 log::trace!("{}", e);
-                return zerror!(ZErrorKind::Other { descr: e });
+                return Err(e.into());
             }
 
             return Ok(transport.into());
@@ -361,12 +379,13 @@ impl TransportManager {
 
         // Then verify that we haven't reached the transport number limit
         if guard.len() >= self.config.unicast.max_sessions {
-            let e = format!(
+            let e = zerror!(
                 "Max transports reached ({}). Denying new transport with peer: {}",
-                self.config.unicast.max_sessions, config.peer
+                self.config.unicast.max_sessions,
+                config.peer
             );
             log::trace!("{}", e);
-            return zerror!(ZErrorKind::Other { descr: e });
+            return Err(e.into());
         }
 
         // Create the transport transport
@@ -406,12 +425,10 @@ impl TransportManager {
         mut endpoint: EndPoint,
     ) -> ZResult<TransportUnicast> {
         if endpoint.locator.address.is_multicast() {
-            return zerror!(ZErrorKind::InvalidLocator {
-                descr: format!(
-                    "Can not open a unicast transport with a multicast endpoint: {}.",
-                    endpoint
-                )
-            });
+            bail!(
+                "Can not open a unicast transport with a multicast endpoint: {}.",
+                endpoint
+            )
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
@@ -438,7 +455,7 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open_link(self, &link).await
+        super::establishment::open::open_link(self, &link).await
     }
 
     pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
@@ -458,9 +475,9 @@ impl TransportManager {
         let _ = zlock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
-                let e = format!("Can not delete the transport of peer: {}", peer);
+                let e = zerror!("Can not delete the transport of peer: {}", peer);
                 log::trace!("{}", e);
-                zerror2!(ZErrorKind::Other { descr: e })
+                e
             })?;
 
         for pa in self.config.unicast.peer_authenticator.iter() {
@@ -518,13 +535,13 @@ impl TransportManager {
         let c_incoming = self.state.unicast.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
-            let auth_link = AuthenticatedPeerLink {
+            let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src(),
                 dst: link.get_dst(),
                 peer_id,
             };
 
-            let res = super::establishment::accept_link(&c_manager, &link, &auth_link)
+            let res = super::establishment::accept::accept_link(&c_manager, &link, &mut auth_link)
                 .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {

@@ -23,9 +23,9 @@ pub use wbuf::*;
 mod codec;
 pub use codec::*;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod shm;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 pub use shm::*;
 
 use super::core;

@@ -18,8 +18,7 @@ use super::Primitives;
 use crate::net::link::Link;
 use crate::net::transport::TransportPeerEventHandler;
 use std::any::Any;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror;
+use zenoh_util::core::Result as ZResult;
 
 pub struct DeMux<P: Primitives> {
     primitives: P,
@@ -38,7 +37,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                 for declaration in declarations {
                     match declaration {
                         Declaration::Resource(r) => {
-                            self.primitives.decl_resource(r.rid, &r.key);
+                            self.primitives.decl_resource(r.expr_id, &r.key);
                         }
                         Declaration::Publisher(p) => {
                             self.primitives.decl_publisher(&p.key, msg.routing_context);
@@ -48,11 +47,15 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                                 .decl_subscriber(&s.key, &s.info, msg.routing_context);
                         }
                         Declaration::Queryable(q) => {
-                            self.primitives
-                                .decl_queryable(&q.key, q.kind, msg.routing_context);
+                            self.primitives.decl_queryable(
+                                &q.key,
+                                q.kind,
+                                &q.info,
+                                msg.routing_context,
+                            );
                         }
                         Declaration::ForgetResource(fr) => {
-                            self.primitives.forget_resource(fr.rid);
+                            self.primitives.forget_resource(fr.expr_id);
                         }
                         Declaration::ForgetPublisher(fp) => {
                             self.primitives
@@ -64,7 +67,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                         }
                         Declaration::ForgetQueryable(q) => {
                             self.primitives
-                                .forget_queryable(&q.key, msg.routing_context);
+                                .forget_queryable(&q.key, q.kind, msg.routing_context);
                         }
                     }
                 }
@@ -99,9 +102,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                         );
                     }
                     None => {
-                        return zerror!(ZErrorKind::Other {
-                            descr: "ReplyData with no replier_id".to_string()
-                        })
+                        bail!("ReplyData with no replier_id")
                     }
                 },
             },
@@ -116,7 +117,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
 
             ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,
@@ -124,7 +125,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
             }) => {
                 self.primitives.send_query(
                     &key,
-                    &predicate,
+                    &value_selector,
                     qid,
                     target.unwrap_or_default(),
                     consolidation,

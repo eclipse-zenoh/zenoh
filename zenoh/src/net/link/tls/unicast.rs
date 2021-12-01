@@ -34,9 +34,9 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror2, zread, zwrite};
+use zenoh_util::{zerror, zread, zwrite};
 
 pub struct LinkUnicastTls {
     // The underlying socket as returned from the async-rustls library
@@ -124,20 +124,14 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let (tcp_stream, _) = tls_stream.get_ref();
         let res = tcp_stream.shutdown(Shutdown::Both);
         log::trace!("TLS link shutdown {}: {:?}", self, res);
-        res.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string(),
-            })
-        })
+        res.map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            zerror!(e).into()
         })
     }
 
@@ -145,9 +139,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let _guard = zasynclock!(self.write_mtx);
         self.get_sock_mut().write_all(buffer).await.map_err(|e| {
             log::trace!("Write error on TLS link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            zerror!(e).into()
         })
     }
 
@@ -155,9 +147,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            zerror!(e).into()
         })
     }
 
@@ -165,9 +155,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         let _guard = zasynclock!(self.read_mtx);
         self.get_sock_mut().read_exact(buffer).await.map_err(|e| {
             log::trace!("Read error on TLS link {}: {}", self, e);
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
+            zerror!(e).into()
         })
     }
 
@@ -275,33 +263,26 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let host: &str = domain.as_ref().into();
 
         // Initialize the TcpStream
-        let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
-            let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
-            zerror2!(ZErrorKind::Other { descr: e })
-        })?;
+        let tcp_stream = TcpStream::connect(addr)
+            .await
+            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
 
-        let src_addr = tcp_stream.local_addr().map_err(|e| {
-            let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let src_addr = tcp_stream
+            .local_addr()
+            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
 
-        let dst_addr = tcp_stream.peer_addr().map_err(|e| {
-            let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let dst_addr = tcp_stream
+            .peer_addr()
+            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
 
         // Initialize the TLS stream
         let bytes = match endpoint.config.as_ref() {
             Some(config) => match config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
                 Some(tls_ca_certificate) => tls_ca_certificate.as_bytes().to_vec(),
                 None => match config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                    Some(tls_ca_certificate) => {
-                        fs::read(tls_ca_certificate).await.map_err(|e| {
-                            zerror2!(ZErrorKind::Other {
-                                descr: format!("Invalid TLS CA certificate file: {}", e)
-                            })
-                        })?
-                    }
+                    Some(tls_ca_certificate) => fs::read(tls_ca_certificate)
+                        .await
+                        .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?,
                     None => vec![],
                 },
             },
@@ -315,11 +296,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             let _ = cc
                 .root_store
                 .add_pem_file(&mut Cursor::new(&bytes))
-                .map_err(|_| {
-                    zerror2!(ZErrorKind::Other {
-                        descr: "Invalid TLS CA certificate file".to_string()
-                    })
-                })?;
+                .map_err(|_| zerror!("Invalid TLS CA certificate file"))?;
             Arc::new(cc)
         };
 
@@ -327,10 +304,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let tls_stream = connector
             .connect(domain.as_ref(), tcp_stream)
             .await
-            .map_err(|e| {
-                let e = format!("Can not create a new TLS link bound to {}: {}", host, e);
-                zerror2!(ZErrorKind::InvalidLink { descr: e })
-            })?;
+            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
         let tls_stream = TlsStream::Client(tls_stream);
 
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
@@ -343,29 +317,25 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Verify there is a valid ServerConfig
         let config = endpoint.config.as_ref().ok_or_else(|| {
-            let e = format!(
+            zerror!(
                 "Can not create a new TLS listener on {}: no ServerConfig provided",
                 addr
-            );
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            )
         })?;
 
         // Configure the server private key
         let bytes = match config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
             Some(tls_server_private_key) => tls_server_private_key.as_bytes().to_vec(),
             None => match config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-                Some(tls_server_private_key) => {
-                    fs::read(tls_server_private_key).await.map_err(|e| {
-                        let e = format!("Invalid TLS private key file: {}", e);
-                        zerror2!(ZErrorKind::IoError { descr: e })
-                    })?
-                }
+                Some(tls_server_private_key) => fs::read(tls_server_private_key)
+                    .await
+                    .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?,
                 None => {
-                    let e = format!(
+                    bail!(
                         "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
-                        addr, TLS_SERVER_PRIVATE_KEY_FILE
+                        addr,
+                        TLS_SERVER_PRIVATE_KEY_FILE
                     );
-                    return zerror!(ZErrorKind::InvalidLink { descr: e });
                 }
             },
         };
@@ -375,36 +345,48 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let bytes = match config.get(TLS_SERVER_CERTIFICATE_RAW) {
             Some(tls_server_certificate) => tls_server_certificate.as_bytes().to_vec(),
             None => match config.get(TLS_SERVER_CERTIFICATE_FILE) {
-                Some(tls_server_certificate) => {
-                    fs::read(tls_server_certificate).await.map_err(|e| {
-                        let e = format!("Invalid TLS server certificate file: {}", e);
-                        zerror2!(ZErrorKind::IoError { descr: e })
-                    })?
-                }
+                Some(tls_server_certificate) => fs::read(tls_server_certificate)
+                    .await
+                    .map_err(|e| zerror!("Invalid TLS server certificate file: {}", e))?,
                 None => {
-                    let e = format!(
+                    bail!(
                         "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
-                        addr, TLS_SERVER_CERTIFICATE_FILE
-                    );
-                    return zerror!(ZErrorKind::InvalidLink { descr: e });
+                        addr,
+                        TLS_SERVER_CERTIFICATE_FILE
+                    )
                 }
             },
         };
         let certs = pemfile::certs(&mut Cursor::new(bytes.as_slice())).unwrap();
 
-        let mut sc = ServerConfig::new(NoClientAuth::new());
+        // Configure the client authentication
+        let client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(ca) => ca,
+            None => TLS_CLIENT_AUTH_DEFAULT,
+        }
+        .parse()
+        .map_err(|e| zerror!("Invalid {} value: {}", TLS_CLIENT_AUTH, e))?;
+
+        let mut sc = if client_auth {
+            // @TODO: implement Client authentication
+            bail!(
+                "Can not create a new TLS listener on {}. ClientAuth not supported.",
+                addr
+            );
+        } else {
+            ServerConfig::new(NoClientAuth::new())
+        };
+
         sc.set_single_cert(certs, keys.remove(0)).unwrap();
 
         // Initialize the TcpListener
-        let socket = TcpListener::bind(addr).await.map_err(|e| {
-            let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let socket = TcpListener::bind(addr)
+            .await
+            .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
 
-        let local_addr = socket.local_addr().map_err(|e| {
-            let e = format!("Can not create a new TLS listener on {}: {}", addr, e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
-        })?;
+        let local_addr = socket
+            .local_addr()
+            .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
         endpoint.locator.address = LocatorAddress::Tls(LocatorTls::SocketAddr(local_addr));
@@ -440,12 +422,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
-            let e = format!(
+            let e = zerror!(
                 "Can not delete the TLS listener because it has not been found: {}",
                 addr
             );
             log::trace!("{}", e);
-            zerror2!(ZErrorKind::InvalidLink { descr: e })
+            e
         })?;
 
         // Send the stop signal
@@ -523,11 +505,7 @@ async fn accept_task(
     }
 
     async fn accept(socket: &TcpListener) -> ZResult<Action> {
-        let res = socket.accept().await.map_err(|e| {
-            zerror2!(ZErrorKind::IoError {
-                descr: e.to_string()
-            })
-        })?;
+        let res = socket.accept().await.map_err(|e| zerror!(e))?;
         Ok(Action::Accept(res))
     }
 
@@ -537,9 +515,9 @@ async fn accept_task(
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
-        let e = format!("Can not accept TLS connections: {}", e);
+        let e = zerror!("Can not accept TLS connections: {}", e);
         log::warn!("{}", e);
-        zerror2!(ZErrorKind::IoError { descr: e })
+        e
     })?;
 
     log::trace!("Ready to accept TLS connections on: {:?}", src_addr);

@@ -17,66 +17,51 @@ use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use zenoh::net::utils::resource_name;
-use zenoh::net::Sample;
-use zenoh::{utils, ChangeKind, Properties, Timestamp, Value, ZResult};
+use zenoh::prelude::*;
+use zenoh::time::Timestamp;
+use zenoh::utils::key_expr;
+use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
 use zenoh_backend_traits::*;
 use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
+use zenoh_util::core::Result as ZResult;
 
-pub fn create_backend(_unused: Properties) -> ZResult<Box<dyn Backend>> {
-    // For now admin status is static and only contains a PROP_BACKEND_TYPE entry
-    let properties = Properties::from(&[(PROP_BACKEND_TYPE, "memory")][..]);
-    let admin_status = utils::properties_to_json_value(&properties);
-    Ok(Box::new(MemoryBackend { admin_status }))
+pub fn create_memory_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+    Ok(Box::new(MemoryBackend { config }))
 }
 
 pub struct MemoryBackend {
-    admin_status: Value,
+    config: BackendConfig,
 }
 
 #[async_trait]
 impl Backend for MemoryBackend {
     async fn get_admin_status(&self) -> Value {
-        self.admin_status.clone()
+        self.config.to_json_value().into()
     }
 
-    async fn create_storage(&mut self, properties: Properties) -> ZResult<Box<dyn Storage>> {
-        debug!("Create Memory Storage with properties: {}", properties);
+    async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+        debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }
 
-    fn incoming_data_interceptor(&self) -> Option<Box<dyn IncomingDataInterceptor>> {
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        None
+        // None
         // To test interceptors, uncomment this line:
-        // Some(Box::new(InTestInterceptor {}))
+        Some(Arc::new(|sample| {
+            println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+            sample
+        }))
     }
 
-    fn outgoing_data_interceptor(&self) -> Option<Box<dyn OutgoingDataInterceptor>> {
+    fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        None
+        // None
         // To test interceptors, uncomment this line:
-        // Some(Box::new(OutTestInterceptor {}))
-    }
-}
-
-struct InTestInterceptor {}
-
-#[async_trait]
-impl IncomingDataInterceptor for InTestInterceptor {
-    async fn on_sample(&self, sample: Sample) -> Sample {
-        println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
-        sample
-    }
-}
-
-struct OutTestInterceptor {}
-
-#[async_trait]
-impl OutgoingDataInterceptor for OutTestInterceptor {
-    async fn on_reply(&self, sample: Sample) -> Sample {
-        println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
-        sample
+        Some(Arc::new(|sample| {
+            println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
+            sample
+        }))
     }
 }
 
@@ -113,17 +98,15 @@ impl StoredValue {
 use StoredValue::{Present, Removed};
 
 struct MemoryStorage {
-    admin_status: Value,
+    config: StorageConfig,
     map: Arc<RwLock<HashMap<String, StoredValue>>>,
     timer: Timer,
 }
 
 impl MemoryStorage {
-    async fn new(properties: Properties) -> ZResult<MemoryStorage> {
-        let admin_status = utils::properties_to_json_value(&properties);
-
+    async fn new(properties: StorageConfig) -> ZResult<MemoryStorage> {
         Ok(MemoryStorage {
-            admin_status,
+            config: properties,
             map: Arc::new(RwLock::new(HashMap::new())),
             timer: Timer::new(),
         })
@@ -131,12 +114,12 @@ impl MemoryStorage {
 }
 
 impl MemoryStorage {
-    async fn schedule_cleanup(&self, path: String) -> TimedHandle {
+    async fn schedule_cleanup(&self, key: String) -> TimedHandle {
         let event = TimedEvent::once(
             Instant::now() + Duration::from_millis(CLEANUP_TIMEOUT_MS),
             TimedCleanup {
                 map: self.map.clone(),
-                path,
+                key,
             },
         );
         let handle = event.get_handle();
@@ -148,24 +131,15 @@ impl MemoryStorage {
 #[async_trait]
 impl Storage for MemoryStorage {
     async fn get_admin_status(&self) -> Value {
-        self.admin_status.clone()
+        self.config.to_json_value().into()
     }
 
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<()> {
-        trace!("on_sample for {}", sample.res_name);
-        let (kind, timestamp) = if let Some(ref info) = sample.data_info {
-            (
-                info.kind.map_or(ChangeKind::Put, ChangeKind::from),
-                match &info.timestamp {
-                    Some(ts) => *ts,
-                    None => utils::new_reception_timestamp(),
-                },
-            )
-        } else {
-            (ChangeKind::Put, utils::new_reception_timestamp())
-        };
-        match kind {
-            ChangeKind::Put => match self.map.write().await.entry(sample.res_name.clone()) {
+    async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+        trace!("on_sample for {}", sample.key_expr);
+        sample.ensure_timestamp();
+        let timestamp = sample.timestamp.unwrap();
+        match sample.kind {
+            SampleKind::Put => match self.map.write().await.entry(sample.key_expr.to_string()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -188,16 +162,16 @@ impl Storage for MemoryStorage {
                             ts: timestamp,
                         });
                     } else {
-                        debug!("PUT on {} dropped: out-of-date", sample.res_name);
+                        debug!("PUT on {} dropped: out-of-date", sample.key_expr);
                     }
                 }
             },
-            ChangeKind::Delete => match self.map.write().await.entry(sample.res_name.clone()) {
+            SampleKind::Delete => match self.map.write().await.entry(sample.key_expr.to_string()) {
                 Entry::Vacant(v) => {
-                    // NOTE: even if path is not known yet, we need to store the removal time:
+                    // NOTE: even if key is not known yet, we need to store the removal time:
                     // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
                     // we must drop the put.
-                    let cleanup_handle = self.schedule_cleanup(sample.res_name.clone()).await;
+                    let cleanup_handle = self.schedule_cleanup(sample.key_expr.to_string()).await;
                     v.insert(Removed {
                         ts: timestamp,
                         cleanup_handle,
@@ -212,35 +186,38 @@ impl Storage for MemoryStorage {
                         Present { sample: _, ts } => {
                             if ts < &timestamp {
                                 let cleanup_handle =
-                                    self.schedule_cleanup(sample.res_name.clone()).await;
+                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
                                 o.insert(Removed {
                                     ts: timestamp,
                                     cleanup_handle,
                                 });
                             } else {
-                                debug!("DEL on {} dropped: out-of-date", sample.res_name);
+                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
                             }
                         }
                     }
                 }
             },
-            ChangeKind::Patch => {
-                warn!("Received PATCH for {}: not yet supported", sample.res_name);
+            SampleKind::Patch => {
+                warn!("Received PATCH for {}: not yet supported", sample.key_expr);
             }
         }
         Ok(())
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        trace!("on_query for {}", query.res_name());
-        if !query.res_name().contains('*') {
-            if let Some(Present { sample, ts: _ }) = self.map.read().await.get(query.res_name()) {
+        trace!("on_query for {}", query.key_selector());
+        if !query.key_selector().as_str().contains('*') {
+            if let Some(Present { sample, ts: _ }) =
+                self.map.read().await.get(query.key_selector().as_str())
+            {
                 query.reply(sample.clone()).await;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if resource_name::intersect(query.res_name(), &sample.res_name) {
+                    if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
+                    {
                         let s: Sample = sample.clone();
                         query.reply(s).await;
                     }
@@ -262,12 +239,12 @@ const CLEANUP_TIMEOUT_MS: u64 = 5000;
 
 struct TimedCleanup {
     map: Arc<RwLock<HashMap<String, StoredValue>>>,
-    path: String,
+    key: String,
 }
 
 #[async_trait]
 impl Timed for TimedCleanup {
     async fn run(&mut self) {
-        self.map.write().await.remove(&self.path);
+        self.map.write().await.remove(&self.key);
     }
 }

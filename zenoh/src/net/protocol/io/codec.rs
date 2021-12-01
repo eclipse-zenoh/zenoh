@@ -11,19 +11,19 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, Property, ZInt, ZINT_MAX_BYTES};
-#[cfg(feature = "zero-copy")]
+use super::core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
+#[cfg(feature = "shared-memory")]
 use super::SharedMemoryBufInfo;
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use crate::net::link::Locator;
-#[cfg(feature = "zero-copy")]
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
+use zenoh_util::core::Result as ZResult;
+#[cfg(feature = "shared-memory")]
 use zenoh_util::zerror;
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod zslice {
     pub(crate) mod kind {
         pub(crate) const RAW: u8 = 0;
@@ -53,22 +53,17 @@ macro_rules! read_zint {
     };
 }
 
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 impl SharedMemoryBufInfo {
     pub fn serialize(&self) -> ZResult<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| {
-            zerror2!(ZErrorKind::ValueEncodingFailed {
-                descr: format!("Unable to serialize SharedMemoryBufInfo: {}", e)
-            })
-        })
+        bincode::serialize(self)
+            .map_err(|e| zerror!("Unable to serialize SharedMemoryBufInfo: {}", e).into())
     }
 
     pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
         match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
             Ok(info) => Ok(info),
-            Err(e) => zerror!(ZErrorKind::ValueDecodingFailed {
-                descr: format!("Unable to deserialize SharedMemoryBufInfo: {}", e)
-            }),
+            Err(e) => bail!("Unable to deserialize SharedMemoryBufInfo: {}", e),
         }
     }
 }
@@ -141,13 +136,13 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_peerid(&mut self) -> Option<PeerId> {
+    pub fn read_peeexpr_id(&mut self) -> Option<PeerId> {
         let size = self.read_zint_as_usize()?;
         if size > PeerId::MAX_SIZE {
             log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
             return None;
         }
-        let mut id = [0u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; PeerId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(PeerId::new(size, id))
         } else {
@@ -176,7 +171,7 @@ impl ZBuf {
         self.read_zslice(len)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn read_shminfo(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
@@ -198,7 +193,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
         let num = self.read_zint_as_usize()?;
@@ -223,7 +218,7 @@ impl ZBuf {
     }
 
     // Same as read_bytes_array but 0 copy on ZBuf.
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf> {
         if !sliced {
@@ -233,7 +228,7 @@ impl ZBuf {
         }
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
     pub fn read_zbuf(&mut self) -> Option<ZBuf> {
         self.read_zbuf_flat()
@@ -252,6 +247,25 @@ impl ZBuf {
         let key = self.read_zint()?;
         let value = self.read_bytes_array()?;
         Some(Property { key, value })
+    }
+
+    pub fn read_timestamp(&mut self) -> Option<Timestamp> {
+        let time = self.read_zint_as_u64()?;
+        let size = self.read_zint_as_usize()?;
+        if size > (uhlc::ID::MAX_SIZE) {
+            log::trace!(
+                "Reading a Timestamp's ID size that exceed {} bytes: {}",
+                uhlc::ID::MAX_SIZE,
+                size
+            );
+            return None;
+        }
+        let mut id = [0_u8; PeerId::MAX_SIZE];
+        if self.read_bytes(&mut id[..size]) {
+            Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
+        } else {
+            None
+        }
     }
 }
 
@@ -297,7 +311,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_peerid(&mut self, pid: &PeerId) -> bool {
+    pub fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 
@@ -326,7 +340,7 @@ impl WBuf {
         self.write_zbuf_slices(zbuf)
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn write_zbuf_sliced(&mut self, zbuf: &ZBuf) -> bool {
         zcheck!(self.write_usize_as_zint(zbuf.zslices_num()));
@@ -343,7 +357,7 @@ impl WBuf {
         true
     }
 
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool {
         if !sliced {
@@ -353,7 +367,7 @@ impl WBuf {
         }
     }
 
-    #[cfg(not(feature = "zero-copy"))]
+    #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
     pub fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool {
         self.write_zbuf_flat(zbuf)
@@ -369,14 +383,20 @@ impl WBuf {
         true
     }
 
-    pub fn write_properties(&mut self, props: &[Property]) {
-        self.write_usize_as_zint(props.len());
+    pub fn write_properties(&mut self, props: &[Property]) -> bool {
+        zcheck!(self.write_usize_as_zint(props.len()));
         for p in props {
-            self.write_property(p);
+            zcheck!(self.write_property(p));
         }
+        true
     }
 
     fn write_property(&mut self, p: &Property) -> bool {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
+    }
+
+    pub fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
+        self.write_u64_as_zint(tstamp.get_time().as_u64())
+            && self.write_bytes_array(tstamp.get_id().as_slice())
     }
 }

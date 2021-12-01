@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[cfg(feature = "zero-copy")]
+#[cfg(feature = "shared-memory")]
 mod tests {
     use async_std::prelude::*;
     use async_std::task;
@@ -22,17 +22,17 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{whatami, Channel, PeerId, Priority, Reliability, ResKey};
+    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
-    use zenoh::net::transport::unicast::authenticator::SharedMemoryAuthenticator;
+    use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportManagerConfig,
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
         TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
-    use zenoh::net::CongestionControl;
-    use zenoh_util::core::ZResult;
+    use zenoh::publication::CongestionControl;
+    use zenoh_util::core::Result as ZResult;
     use zenoh_util::zasync_executor_init;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -104,7 +104,7 @@ mod tests {
             };
             assert_eq!(payload.len(), MSG_SIZE);
 
-            let mut count_bytes = [0u8; 8];
+            let mut count_bytes = [0_u8; 8];
             count_bytes.copy_from_slice(&payload[0..8]);
             let msg_count = u64::from_le_bytes(count_bytes) as usize;
             let sex_count = self.count.fetch_add(1, Ordering::SeqCst);
@@ -126,49 +126,48 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
 
-        // Create a peer manager with zero-copy authenticator enabled
+        // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
+        let unicast =
+            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::new().into(),
+            ]));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
-            .unicast(
-                TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(HashSet::from_iter(vec![
-                        SharedMemoryAuthenticator::new().into()
-                    ]))
-                    .build(),
-            )
-            .build(peer_shm01_handler.clone());
+            .unicast(unicast)
+            .build(peer_shm01_handler.clone())
+            .unwrap();
         let peer_shm01_manager = TransportManager::new(config);
 
-        // Create a peer manager with zero-copy authenticator enabled
+        // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
+        let unicast =
+            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::new().into(),
+            ]));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
-            .unicast(
-                TransportManagerConfigUnicast::builder()
-                    .peer_authenticator(HashSet::from_iter(vec![
-                        SharedMemoryAuthenticator::new().into()
-                    ]))
-                    .build(),
-            )
-            .build(peer_shm02_handler.clone());
+            .unicast(unicast)
+            .build(peer_shm02_handler.clone())
+            .unwrap();
         let peer_shm02_manager = TransportManager::new(config);
 
-        // Create a peer manager with zero-copy authenticator disabled
+        // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let config = TransportManagerConfig::builder()
-            .whatami(whatami::PEER)
+            .whatami(WhatAmI::Peer)
             .pid(peer_net01)
-            .build(peer_net01_handler.clone());
+            .build(peer_net01_handler.clone())
+            .unwrap();
         let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer
@@ -225,7 +224,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = "/test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -282,7 +281,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = ResKey::RName("/test".to_string());
+            let key = "/test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -356,7 +355,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    #[cfg(all(feature = "transport_tcp", feature = "zero-copy"))]
+    #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
     #[test]
     fn transport_tcp_shm() {
         env_logger::init();

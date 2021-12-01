@@ -11,7 +11,34 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
 use super::{IntKeyProperties, KeyTranscoder};
+use std::{borrow::Cow, collections::HashMap};
+pub use zenoh_macros::IntKeyMapLike;
+#[allow(clippy::result_unit_err)]
+pub trait IntKeyMapLike {
+    type Keys: IntoIterator<Item = u64>;
+    fn iget(&self, key: u64) -> Option<Cow<'_, str>>;
+    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()>;
+    fn ikeys(&self) -> Self::Keys;
+}
+
+impl IntKeyMapLike for HashMap<u64, String> {
+    type Keys = Vec<u64>;
+
+    fn iget(&self, key: u64) -> Option<Cow<'_, str>> {
+        self.get(&key).map(|f| Cow::Borrowed(f.as_ref()))
+    }
+
+    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()> {
+        self.insert(key, value.into());
+        Ok(())
+    }
+
+    fn ikeys(&self) -> Self::Keys {
+        self.keys().copied().collect()
+    }
+}
 
 mod consts {
     /// `"true"`
@@ -130,27 +157,27 @@ mod consts {
     pub const ZN_PEERS_AUTOCONNECT_DEFAULT: &str = ZN_TRUE;
 
     /// The file path containing the TLS server private key.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_server_private_key"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_SERVER_PRIVATE_KEY_KEY: u64 = 0x4E;
     pub const ZN_TLS_SERVER_PRIVATE_KEY_STR: &str = "tls_server_private_key";
 
     /// The file path containing the TLS server certificate.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_server_certificate"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_SERVER_CERTIFICATE_KEY: u64 = 0x4F;
     pub const ZN_TLS_SERVER_CERTIFICATE_STR: &str = "tls_server_certificate";
 
     /// The file path containing the TLS root CA certificate.
-    /// String key : `"tls_private_key"`.
+    /// String key : `"tls_root_ca_certificate"`.
     /// Accepted values : `<file path>`.
     /// Default value : None.
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_KEY: u64 = 0x50;
     pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 
-    /// Indicates if the zero-copy features should be used.
+    /// Indicates if the shared-memory features should be used.
     /// String key : `"shm"`.
     /// Accepted values : `"true"`, `"false"`.
     /// Default value : `"true"`.
@@ -244,21 +271,21 @@ mod consts {
     pub const ZN_BATCH_SIZE_STR: &str = "batch_size";
     pub const ZN_BATCH_SIZE_DEFAULT: &str = "65535";
 
-    /// Configures the maximum number of simultaneous open sessions.
-    /// String key : `"max_sessions"`.
+    /// Configures the maximum number of simultaneous open unicast sessions.
+    /// String key : `"max_sessions_unicast"`.
     /// Accepted values : `<unsigned integer>`.
     /// Default value : `1024`.
-    pub const ZN_MAX_SESSIONS_KEY: u64 = 0x70;
-    pub const ZN_MAX_SESSIONS_STR: &str = "max_sessions";
-    pub const ZN_MAX_SESSIONS_DEFAULT: &str = "1024";
+    pub const ZN_MAX_SESSIONS_UNICAST_KEY: u64 = 0x70;
+    pub const ZN_MAX_SESSIONS_UNICAST_STR: &str = "max_sessions_unicast";
+    pub const ZN_MAX_SESSIONS_UNICAST_DEFAULT: &str = "1024";
 
     /// Configures the maximum number of links per open session.
     /// String key : `"max_links"`.
     /// Accepted values : `<unsigned integer>`.
-    /// Default value : `4`.
+    /// Default value : `2`.
     pub const ZN_MAX_LINKS_KEY: u64 = 0x71;
     pub const ZN_MAX_LINKS_STR: &str = "max_links";
-    pub const ZN_MAX_LINKS_DEFAULT: &str = "4";
+    pub const ZN_MAX_LINKS_DEFAULT: &str = "2";
 
     /// Configures the zenoh version.
     /// String key : `"version"`.
@@ -307,10 +334,78 @@ mod consts {
     pub const ZN_MULTICAST_IPV6_ADDRESS_KEY: u64 = 0x77;
     pub const ZN_MULTICAST_IPV6_ADDRESS_STR: &str = "multicast_ipv6_address";
     pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7447";
+
+    /// The public RSA key.
+    /// String key : `"auth_rsa_public_key_pem"`.
+    /// Accepted values : `<RSA key in PEM format>`.
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY: u64 = 0x78;
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR: &str = "auth_rsa_public_key_pem";
+
+    /// The private RSA key.
+    /// String key : `"auth_rsa_private_key_pem"`.
+    /// Accepted values : `<RSA key in PEM format>`.
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY: u64 = 0x79;
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR: &str = "auth_rsa_private_key_pem";
+
+    /// The public RSA key.
+    /// String key : `"auth_rsa_public_key_pem"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY: u64 = 0x80;
+    pub const ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR: &str = "auth_rsa_public_key_file";
+
+    /// The private RSA key.
+    /// String key : `"auth_rsa_private_key_pem"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY: u64 = 0x81;
+    pub const ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR: &str = "auth_rsa_private_key_file";
+
+    /// The default RSA key size.
+    /// String key : `"auth_rsa_key_size"`.
+    /// Accepted values : `<unsigned integer>`.
+    pub const ZN_AUTH_RSA_KEY_SIZE_KEY: u64 = 0x82;
+    pub const ZN_AUTH_RSA_KEY_SIZE_STR: &str = "auth_rsa_key_size";
+    pub const ZN_AUTH_RSA_KEY_SIZE_DEFAULT: &str = "512";
+
+    /// The list of known RSA public keys.
+    /// String key : `"auth_rsa_known_keys_file"`.
+    /// Accepted values : `<file path>`.
+    pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY: u64 = 0x83;
+    pub const ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR: &str = "auth_rsa_known_keys_file";
+
+    /// Configures the maximum number of simultaneous open unicast sessions.
+    /// String key : `"max_sessions_unicast"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `1024`.
+    pub const ZN_MAX_SESSIONS_MULTICAST_KEY: u64 = 0x84;
+    pub const ZN_MAX_SESSIONS_MULTICAST_STR: &str = "max_sessions_multicast";
+    pub const ZN_MAX_SESSIONS_MULTICAST_DEFAULT: &str = "1024";
+
+    /// The file path containing the TLS server private key.
+    /// String key : `"tls_client_private_key"`.
+    /// Accepted values : `<file path>`.
+    /// Default value : None.
+    pub const ZN_TLS_CLIENT_PRIVATE_KEY_KEY: u64 = 0x85;
+    pub const ZN_TLS_CLIENT_PRIVATE_KEY_STR: &str = "tls_client_private_key";
+
+    /// The file path containing the TLS server certificate.
+    /// String key : `"tls_client_private_key"`.
+    /// Accepted values : `<file path>`.
+    /// Default value : None.
+    pub const ZN_TLS_CLIENT_CERTIFICATE_KEY: u64 = 0x86;
+    pub const ZN_TLS_CLIENT_CERTIFICATE_STR: &str = "tls_client_certificate";
+
+    /// The file path containing the TLS server certificate.
+    /// String key : `"tls_private_key"`.
+    /// Accepted values : `"true"`, `"false"`.
+    /// Default value : `"false"`.
+    pub const ZN_TLS_CLIENT_AUTH_KEY: u64 = 0x87;
+    pub const ZN_TLS_CLIENT_AUTH_STR: &str = "tls_client_auth";
+    pub const ZN_TLS_CLIENT_AUTH_DEFAULT: &str = ZN_FALSE;
 }
 
 pub use consts::*;
 
+/// A set of [`IntKeyProperties`] used to configure zenoh.
 pub type ConfigProperties = IntKeyProperties<ConfigTranscoder>;
 
 pub struct ConfigTranscoder;
@@ -348,7 +443,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_OPEN_INCOMING_PENDING_STR => Some(ZN_OPEN_INCOMING_PENDING_KEY),
             ZN_PEER_ID_STR => Some(ZN_PEER_ID_KEY),
             ZN_BATCH_SIZE_STR => Some(ZN_BATCH_SIZE_KEY),
-            ZN_MAX_SESSIONS_STR => Some(ZN_MAX_SESSIONS_KEY),
+            ZN_MAX_SESSIONS_UNICAST_STR => Some(ZN_MAX_SESSIONS_UNICAST_KEY),
             ZN_MAX_LINKS_STR => Some(ZN_MAX_LINKS_KEY),
             ZN_VERSION_STR => Some(ZN_VERSION_KEY),
             ZN_QOS_STR => Some(ZN_QOS_KEY),
@@ -356,6 +451,16 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_DEFRAG_BUFF_SIZE_STR => Some(ZN_DEFRAG_BUFF_SIZE_KEY),
             ZN_LINK_RX_BUFF_SIZE_STR => Some(ZN_LINK_RX_BUFF_SIZE_KEY),
             ZN_MULTICAST_IPV6_ADDRESS_STR => Some(ZN_MULTICAST_IPV6_ADDRESS_KEY),
+            ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR => Some(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY),
+            ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR => Some(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY),
+            ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR => Some(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY),
+            ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY),
+            ZN_AUTH_RSA_KEY_SIZE_STR => Some(ZN_AUTH_RSA_KEY_SIZE_KEY),
+            ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY),
+            ZN_MAX_SESSIONS_MULTICAST_STR => Some(ZN_MAX_SESSIONS_MULTICAST_KEY),
+            ZN_TLS_CLIENT_PRIVATE_KEY_STR => Some(ZN_TLS_CLIENT_PRIVATE_KEY_KEY),
+            ZN_TLS_CLIENT_CERTIFICATE_STR => Some(ZN_TLS_CLIENT_CERTIFICATE_KEY),
+            ZN_TLS_CLIENT_AUTH_STR => Some(ZN_TLS_CLIENT_AUTH_KEY),
             _ => None,
         }
     }
@@ -396,6 +501,7 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_OPEN_INCOMING_PENDING_KEY => Some(ZN_OPEN_INCOMING_PENDING_STR.to_string()),
             ZN_PEER_ID_KEY => Some(ZN_PEER_ID_STR.to_string()),
             ZN_BATCH_SIZE_KEY => Some(ZN_BATCH_SIZE_STR.to_string()),
+            ZN_MAX_SESSIONS_UNICAST_KEY => Some(ZN_MAX_SESSIONS_UNICAST_STR.to_string()),
             ZN_MAX_LINKS_KEY => Some(ZN_MAX_LINKS_STR.to_string()),
             ZN_VERSION_KEY => Some(ZN_VERSION_STR.to_string()),
             ZN_QOS_KEY => Some(ZN_QOS_STR.to_string()),
@@ -403,6 +509,16 @@ impl KeyTranscoder for ConfigTranscoder {
             ZN_DEFRAG_BUFF_SIZE_KEY => Some(ZN_DEFRAG_BUFF_SIZE_STR.to_string()),
             ZN_LINK_RX_BUFF_SIZE_KEY => Some(ZN_LINK_RX_BUFF_SIZE_STR.to_string()),
             ZN_MULTICAST_IPV6_ADDRESS_KEY => Some(ZN_MULTICAST_IPV6_ADDRESS_STR.to_string()),
+            ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY => Some(ZN_AUTH_RSA_PUBLIC_KEY_PEM_STR.to_string()),
+            ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY => Some(ZN_AUTH_RSA_PRIVATE_KEY_PEM_STR.to_string()),
+            ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY => Some(ZN_AUTH_RSA_PUBLIC_KEY_FILE_STR.to_string()),
+            ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY => Some(ZN_AUTH_RSA_PRIVATE_KEY_FILE_STR.to_string()),
+            ZN_AUTH_RSA_KEY_SIZE_KEY => Some(ZN_AUTH_RSA_KEY_SIZE_STR.to_string()),
+            ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY => Some(ZN_AUTH_RSA_KNOWN_KEYS_FILE_STR.to_string()),
+            ZN_MAX_SESSIONS_MULTICAST_KEY => Some(ZN_MAX_SESSIONS_MULTICAST_STR.to_string()),
+            ZN_TLS_CLIENT_PRIVATE_KEY_KEY => Some(ZN_TLS_CLIENT_PRIVATE_KEY_STR.to_string()),
+            ZN_TLS_CLIENT_CERTIFICATE_KEY => Some(ZN_TLS_CLIENT_CERTIFICATE_STR.to_string()),
+            ZN_TLS_CLIENT_AUTH_KEY => Some(ZN_TLS_CLIENT_AUTH_STR.to_string()),
             _ => None,
         }
     }

@@ -21,16 +21,15 @@ use super::tls::{LocatorConfigTls, LocatorTls};
 use super::udp::{LocatorConfigUdp, LocatorUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use super::unixsock_stream::{LocatorConfigUnixSocketStream, LocatorUnixSocketStream};
+use crate::config::Config;
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::properties::config::ConfigProperties;
+use zenoh_util::core::{zresult::BoxedStdErr as ZError, Result as ZResult};
 use zenoh_util::properties::Properties;
-use zenoh_util::zerror2;
 
 /*************************************/
 /*             CONSTS                */
@@ -100,14 +99,10 @@ impl FromStr for EndPoint {
             let c = &s[config_index + 1..];
             // If the metadata is after the configuration, it's an invalid locator
             if c.find(METADATA_SEPARATOR).is_some() {
-                let e = format!("Invalid endpoint format: {}", s);
-                return zerror!(ZErrorKind::InvalidLocator { descr: e });
+                bail!("Invalid endpoint format: {}", s);
             }
-
-            let config = str_to_properties(c).ok_or_else(|| {
-                let e = format!("Invalid endpoint configuration: {}", s);
-                zerror2!(ZErrorKind::InvalidLocator { descr: e })
-            })?;
+            let config = str_to_properties(c)
+                .ok_or_else(|| zerror!("Invalid endpoint configuration: {}", s))?;
             Some(Arc::new(config))
         } else {
             None
@@ -201,7 +196,7 @@ impl fmt::Display for LocatorProtocol {
 pub struct LocatorConfig;
 
 impl LocatorConfig {
-    pub fn from_config(config: &ConfigProperties) -> ZResult<HashMap<LocatorProtocol, Properties>> {
+    pub fn from_config(config: &Config) -> ZResult<HashMap<LocatorProtocol, Properties>> {
         let mut ps: HashMap<LocatorProtocol, Properties> = HashMap::new();
         #[cfg(feature = "transport_tcp")]
         {
@@ -285,10 +280,8 @@ impl FromStr for Locator {
         let address: LocatorAddress = s[0..metadata_index].parse()?;
         // Parse the metadata if any
         let metadata = if metadata_index < s.len() {
-            let metadata = str_to_properties(&s[metadata_index + 1..]).ok_or_else(|| {
-                let e = format!("Invalid locator metadata: {}", s);
-                zerror2!(ZErrorKind::InvalidLocator { descr: e })
-            })?;
+            let metadata = str_to_properties(&s[metadata_index + 1..])
+                .ok_or_else(|| zerror!("Invalid locator metadata: {}", s))?;
             Some(metadata.into())
         } else {
             None
@@ -296,6 +289,40 @@ impl FromStr for Locator {
 
         let locator = Locator { address, metadata };
         Ok(locator)
+    }
+}
+
+struct LocatorVisitor;
+impl<'de> serde::de::Visitor<'de> for LocatorVisitor {
+    type Value = Locator;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a locator (ex: tcp/0.0.0.0:7447)")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(E::custom)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Locator {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(LocatorVisitor)
+    }
+}
+
+impl serde::Serialize for Locator {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 
@@ -331,30 +358,29 @@ impl FromStr for LocatorAddress {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let proto_index = s.find(PROTO_SEPARATOR).ok_or_else(|| {
-            let e = format!("Invalid locator address format: {}. Missing protocol.", s);
-            zerror2!(ZErrorKind::InvalidLocator { descr: e })
-        })?;
+        let proto_index = s
+            .find(PROTO_SEPARATOR)
+            .ok_or_else(|| zerror!("Invalid locator address format: {}. Missing protocol.", s))?;
         let (proto, addr) = s.split_at(proto_index);
         let addr = &addr[1..];
 
         match proto {
             #[cfg(feature = "transport_tcp")]
-            STR_TCP => addr.parse().map(LocatorAddress::Tcp),
+            STR_TCP => Ok(LocatorAddress::Tcp(addr.parse()?)),
             #[cfg(feature = "transport_udp")]
-            STR_UDP => addr.parse().map(LocatorAddress::Udp),
+            STR_UDP => Ok(LocatorAddress::Udp(addr.parse()?)),
             #[cfg(feature = "transport_tls")]
-            STR_TLS => addr.parse().map(LocatorAddress::Tls),
+            STR_TLS => Ok(LocatorAddress::Tls(addr.parse()?)),
             #[cfg(feature = "transport_quic")]
-            STR_QUIC => addr.parse().map(LocatorAddress::Quic),
+            STR_QUIC => Ok(LocatorAddress::Quic(addr.parse()?)),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            STR_UNIXSOCK_STREAM => addr.parse().map(LocatorAddress::UnixSocketStream),
+            STR_UNIXSOCK_STREAM => Ok(LocatorAddress::UnixSocketStream(addr.parse()?)),
             unknown => {
-                let e = format!(
+                bail!(
                     "Invalid locator address: {}. Unknown protocol: {}.",
-                    s, unknown
+                    s,
+                    unknown
                 );
-                zerror!(ZErrorKind::InvalidLocator { descr: e })
             }
         }
     }

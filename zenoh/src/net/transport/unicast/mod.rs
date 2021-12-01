@@ -11,8 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod authenticator;
-pub(crate) mod establishment;
+pub mod establishment;
 pub(crate) mod link;
 pub(crate) mod manager;
 pub(crate) mod rx;
@@ -20,6 +19,8 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
+#[cfg(feature = "stats")]
+use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{tmsg, ZenohMessage};
@@ -29,21 +30,52 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
+
+/*************************************/
+/*              STATS                */
+/*************************************/
+#[cfg(feature = "stats")]
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "stats")]
+use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "stats")]
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TransportUnicastStats {
+        pub tx_t_msgs,
+        pub tx_z_msgs,
+        pub tx_z_data_msgs,
+        pub tx_z_data_payload_bytes,
+        pub tx_z_data_reply_msgs,
+        pub tx_z_data_reply_payload_bytes,
+        pub tx_z_pull_msgs,
+        pub tx_z_query_msgs,
+        pub tx_z_declare_msgs,
+        pub tx_z_linkstate_msgs,
+        pub tx_z_unit_msgs,
+        pub tx_z_unit_reply_msgs,
+        pub tx_bytes,
+        pub rx_t_msgs,
+        pub rx_z_msgs,
+        pub rx_z_data_msgs,
+        pub rx_z_data_payload_bytes,
+        pub rx_z_data_reply_msgs,
+        pub rx_z_data_reply_payload_bytes,
+        pub rx_z_pull_msgs,
+        pub rx_z_query_msgs,
+        pub rx_z_declare_msgs,
+        pub rx_z_linkstate_msgs,
+        pub rx_z_unit_msgs,
+        pub rx_z_unit_reply_msgs,
+        pub rx_bytes,
+    }
+}
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
-#[cfg(feature = "stats")]
-#[derive(Clone, Copy, Debug)]
-pub struct TransportStatsUnicast {
-    tx_msgs: usize,
-    tx_bytes: usize,
-    rx_msgs: usize,
-    rx_bytes: usize,
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: PeerId,
@@ -63,11 +95,9 @@ pub struct TransportUnicast(Weak<TransportUnicastInner>);
 impl TransportUnicast {
     #[inline(always)]
     pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
-        self.0.upgrade().ok_or_else(|| {
-            zerror2!(ZErrorKind::InvalidReference {
-                descr: "Transport unicast closed".to_string()
-            })
-        })
+        self.0
+            .upgrade()
+            .ok_or_else(|| zerror!("Transport unicast closed").into())
     }
 
     #[inline(always)]
@@ -146,11 +176,7 @@ impl TransportUnicast {
             .get_links()
             .into_iter()
             .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
-            .ok_or_else(|| {
-                zerror2!(ZErrorKind::InvalidLink {
-                    descr: "Invalid link".to_string()
-                })
-            })?;
+            .ok_or_else(|| zerror!("Invalid link"))?;
         transport
             .close_link(&link, tmsg::close_reason::GENERIC)
             .await?;
@@ -172,15 +198,8 @@ impl TransportUnicast {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<TransportStatsUnicast> {
-        let transport = self.get_transport()?;
-        let stats = TransportStatsUnicast {
-            tx_msgs: transport.stats.get_tx_msgs(),
-            tx_bytes: transport.stats.get_tx_bytes(),
-            rx_msgs: transport.stats.get_rx_msgs(),
-            rx_bytes: transport.stats.get_rx_bytes(),
-        };
-        Ok(stats)
+    pub fn get_stats(&self) -> ZResult<TransportUnicastStats> {
+        Ok(self.get_transport()?.stats.snapshot())
     }
 }
 

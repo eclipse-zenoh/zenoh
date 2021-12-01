@@ -13,14 +13,16 @@
 //
 use super::common::conduit::TransportChannelRx;
 use super::protocol::core::{Priority, Reliability, ZInt};
+#[cfg(feature = "stats")]
+use super::protocol::proto::ZenohBody;
 use super::protocol::proto::{
     Close, Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
 use std::sync::MutexGuard;
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
-use zenoh_util::zerror2;
+use zenoh_util::core::Result as ZResult;
+use zenoh_util::zerror;
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -32,7 +34,33 @@ impl TransportMulticastInner {
         mut msg: ZenohMessage,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "stats")]
+        self.stats.inc_rx_z_msgs(1);
+        #[cfg(feature = "stats")]
+        match &msg.body {
+            ZenohBody::Data(data) => match data.reply_context {
+                Some(_) => {
+                    self.stats.inc_rx_z_data_reply_msgs(1);
+                    self.stats
+                        .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                }
+                None => {
+                    self.stats.inc_rx_z_data_msgs(1);
+                    self.stats
+                        .inc_rx_z_data_payload_bytes(data.payload.readable());
+                }
+            },
+            ZenohBody::Unit(unit) => match unit.reply_context {
+                Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
+                None => self.stats.inc_rx_z_unit_msgs(1),
+            },
+            ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
+            ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
+            ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
+            ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+        }
+
+        #[cfg(feature = "shared-memory")]
         let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
         peer.handler.handle_message(msg)
     }
@@ -70,13 +98,13 @@ impl TransportMulticastInner {
                 }
                 guard.defrag.push(sn, buffer)?;
                 if is_final {
-                    // When zero-copy feature is disabled, msg does not need to be mutable
+                    // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        let e = format!(
+                        zerror!(
                             "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.pid, self.locator
-                        );
-                        zerror2!(ZErrorKind::InvalidMessage { descr: e })
+                            self.manager.config.pid,
+                            self.locator
+                        )
                     })?;
                     self.trigger_callback(msg, peer)
                 } else {
@@ -157,11 +185,13 @@ impl TransportMulticastInner {
                         } else if channel.priority == Priority::default() {
                             &peer.conduit_rx[0]
                         } else {
-                            let e = format!(
+                            bail!(
                                 "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.pid, self.locator, channel.priority, locator
+                                self.manager.config.pid,
+                                self.locator,
+                                channel.priority,
+                                locator
                             );
-                            return zerror!(ZErrorKind::InvalidMessage { descr: e });
                         };
 
                         let guard = match channel.reliability {

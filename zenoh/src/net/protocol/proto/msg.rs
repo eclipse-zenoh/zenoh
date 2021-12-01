@@ -11,10 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use super::core::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::io::{ZBuf, ZSlice};
 use crate::net::link::Locator;
+use crate::net::protocol::core::whatami::WhatAmIMatcher;
 use std::fmt;
 use std::time::Duration;
 
@@ -185,10 +187,10 @@ pub mod zmsg {
         pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
-        pub const K: u8 = 1 << 7; // 0x80 ResourceKey   if K==1 then resource key has name
+        pub const K: u8 = 1 << 7; // 0x80 KeySuffix     if K==1 then key_expr has suffix
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
         pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
-        pub const Q: u8 = 1 << 6; // 0x40 QueryableKind if Z==1 then the queryable kind is present
+        pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
         pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
@@ -203,7 +205,7 @@ pub mod zmsg {
         pub mod info {
             use super::ZInt;
 
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             pub const SLICED: ZInt = 1 << 0; // 0x01
             pub const KIND: ZInt = 1 << 1; // 0x02
             pub const ENCODING: ZInt = 1 << 2; // 0x04
@@ -358,7 +360,7 @@ impl Header for Attachment {
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
         let mut header = tmsg::id::ATTACHMENT;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if self.buffer.has_shminfo() {
             header |= tmsg::flag::Z;
         }
@@ -527,10 +529,10 @@ impl Priority {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct DataInfo {
-    #[cfg(feature = "zero-copy")]
+    #[cfg(feature = "shared-memory")]
     pub sliced: bool,
     pub kind: Option<ZInt>,
-    pub encoding: Option<ZInt>,
+    pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<PeerId>,
     pub source_sn: Option<ZInt>,
@@ -547,7 +549,7 @@ impl DataInfo {
 impl Default for DataInfo {
     fn default() -> DataInfo {
         DataInfo {
-            #[cfg(feature = "zero-copy")]
+            #[cfg(feature = "shared-memory")]
             sliced: false,
             kind: None,
             encoding: None,
@@ -563,7 +565,7 @@ impl Default for DataInfo {
 impl Options for DataInfo {
     fn options(&self) -> ZInt {
         let mut options = 0;
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         if self.sliced {
             options |= zmsg::data::info::SLICED;
         }
@@ -594,11 +596,11 @@ impl Options for DataInfo {
     fn has_options(&self) -> bool {
         macro_rules! sliced {
             ($info:expr) => {{
-                #[cfg(feature = "zero-copy")]
+                #[cfg(feature = "shared-memory")]
                 {
                     $info.sliced
                 }
-                #[cfg(not(feature = "zero-copy"))]
+                #[cfg(not(feature = "shared-memory"))]
                 {
                     false
                 }
@@ -629,7 +631,7 @@ impl PartialOrd for DataInfo {
 /// +-+-+-+-+-+-+-+-+
 /// |K|I|D|  DATA   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 -- Only numerical id
+/// ~    KeyExpr     ~ if K==1 -- Only numerical id
 /// +---------------+
 /// ~    DataInfo   ~ if I==1
 /// +---------------+
@@ -639,7 +641,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -653,7 +655,7 @@ impl Header for Data {
         if self.data_info.is_some() {
             header |= zmsg::flag::I;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         if self.congestion_control == CongestionControl::Drop {
@@ -708,20 +710,20 @@ pub enum Declaration {
 /// +---------------+
 /// ~      RID      ~
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
-    pub rid: ZInt,
-    pub key: ResKey,
+    pub expr_id: ZInt,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Resource {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::RESOURCE;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -738,7 +740,7 @@ impl Header for Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetResource {
-    pub rid: ZInt,
+    pub expr_id: ZInt,
 }
 
 impl Header for ForgetResource {
@@ -753,19 +755,19 @@ impl Header for ForgetResource {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|   PUB   |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Publisher {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for Publisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -777,19 +779,19 @@ impl Header for Publisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_PUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetPublisher {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetPublisher {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_PUBLISHER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -801,7 +803,7 @@ impl Header for ForgetPublisher {
 /// +-+-+-+-+-+-+-+-+
 /// |K|S|R|   SUB   |  R for Reliable
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// |P|  SubMode    | if S==1. Otherwise: SubMode=Push
 /// +---------------+
@@ -810,7 +812,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscriber {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
     pub info: SubInfo,
 }
 
@@ -824,7 +826,7 @@ impl Header for Subscriber {
         if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
             header |= zmsg::flag::S;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -836,19 +838,19 @@ impl Header for Subscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X|  F_SUB  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetSubscriber {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
 }
 
 impl Header for ForgetSubscriber {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_SUBSCRIBER;
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -860,25 +862,28 @@ impl Header for ForgetSubscriber {
 /// +-+-+-+-+-+-+-+-+
 /// |K|Q|X|  QABLE  |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~     Kind      ~ if Q==1. Otherwise: STORAGE (0x02)
+/// ~     Kind      ~
+/// +---------------+
+/// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
     pub kind: ZInt,
+    pub info: QueryableInfo,
 }
 
 impl Header for Queryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::QUERYABLE;
-        if self.kind != queryable::STORAGE {
+        if self.info != QueryableInfo::default() {
             header |= zmsg::flag::Q;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -890,20 +895,26 @@ impl Header for Queryable {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|X| F_QABLE |
 /// +---------------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
+/// +---------------+
+/// ~     Kind      ~
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
+    pub kind: ZInt,
 }
 
 impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
-        if self.key.is_string() {
-            header |= zmsg::flag::K;
+        if self.kind != queryable::EVAL {
+            header |= zmsg::flag::Q
+        }
+        if self.key.has_suffix() {
+            header |= zmsg::flag::K
         }
         header
     }
@@ -938,7 +949,7 @@ impl Header for Declare {
 /// +-+-+-+-+-+-+-+-+
 /// |K|N|F|  PULL   |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ~    pullid     ~
 /// +---------------+
@@ -947,7 +958,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
-    pub key: ResKey,
+    pub key: KeyExpr<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -963,7 +974,7 @@ impl Header for Pull {
         if self.max_samples.is_some() {
             header |= zmsg::flag::N;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -977,9 +988,9 @@ impl Header for Pull {
 /// +-+-+-+-+-+-+-+-+
 /// |K|X|T|  QUERY  |
 /// +-+-+-+---------+
-/// ~    ResKey     ~ if K==1 then resource key has name
+/// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~   predicate   ~
+/// ~ value_selector~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
@@ -990,8 +1001,8 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
-    pub key: ResKey,
-    pub predicate: String,
+    pub key: KeyExpr<'static>,
+    pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
     pub consolidation: QueryConsolidation,
@@ -1004,7 +1015,7 @@ impl Header for Query {
         if self.target.is_some() {
             header |= zmsg::flag::T;
         }
-        if self.key.is_string() {
+        if self.key.has_suffix() {
             header |= zmsg::flag::K;
         }
         header
@@ -1142,7 +1153,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: ResKey,
+        key: KeyExpr<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1188,7 +1199,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: ResKey,
+        key: KeyExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1210,8 +1221,8 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: ResKey,
-        predicate: String,
+        key: KeyExpr<'static>,
+        value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,
         consolidation: QueryConsolidation,
@@ -1221,7 +1232,7 @@ impl ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
                 key,
-                predicate,
+                value_selector,
                 qid,
                 target,
                 consolidation,
@@ -1305,7 +1316,7 @@ pub enum TransportMode {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scout {
-    pub what: Option<WhatAmI>,
+    pub what: Option<WhatAmIMatcher>,
     pub pid_request: bool,
 }
 
@@ -1369,7 +1380,7 @@ impl Header for Hello {
         if self.pid.is_some() {
             header |= tmsg::flag::I
         }
-        if self.whatami.is_some() && self.whatami.unwrap() != whatami::ROUTER {
+        if self.whatami.is_some() && self.whatami.unwrap() != WhatAmI::Router {
             header |= tmsg::flag::W;
         }
         if self.locators.is_some() {
@@ -1382,8 +1393,8 @@ impl Header for Hello {
 impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let what = match self.whatami {
-            Some(what) => whatami::to_string(what),
-            None => whatami::to_string(whatami::ROUTER),
+            Some(what) => what.to_str(),
+            None => WhatAmI::Router.to_str(),
         };
         let locators = match &self.locators {
             Some(locators) => locators
@@ -1993,7 +2004,7 @@ pub enum TransportBody {
     Frame(Frame),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
@@ -2003,7 +2014,7 @@ pub struct TransportMessage {
 
 impl TransportMessage {
     pub fn make_scout(
-        what: Option<WhatAmI>,
+        what: Option<WhatAmIMatcher>,
         pid_request: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
@@ -2227,5 +2238,11 @@ impl TransportMessage {
             #[cfg(feature = "stats")]
             size: None,
         }
+    }
+}
+
+impl PartialEq for TransportMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.body.eq(&other.body) && self.attachment.eq(&other.attachment)
     }
 }

@@ -159,47 +159,29 @@ macro_rules! zconfigurable {
     };
     () => ()
 }
+pub use anyhow::anyhow;
+#[macro_export]
+macro_rules! zerror {
+    ($source: expr => $($t: tt)*) => {
+        $crate::core::zresult::ZError::new($crate::core::anyhow!($($t)*), file!(), line!()).set_source($source)
+    };
+    ($t: literal) => {
+        $crate::core::zresult::ZError::new($crate::core::anyhow!($t), file!(), line!())
+    };
+    ($t: expr) => {
+        $crate::core::zresult::ZError::new($t, file!(), line!())
+    };
+    ($($t: tt)*) => {
+        $crate::core::zresult::ZError::new($crate::core::anyhow!($($t)*), file!(), line!())
+    };
+}
 
 // @TODO: re-design ZError and macros
 // This macro is a shorthand for the creation of a ZError
 #[macro_export]
-macro_rules! zerror {
-    ($kind:expr) => {
-        Err(ZError::new($kind, file!(), line!(), None))
-    };
-    ($kind:expr, $source:expr) => {
-        Err(ZError::new(
-            $kind,
-            file!(),
-            line!(),
-            Some(Box::new($source)),
-        ))
-    };
-    ($kind:ident, $descr:expr, $source:expr) => {
-        Err(ZError::new(
-            ZErrorKind::$kind { descr: $descr },
-            file!(),
-            line!(),
-            Some(Box::new($source)),
-        ));
-    };
-}
-
-#[macro_export]
-macro_rules! zerror2 {
-    ($kind:expr) => {
-        ZError::new($kind, file!(), line!(), None)
-    };
-    ($kind:expr, $source:expr) => {
-        ZError::new($kind, file!(), line!(), Some(Box::new($source)))
-    };
-    ($kind:ident, $descr:expr, $source:expr) => {
-        ZError::new(
-            ZErrorKind::$kind { descr: $descr },
-            file!(),
-            line!(),
-            Some(Box::new($source)),
-        );
+macro_rules! bail{
+    ($($t: tt)*) => {
+        return Err($crate::zerror!($($t)*).into())
     };
 }
 
@@ -207,7 +189,7 @@ macro_rules! zerror2 {
 #[macro_export]
 macro_rules! to_zerror {
     ($kind:ident, $descr:expr) => {
-        |e| zerror!($kind, $descr, e)
+        |e| Err(zerror!($kind, $descr, e))
     };
 }
 
@@ -253,12 +235,12 @@ macro_rules! zasync_executor_init {
 macro_rules! zparse {
     ($str:expr) => {
         $str.parse().map_err(|_| {
-            let e = format!(
+            let e = $crate::zerror!(
                 "Failed to read configuration: {} is not a valid value",
                 $str
             );
             log::warn!("{}", e);
-            zerror2!(ZErrorKind::ValueDecodingFailed { descr: e })
+            e
         })
     };
 }

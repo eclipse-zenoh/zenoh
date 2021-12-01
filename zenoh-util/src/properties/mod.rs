@@ -13,7 +13,6 @@
 //
 pub mod config;
 
-use crate::core::*;
 use std::collections::HashMap;
 use std::convert::{From, TryFrom};
 use std::fmt;
@@ -25,6 +24,7 @@ pub trait KeyTranscoder {
     fn decode(key: u64) -> Option<String>;
 }
 
+/// A set of Key/Value (`u64`/`String`) pairs.
 #[derive(PartialEq)]
 pub struct IntKeyProperties<T>(pub HashMap<u64, String>, PhantomData<T>)
 where
@@ -33,7 +33,7 @@ where
 impl<T: KeyTranscoder> IntKeyProperties<T> {
     #[inline]
     pub fn get_or<'a>(&'a self, key: &u64, default: &'a str) -> &'a str {
-        self.get(key).map(|s| &s[..]).or(Some(default)).unwrap()
+        self.get(key).map(|s| &s[..]).unwrap_or(default)
     }
 }
 
@@ -72,6 +72,16 @@ impl<T: KeyTranscoder> fmt::Display for IntKeyProperties<T> {
 impl<T: KeyTranscoder> fmt::Debug for IntKeyProperties<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&Properties::from(self.clone()), f)
+    }
+}
+
+impl<T: KeyTranscoder> From<IntKeyProperties<T>> for HashMap<String, String> {
+    fn from(props: IntKeyProperties<T>) -> Self {
+        props
+            .0
+            .into_iter()
+            .filter_map(|(k, v)| T::decode(k).map(|k| (k, v)))
+            .collect()
     }
 }
 
@@ -288,13 +298,9 @@ impl From<&[(&str, &str)]> for Properties {
 }
 
 impl TryFrom<&std::path::Path> for Properties {
-    type Error = ZError;
+    type Error = crate::core::Error;
     fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
-        std::fs::read_to_string(p).map(Self::from).map_err(|e| {
-            crate::zerror2!(ZErrorKind::Other {
-                descr: format!("Failed to parse config file {} : {}", p.display(), e)
-            })
-        })
+        Ok(Self::from(std::fs::read_to_string(p)?))
     }
 }
 

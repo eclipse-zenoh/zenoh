@@ -21,7 +21,7 @@ use std::thread;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    whatami, Channel, CongestionControl, PeerId, Priority, Reliability, ResKey,
+    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -30,7 +30,7 @@ use zenoh::net::transport::{
     TransportManagerConfig, TransportManagerConfigUnicast, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::ZResult;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::zasync_executor_init;
 
 const MSG_SIZE: usize = 8;
@@ -138,65 +138,73 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(3);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::ROUTER)
+        .whatami(WhatAmI::Router)
         .pid(router_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(3)
-                .max_links(1)
-                .build(),
-        )
-        .build(router_handler.clone());
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
     let router_manager = TransportManager::new(config);
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2u8; PeerId::MAX_SIZE]);
-    let client03_id = PeerId::new(1, [3u8; PeerId::MAX_SIZE]);
+    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let client03_id = PeerId::new(1, [3_u8; PeerId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(3);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client01_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build(),
-        )
-        .build(Arc::new(SHClientStable::new(counter.clone())));
+        .unicast(unicast)
+        .build(Arc::new(SHClientStable::new(counter.clone())))
+        .unwrap();
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the second client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client02_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build(),
-        )
-        .build(Arc::new(SHClientIntermittent::default()));
+        .unicast(unicast)
+        .build(Arc::new(SHClientIntermittent::default()))
+        .unwrap();
     let client02_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the third client
+    #[allow(unused_mut)]
+    let mut unicast = TransportManagerConfigUnicast::builder().max_sessions(1);
+    #[cfg(feature = "transport_multilink")]
+    {
+        unicast = unicast.max_links(1);
+    }
     let config = TransportManagerConfig::builder()
-        .whatami(whatami::CLIENT)
+        .whatami(WhatAmI::Client)
         .pid(client03_id)
-        .unicast(
-            TransportManagerConfigUnicast::builder()
-                .max_sessions(1)
-                .max_links(1)
-                .build(),
-        )
-        .build(Arc::new(SHClientIntermittent::default()));
+        .unicast(unicast)
+        .build(Arc::new(SHClientIntermittent::default()))
+        .unwrap();
     let client03_manager = TransportManager::new(config);
 
     /* [1] */
@@ -278,8 +286,8 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_router_manager = router_manager.clone();
     let res = task::spawn_blocking(move || {
         // Create the message to send
-        let key = ResKey::RName("/test".to_string());
-        let payload = ZBuf::from(vec![0u8; MSG_SIZE]);
+        let key = "/test".into();
+        let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
@@ -336,6 +344,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     .timeout(TIMEOUT)
     .await
     .unwrap();
+
     // Stop the tasks
     c2_handle.cancel().await;
     c3_handle.cancel().await;

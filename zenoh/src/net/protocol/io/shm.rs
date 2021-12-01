@@ -20,7 +20,8 @@ use std::fmt;
 use std::mem::align_of;
 use std::sync::atomic;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_util::core::zresult::ShmError;
+use zenoh_util::core::Result as ZResult;
 use zenoh_util::zerror;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
@@ -63,14 +64,18 @@ impl PartialEq for Chunk {
     }
 }
 
-/*************************************/
-/*      SHARED MEMORY BUFFER INFO    */
-/*************************************/
+/// Informations about a [`SharedMemoryBuf`].
+///
+/// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SharedMemoryBufInfo {
+    /// The index of the beginning of the buffer in the shm segment.
     pub offset: usize,
+    /// The length of the buffer.
     pub length: usize,
+    /// The identifier of the shm manager that manages the shm segment this buffer points to.
     pub shm_manager: String,
+    /// The kiond of buffer.
     pub kind: u8,
 }
 
@@ -96,9 +101,7 @@ impl Clone for SharedMemoryBufInfo {
     }
 }
 
-/*************************************/
-/*       SHARED MEMORY BUFFER        */
-/*************************************/
+/// A zenoh buffer in shared memory.
 pub struct SharedMemoryBuf {
     pub(crate) rc_ptr: AtomicPtr<ChunkHeaderType>,
     pub(crate) buf: AtomicPtr<u8>,
@@ -161,8 +164,7 @@ impl SharedMemoryBuf {
         unsafe { std::slice::from_raw_parts(bp, self.len) }
     }
 
-    ///
-    /// Get a mutable slice.
+    /// Gets a mutable slice.
     ///
     /// # Safety
     /// This operation is marked unsafe since we cannot guarantee the single mutable reference
@@ -223,12 +225,13 @@ impl SharedMemoryReader {
                 Ok(())
             }
             Err(e) => {
-                let e = format!(
+                let e = zerror!(
                     "Unable to bind shared memory segment {}: {:?}",
-                    info.shm_manager, e
+                    info.shm_manager,
+                    e
                 );
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemoryError { descr: e })
+                Err(ShmError(e).into())
             }
         }
     }
@@ -251,9 +254,9 @@ impl SharedMemoryReader {
                 Ok(shmb)
             }
             None => {
-                let e = format!("Unable to find shared memory segment: {}", info.shm_manager);
+                let e = zerror!("Unable to find shared memory segment: {}", info.shm_manager);
                 log::trace!("{}", e);
-                zerror!(ZErrorKind::SharedMemoryError { descr: e })
+                Err(ShmError(e).into())
             }
         }
     }
@@ -263,7 +266,7 @@ impl SharedMemoryReader {
         // that the sender of this buffer has incremented for us.
         self.try_read_shmbuf(info).or_else(|_| {
             self.connect_map_to_shm(info)?;
-            Ok(self.try_read_shmbuf(info).unwrap())
+            self.try_read_shmbuf(info)
         })
     }
 }
@@ -281,9 +284,9 @@ impl fmt::Debug for SharedMemoryReader {
     }
 }
 
-/*************************************/
-/*       SHARED MEMORY MANAGER       */
-/*************************************/
+/// A shared memory segment manager.
+///
+/// Allows to access a shared memory segment and reserve some parts of this segment for writting.
 pub struct SharedMemoryManager {
     segment_path: String,
     size: usize,
@@ -303,7 +306,10 @@ impl SharedMemoryManager {
         let mut temp_dir = std::env::temp_dir();
         let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
         temp_dir.push(file_name);
-        let path: String = temp_dir.to_str().unwrap().to_string();
+        let path: String = temp_dir
+            .to_str()
+            .ok_or_else(|| ShmError(zerror!("Unable to parse tmp directory: {:?}", temp_dir)))?
+            .to_string();
         log::trace!("Creating file at: {}", path);
         let real_size = size + ACCOUNTED_OVERHEAD;
         let shmem = match ShmemConf::new()
@@ -314,16 +320,13 @@ impl SharedMemoryManager {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
                 log::trace!("SharedMemory already exists, opening it");
-                ShmemConf::new().flink(path.clone()).open().map_err(|e| {
-                    zerror2!(ZErrorKind::SharedMemoryError {
-                        descr: format!("Unable to open SharedMemoryManager: {}", e)
-                    })
-                })?
+                ShmemConf::new()
+                    .flink(path.clone())
+                    .open()
+                    .map_err(|e| ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)))?
             }
             Err(e) => {
-                return zerror!(ZErrorKind::SharedMemoryError {
-                    descr: format!("Unable to open SharedMemoryManager: {}", e)
-                })
+                return Err(ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)).into())
             }
         };
         let base_ptr = shmem.as_ptr();

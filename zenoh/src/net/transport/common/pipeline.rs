@@ -631,7 +631,7 @@ impl fmt::Debug for TransmissionPipeline {
 mod tests {
     use super::*;
     use crate::net::protocol::core::{
-        Channel, ConduitSn, CongestionControl, Priority, Reliability, ResKey, ZInt,
+        Channel, ConduitSn, CongestionControl, Priority, Reliability, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
     use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
@@ -651,8 +651,8 @@ mod tests {
     fn tx_pipeline_flow() {
         fn schedule(queue: Arc<TransmissionPipeline>, num_msg: usize, payload_size: usize) {
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
@@ -694,7 +694,7 @@ mod tests {
                 batches += 1;
                 bytes += batch.len();
                 // Create a ZBuf for deserialization starting from the batch
-                let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
                 while let Some(msg) = zbuf.read_transport_message() {
                     match msg.body {
@@ -780,8 +780,8 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
@@ -892,8 +892,8 @@ mod tests {
             let payload_size = (BATCH_SIZE / 2) as usize;
 
             // Send reliable messages
-            let key = ResKey::RName("test".to_string());
-            let payload = ZBuf::from(vec![0u8; payload_size]);
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
             let channel = Channel {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
@@ -1025,8 +1025,8 @@ mod tests {
                     c_size.store(*size, Ordering::Release);
 
                     // Send reliable messages
-                    let key = ResKey::RName("/pipeline/thr".to_string());
-                    let payload = ZBuf::from(vec![0u8; *size]);
+                    let key = "/pipeline/thr".into();
+                    let payload = ZBuf::from(vec![0_u8; *size]);
                     let channel = Channel {
                         priority: Priority::Control,
                         reliability: Reliability::Reliable,

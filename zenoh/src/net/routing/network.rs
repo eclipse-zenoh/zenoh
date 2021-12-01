@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::Locator;
-use super::protocol::core::{whatami, PeerId, ZInt};
+use super::protocol::core::{PeerId, WhatAmI, ZInt};
 use super::protocol::proto::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
 use super::transport::TransportUnicast;
@@ -23,7 +23,7 @@ use vec_map::VecMap;
 
 pub(crate) struct Node {
     pub(crate) pid: PeerId,
-    pub(crate) whatami: whatami::Type,
+    pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: ZInt,
     pub(crate) links: Vec<PeerId>,
@@ -89,6 +89,7 @@ pub(crate) struct Network {
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
+    pub(crate) distances: Vec<f64>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
     pub(crate) runtime: Runtime,
 }
@@ -105,7 +106,7 @@ impl Network {
         log::debug!("{} Add node (self) {}", name, pid);
         let idx = graph.add_node(Node {
             pid,
-            whatami: runtime.whatami,
+            whatami: Some(runtime.whatami),
             locators: None,
             sn: 1,
             links: vec![],
@@ -121,6 +122,7 @@ impl Network {
                 childs: vec![],
                 directions: vec![None],
             }],
+            distances: vec![0.0],
             graph,
             runtime,
         }
@@ -141,8 +143,8 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_link(&self, id: usize) -> &Link {
-        &self.links[id]
+    pub(crate) fn get_link(&self, id: usize) -> Option<&Link> {
+        self.links.get(id)
     }
 
     #[inline]
@@ -153,9 +155,23 @@ impl Network {
     #[inline]
     pub(crate) fn get_local_context(&self, context: Option<ZInt>, link_id: usize) -> usize {
         let context = context.unwrap_or(0);
-        (*self.get_link(link_id).get_local_psid(&context).unwrap())
-            .try_into()
-            .unwrap()
+        match self.get_link(link_id) {
+            Some(link) => match link.get_local_psid(&context) {
+                Some(psid) => (*psid).try_into().unwrap_or(0),
+                None => {
+                    log::error!(
+                        "Cannot find local psid for context {} on link {}",
+                        context,
+                        link_id
+                    );
+                    0
+                }
+            },
+            None => {
+                log::error!("Cannot find link {}", link_id);
+                0
+            }
+        }
     }
 
     #[inline]
@@ -199,7 +215,7 @@ impl Network {
             } else {
                 None
             },
-            whatami: Some(self.graph[idx].whatami),
+            whatami: self.graph[idx].whatami,
             locators: if idx == self.idx {
                 Some(self.get_locators())
             } else {
@@ -225,13 +241,13 @@ impl Network {
         }
     }
 
-    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut predicate: P)
+    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut value_selector: P)
     where
         P: FnMut(&Link) -> bool,
     {
         let msg = self.make_msg(idxs);
         for link in self.links.values() {
-            if predicate(link) {
+            if value_selector(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.pid, msg);
                 if let Err(e) = link.transport.handle_message(msg.clone()) {
                     log::debug!("{} Error sending LinkStateList: {}", self.name, e);
@@ -250,7 +266,7 @@ impl Network {
             hasher.write(self.graph[idx1].pid.as_slice());
             hasher.write(self.graph[idx2].pid.as_slice());
         }
-        let weight = 100.0 + ((hasher.finish() as u32) as f64) / std::u32::MAX as f64;
+        let weight = 100.0 + ((hasher.finish() as u32) as f64) / u32::MAX as f64;
         self.graph.update_edge(idx1, idx2, weight);
     }
 
@@ -288,7 +304,7 @@ impl Network {
                     }
                     Some((
                         pid,
-                        link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
+                        link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
                         link_state.locators,
                         link_state.sn,
                         link_state.links,
@@ -297,7 +313,7 @@ impl Network {
                     match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
                             *pid,
-                            link_state.whatami.or(Some(whatami::ROUTER)).unwrap(),
+                            link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
                             link_state.locators,
                             link_state.sn,
                             link_state.links,
@@ -313,7 +329,7 @@ impl Network {
                     }
                 }
             })
-            .collect::<Vec<(PeerId, whatami::Type, Option<Vec<Locator>>, ZInt, Vec<ZInt>)>>();
+            .collect::<Vec<_>>();
 
         // apply psid<->pid mapping to links
         let src_link = self.get_link_from_pid(&src).unwrap();
@@ -338,13 +354,7 @@ impl Network {
                     .collect();
                 (pid, wai, locs, sn, links)
             })
-            .collect::<Vec<(
-                PeerId,
-                whatami::Type,
-                Option<Vec<Locator>>,
-                ZInt,
-                Vec<PeerId>,
-            )>>();
+            .collect::<Vec<_>>();
 
         // log::trace!(
         //     "{} Received from {} mapped: {:?}",
@@ -387,7 +397,7 @@ impl Network {
                     None => {
                         let node = Node {
                             pid,
-                            whatami,
+                            whatami: Some(whatami),
                             locators,
                             sn,
                             links: links.clone(),
@@ -417,7 +427,7 @@ impl Network {
                 } else {
                     let node = Node {
                         pid: *link,
-                        whatami: 0,
+                        whatami: None,
                         locators: None,
                         sn: 0,
                         links: vec![],
@@ -448,15 +458,17 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
 
-        if (self.peers_autoconnect && self.runtime.whatami == whatami::PEER)
-            || (self.routers_autoconnect_gossip && self.runtime.whatami == whatami::ROUTER)
+        if (self.peers_autoconnect && self.runtime.whatami == WhatAmI::Peer)
+            || (self.routers_autoconnect_gossip && self.runtime.whatami == WhatAmI::Router)
         {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
-                if (self.runtime.whatami == whatami::PEER
-                    && (node.whatami == whatami::PEER || node.whatami == whatami::ROUTER))
-                    || (self.runtime.whatami == whatami::ROUTER && node.whatami == whatami::ROUTER)
+                if (self.runtime.whatami == WhatAmI::Peer
+                    && (node.whatami == Some(WhatAmI::Peer)
+                        || node.whatami == Some(WhatAmI::Router)))
+                    || (self.runtime.whatami == WhatAmI::Router
+                        && node.whatami == Some(WhatAmI::Router))
                 {
                     if let Some(locators) = &node.locators {
                         let runtime = self.runtime.clone();
@@ -534,7 +546,7 @@ impl Network {
                 (
                     self.add_node(Node {
                         pid,
-                        whatami,
+                        whatami: Some(whatami),
                         locators: None,
                         sn: 0,
                         links: vec![],
@@ -588,7 +600,7 @@ impl Network {
                 psid: self.idx.index().try_into().unwrap(),
                 sn: self.graph[self.idx].sn,
                 pid: None,
-                whatami: Some(self.graph[self.idx].whatami),
+                whatami: self.graph[self.idx].whatami,
                 locators: Some(self.get_locators()),
                 links,
             }],
@@ -643,12 +655,15 @@ impl Network {
         });
 
         for tree_root_idx in &indexes {
-            let path = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx)
-                .unwrap()
-                .1;
+            let paths = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx).unwrap();
+
+            if tree_root_idx.index() == 0 {
+                self.distances = paths.distances;
+            }
 
             if log::log_enabled!(log::Level::Debug) {
-                let ps: Vec<Option<String>> = path
+                let ps: Vec<Option<String>> = paths
+                    .predecessors
                     .iter()
                     .enumerate()
                     .map(|(is, o)| {
@@ -664,10 +679,10 @@ impl Network {
                 log::debug!("Tree {} {:?}", self.graph[*tree_root_idx].pid, ps);
             }
 
-            self.trees[tree_root_idx.index()].parent = path[self.idx.index()];
+            self.trees[tree_root_idx.index()].parent = paths.predecessors[self.idx.index()];
 
             for idx in &indexes {
-                if let Some(parent_idx) = path[idx.index()] {
+                if let Some(parent_idx) = paths.predecessors[idx.index()] {
                     if parent_idx == self.idx {
                         self.trees[tree_root_idx.index()].childs.push(*idx);
                     }
@@ -689,7 +704,7 @@ impl Network {
                 {
                     let mut direction = None;
                     let mut current = *destination;
-                    while let Some(parent) = path[current.index()] {
+                    while let Some(parent) = paths.predecessors[current.index()] {
                         if parent == self.idx {
                             direction = Some(current);
                             break;

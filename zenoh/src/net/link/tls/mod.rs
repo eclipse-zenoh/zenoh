@@ -50,4 +50,13 @@ pub mod config {
 
     pub const TLS_SERVER_CERTIFICATE_FILE: &str = ZN_TLS_SERVER_CERTIFICATE_STR;
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
+
+    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = ZN_TLS_CLIENT_PRIVATE_KEY_STR;
+    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "tls_client_private_key_raw";
+
+    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = ZN_TLS_CLIENT_CERTIFICATE_STR;
+    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "tls_client_certificate_raw";
+
+    pub const TLS_CLIENT_AUTH: &str = ZN_TLS_CLIENT_AUTH_STR;
+    pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
 }

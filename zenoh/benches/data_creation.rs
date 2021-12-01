@@ -17,7 +17,8 @@ extern crate criterion;
 use async_std::sync::Arc;
 use criterion::Criterion;
 
-use zenoh::net::protocol::core::{Channel, CongestionControl, PeerId, ResKey};
+use zenoh::net::protocol::core::Encoding;
+use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, PeerId};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -34,27 +35,27 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
                 let info = Some(DataInfo {
-                    #[cfg(feature = "zero-copy")]
+                    #[cfg(feature = "shared-memory")]
                     sliced: false,
                     kind: Some(0),
-                    encoding: Some(0),
+                    encoding: Some(Encoding::default()),
                     timestamp: Some(uhlc::Timestamp::new(
                         Default::default(),
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
                     )),
-                    source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
                     source_sn: Some(12345),
-                    first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+                    first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
                     first_router_sn: Some(12345),
                 });
 
                 let msg = ZenohMessage::make_data(
-                    res_key,
+                    key_expr,
                     payload,
                     channel,
                     congestion_control,
@@ -69,14 +70,14 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
-                let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+                let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
                 let info = None;
 
                 let msg = ZenohMessage::make_data(
-                    res_key,
+                    key_expr,
                     payload,
                     channel,
                     congestion_control,
@@ -90,19 +91,19 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     }
 
-    let res_key = ResKey::RIdWithSuffix(18, String::from("/com/acme/sensors/temp"));
+    let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
     let info = Some(DataInfo {
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         sliced: false,
         kind: Some(0),
-        encoding: Some(0),
+        encoding: Some(Encoding::default()),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
-            uhlc::ID::new(16, [0u8; uhlc::ID::MAX_SIZE]),
+            uhlc::ID::new(16, [0_u8; uhlc::ID::MAX_SIZE]),
         )),
-        source_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
         source_sn: Some(12345),
-        first_router_id: Some(PeerId::new(16, [0u8; PeerId::MAX_SIZE])),
+        first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
         first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);
@@ -110,7 +111,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let congestion_control = CongestionControl::default();
 
     let msg = Arc::new(ZenohMessage::make_data(
-        res_key,
+        key_expr,
         payload,
         channel,
         congestion_control,

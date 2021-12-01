@@ -1,5 +1,3 @@
-use crate::net::ZInt;
-
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -13,13 +11,13 @@ use crate::net::ZInt;
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::core::{Priority, Reliability};
+use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
-const LENGTH_BYTES: [u8; 2] = [0u8, 0u8];
+const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
 enum CurrentFrame {
@@ -395,9 +393,7 @@ impl SerializationBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::protocol::core::{
-        Channel, CongestionControl, Priority, Reliability, ResKey, ZInt,
-    };
+    use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
     use crate::net::protocol::io::{WBuf, ZBuf};
     use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
     use crate::net::protocol::proto::{
@@ -448,8 +444,8 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key = ResKey::RName(format!("test{}", zmsgs_in.len()));
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let key: crate::KeyExpr = format!("test{}", zmsgs_in.len()).into();
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,
                     reliability: if reliable {
@@ -487,7 +483,7 @@ mod tests {
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
-            let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+            let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
             // Deserialize the messages
             while let Some(msg) = zbuf.read_transport_message() {
                 deserialized.push(msg);
@@ -525,8 +521,8 @@ mod tests {
                 };
                 let congestion_control = CongestionControl::default();
                 // Create the ZenohMessage
-                let key = ResKey::RName("test".to_string());
-                let payload = ZBuf::from(vec![0u8; payload_size]);
+                let key = "test".into();
+                let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let data_info = None;
                 let routing_context = None;
                 let reply_context = None;
@@ -576,7 +572,7 @@ mod tests {
                 let mut fragments = WBuf::new(0, false);
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let mut zbuf: ZBuf = batch.get_serialized_messages().into();
+                    let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                     // Deserialize the messages
                     let msg = zbuf.read_transport_message().unwrap();
 

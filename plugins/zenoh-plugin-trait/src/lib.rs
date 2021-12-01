@@ -16,15 +16,17 @@
 //!
 //! To build a plugin, up to 2 types may be constructed :
 //! * A [`Plugin`] type.
-//! * [`PluginLaunch::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
+//! * [`Plugin::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
 
 use std::any::Any;
 use std::error::Error;
+use std::sync::Arc;
 pub mod loading;
 pub mod vtable;
+use zenoh_util::core::Result as ZResult;
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, Plugin, PluginStopper};
+    pub use crate::{loading::*, vtable::*, Plugin};
 }
 
 /// Your plugin's identifier.
@@ -58,15 +60,22 @@ impl std::fmt::Display for Incompatibility {
 
 impl Error for Incompatibility {}
 
-/// Zenoh plugins must implement [`Plugin<Requirements=Vec<clap::Arg<'static, 'static>>, StartArgs=(zenoh::net::runtime::Runtime, clap::ArgMatches)>`](Plugin)
+/// Zenoh plugins must implement [`Plugin<Requirements=Option<Arc<dyn Fn(&str, &serde_json::Value)->Result<(), String>>, StartArgs=zenoh::net::runtime::Runtime>`](Plugin)
+///
+/// Plugin lifecycle:
+/// * Each plugin's identity is recovered using `compatibility`
+/// * Compatibility between plugins is asserted using `is_compatible_with`
+/// * Each plugin's requirements are collected through `get_requirements`
+///     * for zenoh plugins, these requirements are dynamic validators to be used upon configuration change requests
+/// *
 pub trait Plugin: Sized + 'static {
-    type Requirements;
     type StartArgs;
+    const STATIC_NAME: &'static str;
 
-    /// Returns this plugin's [`Compatibility`].
+    /// Returns this plugin's `Compatibility`.
     fn compatibility() -> PluginId;
 
-    /// As Zenoh instanciates plugins, it will append their [`Compatibility`] to an array.
+    /// As Zenoh instanciates plugins, it will append their `Compatibility` to an array.
     /// This array's current state will be shown to the next plugin.
     ///
     /// To signal that your plugin is incompatible with a previously instanciated plugin, return `Err`,
@@ -87,22 +96,21 @@ pub trait Plugin: Sized + 'static {
         }
     }
 
-    /// Allows your plugin type to specify operations for the host before start
-    fn get_requirements() -> Self::Requirements;
-
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(args: &Self::StartArgs) -> Result<BoxedAny, Box<dyn Error>>;
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<RunningPlugin>;
 }
 
-pub type BoxedAny = Box<dyn Any + Send + Sync>;
+pub type RunningPlugin = Box<dyn RunningPluginTrait>;
+pub type ValidationFunction = Arc<
+    dyn Fn(
+            &str,
+            &serde_json::Map<String, serde_json::Value>,
+            &serde_json::Map<String, serde_json::Value>,
+        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
+        + Send
+        + Sync,
+>;
 
-/// Allows a [`Plugin`] instance to be stopped.
-/// Typically, you can achieve this using a one-shot channel or an [`AtomicBool`](std::sync::atomic::AtomicBool).
-/// If you don't want a stopping mechanism, you can use `()` as your [`PluginStopper`].
-pub trait PluginStopper: Send + Sync {
-    fn stop(&self);
-}
-
-impl PluginStopper for () {
-    fn stop(&self) {}
+pub trait RunningPluginTrait: Send + Sync + Any {
+    fn config_checker(&self) -> ValidationFunction;
 }

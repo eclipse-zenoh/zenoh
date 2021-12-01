@@ -14,7 +14,7 @@
 use rand::*;
 use std::time::Duration;
 use uhlc::Timestamp;
-use zenoh::net::protocol::core::*;
+use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::SEQ_NUM_RES;
 use zenoh::net::protocol::proto::*;
@@ -89,17 +89,19 @@ fn gen_attachment() -> Attachment {
     let props = gen_props(PROPS_LENGTH, PROP_MAX_SIZE);
     wbuf.write_properties(&props);
 
-    let zbuf = ZBuf::from(&wbuf);
+    let zbuf = ZBuf::from(wbuf);
     Attachment::new(zbuf)
 }
 
 fn gen_declarations() -> Vec<Declaration> {
     vec![
         Declaration::Resource(Resource {
-            rid: gen!(ZInt),
+            expr_id: gen!(ZInt),
             key: gen_key(),
         }),
-        Declaration::ForgetResource(ForgetResource { rid: gen!(ZInt) }),
+        Declaration::ForgetResource(ForgetResource {
+            expr_id: gen!(ZInt),
+        }),
         Declaration::Publisher(Publisher { key: gen_key() }),
         Declaration::ForgetPublisher(ForgetPublisher { key: gen_key() }),
         Declaration::Subscriber(Subscriber {
@@ -146,25 +148,48 @@ fn gen_declarations() -> Vec<Declaration> {
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::ALL_KINDS,
+            info: QueryableInfo {
+                complete: 1,
+                distance: 0,
+            },
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::STORAGE,
+            info: QueryableInfo {
+                complete: 0,
+                distance: 10,
+            },
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
             kind: queryable::EVAL,
+            info: QueryableInfo {
+                complete: 10,
+                distance: 0,
+            },
         }),
-        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::ALL_KINDS,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::STORAGE,
+        }),
+        Declaration::ForgetQueryable(ForgetQueryable {
+            key: gen_key(),
+            kind: queryable::EVAL,
+        }),
     ]
 }
 
-fn gen_key() -> ResKey {
+fn gen_key() -> KeyExpr<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
-        0 => ResKey::from(gen!(ZInt)),
-        1 => ResKey::from("my_resource".to_string()),
-        _ => ResKey::from((gen!(ZInt), "my_resource".to_string())),
+        0 => KeyExpr::from(gen!(ZInt)),
+        1 => KeyExpr::from("my_resource"),
+        _ => KeyExpr::from(gen!(ZInt)).with_suffix("my_resource"),
     }
 }
 
@@ -178,8 +203,10 @@ fn gen_target() -> Target {
     let num: u8 = thread_rng().gen_range(0..4);
     match num {
         0 => Target::BestMatching,
-        1 => Target::Complete { n: 3 },
-        2 => Target::All,
+        1 => Target::All,
+        2 => Target::AllComplete,
+        #[cfg(feature = "complete_n")]
+        4 => Target::Complete(3),
         _ => Target::None,
     }
 }
@@ -208,9 +235,12 @@ fn gen_timestamp() -> Timestamp {
 fn gen_data_info() -> DataInfo {
     DataInfo {
         kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(gen!(ZInt)),
+        encoding: option_gen!(Encoding {
+            prefix: gen!(ZInt),
+            suffix: "".into()
+        }),
         timestamp: option_gen!(gen_timestamp()),
-        #[cfg(feature = "zero-copy")]
+        #[cfg(feature = "shared-memory")]
         sliced: false,
         source_id: option_gen!(gen_pid()),
         source_sn: option_gen!(gen!(ZInt)),
@@ -231,7 +261,7 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_transport_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf).read_transport_message().unwrap();
+    let mut result = ZBuf::from(buf).read_transport_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
         let properties = attachment.buffer.read_properties();
@@ -245,7 +275,7 @@ fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_zenoh_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(&buf)
+    let mut result = ZBuf::from(buf)
         .read_zenoh_message(msg.channel.reliability)
         .unwrap();
     println!("Message read: {:?}", result);
@@ -270,7 +300,11 @@ fn codec_scout() {
         for w in wami.iter() {
             for p in pid_req.iter() {
                 for a in attachment.iter() {
-                    let msg = TransportMessage::make_scout(*w, *p, a.clone());
+                    let msg = TransportMessage::make_scout(
+                        w.map(WhatAmIMatcher::try_from).flatten(),
+                        *p,
+                        a.clone(),
+                    );
                     test_write_read_transport_message(msg);
                 }
             }
@@ -296,7 +330,12 @@ fn codec_hello() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
-                        let msg = TransportMessage::make_hello(*p, *w, l.clone(), a.clone());
+                        let msg = TransportMessage::make_hello(
+                            *p,
+                            w.map(WhatAmI::try_from).flatten(),
+                            l.clone(),
+                            a.clone(),
+                        );
                         test_write_read_transport_message(msg);
                     }
                 }
@@ -309,7 +348,7 @@ fn codec_hello() {
 fn codec_init() {
     for _ in 0..NUM_ITER {
         let is_qos = [true, false];
-        let wami = [whatami::ROUTER, whatami::CLIENT];
+        let wami = [WhatAmI::Router, WhatAmI::Client];
         let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let attachment = [None, Some(gen_attachment())];
 
@@ -383,7 +422,7 @@ fn codec_open() {
 fn codec_join() {
     for _ in 0..NUM_ITER {
         let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
-        let wami = [whatami::ROUTER, whatami::CLIENT];
+        let wami = [WhatAmI::Router, WhatAmI::Client];
         let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
         let initial_sns = [
             ConduitSnList::Plain(gen_initial_sn()),
@@ -606,8 +645,8 @@ fn codec_frame_batching() {
         assert!(wbuf.write_transport_message(&mut frame));
 
         // Create data message
-        let key = ResKey::RName("test".to_string());
-        let payload = ZBuf::from(vec![0u8; 1]);
+        let key = "test".into();
+        let payload = ZBuf::from(vec![0_u8; 1]);
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
@@ -662,7 +701,7 @@ fn codec_frame_batching() {
         ));
 
         // Deserialize from the buffer
-        let mut zbuf = ZBuf::from(&wbuf);
+        let mut zbuf = ZBuf::from(wbuf);
 
         let mut read: Vec<TransportMessage> = vec![];
         while let Some(msg) = zbuf.read_transport_message() {
@@ -812,12 +851,12 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let predicate = [String::default(), "my_predicate".to_string()];
+        let value_selector = [String::default(), "my_value_selector".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in predicate.iter() {
+        for p in value_selector.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {
