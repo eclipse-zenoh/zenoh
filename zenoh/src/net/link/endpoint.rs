@@ -300,11 +300,25 @@ impl<'de> serde::de::Visitor<'de> for LocatorVisitor {
         formatter.write_str("a locator (ex: tcp/0.0.0.0:7447)")
     }
 
-    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
         v.parse().map_err(E::custom)
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(v)
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(&v)
     }
 }
 

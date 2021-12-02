@@ -116,6 +116,18 @@ pub mod whatami {
             v.parse()
                 .map_err(|_| serde::de::Error::unknown_variant(v, &["router", "client", "peer"]))
         }
+        fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(v)
+        }
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&v)
+        }
     }
 
     impl<'de> serde::Deserialize<'de> for WhatAmI {
@@ -208,6 +220,18 @@ pub mod whatami {
                     &"a | separated list of whatami variants ('peer', 'client' or 'router')",
                 )
             })
+        }
+        fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(v)
+        }
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&v)
         }
     }
 
