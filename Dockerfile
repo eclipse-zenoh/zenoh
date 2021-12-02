@@ -44,6 +44,7 @@ COPY .cargo/config .cargo/config
 
 COPY zenoh zenoh
 COPY zenoh-ext zenoh-ext
+COPY zenoh-macros zenoh-macros
 COPY zenoh-util zenoh-util
 COPY backends backends
 COPY plugins plugins
