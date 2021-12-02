@@ -407,21 +407,14 @@ pub fn declare_peer_queryable(
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut face = Some(face);
+            let face = Some(face);
             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
             register_peer_queryable(tables, face.as_deref(), &mut res, kind, qabl_info, peer);
 
             if tables.whatami == WhatAmI::Router {
                 let local_info = local_router_qabl_info(tables, &res, kind);
-                register_router_queryable(
-                    tables,
-                    face.as_deref_mut(),
-                    &mut res,
-                    kind,
-                    &local_info,
-                    tables.pid,
-                );
+                register_router_queryable(tables, face, &mut res, kind, &local_info, tables.pid);
             }
 
             compute_matches_query_routes(tables, &mut res);
@@ -786,8 +779,8 @@ pub(crate) fn undeclare_client_queryable(
         kind,
         face
     );
-    if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-        get_mut_unchecked(&mut ctx).qabl.remove(&kind);
+    if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(ctx).qabl.remove(&kind);
         if ctx.qabl.is_empty() {
             get_mut_unchecked(face)
                 .remote_qabls

@@ -71,7 +71,6 @@ pub struct WBuf {
     slices: Vec<Slice>,
     buf: Vec<u8>,
     contiguous: bool,
-    capacity: usize,
     copy_pos: (usize, usize), // (index in slices, index in the slice)
     mark: WBufMark,
 }
@@ -88,7 +87,6 @@ impl WBuf {
             slices,
             buf,
             contiguous,
-            capacity,
             copy_pos: (0, 0),
         }
     }

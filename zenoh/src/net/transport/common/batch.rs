@@ -28,7 +28,6 @@ enum CurrentFrame {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SerializationBatchSeqNumState {
-    pub(crate) last: ZInt,
     pub(crate) next: ZInt,
 }
 
@@ -46,7 +45,7 @@ impl SerializationBatchSeqNum {
 }
 
 #[cfg(feature = "stats")]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct SerializationBatchStats {
     pub(crate) t_msgs: usize,
 }
@@ -55,13 +54,6 @@ pub(crate) struct SerializationBatchStats {
 impl SerializationBatchStats {
     fn clear(&mut self) {
         self.t_msgs = 0;
-    }
-}
-
-#[cfg(feature = "stats")]
-impl Default for SerializationBatchStats {
-    fn default() -> SerializationBatchStats {
-        SerializationBatchStats { t_msgs: 0 }
     }
 }
 
@@ -277,10 +269,7 @@ impl SerializationBatch {
 
             if res {
                 self.current_frame = frame;
-                let sn_state = SerializationBatchSeqNumState {
-                    last: sn,
-                    next: sn_gen.now(),
-                };
+                let sn_state = SerializationBatchSeqNumState { next: sn_gen.now() };
                 match message.channel.reliability {
                     Reliability::Reliable => self.sn.reliable = Some(sn_state),
                     Reliability::BestEffort => self.sn.best_effort = Some(sn_state),
@@ -356,10 +345,7 @@ impl SerializationBatch {
                 to_fragment.copy_into_wbuf(&mut self.buffer, written);
 
                 // Keep track of the latest serialized SN
-                let sn_state = SerializationBatchSeqNumState {
-                    last: sn,
-                    next: sn_gen.now(),
-                };
+                let sn_state = SerializationBatchSeqNumState { next: sn_gen.now() };
                 match reliability {
                     Reliability::Reliable => self.sn.reliable = Some(sn_state),
                     Reliability::BestEffort => self.sn.best_effort = Some(sn_state),

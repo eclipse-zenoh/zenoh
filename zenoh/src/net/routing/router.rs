@@ -153,14 +153,14 @@ impl Tables {
 
                 let mut face_clone = face.clone();
                 let face = get_mut_unchecked(&mut face);
-                for mut res in face.remote_mappings.values_mut() {
+                for res in face.remote_mappings.values_mut() {
                     get_mut_unchecked(res).session_ctxs.remove(&face.id);
-                    Resource::clean(&mut res);
+                    Resource::clean(res);
                 }
                 face.remote_mappings.clear();
-                for mut res in face.local_mappings.values_mut() {
+                for res in face.local_mappings.values_mut() {
                     get_mut_unchecked(res).session_ctxs.remove(&face.id);
-                    Resource::clean(&mut res);
+                    Resource::clean(res);
                 }
                 face.local_mappings.clear();
                 for mut res in face.remote_subs.drain() {

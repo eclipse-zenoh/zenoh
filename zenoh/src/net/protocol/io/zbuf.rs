@@ -27,7 +27,7 @@ use zenoh_util::core::Result as ZResult;
 /*************************************/
 /*           ZBUF POSITION           */
 /*************************************/
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub struct ZBufPos {
     slice: usize, // The ZSlice index
     byte: usize,  // The byte in the ZSlice
@@ -47,17 +47,6 @@ impl ZBufPos {
     fn clear(&mut self) {
         self.reset();
         self.len = 0;
-    }
-}
-
-impl Default for ZBufPos {
-    fn default() -> ZBufPos {
-        ZBufPos {
-            slice: 0,
-            byte: 0,
-            len: 0,
-            read: 0,
-        }
     }
 }
 

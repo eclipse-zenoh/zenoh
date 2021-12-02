@@ -527,7 +527,7 @@ impl Priority {
 /// - if options & (1 << 5) then the payload is sliced
 ///
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
@@ -543,22 +543,6 @@ pub struct DataInfo {
 impl DataInfo {
     pub fn new() -> DataInfo {
         DataInfo::default()
-    }
-}
-
-impl Default for DataInfo {
-    fn default() -> DataInfo {
-        DataInfo {
-            #[cfg(feature = "shared-memory")]
-            sliced: false,
-            kind: None,
-            encoding: None,
-            timestamp: None,
-            source_id: None,
-            source_sn: None,
-            first_router_id: None,
-            first_router_sn: None,
-        }
     }
 }
 

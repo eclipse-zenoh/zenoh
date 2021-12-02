@@ -239,14 +239,14 @@ fn register_client_subscription(
         let res = get_mut_unchecked(res);
         log::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
-            Some(mut ctx) => match &ctx.subs {
+            Some(ctx) => match &ctx.subs {
                 Some(info) => {
                     if SubMode::Pull == info.mode {
-                        get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                        get_mut_unchecked(ctx).subs = Some(sub_info.clone());
                     }
                 }
                 None => {
-                    get_mut_unchecked(&mut ctx).subs = Some(sub_info.clone());
+                    get_mut_unchecked(ctx).subs = Some(sub_info.clone());
                 }
             },
             None => {
@@ -530,8 +530,8 @@ pub(crate) fn undeclare_client_subscription(
     res: &mut Arc<Resource>,
 ) {
     log::debug!("Unregister client subscription {} for {}", res.expr(), face);
-    if let Some(mut ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
-        get_mut_unchecked(&mut ctx).subs = None;
+    if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(ctx).subs = None;
     }
     get_mut_unchecked(face).remote_subs.remove(res);
 
@@ -1256,7 +1256,7 @@ pub fn pull_data(
             Some(mut res) => {
                 let res = get_mut_unchecked(&mut res);
                 match res.session_ctxs.get_mut(&face.id) {
-                    Some(mut ctx) => match &ctx.subs {
+                    Some(ctx) => match &ctx.subs {
                         Some(subinfo) => {
                             let lock = zlock!(tables.pull_caches_lock);
                             for (name, (info, data)) in &ctx.last_values {
@@ -1274,7 +1274,7 @@ pub fn pull_data(
                                     None,
                                 );
                             }
-                            get_mut_unchecked(&mut ctx).last_values.clear();
+                            get_mut_unchecked(ctx).last_values.clear();
                             drop(lock);
                         }
                         None => {

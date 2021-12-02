@@ -366,7 +366,7 @@ impl std::fmt::Display for Config {
 #[test]
 fn config_from_json() {
     use validated_struct::ValidatedMap;
-    let from_str = |s| serde_json::Deserializer::from_str(s);
+    let from_str = serde_json::Deserializer::from_str;
     let mut config = Config::from_deserializer(&mut from_str(r#"{}"#)).unwrap();
     config
         .insert("transport/link/lease", &mut from_str("168"))

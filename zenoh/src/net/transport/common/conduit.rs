@@ -85,6 +85,7 @@ impl TransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportConduitRx {
+    #[allow(dead_code)]
     pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,
