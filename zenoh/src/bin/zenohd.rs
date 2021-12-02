@@ -66,7 +66,7 @@ fn main() {
             ))
             .arg(Arg::from_usage(
                 "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
-             'A plugin that MUST be loaded. Repeat this option to load several plugins. If loading failed, zenohd will exit. Use --try-plugin if you just want a load attempt to be made.'",
+             'A plugin that MUST be loaded. Repeat this option to load several plugins. If loading failed, zenohd will exit.'",
             ))
             .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
             'A directory where to search for plugins libraries to load. \

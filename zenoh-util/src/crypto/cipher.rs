@@ -42,8 +42,8 @@ impl BlockCipher {
         let mut start: usize = 0;
         while start < bytes.len() {
             let end = start + Self::BLOCK_SIZE;
-            let mut block = GenericArray::from_mut_slice(&mut bytes[start..end]);
-            self.inner.encrypt_block(&mut block);
+            let block = GenericArray::from_mut_slice(&mut bytes[start..end]);
+            self.inner.encrypt_block(block);
             start += Self::BLOCK_SIZE;
         }
 
@@ -58,8 +58,8 @@ impl BlockCipher {
         let mut start: usize = 0;
         while start < bytes.len() {
             let end = start + Self::BLOCK_SIZE;
-            let mut block = GenericArray::from_mut_slice(&mut bytes[start..end]);
-            self.inner.decrypt_block(&mut block);
+            let block = GenericArray::from_mut_slice(&mut bytes[start..end]);
+            self.inner.decrypt_block(block);
             start += Self::BLOCK_SIZE;
         }
 

@@ -148,18 +148,12 @@ const DEFAULT_PROP_SEP: char = ';';
 const KV_SEP: &[char] = &['=', ':'];
 const COMMENT_PREFIX: char = '#';
 
-#[derive(Clone, PartialEq)]
 /// A map of key/value (String,String) properties.
 ///
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
 /// and `=` as separator between a key and its value. Keys and values are trimed.
+#[derive(Clone, PartialEq, Default)]
 pub struct Properties(pub HashMap<String, String>);
-
-impl Default for Properties {
-    fn default() -> Self {
-        Properties(HashMap::new())
-    }
-}
 
 impl Deref for Properties {
     type Target = HashMap<String, String>;
