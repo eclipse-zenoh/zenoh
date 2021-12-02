@@ -66,11 +66,11 @@ fn main() {
             ))
             .arg(Arg::from_usage(
                 "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
-             'A plugin that must be loaded. Repeat this option to load several plugins.'",
+             'A plugin that MUST be loaded. Repeat this option to load several plugins. If loading failed, zenohd will exit. Use --try-plugin if you just want a load attempt to be made.'",
             ))
             .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
             'A directory where to search for plugins libraries to load. \
-            Repeat this option to specify several search directories'.").conflicts_with("plugin-nolookup"))
+            Repeat this option to specify several search directories'."))
             .arg(Arg::from_usage(
                 "--no-timestamp \
              'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
@@ -86,7 +86,7 @@ fn main() {
                 .value_name("KEY:VALUE")
                 .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
             ).arg(Arg::with_name("rest-port")
-                .long("port")
+                .long("rest-http-port")
                 .required(false)
                 .takes_value(true)
                 .value_name("PORT")
