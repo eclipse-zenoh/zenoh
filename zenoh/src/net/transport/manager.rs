@@ -250,18 +250,10 @@ impl Default for TransportManagerConfigBuilder {
     }
 }
 
+#[derive(Default)]
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
     pub multicast: TransportManagerStateMulticast,
-}
-
-impl Default for TransportManagerState {
-    fn default() -> TransportManagerState {
-        TransportManagerState {
-            unicast: TransportManagerStateUnicast::default(),
-            multicast: TransportManagerStateMulticast::default(),
-        }
-    }
 }
 
 #[derive(Clone)]

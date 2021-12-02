@@ -269,7 +269,7 @@ impl Resource {
             };
 
             match get_mut_unchecked(from).childs.get_mut(chunk) {
-                Some(mut res) => Resource::make_resource(tables, &mut res, rest),
+                Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
                     if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
@@ -294,7 +294,7 @@ impl Resource {
                     };
 
                     match get_mut_unchecked(from).childs.get_mut(chunk) {
-                        Some(mut res) => Resource::make_resource(tables, &mut res, rest),
+                        Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
                             if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
@@ -363,7 +363,7 @@ impl Resource {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
-                let mut ctx = get_mut_unchecked(&mut nonwild_prefix)
+                let ctx = get_mut_unchecked(&mut nonwild_prefix)
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
@@ -381,7 +381,7 @@ impl Resource {
                     Some(expr_id) => expr_id,
                     None => {
                         let expr_id = face.get_next_local_id();
-                        get_mut_unchecked(&mut ctx).local_expr_id = Some(expr_id);
+                        get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
                         get_mut_unchecked(face)
                             .local_mappings
                             .insert(expr_id, nonwild_prefix.clone());

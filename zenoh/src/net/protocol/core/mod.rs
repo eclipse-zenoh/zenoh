@@ -860,19 +860,10 @@ impl Default for Reliability {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
-}
-
-impl Default for Channel {
-    fn default() -> Channel {
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -913,19 +904,10 @@ impl fmt::Display for ConduitSnList {
 }
 
 /// The kind of reliability.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
-}
-
-impl Default for ConduitSn {
-    fn default() -> ConduitSn {
-        ConduitSn {
-            reliable: 0,
-            best_effort: 0,
-        }
-    }
 }
 
 /// The kind of congestion control.
@@ -965,21 +947,11 @@ pub struct Period {
     pub duration: ZInt,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
     pub period: Option<Period>,
-}
-
-impl Default for SubInfo {
-    fn default() -> SubInfo {
-        SubInfo {
-            reliability: Reliability::default(),
-            mode: SubMode::default(),
-            period: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -39,7 +39,9 @@ pub(super) struct TransportMulticastPeer {
     pub(super) locator: Locator,
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
+    #[allow(dead_code)] // TODO: Luca - Check these two values
     pub(super) sn_resolution: ZInt,
+    #[allow(dead_code)] // TODO: Luca - Check these two values
     pub(super) lease: Duration,
     pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
@@ -393,7 +395,9 @@ impl TransportMulticastInner {
             conduit_rx,
             handler,
         };
-        zwrite!(self.peers).insert(locator.clone(), peer);
+        {
+            zwrite!(self.peers).insert(locator.clone(), peer);
+        }
 
         // Add the event to the timer
         task::block_on(self.timer.add(event));

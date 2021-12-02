@@ -72,6 +72,7 @@ impl Drop for MemoryBackend {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum StoredValue {
     Present {
         ts: Timestamp,
