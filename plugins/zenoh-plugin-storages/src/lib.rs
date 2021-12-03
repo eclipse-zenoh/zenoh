@@ -239,7 +239,8 @@ impl StorageRuntimeInner {
         }
     }
     fn spawn_storage(&mut self, backend_name: &str, storage: StorageConfig) -> ZResult<()> {
-        let admin_key = self.status_key() + backend_name + "/storages/" + &storage.name;
+        let admin_key =
+            self.status_key() + "/backends/" + backend_name + "/storages/" + &storage.name;
         if let Some(backend) = self.backends.get_mut(backend_name) {
             let storage_name = storage.key_expr.clone();
             let in_interceptor = backend.backend.incoming_data_interceptor();
