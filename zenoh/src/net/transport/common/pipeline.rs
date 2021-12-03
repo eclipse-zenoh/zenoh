@@ -221,7 +221,7 @@ impl TransmissionPipeline {
     ) -> TransmissionPipeline {
         macro_rules! zcapacity {
             ($conduit:expr) => {
-                match $conduit.id {
+                match $conduit.priority {
                     Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
                     Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
                     Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,

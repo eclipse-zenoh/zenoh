@@ -58,7 +58,7 @@ impl TransportChannelRx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportConduitTx {
-    pub(crate) id: Priority,
+    pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<TransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelTx>>,
 }
@@ -70,7 +70,7 @@ impl TransportConduitTx {
         initial_sn: ConduitSn,
     ) -> TransportConduitTx {
         TransportConduitTx {
-            id: priority,
+            priority,
             reliable: Arc::new(Mutex::new(TransportChannelTx::new(
                 initial_sn.reliable,
                 sn_resolution,
@@ -85,7 +85,6 @@ impl TransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportConduitRx {
-    #[allow(dead_code)]
     pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,

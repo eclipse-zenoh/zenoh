@@ -92,7 +92,7 @@ impl TransportUnicastInner {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
-        // @TODO: potentially manager different initial SNs per conduit channel
+        // @TODO: potentially manage different initial SNs per conduit channel
         let conduit_sn_tx = ConduitSn {
             reliable: config.initial_sn_tx,
             best_effort: config.initial_sn_tx,
@@ -201,8 +201,11 @@ impl TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    #[allow(unused_variables)]
-    pub(super) fn can_add_link(&self, link: &LinkUnicast) -> bool {
+    pub(super) fn can_add_link(
+        &self,
+        #[allow(unused_variables)] // transport_multilink feature requires link
+        link: &LinkUnicast,
+    ) -> bool {
         let guard = zread!(self.links);
         #[cfg(feature = "transport_multilink")]
         {
@@ -359,7 +362,7 @@ impl TransportUnicastInner {
     }
 
     pub(crate) fn is_qos(&self) -> bool {
-        self.conduit_tx.len() > 1
+        self.conduit_tx[0].priority != Priority::default()
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {

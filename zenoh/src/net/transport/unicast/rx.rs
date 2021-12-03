@@ -29,32 +29,36 @@ use zenoh_util::{zerror, zread};
 /*            TRANSPORT RX           */
 /*************************************/
 impl TransportUnicastInner {
-    #[allow(unused_mut)]
-    fn trigger_callback(&self, mut msg: ZenohMessage) -> ZResult<()> {
+    fn trigger_callback(
+        &self,
+        #[allow(unused_mut)] // shared-memory feature requires mut
+        mut msg: ZenohMessage,
+    ) -> ZResult<()> {
         #[cfg(feature = "stats")]
-        self.stats.inc_rx_z_msgs(1);
-        #[cfg(feature = "stats")]
-        match &msg.body {
-            ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => {
-                    self.stats.inc_rx_z_data_reply_msgs(1);
-                    self.stats
-                        .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
-                }
-                None => {
-                    self.stats.inc_rx_z_data_msgs(1);
-                    self.stats
-                        .inc_rx_z_data_payload_bytes(data.payload.readable());
-                }
-            },
-            ZenohBody::Unit(unit) => match unit.reply_context {
-                Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
-                None => self.stats.inc_rx_z_unit_msgs(1),
-            },
-            ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
-            ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
-            ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
-            ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+        {
+            self.stats.inc_rx_z_msgs(1);
+            match &msg.body {
+                ZenohBody::Data(data) => match data.reply_context {
+                    Some(_) => {
+                        self.stats.inc_rx_z_data_reply_msgs(1);
+                        self.stats
+                            .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                    }
+                    None => {
+                        self.stats.inc_rx_z_data_msgs(1);
+                        self.stats
+                            .inc_rx_z_data_payload_bytes(data.payload.readable());
+                    }
+                },
+                ZenohBody::Unit(unit) => match unit.reply_context {
+                    Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
+                    None => self.stats.inc_rx_z_unit_msgs(1),
+                },
+                ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
+                ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
+                ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
+                ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+            }
         }
 
         let callback = zread!(self.callback).clone();

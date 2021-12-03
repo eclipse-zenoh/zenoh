@@ -158,7 +158,7 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
-    #[allow(unused_mut)]
+    #[allow(unused_mut)] // transport_multilink-memory feature requires mut
     let mut unicast = TransportManagerConfigUnicast::builder();
     #[cfg(feature = "transport_multilink")]
     {
@@ -173,7 +173,7 @@ async fn open_transport(
     let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
-    #[allow(unused_mut)]
+    #[allow(unused_mut)] // transport_multilink-memory feature requires mut
     let mut unicast = TransportManagerConfigUnicast::builder();
     #[cfg(feature = "transport_multilink")]
     {
