@@ -201,7 +201,7 @@ impl Primitives for AdminSpace {
         {
             match std::str::from_utf8(payload.contiguous().as_slice()) {
                 Ok(json) => {
-                    log::info!(
+                    log::trace!(
                         "Insert conf value /@/router/{}/config/{}:{}",
                         &self.context.pid_str,
                         key,
@@ -211,11 +211,6 @@ impl Primitives for AdminSpace {
                         error!(
                             "Error inserting conf value /@/router/{}/config/{}:{} - {}",
                             &self.context.pid_str, key, json, e
-                        );
-                    } else {
-                        log::info!(
-                            "New conf :{}",
-                            self.context.runtime.config.lock().to_string()
                         );
                     }
                 }
