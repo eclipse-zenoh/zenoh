@@ -17,6 +17,7 @@ use async_std::channel::Sender;
 use async_std::sync::Arc;
 use futures::StreamExt;
 use memory_backend::create_memory_backend;
+use serde_json::json;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::mem::MaybeUninit;
@@ -198,7 +199,8 @@ impl StorageRuntimeInner {
         async_std::task::spawn({
             let session = self.session.clone();
             let flag = flag.clone();
-            let keyexpr = self.status_key() + "/" + &backend_name + "/path";
+            let keyexpr = self.status_key() + "/backends/" + &backend_name;
+            let backend_name = backend_name.clone();
             async move {
                 let mut queryable = match session.queryable(&keyexpr).await {
                     Ok(q) => q,
@@ -211,7 +213,13 @@ impl StorageRuntimeInner {
                 while flag.load(std::sync::atomic::Ordering::Relaxed) {
                     if let Some(query) = receiver.next().await {
                         query
-                            .reply_async(Sample::new(keyexpr.clone(), lib_path.clone()))
+                            .reply_async(Sample::new(
+                                keyexpr.clone(),
+                                json!({
+                                    "type": &backend_name,
+                                    "lib_path": lib_path,
+                                }),
+                            ))
                             .await;
                     } else {
                         break;
