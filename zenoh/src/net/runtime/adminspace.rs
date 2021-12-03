@@ -101,6 +101,12 @@ impl AdminSpace {
             },
             None,
         );
+
+        primitives.decl_subscriber(
+            &[&root_key, "/config/**"].concat().into(),
+            &SubInfo::default(),
+            None,
+        );
     }
 
     pub fn key_expr_to_string(&self, key_expr: &KeyExpr) -> Option<String> {
@@ -188,6 +194,37 @@ impl Primitives for AdminSpace {
             congestion_control,
             data_info,
         );
+
+        if let Some(key) = key_expr
+            .as_str()
+            .strip_prefix(&format!("/@/router/{}/config/", &self.context.pid_str))
+        {
+            match std::str::from_utf8(payload.contiguous().as_slice()) {
+                Ok(json) => {
+                    log::info!(
+                        "Insert conf value /@/router/{}/config/{}:{}",
+                        &self.context.pid_str,
+                        key,
+                        json
+                    );
+                    if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
+                        error!(
+                            "Error inserting conf value /@/router/{}/config/{}:{} - {}",
+                            &self.context.pid_str, key, json, e
+                        );
+                    } else {
+                        log::info!(
+                            "New conf :{}",
+                            self.context.runtime.config.lock().to_string()
+                        );
+                    }
+                }
+                Err(e) => error!(
+                    "Received non utf8 conf value on /@/router/{}/config/{} : {}",
+                    &self.context.pid_str, key, e
+                ),
+            }
+        }
     }
 
     fn send_query(

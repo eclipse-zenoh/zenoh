@@ -28,6 +28,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
+use zenoh_plugin_trait::ValidationFunction;
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 
@@ -276,6 +277,9 @@ fn config_deser() {
 }
 
 impl Config {
+    pub fn add_plugin_validator(&mut self, name: impl Into<String>, validator: ValidationFunction) {
+        self.plugins.validators.insert(name.into(), validator);
+    }
     pub fn insert_json<K: AsRef<str>>(
         &mut self,
         key: K,
