@@ -102,6 +102,7 @@ fn main() {
 
         let args = app.get_matches();
         let config = config_from_args(&args);
+        log::info!("Initial conf: {}", &config);
 
         let mut plugins = PluginsManager::builder()
             // Static plugins are to be added here, with `.add_static::<PluginType>()`
@@ -138,6 +139,11 @@ fn main() {
         }
         for f in failures {
             log::debug!("plugin_failure: {}", f);
+        }
+
+        for (name, plugin) in handles.running_plugins() {
+            let hook = plugin.config_checker();
+            runtime.config.lock().add_plugin_validator(name, hook)
         }
 
         AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;

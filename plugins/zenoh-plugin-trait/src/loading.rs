@@ -65,6 +65,8 @@ impl<T> MergeRequirements for Vec<T> {
     }
 }
 
+type StartResult = (Vec<(String, RunningPlugin)>, Vec<Box<dyn Error>>);
+
 pub trait MultipleStaticPlugins: Sized {
     type StartArgs;
     fn merge_requirements_and_conflicts() -> Compats;
@@ -72,7 +74,7 @@ pub trait MultipleStaticPlugins: Sized {
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &Self::StartArgs,
-    ) -> (Vec<RunningPlugin>, Vec<Box<dyn Error>>);
+    ) -> StartResult;
 
     fn __len(cur: usize) -> usize;
     fn len() -> usize {
@@ -97,7 +99,7 @@ impl<StartArgs> MultipleStaticPlugins for StaticPlugins<(), (), StartArgs> {
     fn start(
         _it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         _args: &StartArgs,
-    ) -> (Vec<RunningPlugin>, Vec<Box<dyn Error>>) {
+    ) -> StartResult {
         (vec![], vec![])
     }
 }
@@ -131,11 +133,11 @@ impl<
     fn start(
         it: &mut std::vec::IntoIter<Option<Incompatibility>>,
         args: &StartArgs,
-    ) -> (Vec<RunningPlugin>, Vec<Box<dyn Error>>) {
+    ) -> StartResult {
         let (mut ok, mut err) = B::start(it, args);
         match it.next().unwrap() {
             None => match A::start(A::STATIC_NAME, args) {
-                Ok(s) => ok.push(s),
+                Ok(s) => ok.push((A::STATIC_NAME.into(), s)),
                 Err(e) => err.push(e),
             },
             Some(i) => err.push(Box::new(i)),
@@ -184,10 +186,14 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
         StaticPlugins: MultipleStaticPlugins<StartArgs = StartArgs>,
     {
         let names = self.ids;
-        let (stoppers, errors) = StaticPlugins::start(&mut self.should_run.into_iter(), args);
+        let (running_plugins, errors) =
+            StaticPlugins::start(&mut self.should_run.into_iter(), args);
         (
             PluginsHandles {
-                stopper: StaticPluginsHandles { stoppers, names },
+                handles: StaticPluginsHandles {
+                    running_plugins,
+                    names,
+                },
                 dynamic_plugins: Vec::new(),
             },
             errors,
@@ -196,19 +202,19 @@ impl<StaticPlugins> StaticLauncher<StaticPlugins> {
 }
 
 pub struct StaticPluginsHandles {
-    stoppers: Vec<RunningPlugin>,
+    running_plugins: Vec<(String, RunningPlugin)>,
     names: Vec<String>,
 }
 
-impl AsRef<Vec<RunningPlugin>> for StaticPluginsHandles {
-    fn as_ref(&self) -> &Vec<RunningPlugin> {
-        &self.stoppers
+impl AsRef<Vec<(String, RunningPlugin)>> for StaticPluginsHandles {
+    fn as_ref(&self) -> &Vec<(String, RunningPlugin)> {
+        &self.running_plugins
     }
 }
 
-impl AsMut<Vec<RunningPlugin>> for StaticPluginsHandles {
-    fn as_mut(&mut self) -> &mut Vec<RunningPlugin> {
-        &mut self.stoppers
+impl AsMut<Vec<(String, RunningPlugin)>> for StaticPluginsHandles {
+    fn as_mut(&mut self) -> &mut Vec<(String, RunningPlugin)> {
+        &mut self.running_plugins
     }
 }
 
@@ -220,7 +226,7 @@ pub struct DynamicLoader<Statics: MultipleStaticPlugins> {
 
 impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<()> {
-        let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", name))? };
+        let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", &name))? };
         let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
         self.dynamic_plugins.push(plugin);
         Ok(())
@@ -295,7 +301,7 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
         args: &StaticPlugins::StartArgs,
     ) -> HandlesAndErrors<StaticPlugins::StartArgs> {
         use std::cell::UnsafeCell;
-        let (mut stopper, errors) = self.static_launcher.start(args);
+        let (mut handle, errors) = self.static_launcher.start(args);
         let errors = UnsafeCell::new(errors);
         let dynamic_plugins = self.dynamic_plugins;
         for plugin in dynamic_plugins
@@ -309,18 +315,19 @@ impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
                 None => Some(p),
             })
         {
+            let name = plugin.name.clone();
             match plugin.start(args) {
-                Ok(p) => stopper.stopper.stoppers.push(p),
+                Ok(p) => handle.handles.running_plugins.push((name, p)),
                 Err(e) => unsafe { &mut *errors.get() }.push(e),
             }
         }
-        stopper.dynamic_plugins.extend(dynamic_plugins);
-        (stopper, errors.into_inner())
+        handle.dynamic_plugins.extend(dynamic_plugins);
+        (handle, errors.into_inner())
     }
 }
 
 pub struct PluginsHandles<StartArgs> {
-    stopper: StaticPluginsHandles,
+    handles: StaticPluginsHandles,
     dynamic_plugins: Vec<DynamicPlugin<StartArgs>>,
 }
 
@@ -331,7 +338,7 @@ pub struct PluginDescription<'l> {
 
 impl<B> PluginsHandles<B> {
     pub fn plugins(&self) -> Vec<PluginDescription> {
-        self.stopper
+        self.handles
             .names
             .iter()
             .map(|name| PluginDescription {
@@ -344,17 +351,20 @@ impl<B> PluginsHandles<B> {
             }))
             .collect()
     }
-}
-
-impl<B> AsRef<Vec<RunningPlugin>> for PluginsHandles<B> {
-    fn as_ref(&self) -> &Vec<RunningPlugin> {
-        self.stopper.as_ref()
+    pub fn running_plugins(&self) -> &[(String, RunningPlugin)] {
+        &self.handles.running_plugins
     }
 }
 
-impl<B> AsMut<Vec<RunningPlugin>> for PluginsHandles<B> {
-    fn as_mut(&mut self) -> &mut Vec<RunningPlugin> {
-        self.stopper.as_mut()
+impl<B> AsRef<Vec<(String, RunningPlugin)>> for PluginsHandles<B> {
+    fn as_ref(&self) -> &Vec<(String, RunningPlugin)> {
+        self.handles.as_ref()
+    }
+}
+
+impl<B> AsMut<Vec<(String, RunningPlugin)>> for PluginsHandles<B> {
+    fn as_mut(&mut self) -> &mut Vec<(String, RunningPlugin)> {
+        self.handles.as_mut()
     }
 }
 
