@@ -36,12 +36,11 @@ use zenoh_util::core::Result as ZResult;
 /*************************************/
 #[derive(Clone)]
 pub(super) struct TransportMulticastPeer {
+    pub(super) version: u8,
     pub(super) locator: Locator,
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
-    #[allow(dead_code)] // TODO: Luca - Check these two values
     pub(super) sn_resolution: ZInt,
-    #[allow(dead_code)] // TODO: Luca - Check these two values
     pub(super) lease: Duration,
     pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
@@ -54,8 +53,8 @@ impl TransportMulticastPeer {
         self.whatchdog.store(true, Ordering::Release);
     }
 
-    fn is_qos(&self) -> bool {
-        self.conduit_rx.len() > 1
+    pub(super) fn is_qos(&self) -> bool {
+        self.conduit_rx[0].priority != Priority::default()
     }
 }
 
@@ -385,6 +384,7 @@ impl TransportMulticastInner {
 
         // Store the new peer
         let peer = TransportMulticastPeer {
+            version: join.version,
             locator: locator.clone(),
             pid: peer.pid,
             whatami: peer.whatami,

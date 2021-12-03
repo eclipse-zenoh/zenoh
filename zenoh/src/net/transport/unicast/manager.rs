@@ -177,8 +177,10 @@ impl TransportManagerConfigBuilderUnicast {
         Ok(self)
     }
 
-    #[allow(unused_mut)]
-    pub fn build(mut self) -> ZResult<TransportManagerConfigUnicast> {
+    pub fn build(
+        #[allow(unused_mut)] // auth_pubkey and shared-memory features require mut
+        mut self,
+    ) -> ZResult<TransportManagerConfigUnicast> {
         #[cfg(feature = "auth_pubkey")]
         if !self
             .peer_authenticator

@@ -16,7 +16,7 @@ use super::protocol::core::{Priority, Reliability, ZInt};
 #[cfg(feature = "stats")]
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::{
-    Close, Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
+    Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
@@ -28,36 +28,37 @@ use zenoh_util::zerror;
 /*            TRANSPORT RX           */
 /*************************************/
 impl TransportMulticastInner {
-    #[allow(unused_mut)]
     fn trigger_callback(
         &self,
+        #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: ZenohMessage,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
         #[cfg(feature = "stats")]
-        self.stats.inc_rx_z_msgs(1);
-        #[cfg(feature = "stats")]
-        match &msg.body {
-            ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => {
-                    self.stats.inc_rx_z_data_reply_msgs(1);
-                    self.stats
-                        .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
-                }
-                None => {
-                    self.stats.inc_rx_z_data_msgs(1);
-                    self.stats
-                        .inc_rx_z_data_payload_bytes(data.payload.readable());
-                }
-            },
-            ZenohBody::Unit(unit) => match unit.reply_context {
-                Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
-                None => self.stats.inc_rx_z_unit_msgs(1),
-            },
-            ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
-            ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
-            ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
-            ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+        {
+            self.stats.inc_rx_z_msgs(1);
+            match &msg.body {
+                ZenohBody::Data(data) => match data.reply_context {
+                    Some(_) => {
+                        self.stats.inc_rx_z_data_reply_msgs(1);
+                        self.stats
+                            .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                    }
+                    None => {
+                        self.stats.inc_rx_z_data_msgs(1);
+                        self.stats
+                            .inc_rx_z_data_payload_bytes(data.payload.readable());
+                    }
+                },
+                ZenohBody::Unit(unit) => match unit.reply_context {
+                    Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
+                    None => self.stats.inc_rx_z_unit_msgs(1),
+                },
+                ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
+                ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
+                ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
+                ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+            }
         }
 
         #[cfg(feature = "shared-memory")]
@@ -120,7 +121,31 @@ impl TransportMulticastInner {
         }
     }
 
-    pub(super) fn handle_join(&self, join: Join, locator: &Locator) -> ZResult<()> {
+    pub(super) fn handle_join_from_peer(
+        &self,
+        join: Join,
+        peer: &TransportMulticastPeer,
+    ) -> ZResult<()> {
+        // Check if parameters are ok
+        if join.version != peer.version
+            || join.pid != peer.pid
+            || join.whatami != peer.whatami
+            || join.sn_resolution != peer.sn_resolution
+            || join.lease != peer.lease
+            || join.is_qos() != peer.is_qos()
+        {
+            let e = format!(
+                "Ingoring Join on {} of peer: {}. Inconsistent parameters. Version",
+                peer.locator, peer.pid,
+            );
+            log::debug!("{}", e);
+            bail!("{}", e);
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn handle_join_from_unknown(&self, join: Join, locator: &Locator) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
@@ -141,6 +166,7 @@ impl TransportMulticastInner {
             );
             return Ok(());
         }
+
         if join.sn_resolution > self.manager.config.sn_resolution {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {}. Expected: <= {}.",
@@ -151,6 +177,7 @@ impl TransportMulticastInner {
             );
             return Ok(());
         }
+
         if !self.manager.config.multicast.is_qos && join.is_qos() {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. QoS is not supported.",
@@ -160,17 +187,15 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        self.new_peer(locator, join)
-    }
+        let _ = self.new_peer(locator, join);
 
-    pub(super) fn handle_close(&self, close: Close, locator: &Locator) -> ZResult<()> {
-        self.del_peer(locator, close.reason)
+        Ok(())
     }
 
     pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
         // Process the received message
-        let guard = zread!(self.peers);
-        match guard.get(locator) {
+        let r_guard = zread!(self.peers);
+        match r_guard.get(locator) {
             Some(peer) => {
                 peer.active();
 
@@ -190,7 +215,7 @@ impl TransportMulticastInner {
                                 self.manager.config.pid,
                                 self.locator,
                                 channel.priority,
-                                locator
+                                peer.locator
                             );
                         };
 
@@ -200,17 +225,18 @@ impl TransportMulticastInner {
                         };
                         self.handle_frame(sn, payload, guard, peer)
                     }
+                    TransportBody::Join(join) => self.handle_join_from_peer(join, peer),
                     TransportBody::Close(close) => {
-                        drop(guard);
-                        self.handle_close(close, locator)
+                        drop(r_guard);
+                        self.del_peer(locator, close.reason)
                     }
                     _ => Ok(()),
                 }
             }
             None => {
-                drop(guard);
+                drop(r_guard);
                 match msg.body {
-                    TransportBody::Join(join) => self.handle_join(join, locator),
+                    TransportBody::Join(join) => self.handle_join_from_unknown(join, locator),
                     _ => Ok(()),
                 }
             }
