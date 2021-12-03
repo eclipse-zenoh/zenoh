@@ -210,21 +210,21 @@ jobs:
         shell: bash
         run: |
           TARGET=${{ matrix.job.target }}
-          MAIN_PKG_NAME="zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
-          EXPL_PKG_NAME="zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-examples.zip"
-          DEBS_PKG_NAME="zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
+          MAIN_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
+          EXPL_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-examples.zip"
+          DEBS_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
 
           case ${TARGET} in
             *linux*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ../../../${MAIN_PKG_NAME} zenohd libzplugin_*.so
+              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.so
               cd -
               cd "target/${TARGET}/release/examples"
               # remove temporary build files we don't want to package
               rm -f *.* *-????????????????
               echo "Packaging ${EXPL_PKG_NAME}:"
-              zip ../../../../${EXPL_PKG_NAME} *
+              zip ${EXPL_PKG_NAME} *
               cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
               echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
@@ -232,9 +232,9 @@ jobs:
               # check if debian packages has been created and packages them in a single tgz
               if [[ -d target/${TARGET}/debian ]]; then
                 cd target/${TARGET}/debian
-                ../../../gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
+                ${GITHUB_WORKSPACE}/gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
                 echo "Packaging ${DEBS_PKG_NAME}:"
-                zip ../../../${DEBS_PKG_NAME} *.deb
+                zip ${DEBS_PKG_NAME} *.deb
                 cd -
                 echo ::set-output name=DEBS_PKG_NAME::"${DEBS_PKG_NAME}"
               fi
@@ -242,13 +242,13 @@ jobs:
             *apple*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ../../../${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
+              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
               cd -
               cd "target/${TARGET}/release/examples"
               # remove temporary build files we don't want to package
               rm -f *.* *-????????????????
               echo "Packaging ${EXPL_PKG_NAME}:"
-              zip ../../../../${EXPL_PKG_NAME} *
+              zip ${EXPL_PKG_NAME} *
               cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
               echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
@@ -256,12 +256,12 @@ jobs:
             *windows*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              7z -y a "../../../${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
+              7z -y a "${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
               cd -
               cd "target/${TARGET}/release/examples"
               rm -f *-????????????????.exe
               echo "Packaging ${EXPL_PKG_NAME}:"
-              7z -y a "../../../../${EXPL_PKG_NAME}" "*.exe"
+              7z -y a "${EXPL_PKG_NAME}" "*.exe"
               cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
               echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
