@@ -1,0 +1,171 @@
+/// This file attempts to list and document available configuration elements.
+/// For a more complete view of the configuration's structure, check out `zenoh/src/config.rs`'s `Config` structure.
+/// Note that the values here are correctly typed, but may not be sensible, so copying this file to change only the parts that matter to you is not good practice.
+{
+  /// Plugins are only loaded if present in the configuration. When starting
+  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
+  plugins: {
+    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzplugin_rest.so` would be searched for on linux)
+    rest: {
+      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
+      __required__: true, // defaults to false
+      port: 8000,
+    },
+    storages: {
+      /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
+      __path__: [
+        "./target/release/libzplugin_storages.so",
+        "./target/release/libzplugin_storages.dylib",
+      ],
+      /// Storages are grouped by backend, which may implement the storage function in various ways.
+      backends: {
+        /// The memory backend is always available, and stores values in RAM.
+        memory: {
+          /// Each backend may manage several storages
+          storages: {
+            /// Each must be named
+            demo: {
+              key_expr: "/demo/memory/**",
+            },
+          },
+        },
+        /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
+        influxdb: {
+          url: "https://myinfluxdb.example",
+          db: "example",
+          /// Some plugins may need passwords in their configuration.
+          /// To avoid leaking them through the adminspace, they may be masked behind a privacy barrier.
+          /// any value held at the key "private" will not be shown in the adminspace.
+          private: {
+            username: "user1",
+            password: "pw1",
+          },
+          storages: {
+            influxdemo: {
+              key_expr: "/demo/influxdb/**",
+              /// This prefix will be stripped of the received keys when storing.
+              strip_prefix: "/demo/influxdb/",
+            },
+          },
+        },
+        influxdb2: {
+          /// A second backend of the same type can be spawned using `__path__`, for examples when different DBs are needed.
+          __path__: ["../libzbackend_influxdb.so"],
+          private: {
+            username: "user2",
+            password: "pw2",
+          },
+          url: "https://localhost:3000",
+          db: "localhost-example",
+          storages: {
+            influxdemo: {
+              key_expr: "/demo/influxdb2/**",
+              strip_prefix: "/demo/influxdb2/",
+            },
+          },
+        },
+      },
+    },
+  },
+  /// Directories where plugin search should run
+  plugins_search_dirs: [],
+  version: null,
+  peer_id: null,
+  /// The node's mode (router, peer or client)
+  mode: "router",
+  /// Which locators to connect to, proto may be one of tcp|udp|quic|tls|unixsock-stream.
+  peers: [
+    // "<proto>/<ip>:<port>"
+  ],
+  /// Which locators to listen on.
+  listeners: [
+    // "<proto>/<ip>:<port>"
+  ],
+  scouting: {
+    /// In client mode, the period dedicated to scouting for a router before failing
+    timeout: 2.5,
+    /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
+    delay: 1.25,
+    /// How multicast should behave
+    multicast: {
+      /// Whether multicast scouting is enabled or not
+      enabled: false,
+      /// The socket which should be used for multicast scouting
+      address: "0.0.0.0:7447",
+      /// The network interface which should be used for multicast scouting
+      interface: null,
+      autoconnect: false,
+    },
+    gossip: {
+      enabled: true,
+      autoconnect: "peer|client",
+    },
+  },
+  /// Whether data messages should be timestamped
+  add_timestamp: true,
+  /// Whether the link state protocol should be enabled
+  link_state: true,
+  /// Whether peers should connect to each other upon discovery (through multicast or gossip)
+  peers_autoconnect: false,
+  /// Whether local writes/queries should reach local subscribers/queryables
+  local_routing: true,
+  join_on_startup: {
+    subscriptions: ["/demo/subs/**"],
+    publications: ["/demo/pubs/**"],
+  },
+  shared_memory: false,
+  transport: {
+    sequence_number_resolution: 4294967296,
+    qos: false,
+    unicast: {
+      /// Timeout in milliseconds when opening a link
+      open_timeout: 10000,
+      open_pending: null,
+      max_sessions: 50,
+      max_links: 100,
+    },
+    multicast: {
+      /// Link keep-alive duration in milliseconds
+      join_interval: 50000,
+      max_sessions: null,
+    },
+    link: {
+      batch_size: null,
+      /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
+      lease: null,
+      /// Link keep-alive duration in milliseconds
+      keep_alive: null,
+      /// Receiving buffer size for each link
+      rx_buff_size: null,
+      /// Maximum size of the defragmentation buffer at receiver end.
+      /// Fragmented messages that are larger than the configured size will be dropped.
+      defrag_buffer_size: null,
+      tls: {
+        root_ca_certificate: null,
+        server_private_key: null,
+        server_certificate: null,
+        client_auth: null,
+        client_private_key: null,
+        client_certificate: null,
+      },
+    },
+    auth: {
+      /// The configuration of authentification.
+      /// A password implies a username is required.
+      usrpwd: {
+        user: null,
+        password: null,
+        /// The path to a file containing the user password dictionary
+        dictionary_file: null,
+      },
+      pubkey: {
+        public_key_pem: null,
+        private_key_pem: null,
+        public_key_file: null,
+        private_key_file: null,
+        key_size: null,
+        known_keys_file: null,
+      },
+    },
+  },
+}

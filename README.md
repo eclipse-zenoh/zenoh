@@ -31,6 +31,10 @@ $ cargo build --release --all-targets
 The zenoh router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
 
 -------------------------------
+## Previous API:
+With the v0.6 API come many changes to the behaviour and configuration of Zenoh. To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
+
+-------------------------------
 ## Quick tests of your build:
 
 **Peer-to-peer tests:**
@@ -43,20 +47,20 @@ The zenoh router is built as `target/release/zenohd`. All the examples are built
  - **get/eval**
     - run: `./target/release/examples/z_eval`
     - in another shell run: `./target/release/examples/z_get`
-    - the eval should display the log in it's listener, and the get should receive the eval result.
+    - the eval should display the log in its listener, and the get should receive the eval result.
 
 **Routed tests:**
 
  - **put/store/get**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --mem-storage '/demo/example/**'`
+      `./target/release/zenohd --cfg='plugins/storages/backends/memory/storages/demo/key_expr:"/demo/example/**"'`
     - in another shell run: `./target/release/examples/z_put`
     - then run `./target/release/examples/z_get`
     - the get should receive the stored publication.
 
  - **REST API using `curl` tool**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --mem-storage '/demo/example/**'`
+      `./target/release/zenohd --cfg='plugins/storages/backends/memory/storages/demo/key_expr:"/demo/example/**"'`
     - in another shell, do a publication via the REST API:  
       `curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test`
     - get it back via the REST API:  
@@ -64,17 +68,17 @@ The zenoh router is built as `target/release/zenohd`. All the examples are built
 
   - **router admin space via the REST API**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --mem-storage '/demo/example/**'`
+      `./target/release/zenohd --cfg='plugins/storages/backends/memory/storages/demo/key_expr:"/demo/example/**"'`
     - in another shell, get info of the zenoh router via the zenoh admin space:  
       `curl http://localhost:8000/@/router/local`
     - get the backends of the router (only memory by default):  
-      `curl 'http://localhost:8000/@/router/local/**/backend/*'`
+      `curl 'http://localhost:8000/@/router/local/**/backends/*'`
     - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
-     `curl 'http://localhost:8000/@/router/local/**/storage/*'`
+     `curl 'http://localhost:8000/@/router/local/**/storages/*'`
     - add another memory storage on `/demo/mystore/**`:  
-      `curl -X PUT -H 'content-type:application/properties' -d 'path_expr=/demo/mystore/**' http://localhost:8000/@/router/local/plugin/storages/backend/memory/storage/my-storage`
+      `curl -X PUT -H 'content-type:application/json' -d '"/demo/mystore/**"' http://localhost:8000/@/router/local/config/plugins/storages/backends/memory/storages/my-storage/key_expr`
     - check it has been created:  
-      `curl 'http://localhost:8000/@/router/local/**/storage/*'`
+      `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
 
 See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
@@ -83,10 +87,10 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
 ## zenoh router command line arguments
 `zenohd` accepts the following arguments:
 
-  * `-c, --config <FILE>`: a configuration file containing a list of properties with format `<key>=<value>` (1 per-line).
-    The accepted property keys are the same than accepted by the zenoh API and are documented [here](https://docs.rs/zenoh/0.5.0-beta.8/zenoh/net/config/index.html).
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
+  * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array.
   * `-l, --listener <LOCATOR>...`: A locator on which this router will listen for incoming sessions. 
-    Repeat this option to open several listeners. By default `tcp/0.0.0.0:7447` is used. The following locators are currently supported:
+    Repeat this option to open several listeners. By default, `tcp/0.0.0.0:7447` is used. The following locators are currently supported:
       - TCP: `tcp/<host_name_or_IPv4>:<port>`
       - UDP: `udp/<host_name_or_IPv4>:<port>`
       - [TCP+TLS](https://zenoh.io/docs/manual/tls/): `tls/<host_name_or_IPv4>:<port>`
@@ -98,26 +102,24 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
      **WARNING**: this identifier must be unique in the system! If not set, a random UUIDv4 will be used.
   * `--no-timestamp`: By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one.
     This option disables this feature.
-  * `--plugin-nolookup`: When set, zenohd will not look for plugins nor try to load any [plugin](https://zenoh.io/docs/manual/plugins/)
-    except the ones explicitely configured with -P or --plugin.
   * `-P, --plugin <PATH_TO_PLUGIN_LIB>...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded.
     Repeat this option to load several plugins.
-  * `--plugin-search-dir <DIRECTORY>...`:  A directory where to search for [plugins](https://zenoh.io/docs/manual/plugins/) libraries to load.
+  * `--plugin-search-dir <DIRECTORY>...`: A directory where to search for [plugins](https://zenoh.io/docs/manual/plugins/) libraries to load.
     Repeat this option to specify several search directories'. By default, the plugins libraries will be searched in:
     `'/usr/local/lib:/usr/lib:~/.zenoh/lib:.'`
+  * `--rest-http-port <rest-http-port>`: Enables the [REST plugin](https://zenoh.io/docs/manual/plugin-http/), while settting its http port [default: 8000]. Any non-integer value will disable the plugin.
 
-By default the zenoh router is delivered or built with 2 plugins that will be loaded at start-up. Each accepts some extra command line arguments:
+-------------------------------
+## Plugins
+By default the zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` cli option or via zenoh puts on individual parts of the configuration.
+
+WARNING: since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only plugins mentioned in the configuration (after processing `--cfg` and `--plugin` options) are loaded. Currently, plugins may only be loaded at startup.
 
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
-  * `--rest-http-port <rest-http-port>`: The REST plugin's http port [default: 8000]
+This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
 
 **[Storages plugin](https://zenoh.io/docs/manual/plugin-storages/)** (managing [backends and storages](https://zenoh.io/docs/manual/backends/))
-
-  * `--no-backend`: If true, no backend (and thus no storage) are created at startup. If false (default) the Memory backend it present at startup.
-  * `--mem-storage <PATH_EXPR>...`: A memory storage to be created at start-up. Repeat this option to created several storages
-  * `--backend-search-dir <DIRECTORY>...`: A directory where to search for backends libraries to load.
-    Repeat this option to specify several search directories'. By default, the backends libraries will be searched in:
-    `'/usr/local/lib:/usr/lib:~/.zenoh/lib:.'`
+This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) for info on how to configure them.
 
 -------------------------------
 ## Troubleshooting

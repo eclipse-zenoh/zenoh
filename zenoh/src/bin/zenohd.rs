@@ -253,7 +253,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
         if let Some((key, value)) = json.split_once(':') {
             match json5::Deserializer::from_str(value) {
                 Ok(mut deserializer) => {
-                    if let Err(e) = config.insert(key, &mut deserializer) {
+                    if let Err(e) =
+                        config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
+                    {
                         log::warn!("Couldn't perform configuration {}: {}", json, e);
                     }
                 }
