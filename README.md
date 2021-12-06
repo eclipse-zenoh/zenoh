@@ -31,8 +31,10 @@ $ cargo build --release --all-targets
 The zenoh router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
 
 -------------------------------
-## Previous API:
-With the v0.6 API come many changes to the behaviour and configuration of Zenoh. To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
+## Previous 0.5 API:
+The following documentation pertains to the v0.6 API, which comes many changes to the behaviour and configuration of Zenoh. 
+
+To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
 
 -------------------------------
 ## Quick tests of your build:
@@ -88,7 +90,7 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
 `zenohd` accepts the following arguments:
 
   * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
-  * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array.
+  * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
   * `-l, --listener <LOCATOR>...`: A locator on which this router will listen for incoming sessions. 
     Repeat this option to open several listeners. By default, `tcp/0.0.0.0:7447` is used. The following locators are currently supported:
       - TCP: `tcp/<host_name_or_IPv4>:<port>`
@@ -113,7 +115,9 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
 ## Plugins
 By default the zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` cli option or via zenoh puts on individual parts of the configuration.
 
-WARNING: since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only plugins mentioned in the configuration (after processing `--cfg` and `--plugin` options) are loaded. Currently, plugins may only be loaded at startup.
+WARNING: since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Currently, plugins may only be loaded at startup.  
+
+Note that the REST plugin is added to the configuration by the default value of the `--rest-http-port` CLI argument.
 
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.

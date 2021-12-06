@@ -23,7 +23,7 @@
         memory: {
           /// Each backend may manage several storages
           storages: {
-            /// Each must be named
+            /// Each storage must be named
             demo: {
               key_expr: "/demo/memory/**",
             },
@@ -67,17 +67,19 @@
       },
     },
   },
-  /// Directories where plugin search should run
+  /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
   plugins_search_dirs: [],
   version: null,
-  peer_id: null,
+  /// The identifier (as hex-string) that zenohd must use. If not set, a random UUIDv4 will be used.
+  /// WARNING: this id must be unique in your zenoh network.
+  id: null,
   /// The node's mode (router, peer or client)
   mode: "router",
   /// Which locators to connect to, proto may be one of tcp|udp|quic|tls|unixsock-stream.
   peers: [
     // "<proto>/<ip>:<port>"
   ],
-  /// Which locators to listen on.
+  /// Which locators to listen on. These are typically bound to local IPs or 0.0.0.0
   listeners: [
     // "<proto>/<ip>:<port>"
   ],

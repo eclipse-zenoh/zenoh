@@ -79,7 +79,7 @@ validated_struct::validator! {
         #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
         version: Option<u8>,
         #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
-        peer_id: Option<String>,
+        id: Option<String>,
         /// The node's mode (router, peer or client)
         #[intkey(ZN_MODE_KEY, into = whatami_to_cowstr, from = whatami_from_str)]
         mode: Option<whatami::WhatAmI>,
