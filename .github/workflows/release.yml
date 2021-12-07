@@ -352,6 +352,7 @@ jobs:
         shell: bash
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cd zenoh-macros && cargo publish && cd - && sleep 30
           cd zenoh-util && cargo publish && cd - && sleep 30
           cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
           cd zenoh && cargo publish && cd - && sleep 30
