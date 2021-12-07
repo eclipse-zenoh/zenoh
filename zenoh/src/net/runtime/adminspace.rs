@@ -1,3 +1,5 @@
+use crate::net::protocol::proto::data_kind;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -29,6 +31,8 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
 type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
+
+const EMPTY_JSON_OBJECT: &str = "{}";
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -199,25 +203,38 @@ impl Primitives for AdminSpace {
             .as_str()
             .strip_prefix(&format!("/@/router/{}/config/", &self.context.pid_str))
         {
-            match std::str::from_utf8(payload.contiguous().as_slice()) {
-                Ok(json) => {
-                    log::trace!(
-                        "Insert conf value /@/router/{}/config/{}:{}",
-                        &self.context.pid_str,
-                        key,
-                        json
-                    );
-                    if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
-                        error!(
-                            "Error inserting conf value /@/router/{}/config/{}:{} - {}",
-                            &self.context.pid_str, key, json, e
+            if let Some(DataInfo {
+                kind: Some(data_kind::DELETE),
+                ..
+            }) = data_info
+            {
+                log::trace!(
+                    "Deleting conf value /@/router/{}/config/{}",
+                    &self.context.pid_str,
+                    key
+                );
+                // TODO @pierre: call config.delete_key(key)
+            } else {
+                match std::str::from_utf8(payload.contiguous().as_slice()) {
+                    Ok(json) => {
+                        log::trace!(
+                            "Insert conf value /@/router/{}/config/{}:{}",
+                            &self.context.pid_str,
+                            key,
+                            json
                         );
+                        if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
+                            error!(
+                                "Error inserting conf value /@/router/{}/config/{}:{} - {}",
+                                &self.context.pid_str, key, json, e
+                            );
+                        }
                     }
+                    Err(e) => error!(
+                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
+                        &self.context.pid_str, key, e
+                    ),
                 }
-                Err(e) => error!(
-                    "Received non utf8 conf value on /@/router/{}/config/{} : {}",
-                    &self.context.pid_str, key, e
-                ),
             }
         }
     }
