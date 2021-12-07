@@ -85,20 +85,23 @@ fn main() {
                 .takes_value(true)
                 .multiple(true)
                 .value_name("KEY:VALUE")
-                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
+                .help(r#"Allows arbitrary configuration changes.
+KEY must be a valid config path.
+VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`"#)
             ).arg(Arg::with_name("rest-port")
                 .long("rest-http-port")
                 .required(false)
                 .takes_value(true)
                 .value_name("PORT")
                 .default_value("8000")
-                .help("Maps to `--cfg=/plugins/rest/port:PORT`. To disable the rest plugin, pass `--port=None`")
+                .help("Maps to `--cfg='plugins/rest/port:PORT'`. To disable the rest plugin, pass `--port=None`")
             ).arg(Arg::with_name("domain-id")
                 .long("domain-id")
                 .required(false)
                 .takes_value(true)
                 .value_name("DOMAIN")
-                .help("Maps to --cfg=/plugins/dds/domain-id:\"DOMAIN\"")
+                .help("Maps to --cfg='plugins/dds/domain-id:\"DOMAIN\"'")
             );
 
         let args = app.get_matches();
