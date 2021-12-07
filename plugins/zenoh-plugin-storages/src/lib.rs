@@ -35,7 +35,6 @@ use zenoh_plugin_trait::RunningPluginTrait;
 use zenoh_plugin_trait::ValidationFunction;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::LibLoader;
-use zenoh_util::LIB_SUFFIX;
 use zenoh_util::{bail, zerror, zlock};
 
 mod backends_mgt;
@@ -173,12 +172,10 @@ impl StorageRuntimeInner {
                     }
                 }
                 None => unsafe {
-                    if let Ok((lib, path)) = self.lib_loader.search_and_load(&format!(
-                        "{}{}{}",
-                        BACKEND_LIB_PREFIX,
-                        &backend_name,
-                        LIB_SUFFIX.as_str()
-                    )) {
+                    if let Ok((lib, path)) = self
+                        .lib_loader
+                        .search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, &backend_name))
+                    {
                         if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME)
                         {
                             loaded_backend = create_backend(backend.clone())
