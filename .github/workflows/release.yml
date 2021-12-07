@@ -145,8 +145,10 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v2
         with:
-          fetch-depth: 0 # NOTE: get all history for git-version crate to correctly compute a version
-
+          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
+        shell: bash
+        run: git fetch --tags --force
       - name: Install prerequisites
         shell: bash
         run: |
@@ -284,7 +286,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          fetch-depth: 0 # NOTE: get all history for git-version crate to correctly compute a version
+          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
+        shell: bash
+        run: git fetch --tags --force
       - name: Docker meta - set tags and labels
         id: meta
         uses: docker/metadata-action@v3
