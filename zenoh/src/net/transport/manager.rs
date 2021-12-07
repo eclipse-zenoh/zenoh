@@ -199,7 +199,7 @@ impl TransportManagerConfigBuilder {
         if let Some(v) = properties.version() {
             self = self.version(*v);
         }
-        if let Some(v) = properties.peer_id() {
+        if let Some(v) = properties.id() {
             self = self.pid(zparse!(v)?);
         }
         if let Some(v) = properties.mode() {
