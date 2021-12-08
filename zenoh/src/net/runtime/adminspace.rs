@@ -32,8 +32,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
 
-const EMPTY_JSON_OBJECT: &str = "{}";
-
 pub struct AdminContext {
     runtime: Runtime,
     plugins_mgr: PluginsHandles,
