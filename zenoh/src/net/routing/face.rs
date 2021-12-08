@@ -354,9 +354,8 @@ impl Primitives for Face {
         consolidation: QueryConsolidation,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
         route_query(
-            &mut tables,
+            &self.tables,
             &self.state,
             key_expr,
             value_selector,

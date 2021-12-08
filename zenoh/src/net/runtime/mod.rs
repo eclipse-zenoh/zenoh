@@ -33,8 +33,10 @@ pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
 use async_std::sync::Arc;
 use std::any::Any;
+use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_util::core::Result as ZResult;
+use zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::{bail, zerror};
 
@@ -103,8 +105,16 @@ impl Runtime {
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
         let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
+        let queries_default_timeout = config
+            .queries_default_timeout()
+            .unwrap_or_else(|| ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap());
 
-        let router = Arc::new(Router::new(pid, whatami, hlc.clone()));
+        let router = Arc::new(Router::new(
+            pid,
+            whatami,
+            hlc.clone(),
+            Duration::from_millis(queries_default_timeout),
+        ));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),

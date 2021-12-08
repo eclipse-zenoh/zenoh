@@ -26,7 +26,9 @@ use async_std::task::JoinHandle;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, RwLock};
+use std::time::Duration;
 use uhlc::HLC;
+use zenoh_util::collections::Timer;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::zconfigurable;
@@ -42,6 +44,8 @@ pub struct Tables {
     face_counter: usize,
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
+    pub(crate) timer: Timer,
+    pub(crate) queries_default_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) pull_caches_lock: Mutex<()>,
@@ -57,12 +61,19 @@ pub struct Tables {
 }
 
 impl Tables {
-    pub fn new(pid: PeerId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
+    pub fn new(
+        pid: PeerId,
+        whatami: WhatAmI,
+        hlc: Option<Arc<HLC>>,
+        queries_default_timeout: Duration,
+    ) -> Self {
         Tables {
             pid,
             whatami,
             face_counter: 0,
             hlc,
+            timer: Timer::new(),
+            queries_default_timeout,
             root_res: Resource::root(),
             faces: HashMap::new(),
             pull_caches_lock: Mutex::new(()),
@@ -242,10 +253,20 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(pid: PeerId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
+    pub fn new(
+        pid: PeerId,
+        whatami: WhatAmI,
+        hlc: Option<Arc<HLC>>,
+        queries_default_timeout: Duration,
+    ) -> Self {
         Router {
             whatami,
-            tables: Arc::new(RwLock::new(Tables::new(pid, whatami, hlc))),
+            tables: Arc::new(RwLock::new(Tables::new(
+                pid,
+                whatami,
+                hlc,
+                queries_default_timeout,
+            ))),
         }
     }
 

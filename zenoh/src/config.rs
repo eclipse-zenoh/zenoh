@@ -134,6 +134,9 @@ validated_struct::validator! {
         /// Whether local writes/queries should reach local subscribers/queryables
         #[intkey(ZN_LOCAL_ROUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
         local_routing: Option<bool>,
+        /// The default timeout to apply to queries in milliseconds
+        #[intkey(ZN_QUERIES_DEFAULT_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
+        queries_default_timeout: Option<ZInt>,
         #[serde(default)]
         pub join_on_startup: JoinConfig {
             #[serde(default)]
