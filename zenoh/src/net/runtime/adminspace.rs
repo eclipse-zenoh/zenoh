@@ -211,7 +211,9 @@ impl Primitives for AdminSpace {
                     &self.context.pid_str,
                     key
                 );
-                // TODO @pierre: call config.delete_key(key)
+                if let Err(e) = self.context.runtime.config.remove(key) {
+                    log::error!("Error deleting conf value {}: {}", key_expr, e)
+                }
             } else {
                 match std::str::from_utf8(payload.contiguous().as_slice()) {
                     Ok(json) => {

@@ -33,6 +33,7 @@ pub struct StorageConfig {
     #[as_mut]
     pub rest: Map<String, Value>,
 }
+#[derive(Debug)]
 pub enum ConfigDiff {
     DeleteBackend(BackendConfig),
     AddBackend(BackendConfig),

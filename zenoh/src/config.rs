@@ -291,7 +291,9 @@ impl Config {
     where
         validated_struct::InsertionError: From<serde_json::Error>,
     {
-        self.insert(key.as_ref(), &mut serde_json::Deserializer::from_str(value))
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        self.insert(key, &mut serde_json::Deserializer::from_str(value))
     }
 
     pub fn insert_json5<K: AsRef<str>>(
@@ -302,7 +304,9 @@ impl Config {
     where
         validated_struct::InsertionError: From<json5::Error>,
     {
-        self.insert(key.as_ref(), &mut json5::Deserializer::from_str(value)?)
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        self.insert(key, &mut json5::Deserializer::from_str(value)?)
     }
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
@@ -313,6 +317,17 @@ impl Config {
         let mut copy = self.clone();
         copy.plugins.sift_privates();
         copy
+    }
+
+    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> crate::Result<()> {
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        if !key.starts_with("plugins/") {
+            bail!(
+                "Removal of values from Config is only supported for keys starting with `plugins/`"
+            )
+        }
+        self.plugins.remove(&key["plugins/".len()..])
     }
 }
 
@@ -396,6 +411,17 @@ impl<T> Clone for Notifier<T> {
         Self {
             inner: self.inner.clone(),
         }
+    }
+}
+impl Notifier<Config> {
+    pub fn remove<K: AsRef<str>>(&self, key: K) -> crate::Result<()> {
+        let key = key.as_ref();
+        {
+            let mut guard = zlock!(self.inner.inner);
+            guard.remove(key)?;
+        }
+        self.notify(key);
+        Ok(())
     }
 }
 impl<T: ValidatedMap> Notifier<T> {
@@ -714,6 +740,71 @@ impl PluginsConfig {
                 PluginLoad {name: name.clone(), paths: None, required}
             }
         })
+    }
+    pub fn remove(&mut self, key: &str) -> crate::Result<()> {
+        let mut split = key.split('/');
+        let plugin = split.next().unwrap();
+        let mut current = match split.next() {
+            Some(first_in_plugin) => first_in_plugin,
+            None => {
+                bail!("Removing plugins dynamically is not supported yet")
+            }
+        };
+        let validator = self.validators.get(plugin);
+        let (old_conf, mut new_conf) = match self.values.get_mut(plugin) {
+            Some(plugin) => {
+                let clone = plugin.clone();
+                (plugin, clone)
+            }
+            None => bail!("No plugin {} to edit", plugin),
+        };
+        let mut remove_from = &mut new_conf;
+        for next in split {
+            match remove_from {
+                Value::Object(o) => match o.get_mut(current) {
+                    Some(v) => unsafe { remove_from = std::mem::transmute(v) },
+                    None => bail!("{:?} has no {} property", o, current),
+                },
+                Value::Array(a) => {
+                    let index: usize = current.parse()?;
+                    if a.len() <= index {
+                        bail!("{:?} cannot be indexed at {}", a, index)
+                    }
+                    remove_from = &mut a[index];
+                }
+                other => bail!("{} cannot be indexed", other),
+            }
+            current = next
+        }
+        match remove_from {
+            Value::Object(o) => {
+                if o.remove(current).is_none() {
+                    bail!("{:?} has no {} property", o, current)
+                }
+            }
+            Value::Array(a) => {
+                let index: usize = current.parse()?;
+                if a.len() <= index {
+                    bail!("{:?} cannot be indexed at {}", a, index)
+                }
+                a.remove(index);
+            }
+            other => bail!("{} cannot be indexed", other),
+        }
+        let new_conf = if let Some(validator) = validator {
+            match validator(
+                &key[("plugins/".len() + plugin.len())..],
+                old_conf.as_object().unwrap(),
+                new_conf.as_object().unwrap(),
+            )? {
+                None => new_conf,
+                Some(new_conf) => Value::Object(new_conf),
+            }
+        } else {
+            new_conf
+        };
+        *old_conf = new_conf;
+        Ok(())
     }
 }
 impl serde::Serialize for PluginsConfig {
