@@ -124,7 +124,7 @@ impl MemoryStorage {
             },
         );
         let handle = event.get_handle();
-        self.timer.add(event).await;
+        self.timer.add_async(event).await;
         handle
     }
 }

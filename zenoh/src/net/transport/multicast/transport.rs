@@ -21,7 +21,6 @@ use crate::net::link::{Link, LinkMulticast, Locator};
 use crate::net::transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -400,7 +399,7 @@ impl TransportMulticastInner {
         }
 
         // Add the event to the timer
-        task::block_on(self.timer.add(event));
+        self.timer.add(event);
 
         log::debug!(
                 "New transport joined on {}: pid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",
