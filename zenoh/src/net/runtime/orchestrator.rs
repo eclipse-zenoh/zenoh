@@ -669,22 +669,19 @@ impl Runtime {
                     IpAddr::V6(addr) => addr.octets().to_vec(),
                 }
             }
+            fn matching_octets(addr: &IpAddr, sock: &UdpSocket) -> usize {
+                octets(addr)
+                    .iter()
+                    .zip(octets(&sock.local_addr().unwrap().ip()))
+                    .map(|(x, y)| x.cmp(&y))
+                    .position(|ord| ord != std::cmp::Ordering::Equal)
+                    .unwrap_or_else(|| octets(addr).len())
+            }
             sockets
                 .iter()
                 .filter(|sock| sock.local_addr().is_ok())
                 .max_by(|sock1, sock2| {
-                    octets(addr)
-                        .iter()
-                        .zip(octets(&sock1.local_addr().unwrap().ip()))
-                        .map(|(x, y)| x.cmp(&y))
-                        .position(|ord| ord != std::cmp::Ordering::Equal)
-                        .cmp(
-                            &octets(addr)
-                                .iter()
-                                .zip(octets(&sock2.local_addr().unwrap().ip()))
-                                .map(|(x, y)| x.cmp(&y))
-                                .position(|ord| ord != std::cmp::Ordering::Equal),
-                        )
+                    matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2))
                 })
         }
 
