@@ -28,7 +28,7 @@ pub struct BackendConfig {
 pub struct StorageConfig {
     pub name: String,
     pub key_expr: String,
-    pub truncate: String,
+    pub strip_prefix: String,
     #[as_ref]
     #[as_mut]
     pub rest: Map<String, Value>,
@@ -252,8 +252,11 @@ impl StorageConfig {
     pub fn to_json_value(&self) -> Value {
         let mut result = self.rest.clone();
         result.insert("key_expr".into(), Value::String(self.key_expr.clone()));
-        if !self.truncate.is_empty() {
-            result.insert("truncate".into(), Value::String(self.truncate.clone()));
+        if !self.strip_prefix.is_empty() {
+            result.insert(
+                "strip_prefix".into(),
+                Value::String(self.strip_prefix.clone()),
+            );
         }
         Value::Object(result)
     }
@@ -277,21 +280,21 @@ impl StorageConfig {
             plugin_name,
             backend_name)
         };
-        let truncate = match config.get("truncate") {
+        let strip_prefix = match config.get("strip_prefix") {
             Some(Value::String(s)) => s.clone(),
             None => String::new(),
-            _ => bail!("`truncate` field of elements of the `storage` field of `{}`'s `{}` backend configuration must be a string",
+            _ => bail!("`strip_prefix` field of elements of the `storage` field of `{}`'s `{}` backend configuration must be a string",
             plugin_name,
             backend_name)
         };
         Ok(StorageConfig {
             name: storage_name.into(),
             key_expr,
-            truncate,
+            strip_prefix,
             rest: config
                 .into_iter()
                 .filter_map(|(k, v)| {
-                    (!["key_expr", "truncate"].contains(&k.as_str()))
+                    (!["key_expr", "strip_prefix"].contains(&k.as_str()))
                         .then(|| (k.clone(), v.clone()))
                 })
                 .collect(),
