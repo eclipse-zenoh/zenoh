@@ -207,8 +207,8 @@ impl StorageRuntimeInner {
                     }
                 };
                 let receiver = queryable.receiver();
-                while flag.load(std::sync::atomic::Ordering::Relaxed) {
-                    if let Some(query) = receiver.next().await {
+                while let Some(query) = receiver.next().await {
+                    if flag.load(std::sync::atomic::Ordering::Relaxed) {
                         query
                             .reply_async(Sample::new(
                                 keyexpr.clone(),
@@ -287,7 +287,10 @@ impl RunningPluginTrait for StorageRuntime {
         Arc::new(move |_path, old, new| {
             let old = PluginConfig::try_from((&name, old))?;
             let new = PluginConfig::try_from((&name, new))?;
+            log::info!("old: {:?}", &old);
+            log::info!("new: {:?}", &new);
             let diffs = ConfigDiff::diffs(old, new);
+            log::info!("diff: {:?}", &diffs);
             { zlock!(runtime).update(diffs) }?;
             Ok(None)
         })
