@@ -1481,11 +1481,19 @@ pub fn route_query(
 
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
-                    let mut outface = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface);
+                    let mut outface_owned = outface.clone();
+                    let outface_mut = get_mut_unchecked(&mut outface_owned);
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
+                    tables.timer.add(TimedEvent::once(
+                        Instant::now() + tables.queries_default_timeout,
+                        QueryCleanup {
+                            tables: tables_ref.clone(),
+                            face: outface_owned,
+                            qid,
+                        },
+                    ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
