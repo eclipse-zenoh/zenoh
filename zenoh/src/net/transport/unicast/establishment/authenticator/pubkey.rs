@@ -524,7 +524,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             (None, None) => {
                 // No multilink
                 let mut guard = zasynclock!(self.state);
-                println!("\nINSERTING: {} {:?}\n", cookie.pid, guard.authenticated);
                 if guard.authenticated.get(&cookie.pid).is_some() {
                     // The peer did not previously express interest in multilink
                     bail!("Invalid multilink pub key on link: {}", link);
