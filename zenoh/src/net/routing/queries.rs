@@ -1479,6 +1479,9 @@ pub fn route_query(
                     src_qid: qid,
                 });
 
+                let timer = tables.timer.clone();
+                let timeout = tables.queries_default_timeout;
+                drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
                     let mut outface_owned = outface.clone();
@@ -1486,8 +1489,8 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
-                    tables.timer.add(TimedEvent::once(
-                        Instant::now() + tables.queries_default_timeout,
+                    timer.add(TimedEvent::once(
+                        Instant::now() + timout,
                         QueryCleanup {
                             tables: tables_ref.clone(),
                             face: outface_owned,
@@ -1517,8 +1520,8 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
-                    tables.timer.add(TimedEvent::once(
-                        Instant::now() + tables.queries_default_timeout,
+                    timer.add(TimedEvent::once(
+                        Instant::now() + timeout,
                         QueryCleanup {
                             tables: tables_ref.clone(),
                             face: outface_owned,
