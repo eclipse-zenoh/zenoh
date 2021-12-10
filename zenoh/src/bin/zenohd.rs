@@ -182,9 +182,6 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_plugins_search_dirs(plugins_search_dirs.map(|c| c.to_owned()).collect())
             .unwrap();
     }
-    if !args.is_present("plugin-nolookup") {
-        config.set_plugins_search_dirs(Vec::new()).unwrap();
-    }
     if let Some(paths) = args.values_of("plugin") {
         for path in paths {
             if path.contains('.') || path.contains('/') {
