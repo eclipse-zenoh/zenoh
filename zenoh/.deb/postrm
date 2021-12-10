@@ -20,8 +20,8 @@ set -e
 
 case "$1" in
     purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    userdel zenoh
-    rm -rf /etc/zenoh
+    userdel zenohd
+    rm -rf /etc/zenohd
     ;;
 
     *)

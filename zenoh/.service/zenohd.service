@@ -14,9 +14,9 @@ KillSignal=SIGINT
 RestartKillSignal=SIGINT
 Restart=on-failure
 PermissionsStartOnly=true
-User=zenoh
+User=zenohd
 StandardOutput=syslog
 StandardError=syslog
-SyslogIdentifier=zenoh
+SyslogIdentifier=zenohd
 [Install]
 WantedBy=multi-user.target

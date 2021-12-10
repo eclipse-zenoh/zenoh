@@ -130,7 +130,7 @@ assets = [
     # binary
     ["target/release/zenohd", "/usr/bin/", "755"],
     # service
-    [".service/zenoh.service","/lib/systemd/system/zenoh.service","644"],
+    [".service/zenohd.service","/lib/systemd/system/zenohd.service","644"],
 ]
 
 
