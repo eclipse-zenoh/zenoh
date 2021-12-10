@@ -109,7 +109,7 @@ impl MemoryStorage {
         Ok(MemoryStorage {
             config: properties,
             map: Arc::new(RwLock::new(HashMap::new())),
-            timer: Timer::new(),
+            timer: Timer::new(false),
         })
     }
 }

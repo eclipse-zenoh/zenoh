@@ -131,7 +131,7 @@ impl TransportMulticastInner {
             peers: Arc::new(RwLock::new(HashMap::new())),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
-            timer: Arc::new(Timer::new()),
+            timer: Arc::new(Timer::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportMulticastStatsAtomic::default()),
         };

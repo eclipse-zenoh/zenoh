@@ -72,7 +72,7 @@ impl Tables {
             whatami,
             face_counter: 0,
             hlc,
-            timer: Timer::new(),
+            timer: Timer::new(true),
             queries_default_timeout,
             root_res: Resource::root(),
             faces: HashMap::new(),

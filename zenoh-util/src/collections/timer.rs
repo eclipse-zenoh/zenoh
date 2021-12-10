@@ -187,7 +187,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new() -> Timer {
+    pub fn new(spawn_blocking: bool) -> Timer {
         // Create the channels
         let (ev_sender, ev_receiver) = bounded::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
         let (sl_sender, sl_receiver) = bounded::<()>(1);
@@ -201,19 +201,24 @@ impl Timer {
 
         // Start the timer task
         let c_e = timer.events.clone();
-        task::spawn(async move {
+        let fut = async move {
             let _ = sl_receiver
                 .recv_async()
                 .race(timer_task(c_e, ev_receiver))
                 .await;
             log::trace!("A - Timer task no longer running...");
-        });
+        };
+        if spawn_blocking {
+            task::spawn_blocking(|| task::block_on(fut));
+        } else {
+            task::spawn(fut);
+        }
 
         // Return the timer object
         timer
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, spawn_blocking: bool) {
         if self.sl_sender.is_none() {
             // Create the channels
             let (ev_sender, ev_receiver) =
@@ -226,19 +231,24 @@ impl Timer {
 
             // Start the timer task
             let c_e = self.events.clone();
-            task::spawn(async move {
+            let fut = async move {
                 let _ = sl_receiver
                     .recv_async()
                     .race(timer_task(c_e, ev_receiver))
                     .await;
-                log::trace!("B - Timer task no longer running...");
-            });
+                log::trace!("A - Timer task no longer running...");
+            };
+            if spawn_blocking {
+                task::spawn_blocking(|| task::block_on(fut));
+            } else {
+                task::spawn(fut);
+            }
         }
     }
 
     #[inline]
-    pub async fn start_async(&mut self) {
-        self.start()
+    pub async fn start_async(&mut self, spawn_blocking: bool) {
+        self.start(spawn_blocking)
     }
 
     pub fn stop(&mut self) {
@@ -280,7 +290,7 @@ impl Timer {
 
 impl Default for Timer {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
@@ -308,7 +318,7 @@ mod tests {
 
         async fn run() {
             // Create the timer
-            let mut timer = Timer::new();
+            let mut timer = Timer::new(false);
 
             // Counter for testing
             let counter = Arc::new(AtomicUsize::new(0));
@@ -415,7 +425,7 @@ mod tests {
             assert_eq!(value, 0);
 
             // Restart the timer
-            timer.start_async().await;
+            timer.start_async(false).await;
 
             // Wait for the events to occur
             task::sleep(to_elapse).await;
