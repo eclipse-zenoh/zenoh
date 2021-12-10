@@ -17,7 +17,7 @@ use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{RwLock, Weak};
 use std::time::Instant;
 use zenoh_util::collections::{Timed, TimedEvent};
 use zenoh_util::sync::get_mut_unchecked;
@@ -1329,25 +1329,27 @@ fn compute_final_route(
 #[derive(Clone)]
 struct QueryCleanup {
     tables: Arc<RwLock<Tables>>,
-    face: Arc<FaceState>,
+    face: Weak<FaceState>,
     qid: ZInt,
 }
 
 #[async_trait]
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
-        let mut _tables = zwrite!(self.tables);
-        if let Some(query) = get_mut_unchecked(&mut self.face)
-            .pending_queries
-            .remove(&self.qid)
-        {
-            log::warn!(
-                "Didn't receive final reply {}:{} from {}: Timeout!",
-                query.src_face,
-                self.qid,
-                self.face
-            );
-            finalize_pending_query(&mut _tables, &query);
+        if let Some(mut face) = self.face.upgrade() {
+            let mut _tables = zwrite!(self.tables);
+            if let Some(query) = get_mut_unchecked(&mut face)
+                .pending_queries
+                .remove(&self.qid)
+            {
+                log::warn!(
+                    "Didn't receive final reply {}:{} from {}: Timeout!",
+                    query.src_face,
+                    self.qid,
+                    face
+                );
+                finalize_pending_query(&mut _tables, &query);
+            }
         }
     }
 }
@@ -1484,8 +1486,8 @@ pub fn route_query(
                 drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
-                    let mut outface_owned = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface_owned);
+                    let mut outface = outface.clone();
+                    let outface_mut = get_mut_unchecked(&mut outface);
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
@@ -1493,7 +1495,7 @@ pub fn route_query(
                         Instant::now() + timout,
                         QueryCleanup {
                             tables: tables_ref.clone(),
-                            face: outface_owned,
+                            face: Arc::downgrade(&outface),
                             qid,
                         },
                     ));
@@ -1515,8 +1517,8 @@ pub fn route_query(
 
                 #[cfg(not(feature = "complete_n"))]
                 for (outface, key_expr, context) in route.values() {
-                    let mut outface_owned = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface_owned);
+                    let mut outface = outface.clone();
+                    let outface_mut = get_mut_unchecked(&mut outface);
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
@@ -1524,7 +1526,7 @@ pub fn route_query(
                         Instant::now() + timeout,
                         QueryCleanup {
                             tables: tables_ref.clone(),
-                            face: outface_owned,
+                            face: Arc::downgrade(&outface),
                             qid,
                         },
                     ));
