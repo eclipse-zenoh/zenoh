@@ -142,7 +142,7 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
             log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
         }
         for f in failures {
-            log::debug!("plugin_failure: {}", f);
+            log::error!("Plugin load failure: {}", f);
         }
 
         for (name, plugin) in handles.running_plugins() {
