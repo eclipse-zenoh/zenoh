@@ -2,18 +2,18 @@ use super::*;
 pub use no_mangle::*;
 
 pub type PluginVTableVersion = u16;
-type LoadPluginResultInner = Result<PluginVTableInner<()>, PluginVTableVersion>;
-pub type LoadPluginResult<A> = Result<PluginVTable<A>, PluginVTableVersion>;
+type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;
+pub type LoadPluginResult<A, B> = Result<PluginVTable<A, B>, PluginVTableVersion>;
 
 /// This number should change any time the internal structure of [`PluginVTable`] changes
 pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 1;
 
-type StartFn<StartArgs> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
+type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
 
 #[repr(C)]
-struct PluginVTableInner<StartArgs> {
+struct PluginVTableInner<StartArgs, RunningPlugin> {
     is_compatible_with: fn(&[PluginId]) -> Result<PluginId, Incompatibility>,
-    start: StartFn<StartArgs>,
+    start: StartFn<StartArgs, RunningPlugin>,
 }
 
 /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
@@ -36,13 +36,14 @@ impl PluginVTablePadding {
 ///
 /// To ensure compatibility, its size and alignment must allow `size_of::<Result<PluginVTable, PluginVTableVersion>>() == 64` (one cache line).
 #[repr(C)]
-pub struct PluginVTable<StartArgs> {
-    inner: PluginVTableInner<StartArgs>,
+pub struct PluginVTable<StartArgs, RunningPlugin> {
+    inner: PluginVTableInner<StartArgs, RunningPlugin>,
     padding: PluginVTablePadding,
 }
 
-impl<StartArgs> PluginVTable<StartArgs> {
-    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs>>() -> Self {
+impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
+    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin>>(
+    ) -> Self {
         PluginVTable {
             inner: PluginVTableInner {
                 is_compatible_with: ConcretePlugin::is_compatible_with,
@@ -80,7 +81,7 @@ pub mod no_mangle {
             #[no_mangle]
             fn load_plugin(
                 version: PluginVTableVersion,
-            ) -> LoadPluginResult<<$ty as Plugin>::StartArgs> {
+            ) -> LoadPluginResult<<$ty as Plugin>::StartArgs, <$ty as Plugin>::RunningPlugin> {
                 if version == PLUGIN_VTABLE_VERSION {
                     Ok(PluginVTable::new::<$ty>())
                 } else {

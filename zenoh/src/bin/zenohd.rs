@@ -108,9 +108,8 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::builder()
-            // Static plugins are to be added here, with `.add_static::<PluginType>()`
-            .into_dynamic(config.libloader());
+        let mut plugins = PluginsManager::new(config.libloader());
+        // Static plugins are to be added here, with `.add_static::<PluginType>()`
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {
                 name,
@@ -137,20 +136,23 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
             }
         };
 
-        let (handles, failures) = plugins.build().start(&runtime);
-        for p in handles.plugins() {
-            log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
-        }
-        for f in failures {
-            log::error!("Plugin load failure: {}", f);
-        }
-
-        for (name, plugin) in handles.running_plugins() {
-            let hook = plugin.config_checker();
-            runtime.config.lock().add_plugin_validator(name, hook)
+        for (name, path, start_result) in plugins.start_all(&runtime) {
+            match start_result {
+                Ok(true) => log::debug!("started plugin {} form {:?}", name, path),
+                Ok(false) => log::warn!("plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+                Err(e) => log::debug!("plugin failure: {}", e)
+            }
         }
 
-        AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;
+        {
+            let mut config_guard = runtime.config.lock();
+            for (name, plugin) in plugins.running_plugins() {
+                let hook = plugin.config_checker();
+                config_guard.add_plugin_validator(name, hook)
+            }
+        }
+
+        AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });

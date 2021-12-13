@@ -94,6 +94,7 @@ rcgen = { version = "0.8.9", optional = true }
 regex = "1"
 rsa = { git = "https://github.com/RustCrypto/RSA.git", optional = true }
 serde_json = "1.0"
+serde_yaml = "0.8"
 serde = "1.0.123"
 shared_memory = { version = "=0.12.0", optional = true }
 socket2 = "0.4.0"
@@ -130,7 +131,7 @@ assets = [
     # binary
     ["target/release/zenohd", "/usr/bin/", "755"],
     # service
-    [".service/zenohd.service","/lib/systemd/system/zenohd.service","644"],
+    [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]
 
 

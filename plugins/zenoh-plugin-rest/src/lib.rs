@@ -152,9 +152,10 @@ impl Plugin for RestPlugin {
         }
     }
     type StartArgs = Runtime;
+    type RunningPlugin = zenoh::plugins::RuntimePlugin;
     const STATIC_NAME: &'static str = "rest";
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg: &serde_json::Value = match config.plugin(name) {
             Some(value) => value,
@@ -195,11 +196,21 @@ impl Plugin for RestPlugin {
     }
 }
 struct RunningPlugin;
-impl RunningPluginTrait for RunningPlugin {
+impl<'a> RunningPluginTrait<'a> for RunningPlugin {
     fn config_checker(&self) -> ValidationFunction {
         Arc::new(|_, _, _| {
             Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
         })
+    }
+    type GetterIn = zenoh::plugins::GetterIn<'a>;
+    type GetterOut = zenoh::plugins::GetterOut<'a>;
+    type SetterIn = zenoh::plugins::SetterIn<'a>;
+    type SetterOut = zenoh::plugins::SetterOut<'a>;
+    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
+        todo!()
+    }
+    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
+        todo!()
     }
 }
 

@@ -53,8 +53,9 @@ impl Plugin for StoragesPlugin {
     const STATIC_NAME: &'static str = "storages";
 
     type StartArgs = Runtime;
+    type RunningPlugin = zenoh::plugins::RuntimePlugin;
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         std::mem::drop(env_logger::try_init());
         let config =
             { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
@@ -280,7 +281,7 @@ impl From<StorageRuntimeInner> for StorageRuntime {
         StorageRuntime(Arc::new(Mutex::new(inner)))
     }
 }
-impl RunningPluginTrait for StorageRuntime {
+impl<'a> RunningPluginTrait<'a> for StorageRuntime {
     fn config_checker(&self) -> ValidationFunction {
         let name = { zlock!(self.0).name.clone() };
         let runtime = self.0.clone();
@@ -294,6 +295,16 @@ impl RunningPluginTrait for StorageRuntime {
             { zlock!(runtime).update(diffs) }?;
             Ok(None)
         })
+    }
+    type GetterIn = zenoh::plugins::GetterIn<'a>;
+    type GetterOut = zenoh::plugins::GetterOut<'a>;
+    type SetterIn = zenoh::plugins::SetterIn<'a>;
+    type SetterOut = zenoh::plugins::SetterOut<'a>;
+    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
+        todo!()
+    }
+    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
+        todo!()
     }
 }
 

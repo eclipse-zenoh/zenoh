@@ -23,6 +23,7 @@ use super::protocol::{
 use super::routing::face::Face;
 use super::transport::{Primitives, TransportUnicast};
 use super::Runtime;
+use crate::plugins::PluginsManager;
 use async_std::sync::Arc;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
@@ -30,11 +31,10 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: PluginsHandles,
+    plugins_mgr: Mutex<PluginsManager>,
     pid_str: String,
     version: String,
 }
@@ -53,8 +53,12 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
+enum PluginDiff {
+    Delete(String),
+    Start(crate::config::PluginLoad),
+}
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
         let root_key = format!("/@/router/{}", pid_str);
 
@@ -77,9 +81,16 @@ impl AdminSpace {
                 linkstate_peers_data(context, key, args).boxed()
             })),
         );
+
+        let mut active_plugins = plugins_mgr
+            .running_plugins_info()
+            .into_iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect::<HashMap<_, _>>();
+
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            plugins_mgr,
+            plugins_mgr: Mutex::new(plugins_mgr),
             pid_str,
             version,
         });
@@ -89,6 +100,96 @@ impl AdminSpace {
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
+        });
+
+        let cfg_rx = admin.context.runtime.config.subscribe();
+        task::spawn({
+            let admin = admin.clone();
+            async move {
+                while let Ok(change) = cfg_rx.recv_async().await {
+                    let change = change.strip_prefix('/').unwrap_or(&change);
+                    if !change.starts_with("plugins") {
+                        continue;
+                    }
+
+                    let requested_plugins = {
+                        let guard = admin.context.runtime.config.lock();
+                        guard.plugins().load_requests().collect::<Vec<_>>()
+                    };
+                    let mut diffs = Vec::new();
+                    for plugin in active_plugins.keys() {
+                        if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                            diffs.push(PluginDiff::Delete(plugin.clone()))
+                        }
+                    }
+                    for request in requested_plugins {
+                        if let Some(active) = active_plugins.get(&request.name) {
+                            if request
+                                .paths
+                                .as_ref()
+                                .map(|p| p.contains(active))
+                                .unwrap_or(true)
+                            {
+                                continue;
+                            }
+                            diffs.push(PluginDiff::Delete(request.name.clone()))
+                        }
+                        diffs.push(PluginDiff::Start(request))
+                    }
+                    let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
+                    for diff in diffs {
+                        match diff {
+                            PluginDiff::Delete(plugin) => {
+                                active_plugins.remove(&plugin);
+                                plugins_mgr.stop(&plugin);
+                            }
+                            PluginDiff::Start(plugin) => {
+                                let load = match plugin.paths {
+                                    Some(paths) => plugins_mgr
+                                        .load_plugin_by_paths(plugin.name.clone(), &paths),
+                                    None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
+                                };
+                                match load {
+                                    Err(e) => {
+                                        if plugin.required {
+                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                        } else {
+                                            log::error!(
+                                                "Failed to load plugin `{}`: {}",
+                                                plugin.name,
+                                                e
+                                            )
+                                        }
+                                    }
+                                    Ok(path) => {
+                                        log::info!(
+                                            "Loaded plugin `{}` from {}",
+                                            &plugin.name,
+                                            &path
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    for (name, path, status) in plugins_mgr.start_all(&admin.context.runtime) {
+                        match status {
+                            Ok(true) => {
+                                log::info!("Succesfully started plugin `{}` from {}", name, path)
+                            }
+                            Ok(false) => {
+                                log::info!("Succesfully started plugin `{}` from {}", name, path)
+                            }
+                            Err(e) => log::error!(
+                                "Failed to start plugin `{}` (loaded from {}): {}",
+                                name,
+                                path,
+                                e
+                            ),
+                        }
+                    }
+                }
+            }
         });
 
         let primitives = runtime.router.new_primitives(admin.clone());
@@ -341,17 +442,18 @@ pub async fn router_data(
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    let plugins: Vec<serde_json::Value> = context
-        .plugins_mgr
-        .plugins()
-        .iter()
-        .map(|plugin| {
-            json!({
-                "name": plugin.name,
-                "path": plugin.path
+    let plugins: Vec<serde_json::Value> = {
+        zlock!(context.plugins_mgr)
+            .running_plugins_info()
+            .iter()
+            .map(|(name, path)| {
+                json!({
+                    "name": name,
+                    "path": path
+                })
             })
-        })
-        .collect();
+            .collect()
+    };
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr

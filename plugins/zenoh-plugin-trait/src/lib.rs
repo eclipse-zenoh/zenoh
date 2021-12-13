@@ -60,7 +60,7 @@ impl std::fmt::Display for Incompatibility {
 
 impl Error for Incompatibility {}
 
-/// Zenoh plugins must implement [`Plugin<Requirements=Option<Arc<dyn Fn(&str, &serde_json::Value)->Result<(), String>>, StartArgs=zenoh::net::runtime::Runtime>`](Plugin)
+/// Zenoh plugins must implement [`Plugin<StartArgs=zenoh::net::runtime::Runtime>`](Plugin)
 ///
 /// Plugin lifecycle:
 /// * Each plugin's identity is recovered using `compatibility`
@@ -70,6 +70,7 @@ impl Error for Incompatibility {}
 /// *
 pub trait Plugin: Sized + 'static {
     type StartArgs;
+    type RunningPlugin;
     const STATIC_NAME: &'static str;
 
     /// Returns this plugin's `Compatibility`.
@@ -97,10 +98,9 @@ pub trait Plugin: Sized + 'static {
     }
 
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<RunningPlugin>;
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin>;
 }
 
-pub type RunningPlugin = Box<dyn RunningPluginTrait>;
 pub type ValidationFunction = Arc<
     dyn Fn(
             &str,
@@ -111,6 +111,15 @@ pub type ValidationFunction = Arc<
         + Sync,
 >;
 
-pub trait RunningPluginTrait: Send + Sync + Any {
+// pub type GetCallback = Arc<dyn Fn(&Selector<'_>) -> ZResult<Vec<Reply>>>;
+// pub type PutCallback = Arc<dyn Fn(&KeyExpr<'_>, &Value, Kind) -> ZResult<()>>;
+
+pub trait RunningPluginTrait<'a>: Send + Sync + Any {
+    type GetterIn;
+    type GetterOut;
+    type SetterIn;
+    type SetterOut;
     fn config_checker(&self) -> ValidationFunction;
+    fn adminspace_getter(&'a self, input: Self::GetterIn) -> Self::GetterOut;
+    fn adminspace_setter(&'a mut self, input: Self::SetterIn) -> Self::SetterOut;
 }

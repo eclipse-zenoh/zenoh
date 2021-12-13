@@ -12,10 +12,26 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::runtime::Runtime;
+use crate::prelude::{KeyExpr, SampleKind, Selector, Value};
+use crate::Result as ZResult;
 use zenoh_util::zconfigurable;
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
 }
 
+pub use zenoh_plugin_trait::RunningPluginTrait;
 pub type StartArgs = Runtime;
-pub type PluginsManager = zenoh_plugin_trait::loading::StaticPlugins<(), (), StartArgs>;
+pub type GetterIn<'a> = &'a Selector<'a>;
+pub type GetterOut<'a> = ZResult<serde_json::Value>;
+pub type SetterIn<'a> = (&'a KeyExpr<'a>, &'a SampleKind, &'a Value);
+pub type SetterOut<'a> = ZResult<()>;
+pub type RuntimePlugin = Box<
+    dyn for<'a> RunningPluginTrait<
+            'a,
+            GetterIn = GetterIn<'a>,
+            GetterOut = GetterOut<'a>,
+            SetterIn = SetterIn<'a>,
+            SetterOut = SetterOut<'a>,
+        > + 'static,
+>;
+pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RuntimePlugin>;

@@ -1,385 +1,204 @@
 use crate::vtable::*;
 use crate::*;
 use libloading::Library;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::{bail, LibLoader};
 
-type Compats = (Vec<PluginId>, Vec<Option<Incompatibility>>);
-
-pub struct StaticPlugins<A, B, C> {
-    a: std::marker::PhantomData<A>,
-    b: std::marker::PhantomData<B>,
-    c: std::marker::PhantomData<C>,
+pub struct PluginsManager<StartArgs, RunningPlugin> {
+    loader: LibLoader,
+    plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
+    running_plugins: HashMap<String, RunningPlugin>,
 }
-impl<C> StaticPlugins<(), (), C> {
-    #[inline(always)]
-    pub fn builder() -> Self {
-        Self::new()
-    }
-}
-impl<A, B, C> StaticPlugins<A, B, C> {
-    #[inline(always)]
-    fn new() -> Self {
-        StaticPlugins {
-            a: Default::default(),
-            b: Default::default(),
-            c: Default::default(),
-        }
-    }
-    #[inline(always)]
-    pub fn add_static<E>(self) -> StaticPlugins<E, Self, C> {
-        StaticPlugins::new()
-    }
-
-    pub fn into_dynamic(self, loader: LibLoader) -> DynamicLoader<Self>
-    where
-        Self: MultipleStaticPlugins,
-    {
-        DynamicLoader {
-            _static: self,
+impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, RunningPlugin> {
+    /// Constructs a new plugin manager.
+    pub fn new(loader: LibLoader) -> Self {
+        PluginsManager {
             loader,
-            dynamic_plugins: vec![],
+            plugin_starters: Vec::new(),
+            running_plugins: HashMap::new(),
         }
     }
-}
 
-impl<A, B, C> Default for StaticPlugins<A, B, C> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-pub trait MergeRequirements {
-    fn zero() -> Self;
-    fn merge(self, other: Self) -> Self;
-}
-
-impl<T> MergeRequirements for Vec<T> {
-    fn zero() -> Self {
-        Default::default()
-    }
-    fn merge(mut self, other: Self) -> Self {
-        self.extend(other);
+    /// Adds a statically linked plugin to the manager.
+    pub fn add_static<
+        P: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin> + Send + Sync,
+    >(
+        mut self,
+    ) -> Self {
+        let plugin_starter: StaticPlugin<P> = StaticPlugin::new();
+        self.plugin_starters.push(Box::new(plugin_starter));
         self
     }
-}
 
-type StartResult = (Vec<(String, RunningPlugin)>, Vec<Box<dyn Error>>);
-
-pub trait MultipleStaticPlugins: Sized {
-    type StartArgs;
-    fn merge_requirements_and_conflicts() -> Compats;
-
-    fn start(
-        it: &mut std::vec::IntoIter<Option<Incompatibility>>,
-        args: &Self::StartArgs,
-    ) -> StartResult;
-
-    fn __len(cur: usize) -> usize;
-    fn len() -> usize {
-        Self::__len(0)
-    }
-    fn build(self) -> (StaticLauncher<Self>, Vec<PluginId>) {
-        let (ids, should_run) = Self::merge_requirements_and_conflicts();
-        (StaticLauncher::new(self, should_run, &ids), ids)
-    }
-}
-impl<StartArgs> MultipleStaticPlugins for StaticPlugins<(), (), StartArgs> {
-    type StartArgs = StartArgs;
-    #[inline(always)]
-    fn merge_requirements_and_conflicts() -> Compats {
-        (vec![], vec![])
-    }
-
-    fn __len(cur: usize) -> usize {
-        cur
-    }
-
-    fn start(
-        _it: &mut std::vec::IntoIter<Option<Incompatibility>>,
-        _args: &StartArgs,
-    ) -> StartResult {
-        (vec![], vec![])
-    }
-}
-impl<
-        StartArgs,
-        A: Plugin<StartArgs = StartArgs>,
-        B: MultipleStaticPlugins<StartArgs = StartArgs>,
-    > MultipleStaticPlugins for StaticPlugins<A, B, StartArgs>
-{
-    type StartArgs = StartArgs;
-    #[inline(always)]
-    fn merge_requirements_and_conflicts() -> Compats {
-        let (mut compats, mut should_init) = B::merge_requirements_and_conflicts();
-        match A::is_compatible_with(&compats) {
-            Ok(c) => {
-                compats.push(c);
-                should_init.push(None);
-            }
-            Err(i) => {
-                should_init.push(Some(i));
-            }
+    /// Starts `plugin`.
+    ///
+    /// `Ok(true)` => plugin was successfully started  
+    /// `Ok(false)` => plugin was running already, nothing happened  
+    /// `Err(e)` => starting the plugin failed due to `e`
+    pub fn start(&mut self, plugin: &str, args: &StartArgs) -> ZResult<bool> {
+        if self.running_plugins.contains_key(plugin) {
+            return Ok(false);
         }
-        (compats, should_init)
-    }
-
-    fn __len(cur: usize) -> usize {
-        B::__len(cur + 1)
-    }
-
-    #[inline(always)]
-    fn start(
-        it: &mut std::vec::IntoIter<Option<Incompatibility>>,
-        args: &StartArgs,
-    ) -> StartResult {
-        let (mut ok, mut err) = B::start(it, args);
-        match it.next().unwrap() {
-            None => match A::start(A::STATIC_NAME, args) {
-                Ok(s) => ok.push((A::STATIC_NAME.into(), s)),
-                Err(e) => err.push(e),
-            },
-            Some(i) => err.push(Box::new(i)),
+        match self.plugin_starters.iter().find(|p| p.name() == plugin) {
+            Some(s) => s.start(args)?,
+            None => bail!("Plugin starter for `{}` not found", plugin),
         };
-        (ok, err)
-    }
-}
-
-pub struct StaticLauncher<StaticPlugins> {
-    _static_plugins: StaticPlugins,
-    should_run: Vec<Option<Incompatibility>>,
-    ids: Vec<String>,
-}
-
-type HandlesAndErrors<StartArgs> = (PluginsHandles<StartArgs>, Vec<Box<dyn Error>>);
-
-impl<StaticPlugins> StaticLauncher<StaticPlugins> {
-    fn new(
-        static_plugins: StaticPlugins,
-        should_run: Vec<Option<Incompatibility>>,
-        ids: &[PluginId],
-    ) -> Self {
-        StaticLauncher {
-            _static_plugins: static_plugins,
-            ids: ids
-                .iter()
-                .zip(&should_run)
-                .filter_map(|(id, incompat)| {
-                    if incompat.is_none() {
-                        Some(id.uid.to_owned())
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            should_run,
-        }
+        Ok(true)
     }
 
-    pub fn incompatibilities(&self) -> impl Iterator<Item = &Incompatibility> {
-        self.should_run.iter().filter_map(Option::as_ref)
-    }
-
-    pub fn start<StartArgs>(self, args: &StartArgs) -> HandlesAndErrors<StaticPlugins::StartArgs>
-    where
-        StaticPlugins: MultipleStaticPlugins<StartArgs = StartArgs>,
-    {
-        let names = self.ids;
-        let (running_plugins, errors) =
-            StaticPlugins::start(&mut self.should_run.into_iter(), args);
-        (
-            PluginsHandles {
-                handles: StaticPluginsHandles {
-                    running_plugins,
-                    names,
+    /// Lazily starts all plugins.
+    ///
+    /// `Ok(Ok(name))` => plugin `name` was successfully started  
+    /// `Ok(Err(name))` => plugin `name` wasn't started because it was already running  
+    /// `Err(e)` => Error `e` occured when trying to start plugin `name`
+    pub fn start_all<'l>(
+        &'l mut self,
+        args: &'l StartArgs,
+    ) -> impl Iterator<Item = (&str, &str, ZResult<bool>)> + 'l {
+        let PluginsManager {
+            plugin_starters: plugins_starters,
+            running_plugins,
+            ..
+        } = self;
+        plugins_starters.iter().map(move |p| {
+            (
+                p.name(),
+                p.path(),
+                match running_plugins.entry(p.name().into()) {
+                    std::collections::hash_map::Entry::Occupied(_) => Ok(false),
+                    std::collections::hash_map::Entry::Vacant(e) => match p.start(args) {
+                        Ok(p) => {
+                            e.insert(p);
+                            Ok(true)
+                        }
+                        Err(e) => Err(e),
+                    },
                 },
-                dynamic_plugins: Vec::new(),
-            },
-            errors,
-        )
+            )
+        })
     }
-}
 
-pub struct StaticPluginsHandles {
-    running_plugins: Vec<(String, RunningPlugin)>,
-    names: Vec<String>,
-}
-
-impl AsRef<Vec<(String, RunningPlugin)>> for StaticPluginsHandles {
-    fn as_ref(&self) -> &Vec<(String, RunningPlugin)> {
-        &self.running_plugins
+    /// Stops `plugin`, returning `true` if it was indeed running.
+    pub fn stop(&mut self, plugin: &str) -> bool {
+        let result = self.running_plugins.remove(plugin).is_some();
+        self.plugin_starters
+            .retain(|p| p.name() == plugin || !p.deleteable());
+        result
     }
-}
 
-impl AsMut<Vec<(String, RunningPlugin)>> for StaticPluginsHandles {
-    fn as_mut(&mut self) -> &mut Vec<(String, RunningPlugin)> {
-        &mut self.running_plugins
+    pub fn available_plugins(&self) -> impl Iterator<Item = &str> {
+        self.plugin_starters.iter().map(|p| p.name())
     }
-}
+    pub fn running_plugins_info(&self) -> Vec<(&str, &str)> {
+        let mut result = Vec::with_capacity(self.running_plugins.len());
+        for p in self.plugin_starters.iter() {
+            let name = p.name();
+            if self.running_plugins.contains_key(name) && !result.iter().any(|(p, _)| p == &name) {
+                result.push((name, p.path()))
+            }
+        }
+        result
+    }
+    pub fn running_plugins(&self) -> impl Iterator<Item = (&str, &RunningPlugin)> {
+        self.running_plugins.iter().map(|(s, p)| (s.as_str(), p))
+    }
+    pub fn plugin(&self, name: &str) -> Option<&RunningPlugin> {
+        self.running_plugins.get(name)
+    }
 
-pub struct DynamicLoader<Statics: MultipleStaticPlugins> {
-    _static: Statics,
-    loader: LibLoader,
-    dynamic_plugins: Vec<DynamicPlugin<Statics::StartArgs>>,
-}
-
-impl<StaticPlugins: MultipleStaticPlugins> DynamicLoader<StaticPlugins> {
-    pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<()> {
+    pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
         let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", &name))? };
         let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
-        self.dynamic_plugins.push(plugin);
-        Ok(())
+        let path = plugin.path().into();
+        self.plugin_starters.push(Box::new(plugin));
+        Ok(path)
     }
     pub fn load_plugin_by_paths<P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: String,
         paths: &[P],
-    ) -> ZResult<()> {
+    ) -> ZResult<String> {
         for path in paths {
             let path = path.as_ref();
             match unsafe { LibLoader::load_file(path) } {
                 Ok((lib, p)) => {
-                    self.dynamic_plugins.push(
-                        DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION)));
-                    return Ok(());
+                    let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
+                    let path = plugin.path().into();
+                    self.plugin_starters.push(Box::new(plugin));
+                    return Ok(path);
                 }
                 Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
         }
         bail!("Plugin '{}' not found in {:?}", name, &paths)
     }
-    pub fn search_and_load_plugins(mut self, prefix: Option<&str>) -> Self {
-        let libs = unsafe { self.loader.load_all_with_prefix(prefix) };
-        self.dynamic_plugins.extend(
-            libs.into_iter()
-                .map(|(lib, path, name)| (DynamicPlugin::new(name, lib, path.clone()), path))
-                .filter_map(|(p, path)| match p {
-                    Ok(p) => Some(p),
-                    Err(e) => {
-                        log::debug!("{:?} failed to load: {:?}", path, e);
-                        None
-                    }
-                }),
-        );
-        self
-    }
-
-    pub fn build(self) -> DynamicStarter<StaticPlugins>
-    where
-        StaticPlugins: MultipleStaticPlugins,
-    {
-        let (static_launcher, mut compatibilites) = self._static.build();
-        let mut incompatibilities = Vec::new();
-        let dynamic_plugins = self.dynamic_plugins;
-        for plugin in &dynamic_plugins {
-            match plugin.is_compatible_with(&compatibilites) {
-                Ok(c) => {
-                    compatibilites.push(c);
-                    incompatibilities.push(None);
-                }
-                Err(i) => incompatibilities.push(Some(i)),
-            }
-        }
-        DynamicStarter {
-            static_launcher,
-            dynamic_plugins,
-            incompatibilities,
+}
+trait PluginStarter<StartArgs, RunningPlugin> {
+    fn name(&self) -> &str;
+    fn path(&self) -> &str;
+    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin>;
+    fn deleteable(&self) -> bool;
+}
+struct StaticPlugin<P> {
+    inner: std::marker::PhantomData<P>,
+}
+impl<P> StaticPlugin<P> {
+    fn new() -> Self {
+        StaticPlugin {
+            inner: std::marker::PhantomData,
         }
     }
 }
-
-pub struct DynamicStarter<StaticPlugins: MultipleStaticPlugins> {
-    static_launcher: StaticLauncher<StaticPlugins>,
-    dynamic_plugins: Vec<DynamicPlugin<StaticPlugins::StartArgs>>,
-    incompatibilities: Vec<Option<Incompatibility>>,
+impl<StartArgs, RunningPlugin, P> PluginStarter<StartArgs, RunningPlugin> for StaticPlugin<P>
+where
+    P: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin>,
+{
+    fn name(&self) -> &str {
+        P::STATIC_NAME
+    }
+    fn path(&self) -> &str {
+        "<statically_linked>"
+    }
+    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
+        P::start(P::STATIC_NAME, args)
+    }
+    fn deleteable(&self) -> bool {
+        false
+    }
 }
-
-impl<StaticPlugins: MultipleStaticPlugins> DynamicStarter<StaticPlugins> {
-    pub fn start(
-        self,
-        args: &StaticPlugins::StartArgs,
-    ) -> HandlesAndErrors<StaticPlugins::StartArgs> {
-        use std::cell::UnsafeCell;
-        let (mut handle, errors) = self.static_launcher.start(args);
-        let errors = UnsafeCell::new(errors);
-        let dynamic_plugins = self.dynamic_plugins;
-        for plugin in dynamic_plugins
-            .iter()
-            .zip(self.incompatibilities.into_iter())
-            .filter_map(|(p, i)| match i {
-                Some(i) => {
-                    unsafe { &mut *errors.get() }.push(Box::new(i));
-                    None
-                }
-                None => Some(p),
-            })
-        {
-            let name = plugin.name.clone();
-            match plugin.start(args) {
-                Ok(p) => handle.handles.running_plugins.push((name, p)),
-                Err(e) => unsafe { &mut *errors.get() }.push(e),
-            }
-        }
-        handle.dynamic_plugins.extend(dynamic_plugins);
-        (handle, errors.into_inner())
+impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
+    for DynamicPlugin<StartArgs, RunningPlugin>
+{
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn path(&self) -> &str {
+        self.path.to_str().unwrap()
+    }
+    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
+        self.vtable.start(self.name(), args)
+    }
+    fn deleteable(&self) -> bool {
+        true
     }
 }
 
-pub struct PluginsHandles<StartArgs> {
-    handles: StaticPluginsHandles,
-    dynamic_plugins: Vec<DynamicPlugin<StartArgs>>,
-}
-
-pub struct PluginDescription<'l> {
-    pub name: &'l str,
-    pub path: &'l str,
-}
-
-impl<B> PluginsHandles<B> {
-    pub fn plugins(&self) -> Vec<PluginDescription> {
-        self.handles
-            .names
-            .iter()
-            .map(|name| PluginDescription {
-                name,
-                path: "<static-linking>",
-            })
-            .chain(self.dynamic_plugins.iter().map(|p| PluginDescription {
-                name: &p.name,
-                path: p.path.to_str().unwrap(),
-            }))
-            .collect()
-    }
-    pub fn running_plugins(&self) -> &[(String, RunningPlugin)] {
-        &self.handles.running_plugins
-    }
-}
-
-impl<B> AsRef<Vec<(String, RunningPlugin)>> for PluginsHandles<B> {
-    fn as_ref(&self) -> &Vec<(String, RunningPlugin)> {
-        self.handles.as_ref()
-    }
-}
-
-impl<B> AsMut<Vec<(String, RunningPlugin)>> for PluginsHandles<B> {
-    fn as_mut(&mut self) -> &mut Vec<(String, RunningPlugin)> {
-        self.handles.as_mut()
-    }
-}
-
-pub struct DynamicPlugin<StartArgs> {
+pub struct DynamicPlugin<StartArgs, RunningPlugin> {
     _lib: Library,
-    vtable: PluginVTable<StartArgs>,
+    vtable: PluginVTable<StartArgs, RunningPlugin>,
     pub name: String,
     pub path: PathBuf,
 }
 
-impl<StartArgs> DynamicPlugin<StartArgs> {
+impl<StartArgs, RunningPlugin> DynamicPlugin<StartArgs, RunningPlugin> {
     fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, Option<PluginVTableVersion>> {
         let load_plugin = unsafe {
-            lib.get::<fn(PluginVTableVersion) -> LoadPluginResult<StartArgs>>(b"load_plugin")
-                .map_err(|_| None)?
+            lib.get::<fn(PluginVTableVersion) -> LoadPluginResult<StartArgs, RunningPlugin>>(
+                b"load_plugin",
+            )
+            .map_err(|_| None)?
         };
         match load_plugin(PLUGIN_VTABLE_VERSION) {
             Ok(vtable) => Ok(DynamicPlugin {
@@ -390,13 +209,5 @@ impl<StartArgs> DynamicPlugin<StartArgs> {
             }),
             Err(plugin_version) => Err(Some(plugin_version)),
         }
-    }
-
-    fn is_compatible_with(&self, others: &[PluginId]) -> Result<PluginId, Incompatibility> {
-        self.vtable.is_compatible_with(others)
-    }
-
-    fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
-        self.vtable.start(&self.name, args)
     }
 }

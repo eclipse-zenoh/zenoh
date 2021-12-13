@@ -38,6 +38,7 @@ zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 const DEFAULT_SELECTOR: &str = "/demo/example/**";
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
+    type RunningPlugin = zenoh::plugins::RuntimePlugin;
     fn compatibility() -> zenoh_plugin_trait::PluginId {
         zenoh_plugin_trait::PluginId {
             uid: "zenoh-example-plugin",
@@ -45,7 +46,7 @@ impl Plugin for ExamplePlugin {
     }
     const STATIC_NAME: &'static str = "example";
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         let selector;
@@ -77,7 +78,7 @@ struct RunningPluginInner {
 }
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
-impl RunningPluginTrait for RunningPlugin {
+impl<'a> RunningPluginTrait<'a> for RunningPlugin {
     fn config_checker(&self) -> ValidationFunction {
         let guard = zlock!(&self.0);
         let name = guard.name.clone();
@@ -111,6 +112,23 @@ impl RunningPluginTrait for RunningPlugin {
             }
             bail!("unknown option {} for {}", path, &name)
         })
+    }
+
+    type GetterIn = zenoh::plugins::GetterIn<'a>;
+    type GetterOut = zenoh::plugins::GetterOut<'a>;
+    type SetterIn = zenoh::plugins::SetterIn<'a>;
+    type SetterOut = zenoh::plugins::SetterOut<'a>;
+    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
+        bail!(
+            "adminspace_getter not supported by example-plugin `{}`",
+            &zlock!(self.0).name
+        )
+    }
+    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
+        bail!(
+            "adminspace_setter not supported by example-plugin `{}`",
+            &zlock!(self.0).name
+        )
     }
 }
 impl Drop for RunningPlugin {
