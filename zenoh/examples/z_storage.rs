@@ -13,10 +13,12 @@
 //
 #![recursion_limit = "256"]
 
+use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use std::collections::HashMap;
+use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
@@ -67,7 +69,11 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break} else {async_std::task::sleep(std::time::Duration::from_secs(1)).await}
+                match input[0] {
+                    b'q' => break,
+                    0 => sleep(Duration::from_secs(1)).await,
+                    _ => (),
+                }
             }
         );
     }

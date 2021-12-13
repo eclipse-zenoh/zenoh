@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::time::Duration;
 use zenoh::config::Config;
 use zenoh_ext::*;
 
@@ -54,10 +56,14 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' { break }
-                else if input[0] == b'd' {
-                    println!("Do query again");
-                    subscriber.query().await.unwrap()
+                match input[0] {
+                    b'q' => break,
+                    b'd' => {
+                        println!("Do query again");
+                        subscriber.query().await.unwrap()
+                    }
+                    0 => sleep(Duration::from_secs(1)).await,
+                    _ => (),
                 }
             }
         );

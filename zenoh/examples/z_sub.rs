@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::time::Duration;
 use zenoh::config::Config;
 
 #[async_std::main]
@@ -42,7 +44,11 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break}
+                match input[0] {
+                    b'q' => break,
+                    0 => sleep(Duration::from_secs(1)).await,
+                    _ => (),
+                }
             }
         );
     }
