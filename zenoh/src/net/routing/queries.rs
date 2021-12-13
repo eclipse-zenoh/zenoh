@@ -18,8 +18,9 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{RwLock, Weak};
-use std::time::Instant;
-use zenoh_util::collections::{Timed, TimedEvent};
+// use std::time::Instant;
+// use zenoh_util::collections::{Timed, TimedEvent};
+use zenoh_util::collections::Timed;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
@@ -1481,8 +1482,8 @@ pub fn route_query(
                     src_qid: qid,
                 });
 
-                let timer = tables.timer.clone();
-                let timeout = tables.queries_default_timeout;
+                // let timer = tables.timer.clone();
+                // let timeout = tables.queries_default_timeout;
                 drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
@@ -1491,14 +1492,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
-                    timer.add(TimedEvent::once(
-                        Instant::now() + timout,
-                        QueryCleanup {
-                            tables: tables_ref.clone(),
-                            face: Arc::downgrade(&outface),
-                            qid,
-                        },
-                    ));
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
@@ -1522,14 +1523,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
-                    timer.add(TimedEvent::once(
-                        Instant::now() + timeout,
-                        QueryCleanup {
-                            tables: tables_ref.clone(),
-                            face: Arc::downgrade(&outface),
-                            qid,
-                        },
-                    ));
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timeout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
