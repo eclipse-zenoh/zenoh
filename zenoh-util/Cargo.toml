@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-util"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
