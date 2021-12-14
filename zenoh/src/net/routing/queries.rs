@@ -1506,8 +1506,8 @@ pub fn route_query(
                         );
                     }
 
-                    let _timer = tables.timer.clone();
-                    let _timeout = tables.queries_default_timeout;
+                    // let _timer = tables.timer.clone();
+                    // let _timeout = tables.queries_default_timeout;
                     drop(tables);
                     // for ((outface, _, _), _) in route.values() {
                     //     timer.add(TimedEvent::once(
@@ -1542,8 +1542,8 @@ pub fn route_query(
                         );
                     }
 
-                    let _timer = tables.timer.clone();
-                    let _timeout = tables.queries_default_timeout;
+                    // let _timer = tables.timer.clone();
+                    // let _timeout = tables.queries_default_timeout;
                     drop(tables);
                     // for (outface, _, _) in route.values() {
                     //     timer.add(TimedEvent::once(
