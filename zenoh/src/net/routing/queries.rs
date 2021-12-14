@@ -1507,6 +1507,7 @@ pub fn route_query(
 
                     let timer = tables.timer.clone();
                     let timeout = tables.queries_default_timeout;
+                    drop(tables);
                     for ((outface, _, _), _) in route.values() {
                         timer.add(TimedEvent::once(
                             Instant::now() + timeout,
@@ -1542,6 +1543,7 @@ pub fn route_query(
 
                     let timer = tables.timer.clone();
                     let timeout = tables.queries_default_timeout;
+                    drop(tables);
                     for (outface, _, _) in route.values() {
                         timer.add(TimedEvent::once(
                             Instant::now() + timeout,
