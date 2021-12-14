@@ -53,10 +53,12 @@ pub struct AdminSpace {
     context: Arc<AdminContext>,
 }
 
+#[derive(Debug, Clone)]
 enum PluginDiff {
     Delete(String),
     Start(crate::config::PluginLoad),
 }
+
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
@@ -113,8 +115,8 @@ impl AdminSpace {
                     }
 
                     let requested_plugins = {
-                        let guard = admin.context.runtime.config.lock();
-                        guard.plugins().load_requests().collect::<Vec<_>>()
+                        let cfg_guard = admin.context.runtime.config.lock();
+                        cfg_guard.plugins().load_requests().collect::<Vec<_>>()
                     };
                     let mut diffs = Vec::new();
                     for plugin in active_plugins.keys() {
@@ -137,14 +139,15 @@ impl AdminSpace {
                         diffs.push(PluginDiff::Start(request))
                     }
                     let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
+                    log::info!("{:?}", &diffs);
                     for diff in diffs {
                         match diff {
                             PluginDiff::Delete(plugin) => {
-                                active_plugins.remove(&plugin);
+                                active_plugins.remove(plugin.as_str());
                                 plugins_mgr.stop(&plugin);
                             }
                             PluginDiff::Start(plugin) => {
-                                let load = match plugin.paths {
+                                let load = match &plugin.paths {
                                     Some(paths) => plugins_mgr
                                         .load_plugin_by_paths(plugin.name.clone(), &paths),
                                     None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
@@ -162,32 +165,34 @@ impl AdminSpace {
                                         }
                                     }
                                     Ok(path) => {
-                                        log::info!(
-                                            "Loaded plugin `{}` from {}",
-                                            &plugin.name,
-                                            &path
-                                        );
+                                        let name = &plugin.name;
+                                        log::info!("Loaded plugin `{}` from {}", name, &path);
+                                        match plugins_mgr.start(name, &admin.context.runtime) {
+                                            Ok(Some((path, plugin))) => {
+                                                active_plugins.insert(name.into(), path.into());
+                                                let mut cfg_guard =
+                                                    admin.context.runtime.config.lock();
+                                                cfg_guard.add_plugin_validator(
+                                                    name,
+                                                    plugin.config_checker(),
+                                                );
+                                                log::info!(
+                                                    "Successfully started plugin `{}` from {}",
+                                                    name,
+                                                    path
+                                                );
+                                            }
+                                            Ok(None) => {
+                                                log::warn!("Plugin `{}` was already running", name)
+                                            }
+                                            Err(e) => log::error!("{}", e),
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    for (name, path, status) in plugins_mgr.start_all(&admin.context.runtime) {
-                        match status {
-                            Ok(true) => {
-                                log::info!("Succesfully started plugin `{}` from {}", name, path)
-                            }
-                            Ok(false) => {
-                                log::info!("Succesfully started plugin `{}` from {}", name, path)
-                            }
-                            Err(e) => log::error!(
-                                "Failed to start plugin `{}` (loaded from {}): {}",
-                                name,
-                                path,
-                                e
-                            ),
-                        }
-                    }
+                    log::info!("Running plugins: {:?}", &active_plugins)
                 }
             }
         });

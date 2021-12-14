@@ -721,6 +721,7 @@ fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub struct PluginLoad {
     pub name: String,
     pub paths: Option<Vec<String>>,
@@ -756,7 +757,9 @@ impl PluginsConfig {
         let mut current = match split.next() {
             Some(first_in_plugin) => first_in_plugin,
             None => {
-                bail!("Removing plugins dynamically is not supported yet") // TODO: support this once runtime plugin loading is supported
+                self.values.as_object_mut().unwrap().remove(plugin);
+                self.validators.remove(plugin);
+                return Ok(());
             }
         };
         let validator = self.validators.get(plugin);

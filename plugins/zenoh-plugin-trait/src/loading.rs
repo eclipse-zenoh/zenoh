@@ -1,16 +1,18 @@
 use crate::vtable::*;
 use crate::*;
 use libloading::Library;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use zenoh_util::core::Result as ZResult;
-use zenoh_util::{bail, LibLoader};
+use zenoh_util::{bail, zerror, LibLoader};
 
 pub struct PluginsManager<StartArgs, RunningPlugin> {
     loader: LibLoader,
     plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
-    running_plugins: HashMap<String, RunningPlugin>,
+    running_plugins: HashMap<String, (String, RunningPlugin)>,
 }
+
 impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, RunningPlugin> {
     /// Constructs a new plugin manager.
     pub fn new(loader: LibLoader) -> Self {
@@ -37,15 +39,24 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
     /// `Ok(true)` => plugin was successfully started  
     /// `Ok(false)` => plugin was running already, nothing happened  
     /// `Err(e)` => starting the plugin failed due to `e`
-    pub fn start(&mut self, plugin: &str, args: &StartArgs) -> ZResult<bool> {
-        if self.running_plugins.contains_key(plugin) {
-            return Ok(false);
+    pub fn start(
+        &mut self,
+        plugin: &str,
+        args: &StartArgs,
+    ) -> ZResult<Option<(&str, &RunningPlugin)>> {
+        match self.running_plugins.entry(plugin.into()) {
+            Entry::Occupied(_) => return Ok(None),
+            Entry::Vacant(e) => {
+                match self.plugin_starters.iter().find(|p| p.name() == plugin) {
+                    Some(s) => {
+                        let path = s.path();
+                        let (_, plugin) = e.insert((path.into(), s.start(args).map_err(|e| zerror!(e => "Failed to load plugin {} (from {})", plugin, path))?));
+                        Ok(Some((path, &*plugin)))
+                    }
+                    None => bail!("Plugin starter for `{}` not found", plugin),
+                }
+            }
         }
-        match self.plugin_starters.iter().find(|p| p.name() == plugin) {
-            Some(s) => s.start(args)?,
-            None => bail!("Plugin starter for `{}` not found", plugin),
-        };
-        Ok(true)
     }
 
     /// Lazily starts all plugins.
@@ -56,23 +67,24 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
     pub fn start_all<'l>(
         &'l mut self,
         args: &'l StartArgs,
-    ) -> impl Iterator<Item = (&str, &str, ZResult<bool>)> + 'l {
+    ) -> impl Iterator<Item = (&str, &str, ZResult<Option<&RunningPlugin>>)> + 'l {
         let PluginsManager {
-            plugin_starters: plugins_starters,
+            plugin_starters,
             running_plugins,
             ..
         } = self;
-        plugins_starters.iter().map(move |p| {
+        plugin_starters.iter().map(move |p| {
+            let name = p.name();
+            let path = p.path();
             (
-                p.name(),
-                p.path(),
-                match running_plugins.entry(p.name().into()) {
-                    std::collections::hash_map::Entry::Occupied(_) => Ok(false),
+                name,
+                path,
+                match running_plugins.entry(name.into()) {
+                    std::collections::hash_map::Entry::Occupied(_) => Ok(None),
                     std::collections::hash_map::Entry::Vacant(e) => match p.start(args) {
-                        Ok(p) => {
-                            e.insert(p);
-                            Ok(true)
-                        }
+                        Ok(p) => Ok(Some(unsafe {
+                            std::mem::transmute(&e.insert((path.into(), p)).1)
+                        })),
                         Err(e) => Err(e),
                     },
                 },
@@ -84,33 +96,48 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
     pub fn stop(&mut self, plugin: &str) -> bool {
         let result = self.running_plugins.remove(plugin).is_some();
         self.plugin_starters
-            .retain(|p| p.name() == plugin || !p.deleteable());
+            .retain(|p| p.name() == plugin || !p.deletable());
         result
     }
 
     pub fn available_plugins(&self) -> impl Iterator<Item = &str> {
         self.plugin_starters.iter().map(|p| p.name())
     }
-    pub fn running_plugins_info(&self) -> Vec<(&str, &str)> {
-        let mut result = Vec::with_capacity(self.running_plugins.len());
+    pub fn running_plugins_info(&self) -> HashMap<&str, &str> {
+        let mut result = HashMap::with_capacity(self.running_plugins.len());
         for p in self.plugin_starters.iter() {
             let name = p.name();
-            if self.running_plugins.contains_key(name) && !result.iter().any(|(p, _)| p == &name) {
-                result.push((name, p.path()))
+            if self.running_plugins.contains_key(name) && !result.contains_key(name) {
+                result.insert(name, p.path());
             }
         }
         result
     }
-    pub fn running_plugins(&self) -> impl Iterator<Item = (&str, &RunningPlugin)> {
-        self.running_plugins.iter().map(|(s, p)| (s.as_str(), p))
+    pub fn running_plugins(&self) -> impl Iterator<Item = (&str, (&str, &RunningPlugin))> {
+        self.running_plugins
+            .iter()
+            .map(|(s, (path, p))| (s.as_str(), (path.as_str(), p)))
     }
     pub fn plugin(&self, name: &str) -> Option<&RunningPlugin> {
-        self.running_plugins.get(name)
+        self.running_plugins.get(name).map(|p| &p.1)
+    }
+
+    fn load_plugin(
+        name: &str,
+        lib: Library,
+        path: PathBuf,
+    ) -> ZResult<DynamicPlugin<StartArgs, RunningPlugin>> {
+        DynamicPlugin::new(name.into(), lib, path).map_err(|e|
+            zerror!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})",
+                name,
+                e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()),
+                PLUGIN_VTABLE_VERSION).into()
+        )
     }
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
         let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", &name))? };
-        let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
+        let plugin = Self::load_plugin(&name, lib, p)?;
         let path = plugin.path().into();
         self.plugin_starters.push(Box::new(plugin));
         Ok(path)
@@ -124,7 +151,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
             let path = path.as_ref();
             match unsafe { LibLoader::load_file(path) } {
                 Ok((lib, p)) => {
-                    let plugin = DynamicPlugin::new(name.clone(), lib, p).unwrap_or_else(|e| panic!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})", name, e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()), PLUGIN_VTABLE_VERSION));
+                    let plugin = Self::load_plugin(&name, lib, p)?;
                     let path = plugin.path().into();
                     self.plugin_starters.push(Box::new(plugin));
                     return Ok(path);
@@ -135,15 +162,18 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         bail!("Plugin '{}' not found in {:?}", name, &paths)
     }
 }
+
 trait PluginStarter<StartArgs, RunningPlugin> {
     fn name(&self) -> &str;
     fn path(&self) -> &str;
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin>;
-    fn deleteable(&self) -> bool;
+    fn deletable(&self) -> bool;
 }
+
 struct StaticPlugin<P> {
     inner: std::marker::PhantomData<P>,
 }
+
 impl<P> StaticPlugin<P> {
     fn new() -> Self {
         StaticPlugin {
@@ -151,6 +181,7 @@ impl<P> StaticPlugin<P> {
         }
     }
 }
+
 impl<StartArgs, RunningPlugin, P> PluginStarter<StartArgs, RunningPlugin> for StaticPlugin<P>
 where
     P: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin>,
@@ -164,10 +195,11 @@ where
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         P::start(P::STATIC_NAME, args)
     }
-    fn deleteable(&self) -> bool {
+    fn deletable(&self) -> bool {
         false
     }
 }
+
 impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
     for DynamicPlugin<StartArgs, RunningPlugin>
 {
@@ -180,7 +212,7 @@ impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         self.vtable.start(self.name(), args)
     }
-    fn deleteable(&self) -> bool {
+    fn deletable(&self) -> bool {
         true
     }
 }

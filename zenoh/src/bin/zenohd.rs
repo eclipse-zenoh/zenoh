@@ -138,15 +138,15 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
 
         for (name, path, start_result) in plugins.start_all(&runtime) {
             match start_result {
-                Ok(true) => log::debug!("started plugin {} form {:?}", name, path),
-                Ok(false) => log::warn!("plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
-                Err(e) => log::debug!("plugin failure: {}", e)
+                Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
+                Ok(None) => log::warn!("plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+                Err(e) => log::error!("plugin failure: {}", e)
             }
         }
 
         {
             let mut config_guard = runtime.config.lock();
-            for (name, plugin) in plugins.running_plugins() {
+            for (name, (_, plugin)) in plugins.running_plugins() {
                 let hook = plugin.config_checker();
                 config_guard.add_plugin_validator(name, hook)
             }
