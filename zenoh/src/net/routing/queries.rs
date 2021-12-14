@@ -1336,21 +1336,21 @@ struct QueryCleanup {
 #[async_trait]
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
-        if let Some(mut face) = self.face.upgrade() {
-            let mut _tables = zwrite!(self.tables);
-            if let Some(query) = get_mut_unchecked(&mut face)
-                .pending_queries
-                .remove(&self.qid)
-            {
-                log::warn!(
-                    "Didn't receive final reply {}:{} from {}: Timeout!",
-                    query.src_face,
-                    self.qid,
-                    face
-                );
-                finalize_pending_query(&mut _tables, &query);
-            }
-        }
+        // if let Some(mut face) = self.face.upgrade() {
+        //     let mut _tables = zwrite!(self.tables);
+        //     if let Some(query) = get_mut_unchecked(&mut face)
+        //         .pending_queries
+        //         .remove(&self.qid)
+        //     {
+        //         log::warn!(
+        //             "Didn't receive final reply {}:{} from {}: Timeout!",
+        //             query.src_face,
+        //             self.qid,
+        //             face
+        //         );
+        //         finalize_pending_query(&mut _tables, &query);
+        //     }
+        // }
     }
 }
 
@@ -1507,7 +1507,6 @@ pub fn route_query(
 
                     let timer = tables.timer.clone();
                     let timeout = tables.queries_default_timeout;
-                    drop(tables);
                     for ((outface, _, _), _) in route.values() {
                         timer.add(TimedEvent::once(
                             Instant::now() + timeout,
@@ -1543,7 +1542,6 @@ pub fn route_query(
 
                     let timer = tables.timer.clone();
                     let timeout = tables.queries_default_timeout;
-                    drop(tables);
                     for (outface, _, _) in route.values() {
                         timer.add(TimedEvent::once(
                             Instant::now() + timeout,
