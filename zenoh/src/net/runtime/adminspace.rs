@@ -139,7 +139,6 @@ impl AdminSpace {
                         diffs.push(PluginDiff::Start(request))
                     }
                     let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
-                    log::info!("{:?}", &diffs);
                     for diff in diffs {
                         match diff {
                             PluginDiff::Delete(plugin) => {
@@ -148,8 +147,9 @@ impl AdminSpace {
                             }
                             PluginDiff::Start(plugin) => {
                                 let load = match &plugin.paths {
-                                    Some(paths) => plugins_mgr
-                                        .load_plugin_by_paths(plugin.name.clone(), &paths),
+                                    Some(paths) => {
+                                        plugins_mgr.load_plugin_by_paths(plugin.name.clone(), paths)
+                                    }
                                     None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
                                 };
                                 match load {

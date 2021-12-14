@@ -45,7 +45,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         args: &StartArgs,
     ) -> ZResult<Option<(&str, &RunningPlugin)>> {
         match self.running_plugins.entry(plugin.into()) {
-            Entry::Occupied(_) => return Ok(None),
+            Entry::Occupied(_) => Ok(None),
             Entry::Vacant(e) => {
                 match self.plugin_starters.iter().find(|p| p.name() == plugin) {
                     Some(s) => {

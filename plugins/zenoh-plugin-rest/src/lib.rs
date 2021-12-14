@@ -210,7 +210,7 @@ impl<'a> RunningPluginTrait<'a> for RunningPlugin {
         todo!()
     }
     fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
-        todo!()
+        Ok(())
     }
 }
 
