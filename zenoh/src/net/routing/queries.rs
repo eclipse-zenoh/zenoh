@@ -18,8 +18,9 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{RwLock, Weak};
-use std::time::Instant;
-use zenoh_util::collections::{Timed, TimedEvent};
+// use std::time::Instant;
+// use zenoh_util::collections::{Timed, TimedEvent};
+use zenoh_util::collections::Timed;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
@@ -1505,19 +1506,19 @@ pub fn route_query(
                         );
                     }
 
-                    let timer = tables.timer.clone();
-                    let timeout = tables.queries_default_timeout;
+                    let _timer = tables.timer.clone();
+                    let _timeout = tables.queries_default_timeout;
                     drop(tables);
-                    for ((outface, _, _), _) in route.values() {
-                        timer.add(TimedEvent::once(
-                            Instant::now() + timeout,
-                            QueryCleanup {
-                                tables: tables_ref.clone(),
-                                face: Arc::downgrade(outface),
-                                qid,
-                            },
-                        ));
-                    }
+                    // for ((outface, _, _), _) in route.values() {
+                    //     timer.add(TimedEvent::once(
+                    //         Instant::now() + timeout,
+                    //         QueryCleanup {
+                    //             tables: tables_ref.clone(),
+                    //             face: Arc::downgrade(outface),
+                    //             qid,
+                    //         },
+                    //     ));
+                    // }
                 }
 
                 #[cfg(not(feature = "complete_n"))]
@@ -1541,19 +1542,19 @@ pub fn route_query(
                         );
                     }
 
-                    let timer = tables.timer.clone();
-                    let timeout = tables.queries_default_timeout;
+                    let _timer = tables.timer.clone();
+                    let _timeout = tables.queries_default_timeout;
                     drop(tables);
-                    for (outface, _, _) in route.values() {
-                        timer.add(TimedEvent::once(
-                            Instant::now() + timeout,
-                            QueryCleanup {
-                                tables: tables_ref.clone(),
-                                face: Arc::downgrade(outface),
-                                qid,
-                            },
-                        ));
-                    }
+                    // for (outface, _, _) in route.values() {
+                    //     timer.add(TimedEvent::once(
+                    //         Instant::now() + timeout,
+                    //         QueryCleanup {
+                    //             tables: tables_ref.clone(),
+                    //             face: Arc::downgrade(outface),
+                    //             qid,
+                    //         },
+                    //     ));
+                    // }
                 }
             }
         }
