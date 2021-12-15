@@ -15,7 +15,7 @@ use super::face::FaceState;
 use super::protocol::core::key_expr;
 use super::protocol::core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::message::{DataInfo, RoutingContext};
 use super::router::Tables;
 use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;

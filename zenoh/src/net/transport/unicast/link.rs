@@ -14,7 +14,7 @@
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::TransportMessage;
+use super::protocol::message::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;

@@ -15,7 +15,7 @@
 //! Publishing primitives.
 
 use super::net::protocol::core::Channel;
-use super::net::protocol::proto::{data_kind, DataInfo, Options};
+use super::net::protocol::message::{data_kind, DataInfo, Options};
 use super::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;

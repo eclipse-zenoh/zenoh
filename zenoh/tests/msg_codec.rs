@@ -16,8 +16,8 @@ use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
-use zenoh::net::protocol::proto::defaults::SEQ_NUM_RES;
-use zenoh::net::protocol::proto::*;
+use zenoh::net::protocol::message::defaults::SEQ_NUM_RES;
+use zenoh::net::protocol::message::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;

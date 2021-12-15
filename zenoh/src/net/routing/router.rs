@@ -14,7 +14,7 @@
 use super::face::{Face, FaceState};
 use super::network::{shared_nodes, Network};
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
+use super::protocol::message::{ZenohBody, ZenohMessage};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;

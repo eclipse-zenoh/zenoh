@@ -13,7 +13,7 @@
 //
 use super::link::Locator;
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{LinkState, ZenohMessage};
+use super::protocol::message::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
 use super::transport::TransportUnicast;
 use petgraph::graph::NodeIndex;

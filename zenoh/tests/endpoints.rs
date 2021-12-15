@@ -17,7 +17,7 @@ use std::any::Any;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{PeerId, WhatAmI};
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,

@@ -28,7 +28,7 @@ use super::batch::SerializationBatch;
 use super::conduit::{TransportChannelTx, TransportConduitTx};
 use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
-use super::protocol::proto::{TransportMessage, ZenohMessage};
+use super::protocol::message::{TransportMessage, ZenohMessage};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
@@ -634,8 +634,8 @@ mod tests {
         Channel, ConduitSn, CongestionControl, Priority, Reliability, ZInt,
     };
     use crate::net::protocol::io::ZBuf;
-    use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
-    use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
+    use crate::net::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES};
+    use crate::net::protocol::message::{Frame, FramePayload, TransportBody, ZenohMessage};
     use crate::net::transport::defaults::ZN_QUEUE_SIZE_CONTROL;
     use async_std::prelude::*;
     use async_std::task;

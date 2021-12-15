@@ -13,7 +13,7 @@
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::TransportMessage;
+use super::protocol::message::TransportMessage;
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;

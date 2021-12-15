@@ -17,8 +17,8 @@ extern crate criterion;
 use criterion::Criterion;
 use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, Priority, Reliability};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
-use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::defaults::BATCH_SIZE;
+use zenoh::net::protocol::message::ZenohMessage;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let batch_size = BATCH_SIZE as usize;

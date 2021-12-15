@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::ZenohMessage;
+use super::protocol::message::ZenohBody;
+use super::protocol::message::ZenohMessage;
 use super::transport::TransportUnicastInner;
 use zenoh_util::zread;
 

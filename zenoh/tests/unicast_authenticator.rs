@@ -23,7 +23,7 @@ use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{PeerId, WhatAmI};
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 #[cfg(feature = "auth_pubkey")]
 use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]

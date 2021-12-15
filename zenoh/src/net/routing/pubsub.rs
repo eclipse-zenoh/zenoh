@@ -24,7 +24,7 @@ use super::protocol::core::{
     ZInt,
 };
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::message::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;

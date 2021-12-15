@@ -18,7 +18,7 @@ use super::multicast::manager::{
 use super::protocol::core::{PeerId, WhatAmI, ZInt};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
-use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
+use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{
     TransportManagerConfigBuilderUnicast, TransportManagerConfigUnicast,
     TransportManagerStateUnicast,

@@ -14,7 +14,7 @@
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
-use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
+use super::protocol::message::{Close, Join, TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};
@@ -70,9 +70,7 @@ impl Timed for TransportMulticastPeerLeaseTimer {
     async fn run(&mut self) {
         let is_active = self.whatchdog.swap(false, Ordering::AcqRel);
         if !is_active {
-            let _ = self
-                .transport
-                .del_peer(&self.locator, tmsg::close_reason::EXPIRED);
+            let _ = self.transport.del_peer(&self.locator, Close::EXPIRED);
         }
     }
 }

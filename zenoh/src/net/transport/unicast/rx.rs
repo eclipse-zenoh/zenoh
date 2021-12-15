@@ -14,8 +14,8 @@
 use super::common::conduit::TransportChannelRx;
 use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
 #[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::{
+use super::protocol::message::ZenohBody;
+use super::protocol::message::{
     Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;

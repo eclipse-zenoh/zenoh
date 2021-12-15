@@ -17,9 +17,7 @@ use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
 use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{
-    tmsg, Attachment, Close, OpenAck, TransportBody, TransportMessage,
-};
+use crate::net::protocol::message::{Attachment, Close, OpenAck, TransportBody, TransportMessage};
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::unicast::manager::Opened;
@@ -105,7 +103,7 @@ async fn open_recv_init_ack(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -131,7 +129,7 @@ async fn open_recv_init_ack(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
@@ -151,7 +149,7 @@ async fn open_recv_init_ack(
                         sn_resolution
                     )
                     .into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
         }
@@ -167,7 +165,7 @@ async fn open_recv_init_ack(
                             sn_resolution
                         )
                         .into(),
-                        Some(tmsg::close_reason::INVALID),
+                        Some(Close::INVALID),
                     ));
                 }
                 sn_resolution
@@ -179,9 +177,7 @@ async fn open_recv_init_ack(
     };
 
     let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -216,7 +212,7 @@ async fn open_recv_init_ack(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
@@ -317,7 +313,7 @@ async fn open_recv_open_ack(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -343,15 +339,13 @@ async fn open_recv_open_ack(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
 
     let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
     for pa in manager.config.unicast.peer_authenticator.iter() {
@@ -361,7 +355,7 @@ async fn open_recv_open_ack(
                 opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(Close::INVALID)))?;
     }
 
     let output = OpenAckOutput {
@@ -420,7 +414,7 @@ pub(crate) async fn open_link(
     let transport = match res {
         Ok(s) => s,
         Err(e) => {
-            let _ = close_link(manager, link, &auth_link, Some(tmsg::close_reason::INVALID)).await;
+            let _ = close_link(manager, link, &auth_link, Some(Close::INVALID)).await;
             return Err(e);
         }
     };

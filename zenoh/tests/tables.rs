@@ -20,7 +20,7 @@ use zenoh::net::protocol::core::{
     Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
+use zenoh::net::protocol::message::{DataInfo, RoutingContext};
 use zenoh::net::routing::router::*;
 use zenoh::net::transport::{DummyPrimitives, Primitives};
 use zenoh_util::zlock;

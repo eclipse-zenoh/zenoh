@@ -20,7 +20,7 @@ use zenoh::net::protocol::core::{
     Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{DummyTransportEventHandler, TransportManager, TransportManagerConfig};
 use zenoh_util::zasync_executor_init;
 

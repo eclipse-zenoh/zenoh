@@ -18,7 +18,7 @@ use super::common::{
 };
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
-use super::protocol::proto::{TransportMessage, ZenohMessage};
+use super::protocol::message::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};

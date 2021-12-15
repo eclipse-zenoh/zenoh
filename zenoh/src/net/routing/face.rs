@@ -16,7 +16,7 @@ use super::protocol::core::{
     SubInfo, WhatAmI, ZInt,
 };
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::message::{DataInfo, RoutingContext};
 use super::router::*;
 use super::transport::Primitives;
 use async_std::sync::Arc;

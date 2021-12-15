@@ -14,7 +14,7 @@
 use super::link::{EndPoint, Locator};
 use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
+use super::protocol::message::{Hello, Scout, TransportBody, TransportMessage};
 use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
 use crate::net::protocol::core::whatami::WhatAmIMatcher;

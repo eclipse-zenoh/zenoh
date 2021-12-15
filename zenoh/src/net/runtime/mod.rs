@@ -19,7 +19,7 @@ use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
+use super::protocol::message::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};

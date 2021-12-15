@@ -29,7 +29,7 @@ use net::protocol::{
         QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
     },
     io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    message::{DataInfo, RoutingContext},
 };
 use net::routing::face::Face;
 use net::runtime::Runtime;

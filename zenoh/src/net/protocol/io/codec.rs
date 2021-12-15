@@ -74,9 +74,7 @@ impl SharedMemoryBufInfo {
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~  zbuf length  ~
-// +---------------+
-// ~  zbuf bytes   ~
+// ~    <uint8>    ~
 // +---------------+
 //
 //
@@ -84,21 +82,16 @@ impl SharedMemoryBufInfo {
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~  slices num   ~
+// ~    <slice>    ~
 // +---------------+
+//
+// Where each slice is encoded as:
+//
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
 // |  slice type   |
 // +---------------+
-// ~  slice length ~
-// +---------------+
-// ~  slice bytes  ~
-// +---------------+
-//        ...
-// +---------------+
-// |  slice type   |
-// +---------------+
-// ~  slice length ~
-// +---------------+
-// ~  slice bytes  ~
+// ~    <uint8>    ~
 // +---------------+
 
 impl ZBuf {

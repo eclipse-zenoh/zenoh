@@ -18,9 +18,7 @@ use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
 use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{
-    tmsg, Attachment, Close, OpenSyn, TransportBody, TransportMessage,
-};
+use crate::net::protocol::message::{Attachment, Close, OpenSyn, TransportBody, TransportMessage};
 use crate::net::transport::unicast::manager::Opened;
 use crate::net::transport::{TransportManager, TransportPeer};
 use rand::Rng;
@@ -59,7 +57,7 @@ async fn accept_recv_init_syn(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -74,7 +72,7 @@ async fn accept_recv_init_syn(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
@@ -91,7 +89,7 @@ async fn accept_recv_init_syn(
                         init_syn.pid
                     )
                     .into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
         }
@@ -100,9 +98,7 @@ async fn accept_recv_init_syn(
 
     // Check if we are allowed to open more links if the transport is established
     if let Some(t) = manager.get_transport_unicast(&init_syn.pid) {
-        let t = t
-            .get_transport()
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let t = t.get_transport().map_err(|e| (e, Some(Close::INVALID)))?;
 
         // Check if we have reached maximum number of links for this transport
         if !t.can_add_link(link) {
@@ -113,7 +109,7 @@ async fn accept_recv_init_syn(
                     init_syn.pid
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     }
@@ -127,15 +123,13 @@ async fn accept_recv_init_syn(
                 init_syn.pid
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -192,7 +186,7 @@ async fn accept_send_init_ack(
                     .map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(Close::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
@@ -214,7 +208,7 @@ async fn accept_send_init_ack(
 
     let encrypted = cookie
         .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng), ps_cookie)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Compute and store cookie hash
     let hash = hmac::digest(&encrypted);
@@ -265,7 +259,7 @@ async fn accept_recv_open_syn(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -295,7 +289,7 @@ async fn accept_recv_open_syn(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
@@ -308,34 +302,32 @@ async fn accept_recv_open_syn(
                 if cookie_hash != &hmac::digest(&encrypted) {
                     return Err((
                         zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link).into(),
-                        Some(tmsg::close_reason::INVALID),
+                        Some(Close::INVALID),
                     ));
                 }
             }
             None => {
                 return Err((
                     zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,).into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
         },
         None => {
             return Err((
                 zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link,).into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     }
 
     // Decrypt the cookie with the cyper
-    let (cookie, mut ps_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+    let (cookie, mut ps_cookie) =
+        Cookie::decrypt(encrypted, &manager.cipher).map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Validate with the peer authenticators
     let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -372,7 +364,7 @@ async fn accept_recv_open_syn(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
@@ -419,7 +411,7 @@ async fn accept_init_transport(
                         "Rejecting OpenSyn cookie on {} for peer: {}. Invalid sn resolution: {}. Expected: {}",
                         link, input.cookie.pid, input.cookie.sn_resolution, opened.sn_resolution
                     ).into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
 
@@ -431,7 +423,7 @@ async fn accept_init_transport(
                         input.cookie.pid
                     )
                     .into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
 
@@ -462,13 +454,13 @@ async fn accept_init_transport(
     };
     let transport = manager
         .init_transport_unicast(config)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Retrieve the transport's transport
     let t = transport.get_transport().map_err(|e| (e, None))?;
     let _ = t
         .add_link(link.clone())
-        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+        .map_err(|e| (e, Some(Close::GENERIC)))?;
 
     log::debug!(
         "New transport link established from {}: {}",
@@ -621,10 +613,7 @@ pub(crate) async fn accept_link(
     let transport = output.transport.clone();
     let res = accept_transport_stages(manager, link, auth_link, output).await;
     if let Err(e) = res {
-        let _ = transport
-            .get_transport()?
-            .close(tmsg::close_reason::GENERIC)
-            .await;
+        let _ = transport.get_transport()?.close(Close::GENERIC).await;
         return Err(e);
     }
 

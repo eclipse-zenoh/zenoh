@@ -25,7 +25,7 @@ pub mod udp;
 pub mod unixsock_stream;
 
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::proto::TransportMessage;
+use crate::net::protocol::message::TransportMessage;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use endpoint::*;

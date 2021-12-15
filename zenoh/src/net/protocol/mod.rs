@@ -14,4 +14,4 @@
 
 pub mod core;
 pub mod io;
-pub mod proto;
+pub mod message;

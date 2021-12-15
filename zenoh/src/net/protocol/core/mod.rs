@@ -109,6 +109,7 @@ pub mod whatami {
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("either 'router', 'client' or 'peer'")
         }
+
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
@@ -116,12 +117,14 @@ pub mod whatami {
             v.parse()
                 .map_err(|_| serde::de::Error::unknown_variant(v, &["router", "client", "peer"]))
         }
+
         fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
         {
             self.visit_str(v)
         }
+
         fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
@@ -210,6 +213,7 @@ pub mod whatami {
             formatter
                 .write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
         }
+
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
@@ -221,12 +225,14 @@ pub mod whatami {
                 )
             })
         }
+
         fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
         {
             self.visit_str(v)
         }
+
         fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
@@ -829,18 +835,27 @@ impl Default for Priority {
 impl TryFrom<u8> for Priority {
     type Error = zenoh_util::core::Error;
 
-    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
-        match conduit {
-            0 => Ok(Priority::Control),
-            1 => Ok(Priority::RealTime),
-            2 => Ok(Priority::InteractiveHigh),
-            3 => Ok(Priority::InteractiveLow),
-            4 => Ok(Priority::DataHigh),
-            5 => Ok(Priority::Data),
-            6 => Ok(Priority::DataLow),
-            7 => Ok(Priority::Background),
+    fn try_from(priority: u8) -> Result<Self, Self::Error> {
+        const CONTROL: u8 = Priority::Control as u8;
+        const REAL_TIME: u8 = Priority::RealTime as u8;
+        const INTERACTIVE_HIGH: u8 = Priority::InteractiveHigh as u8;
+        const INTERACTIVE_LOW: u8 = Priority::InteractiveLow as u8;
+        const DATA_HIGH: u8 = Priority::DataHigh as u8;
+        const DATA: u8 = Priority::Data as u8;
+        const DATA_LOW: u8 = Priority::DataLow as u8;
+        const BACKGROUND: u8 = Priority::Background as u8;
+
+        match priority {
+            CONTROL => Ok(Priority::Control),
+            REAL_TIME => Ok(Priority::RealTime),
+            INTERACTIVE_HIGH => Ok(Priority::InteractiveHigh),
+            INTERACTIVE_LOW => Ok(Priority::InteractiveLow),
+            DATA_HIGH => Ok(Priority::DataHigh),
+            DATA => Ok(Priority::Data),
+            DATA_LOW => Ok(Priority::DataLow),
+            BACKGROUND => Ok(Priority::Background),
             unknown => bail!(
-                "{} is not a valid conduit value. Admitted values are [0-7].",
+                "{} is not a valid priority value. Admitted values are [0-7].",
                 unknown
             ),
         }
@@ -928,14 +943,32 @@ impl Default for CongestionControl {
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum SubMode {
-    Push,
-    Pull,
+    Push = 0x00,
+    Pull = 0x01,
 }
 
 impl Default for SubMode {
     #[inline]
     fn default() -> Self {
         SubMode::Push
+    }
+}
+
+impl TryFrom<u8> for SubMode {
+    type Error = zenoh_util::core::Error;
+
+    fn try_from(submode: u8) -> Result<Self, Self::Error> {
+        const PUSH: u8 = 0x00;
+        const PULL: u8 = 0x01;
+
+        match submode {
+            PUSH => Ok(SubMode::Push),
+            PULL => Ok(SubMode::Pull),
+            unknown => bail!(
+                "{} is not a valid submode value. Admitted values are [0-1].",
+                unknown
+            ),
+        }
     }
 }
 

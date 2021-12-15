@@ -20,7 +20,7 @@ use super::protocol::core::{
     SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::message::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
 

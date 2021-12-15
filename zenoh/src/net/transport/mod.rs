@@ -21,7 +21,7 @@ pub mod unicast;
 use super::link::Link;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::proto::ZenohMessage;
+use super::protocol::message::ZenohMessage;
 pub use manager::*;
 pub use multicast::*;
 pub use primitives::*;

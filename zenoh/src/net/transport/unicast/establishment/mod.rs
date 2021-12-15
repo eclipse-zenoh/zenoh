@@ -18,7 +18,7 @@ pub(crate) mod open;
 use super::super::TransportManager;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::proto::{Attachment, TransportMessage};
+use super::protocol::message::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::LinkUnicast;
 use authenticator::AuthenticatedPeerLink;

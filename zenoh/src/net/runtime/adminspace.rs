@@ -16,7 +16,7 @@ use super::protocol::{
         QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
     },
     io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    message::{DataInfo, RoutingContext},
 };
 use super::routing::face::Face;
 use super::transport::{Primitives, TransportUnicast};

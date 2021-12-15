@@ -86,7 +86,7 @@ use futures::prelude::*;
 use git_version::git_version;
 use log::{debug, trace};
 use net::protocol::core::WhatAmI;
-use net::protocol::proto::data_kind;
+use net::protocol::message::data_kind;
 use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
@@ -249,7 +249,7 @@ pub mod scouting {
     pub use super::net::protocol::core::WhatAmI;
 
     /// A zenoh Hello message.
-    pub use super::net::protocol::proto::Hello;
+    pub use super::net::protocol::message::Hello;
 
     zreceiver! {
         /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.

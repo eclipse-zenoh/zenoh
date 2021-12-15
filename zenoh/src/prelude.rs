@@ -26,7 +26,7 @@
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
-use crate::net::protocol::proto::DataInfo;
+use crate::net::protocol::message::DataInfo;
 use crate::queryable::Query;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[cfg(feature = "shared-memory")]

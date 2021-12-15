@@ -24,7 +24,7 @@ mod tests {
         Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
-    use zenoh::net::protocol::proto::ZenohMessage;
+    use zenoh::net::protocol::message::ZenohMessage;
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportManagerConfig,
         TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,

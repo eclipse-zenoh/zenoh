@@ -20,7 +20,7 @@ use criterion::Criterion;
 use zenoh::net::protocol::core::Encoding;
 use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, PeerId};
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
+use zenoh::net::protocol::message::{DataInfo, ZenohMessage};
 
 fn consume_message(msg: ZenohMessage) {
     drop(msg);
