@@ -20,10 +20,10 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
-use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
 use zenoh_util::{bail, core::Result as ZResult};
 
 const PORT_SEPARATOR: char = ':';
@@ -145,14 +145,11 @@ impl std::fmt::Display for StringError {
     }
 }
 
+impl ZenohPlugin for RestPlugin {}
+
 impl Plugin for RestPlugin {
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        zenoh_plugin_trait::PluginId {
-            uid: "zenoh-plugin-rest",
-        }
-    }
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RuntimePlugin;
+    type RunningPlugin = zenoh::plugins::RunningPlugin;
     const STATIC_NAME: &'static str = "rest";
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
@@ -185,8 +182,8 @@ impl Plugin for RestPlugin {
                 }
             };
             std::mem::drop(config);
-            async_std::task::spawn(run(runtime.clone(), port));
-            Ok(Box::new(RunningPlugin))
+            async_std::task::spawn(run(runtime.clone(), port.clone()));
+            Ok(Box::new(RunningPlugin(port)))
         } else {
             std::mem::drop(config);
             Err(Box::new(StrError {
@@ -195,22 +192,28 @@ impl Plugin for RestPlugin {
         }
     }
 }
-struct RunningPlugin;
-impl<'a> RunningPluginTrait<'a> for RunningPlugin {
-    fn config_checker(&self) -> ValidationFunction {
+struct RunningPlugin(String);
+impl RunningPluginTrait for RunningPlugin {
+    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
         Arc::new(|_, _, _| {
             Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
         })
     }
-    type GetterIn = zenoh::plugins::GetterIn<'a>;
-    type GetterOut = zenoh::plugins::GetterOut<'a>;
-    type SetterIn = zenoh::plugins::SetterIn<'a>;
-    type SetterOut = zenoh::plugins::SetterOut<'a>;
-    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
-        todo!()
-    }
-    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
-        Ok(())
+
+    fn adminspace_getter<'a>(
+        &'a self,
+        selector: &'a Selector<'a>,
+        plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        let port_key = [plugin_status_key, "/port"].concat();
+        if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), &port_key) {
+            Ok(vec![zenoh::plugins::Response {
+                key: port_key,
+                value: self.0.clone().into(),
+            }])
+        } else {
+            Ok(Vec::new())
+        }
     }
 }
 

@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::{bail, zerror, LibLoader};
 
+/// A plugins manager that handles starting and stopping plugins.
+/// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
 pub struct PluginsManager<StartArgs, RunningPlugin> {
     loader: LibLoader,
     plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
@@ -100,9 +102,11 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         result
     }
 
-    pub fn available_plugins(&self) -> impl Iterator<Item = &str> {
+    /// Lists the loaded plugins by name.
+    pub fn loaded_plugins(&self) -> impl Iterator<Item = &str> {
         self.plugin_starters.iter().map(|p| p.name())
     }
+    /// Retuns a map containing each running plugin's load-path, associated to its name.
     pub fn running_plugins_info(&self) -> HashMap<&str, &str> {
         let mut result = HashMap::with_capacity(self.running_plugins.len());
         for p in self.plugin_starters.iter() {
@@ -113,11 +117,13 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         }
         result
     }
+    /// Returns an iterator over each running plugin, where the keys are their name, and the values are a tuple of their path and handle.
     pub fn running_plugins(&self) -> impl Iterator<Item = (&str, (&str, &RunningPlugin))> {
         self.running_plugins
             .iter()
             .map(|(s, (path, p))| (s.as_str(), (path.as_str(), p)))
     }
+    /// Returns the handle of the requested running plugin if available.
     pub fn plugin(&self, name: &str) -> Option<&RunningPlugin> {
         self.running_plugins.get(name).map(|p| &p.1)
     }

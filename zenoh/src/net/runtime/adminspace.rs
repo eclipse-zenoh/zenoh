@@ -1,4 +1,4 @@
-use crate::net::protocol::proto::data_kind;
+use crate::{net::protocol::proto::data_kind, prelude::Selector};
 
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
@@ -81,6 +81,12 @@ impl AdminSpace {
             [&root_key, "/linkstate/peers"].concat(),
             Arc::new(Box::new(|context, key, args| {
                 linkstate_peers_data(context, key, args).boxed()
+            })),
+        );
+        handlers.insert(
+            [&root_key, "/status/plugins/**"].concat(),
+            Arc::new(Box::new(|context, key, args| {
+                plugins_status(context, key, args).boxed()
             })),
         );
 
@@ -544,21 +550,76 @@ pub async fn linkstate_peers_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    (
-        ZBuf::from(
-            context
-                .runtime
-                .router
-                .tables
-                .read()
-                .unwrap()
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .dot()
-                .as_bytes()
-                .to_vec(),
-        ),
-        Encoding::TEXT_PLAIN,
-    )
+    let data: Vec<u8> = context
+        .runtime
+        .router
+        .tables
+        .read()
+        .unwrap()
+        .peers_net
+        .as_ref()
+        .unwrap()
+        .dot()
+        .into();
+    (ZBuf::from(data), Encoding::TEXT_PLAIN)
+}
+
+pub async fn plugins_status(
+    context: &AdminContext,
+    key: &KeyExpr<'_>,
+    args: &str,
+) -> (ZBuf, Encoding) {
+    let selector = Selector {
+        key_selector: key.clone(),
+        value_selector: args,
+    };
+    let guard = zlock!(context.plugins_mgr);
+    let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);
+    let mut responses = Vec::new();
+    for (name, (path, plugin)) in guard.running_plugins() {
+        with_extended_string(&mut root_key, &[name], |plugin_key| {
+            with_extended_string(plugin_key, &["/path"], |plugin_path_key| {
+                if key_expr::intersect(key.as_str(), plugin_path_key) {
+                    responses.push(crate::plugins::Response {
+                        key: plugin_path_key.clone(),
+                        value: path.into(),
+                    })
+                }
+            });
+            with_extended_string(plugin_key, &["/status"], |plugin_status_key| {
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        plugin.adminspace_getter(&selector, plugin_status_key)
+                    })) {
+                        Ok(Ok(response)) => responses.extend(response),
+                        Ok(Err(e)) => {
+                            log::error!("Plugin {} bailed from responding to {}: {}", name, key, e)
+                        }
+                        Err(e) => match e
+                            .downcast_ref::<String>()
+                            .map(|s| s.as_str())
+                            .or_else(|| e.downcast_ref::<&str>().copied())
+                        {
+                            Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", name, key, e),
+                            None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", name, key),
+                        },
+                    }
+            });
+        });
+    }
+    let response: Vec<u8> = serde_json::to_string(&responses).unwrap().into();
+    (ZBuf::from(response), Encoding::APP_JSON)
+}
+
+fn with_extended_string<R, F: FnMut(&mut String) -> R>(
+    prefix: &mut String,
+    suffixes: &[&str],
+    mut closure: F,
+) -> R {
+    let prefix_len = prefix.len();
+    for suffix in suffixes {
+        prefix.push_str(suffix);
+    }
+    let result = closure(prefix);
+    prefix.truncate(prefix_len);
+    result
 }

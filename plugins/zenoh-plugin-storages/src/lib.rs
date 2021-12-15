@@ -29,10 +29,8 @@ use zenoh::Session;
 use zenoh_backend_traits::CreateBackend;
 use zenoh_backend_traits::CREATE_BACKEND_FN_NAME;
 // use zenoh_backend_traits::Storage;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh_backend_traits::{config::*, Backend};
-use zenoh_plugin_trait::prelude::*;
-use zenoh_plugin_trait::RunningPluginTrait;
-use zenoh_plugin_trait::ValidationFunction;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::LibLoader;
 use zenoh_util::{bail, zerror, zlock};
@@ -44,16 +42,12 @@ mod storages_mgt;
 
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
+impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        zenoh_plugin_trait::PluginId {
-            uid: "zenoh-plugin-storages",
-        }
-    }
     const STATIC_NAME: &'static str = "storages";
 
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RuntimePlugin;
+    type RunningPlugin = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         std::mem::drop(env_logger::try_init());
@@ -281,7 +275,7 @@ impl From<StorageRuntimeInner> for StorageRuntime {
         StorageRuntime(Arc::new(Mutex::new(inner)))
     }
 }
-impl<'a> RunningPluginTrait<'a> for StorageRuntime {
+impl RunningPluginTrait for StorageRuntime {
     fn config_checker(&self) -> ValidationFunction {
         let name = { zlock!(self.0).name.clone() };
         let runtime = self.0.clone();
@@ -296,15 +290,13 @@ impl<'a> RunningPluginTrait<'a> for StorageRuntime {
             Ok(None)
         })
     }
-    type GetterIn = zenoh::plugins::GetterIn<'a>;
-    type GetterOut = zenoh::plugins::GetterOut<'a>;
-    type SetterIn = zenoh::plugins::SetterIn<'a>;
-    type SetterOut = zenoh::plugins::SetterOut<'a>;
-    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
-        todo!()
-    }
-    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
-        todo!()
+
+    fn adminspace_getter<'a>(
+        &'a self,
+        _selector: &'a Selector<'a>,
+        _plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        bail!("Not yet implemented")
     }
 }
 

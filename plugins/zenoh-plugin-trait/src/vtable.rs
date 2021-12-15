@@ -12,7 +12,6 @@ type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<Running
 
 #[repr(C)]
 struct PluginVTableInner<StartArgs, RunningPlugin> {
-    is_compatible_with: fn(&[PluginId]) -> Result<PluginId, Incompatibility>,
     start: StartFn<StartArgs, RunningPlugin>,
 }
 
@@ -46,7 +45,6 @@ impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
     ) -> Self {
         PluginVTable {
             inner: PluginVTableInner {
-                is_compatible_with: ConcretePlugin::is_compatible_with,
                 start: ConcretePlugin::start,
             },
             padding: PluginVTablePadding::new(),
@@ -60,10 +58,6 @@ impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
                 Result<Self, PluginVTableVersion>,
             >::uninit())
         };
-    }
-
-    pub fn is_compatible_with(&self, others: &[PluginId]) -> Result<PluginId, Incompatibility> {
-        (self.inner.is_compatible_with)(others)
     }
 
     pub fn start(&self, name: &str, start_args: &StartArgs) -> ZResult<RunningPlugin> {
@@ -80,12 +74,15 @@ pub mod no_mangle {
         ($ty: path) => {
             #[no_mangle]
             fn load_plugin(
-                version: PluginVTableVersion,
-            ) -> LoadPluginResult<<$ty as Plugin>::StartArgs, <$ty as Plugin>::RunningPlugin> {
-                if version == PLUGIN_VTABLE_VERSION {
-                    Ok(PluginVTable::new::<$ty>())
+                version: $crate::prelude::PluginVTableVersion,
+            ) -> $crate::prelude::LoadPluginResult<
+                <$ty as $crate::prelude::Plugin>::StartArgs,
+                <$ty as $crate::prelude::Plugin>::RunningPlugin,
+            > {
+                if version == $crate::prelude::PLUGIN_VTABLE_VERSION {
+                    Ok($crate::prelude::PluginVTable::new::<$ty>())
                 } else {
-                    Err(PLUGIN_VTABLE_VERSION)
+                    Err($crate::prelude::PLUGIN_VTABLE_VERSION)
                 }
             }
         };

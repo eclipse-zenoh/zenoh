@@ -118,7 +118,7 @@ pub mod queryable;
 pub mod subscriber;
 pub mod utils;
 
-pub use crate::net::plugins;
+pub mod plugins;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.

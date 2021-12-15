@@ -17,6 +17,7 @@
 
 use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
+use crate::plugins::ValidationFunction;
 use crate::Result as ZResult;
 use serde_json::Value;
 use std::{
@@ -29,7 +30,6 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
-use zenoh_plugin_trait::ValidationFunction;
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 
@@ -709,7 +709,7 @@ fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, zenoh_plugin_trait::ValidationFunction>,
+    validators: HashMap<String, crate::plugins::ValidationFunction>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {

@@ -14,8 +14,6 @@
 #[doc(hidden)]
 pub mod link;
 #[doc(hidden)]
-pub mod plugins;
-#[doc(hidden)]
 pub mod protocol;
 #[doc(hidden)]
 pub mod routing;

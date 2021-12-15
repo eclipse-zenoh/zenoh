@@ -22,12 +22,10 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
-use zenoh_plugin_trait::prelude::*;
-use zenoh_plugin_trait::RunningPluginTrait;
-use zenoh_plugin_trait::ValidationFunction;
 use zenoh_util::bail;
 use zenoh_util::{core::Result as ZResult, zlock};
 
@@ -36,14 +34,10 @@ pub struct ExamplePlugin {}
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
 const DEFAULT_SELECTOR: &str = "/demo/example/**";
+impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RuntimePlugin;
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        zenoh_plugin_trait::PluginId {
-            uid: "zenoh-example-plugin",
-        }
-    }
+    type RunningPlugin = zenoh::plugins::RunningPlugin;
     const STATIC_NAME: &'static str = "example";
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
@@ -78,7 +72,7 @@ struct RunningPluginInner {
 }
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
-impl<'a> RunningPluginTrait<'a> for RunningPlugin {
+impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> ValidationFunction {
         let guard = zlock!(&self.0);
         let name = guard.name.clone();
@@ -113,22 +107,12 @@ impl<'a> RunningPluginTrait<'a> for RunningPlugin {
             bail!("unknown option {} for {}", path, &name)
         })
     }
-
-    type GetterIn = zenoh::plugins::GetterIn<'a>;
-    type GetterOut = zenoh::plugins::GetterOut<'a>;
-    type SetterIn = zenoh::plugins::SetterIn<'a>;
-    type SetterOut = zenoh::plugins::SetterOut<'a>;
-    fn adminspace_getter(&'a self, _input: Self::GetterIn) -> Self::GetterOut {
-        bail!(
-            "adminspace_getter not supported by example-plugin `{}`",
-            &zlock!(self.0).name
-        )
-    }
-    fn adminspace_setter(&'a mut self, _input: Self::SetterIn) -> Self::SetterOut {
-        bail!(
-            "adminspace_setter not supported by example-plugin `{}`",
-            &zlock!(self.0).name
-        )
+    fn adminspace_getter<'a>(
+        &'a self,
+        _selector: &'a Selector<'a>,
+        _plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        Ok(Vec::new())
     }
 }
 impl Drop for RunningPlugin {

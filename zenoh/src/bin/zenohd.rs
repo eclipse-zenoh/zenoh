@@ -19,8 +19,8 @@ use git_version::git_version;
 use validated_struct::ValidatedMap;
 use zenoh::config::Config;
 use zenoh::config::PluginLoad;
-use zenoh::net::plugins::PluginsManager;
 use zenoh::net::runtime::{AdminSpace, Runtime};
+use zenoh::plugins::PluginsManager;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
