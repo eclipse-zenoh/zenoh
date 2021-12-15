@@ -83,12 +83,6 @@ impl AdminSpace {
                 linkstate_peers_data(context, key, args).boxed()
             })),
         );
-        handlers.insert(
-            [&root_key, "/status/plugins/**"].concat(),
-            Arc::new(Box::new(|context, key, args| {
-                plugins_status(context, key, args).boxed()
-            })),
-        );
 
         let mut active_plugins = plugins_mgr
             .running_plugins_info()
@@ -368,19 +362,22 @@ impl Primitives for AdminSpace {
             _consolidation
         );
         let pid = self.pid;
+        let plugin_key = format!("/@/router/{}/status/plugins/**", &pid);
+        let mut ask_plugins = false;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
             Some(name) => {
+                ask_plugins = key_expr::intersect(&name, &plugin_key);
                 for (key, handler) in &self.handlers {
                     if key_expr::intersect(&name, key) {
                         matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
             }
-            None => error!("Unknown KeyExpr!!"),
+            None => log::error!("Unknown KeyExpr!!"),
         };
 
         let key_expr = key_expr.to_owned();
@@ -388,12 +385,44 @@ impl Primitives for AdminSpace {
 
         // router is not re-entrant
         task::spawn(async move {
-            for (key, handler) in matching_handlers {
-                let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
-                let mut data_info = DataInfo::new();
-                data_info.encoding = Some(encoding);
+            let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
+                |(key, handler)| async {
+                    let handler = handler;
+                    let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(qid, EVAL, pid, key.into(), Some(data_info), payload);
+                    primitives.send_reply_data(
+                        qid,
+                        EVAL,
+                        pid,
+                        key.into(),
+                        Some(data_info),
+                        payload,
+                    );
+                },
+            ));
+            if ask_plugins {
+                futures::join!(handler_tasks, async {
+                    let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
+                    for status in plugin_status {
+                        let crate::plugins::Response { key, value } = status;
+                        let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
+                        let mut data_info = DataInfo::new();
+                        data_info.encoding = Some(Encoding::APP_JSON);
+
+                        primitives.send_reply_data(
+                            qid,
+                            EVAL,
+                            pid,
+                            key.into(),
+                            Some(data_info),
+                            payload.into(),
+                        );
+                    }
+                });
+            } else {
+                handler_tasks.await;
             }
 
             primitives.send_reply_final(qid);
@@ -568,7 +597,7 @@ pub async fn plugins_status(
     context: &AdminContext,
     key: &KeyExpr<'_>,
     args: &str,
-) -> (ZBuf, Encoding) {
+) -> Vec<crate::plugins::Response> {
     let selector = Selector {
         key_selector: key.clone(),
         value_selector: args,
@@ -606,8 +635,7 @@ pub async fn plugins_status(
             });
         });
     }
-    let response: Vec<u8> = serde_json::to_string(&responses).unwrap().into();
-    (ZBuf::from(response), Encoding::APP_JSON)
+    responses
 }
 
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
