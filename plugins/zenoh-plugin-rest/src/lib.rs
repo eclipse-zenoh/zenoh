@@ -24,23 +24,10 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
 use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
-use zenoh_util::{bail, core::Result as ZResult};
+use zenoh_util::{core::Result as ZResult, zerror};
 
-const PORT_SEPARATOR: char = ':';
-const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
-const DEFAULT_HTTP_PORT: &str = "8000";
-
-fn parse_http_port(arg: &str) -> String {
-    match arg.split(':').count() {
-        1 => {
-            match arg.parse::<u16>() {
-                Ok(_) => [DEFAULT_HTTP_HOST, arg].join(&PORT_SEPARATOR.to_string()), // port only
-                Err(_) => [arg, DEFAULT_HTTP_PORT].join(&PORT_SEPARATOR.to_string()), // host only
-            }
-        }
-        _ => arg.to_string(),
-    }
-}
+mod config;
+pub use config::Config;
 
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
@@ -155,43 +142,20 @@ impl Plugin for RestPlugin {
     const STATIC_NAME: &'static str = "rest";
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
-        let config = runtime.config.lock();
-        let self_cfg: &serde_json::Value = match config.plugin(name) {
-            Some(value) => value,
-            None => {
-                bail!("No configuration found for plugin '{}'", name)
-            }
-        };
-        if let Some(port) = self_cfg.as_object().unwrap().get("port") {
-            let port = match port {
-                serde_json::Value::Null
-                | serde_json::Value::Bool(_)
-                | serde_json::Value::Array(_)
-                | serde_json::Value::Object(_) => {
-                    return Err(Box::new(StrError {
-                        err: r#""port" option must be an integer"#,
-                    }))
-                }
-                serde_json::Value::String(s) => s.clone(),
-                serde_json::Value::Number(n) => {
-                    if let Some(port) = n.as_u64() {
-                        port.to_string()
-                    } else {
-                        return Err(Box::new(StrError {
-                            err: r#""port" option must be a positive integer"#,
-                        }));
-                    }
-                }
-            };
-            std::mem::drop(config);
-            async_std::task::spawn(run(runtime.clone(), port));
-            Ok(Box::new(RunningPlugin))
-        } else {
-            std::mem::drop(config);
-            Err(Box::new(StrError {
-                err: r#"Plugin option "port" is required"#,
-            }))
-        }
+        // Try to initiate login.
+        // Required in case of dynamic lib, otherwise no logs.
+        // But cannot be done twice in case of static link.
+        let _ = env_logger::try_init();
+
+        let runtime_conf = runtime.config.lock();
+        let plugin_conf = runtime_conf
+            .plugin(name)
+            .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
+
+        let conf: Config = serde_json::from_value(plugin_conf.clone())
+            .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
+        async_std::task::spawn(run(runtime.clone(), conf));
+        Ok(Box::new(RunningPlugin))
     }
 }
 struct RunningPlugin;
@@ -338,13 +302,11 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-pub async fn run(runtime: Runtime, port: String) {
+pub async fn run(runtime: Runtime, conf: Config) {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
-
-    let http_port = parse_http_port(&port);
 
     let pid = runtime.get_pid_str();
     let session = Session::init(runtime, true, vec![], vec![]).await;
@@ -364,7 +326,7 @@ pub async fn run(runtime: Runtime, port: String) {
     app.at("/").get(query).put(write).patch(write).delete(write);
     app.at("*").get(query).put(write).patch(write).delete(write);
 
-    if let Err(e) = app.listen(http_port).await {
+    if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST : {:?}", e);
     }
 }

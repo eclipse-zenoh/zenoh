@@ -3272,6 +3272,7 @@ dependencies = [
  "futures",
  "http-types",
  "log",
+ "serde",
  "serde_json",
  "tide",
  "zenoh",
