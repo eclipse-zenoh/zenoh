@@ -25,7 +25,7 @@ mod tests {
     use zenoh::net::link::EndPoint;
     use zenoh::net::link::Link;
     use zenoh::net::protocol::core::{
-        Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+        Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::message::ZenohMessage;
@@ -132,8 +132,8 @@ mod tests {
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
         // Define peer01 and peer02 IDs
-        let peer01_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+        let peer01_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+        let peer02_id = ZenohId::new(1, [1u8; ZenohId::MAX_SIZE]);
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());

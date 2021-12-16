@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::message::ZenohMessage;
@@ -169,8 +169,8 @@ async fn open_transport(
     priority: Priority,
 ) -> (TransportManager, Arc<SHRouter>, TransportUnicast) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));

@@ -13,7 +13,7 @@
 //
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
-use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSnList, ZenohId, Priority, WhatAmI, ZInt};
 use super::protocol::message::{Close, Join, TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
@@ -38,7 +38,7 @@ use zenoh_util::core::Result as ZResult;
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) lease: Duration,

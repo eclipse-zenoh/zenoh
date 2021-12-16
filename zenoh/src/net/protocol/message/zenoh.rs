@@ -144,7 +144,7 @@ pub mod default_congestion_control {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplierInfo {
     pub kind: ZInt,
-    pub id: PeerId,
+    pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyContext {
@@ -260,9 +260,9 @@ pub struct DataInfo {
     pub kind: Option<ZInt>,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<PeerId>,
+    pub source_id: Option<ZenohId>,
     pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<PeerId>,
+    pub first_router_id: Option<ZenohId>,
     pub first_router_sn: Option<ZInt>,
 }
 
@@ -769,7 +769,7 @@ impl Header for Query {
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
     pub links: Vec<ZInt>,

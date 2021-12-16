@@ -17,7 +17,7 @@ use super::common::{
     pipeline::TransmissionPipeline,
 };
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, ZenohId, Priority, WhatAmI, ZInt};
 use super::protocol::message::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -54,7 +54,7 @@ pub(crate) struct TransportUnicastInner {
     // The manager this channel is associated to
     pub(super) manager: TransportManager,
     // The remote peer id
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     // The remote whatami
     pub(super) whatami: WhatAmI,
     // The SN resolution
@@ -78,7 +78,7 @@ pub(crate) struct TransportUnicastInner {
 
 pub(crate) struct TransportUnicastConfig {
     pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
+    pub(crate) pid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
@@ -345,7 +345,7 @@ impl TransportUnicastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
+    pub(crate) fn get_pid(&self) -> ZenohId {
         self.pid
     }
 

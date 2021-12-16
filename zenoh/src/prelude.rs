@@ -49,7 +49,7 @@ pub use crate::net::link::Locator;
 pub use super::net::protocol::core::Encoding;
 
 /// The global unique id of a zenoh peer.
-pub use super::net::protocol::core::PeerId;
+pub use super::net::protocol::core::ZenohId;
 
 /// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
 pub use super::net::protocol::core::ExprId;
@@ -273,12 +273,12 @@ impl From<f64> for Value {
 /// Informations on the source of a zenoh [`Sample`].
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
-    /// The [`PeerId`] of the zenoh instance that published the concerned [`Sample`].
-    pub source_id: Option<PeerId>,
+    /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
+    pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<ZInt>,
-    /// The [`PeerId`] of the first zenoh router that routed this [`Sample`].
-    pub first_router_id: Option<PeerId>,
+    /// The [`ZenohId`] of the first zenoh router that routed this [`Sample`].
+    pub first_router_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the first zenoh router that routed it.
     pub first_router_sn: Option<ZInt>,
 }

@@ -21,7 +21,7 @@ mod tests {
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
     use zenoh::net::protocol::core::{
-        Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+        Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI,
     };
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::message::ZenohMessage;
@@ -101,8 +101,8 @@ mod tests {
 
     async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
         /* [Peers] */
-        let peer_id01 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-        let peer_id02 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+        let peer_id01 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+        let peer_id02 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new());

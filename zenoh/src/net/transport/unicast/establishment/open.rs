@@ -15,7 +15,7 @@ use super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use crate::net::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::message::{Attachment, Close, OpenAck, TransportBody, TransportMessage};
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
@@ -78,7 +78,7 @@ async fn open_send_init_syn(
 }
 
 struct OpenInitAckOutput {
-    pid: PeerId,
+    pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     is_qos: bool,
@@ -250,7 +250,7 @@ async fn open_recv_init_ack(
 }
 
 struct OpenOpenSynOutput {
-    pid: PeerId,
+    pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     initial_sn_tx: ZInt,
@@ -288,7 +288,7 @@ async fn open_send_open_syn(
 }
 
 struct OpenAckOutput {
-    pid: PeerId,
+    pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     is_qos: bool,

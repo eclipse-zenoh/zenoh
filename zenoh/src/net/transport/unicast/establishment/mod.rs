@@ -16,7 +16,7 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use super::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::message::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportUnicast};
@@ -94,7 +94,7 @@ pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<Establi
 /*************************************/
 pub struct Cookie {
     whatami: WhatAmI,
-    pid: PeerId,
+    pid: ZenohId,
     sn_resolution: ZInt,
     is_qos: bool,
     nonce: ZInt,

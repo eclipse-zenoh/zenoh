@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{PeerId, WhatAmI};
+use zenoh::net::protocol::core::{ZenohId, WhatAmI};
 use zenoh::net::protocol::message::ZenohMessage;
 #[cfg(feature = "auth_pubkey")]
 use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;
@@ -113,7 +113,7 @@ impl TransportEventHandler for SHClientAuthenticator {
 #[cfg(feature = "transport_multilink")]
 async fn authenticator_multilink(endpoint: &EndPoint) {
     // Create the router transport manager
-    let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [0u8; ZenohId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     let n = BigUint::from_bytes_le(&[
         0x31, 0xd1, 0xfc, 0x7e, 0x70, 0x5f, 0xd7, 0xe3, 0xcc, 0xa4, 0xca, 0xcb, 0x38, 0x84, 0x2f,
@@ -166,7 +166,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     let router_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the client 01
-    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
 
     let n = BigUint::from_bytes_le(&[
         0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95, 0xca,
@@ -219,7 +219,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     let client01_manager = TransportManager::new(config);
 
     // Create the transport transport manager for the client 02
-    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
     let n = BigUint::from_bytes_le(&[
         0xd1, 0x36, 0xcf, 0x94, 0xda, 0x04, 0x7e, 0x9f, 0x53, 0x39, 0xb8, 0x7b, 0x53, 0x3a, 0xe6,
@@ -507,11 +507,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 #[cfg(feature = "auth_usrpwd")]
 async fn authenticator_user_password(endpoint: &EndPoint) {
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
     let user01 = "user01".to_string();
     let password01 = "password01".to_string();
 
-    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
     let user02 = "invalid".to_string();
     let password02 = "invalid".to_string();
 
@@ -520,7 +520,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     let password03 = "password03".to_string();
 
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
@@ -676,10 +676,10 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 #[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
     /* [CLIENT] */
-    let client_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::new(1, [1u8; ZenohId::MAX_SIZE]);
 
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
     let router_handler = Arc::new(SHRouterAuthenticator::new());
     // Create the router transport manager
     let peer_auth_router = SharedMemoryAuthenticator::new();

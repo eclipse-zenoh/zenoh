@@ -20,7 +20,7 @@ mod userpassword;
 
 use crate::config::Config;
 use crate::net::link::{Link, Locator};
-use crate::net::protocol::core::{PeerId, ZInt};
+use crate::net::protocol::core::{ZenohId, ZInt};
 #[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
 use crate::net::transport::unicast::establishment::Cookie;
@@ -86,7 +86,7 @@ impl Hash for LinkAuthenticator {
 pub trait LinkUnicastAuthenticatorTrait {
     fn id(&self) -> LinkAuthenticatorId;
 
-    async fn handle_new_link(&self, link: &Link) -> ZResult<Option<PeerId>>;
+    async fn handle_new_link(&self, link: &Link) -> ZResult<Option<ZenohId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
     /// of the authenticator in such a way no unnecessary data is left around
@@ -111,7 +111,7 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
         LinkAuthenticatorId::Reserved
     }
 
-    async fn handle_new_link(&self, _link: &Link) -> ZResult<Option<PeerId>> {
+    async fn handle_new_link(&self, _link: &Link) -> ZResult<Option<ZenohId>> {
         Ok(None)
     }
 
@@ -198,7 +198,7 @@ impl Hash for PeerAuthenticator {
 pub struct AuthenticatedPeerLink {
     pub src: Locator,
     pub dst: Locator,
-    pub peer_id: Option<PeerId>,
+    pub peer_id: Option<ZenohId>,
 }
 
 impl fmt::Display for AuthenticatedPeerLink {
@@ -217,13 +217,13 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link`        - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the initial InitSyn message will be sent on
     ///
-    /// * `peer_id`     - The [`PeerId`][PeerId] of the sender of the InitSyn, i.e., the peer
+    /// * `peer_id`     - The [`ZenohId`][ZenohId] of the sender of the InitSyn, i.e., the peer
     ///                   initiating a new transport.
     ///
     async fn get_init_syn_properties(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
+        peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>>;
 
     /// Return the attachment to be included in the InitAck message to be sent
@@ -249,7 +249,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// # Arguments
     /// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
     ///
-    /// * `peer_id` - The [`PeerId`][PeerId] of the sender of the InitAck message
+    /// * `peer_id` - The [`ZenohId`][ZenohId] of the sender of the InitAck message
     ///
     /// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitAck message
     ///
@@ -258,7 +258,7 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
+        peer_id: &ZenohId,
         sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>>;
@@ -305,9 +305,9 @@ pub trait PeerAuthenticatorTrait: Send + Sync {
     /// of the authenticator in such a way no unnecessary data is left around
     ///
     /// # Arguments
-    /// * `peerd_id` - The [`PeerId`][PeerId] of the transport being closed.
+    /// * `peerd_id` - The [`ZenohId`][ZenohId] of the transport being closed.
     ///
-    async fn handle_close(&self, peer_id: &PeerId);
+    async fn handle_close(&self, peer_id: &ZenohId);
 }
 
 /*************************************/
@@ -330,7 +330,7 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
@@ -347,7 +347,7 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
     async fn handle_init_ack(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
         _sn_resolution: ZInt,
         _property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -373,5 +373,5 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
 
-    async fn handle_close(&self, _peer_id: &PeerId) {}
+    async fn handle_close(&self, _peer_id: &ZenohId) {}
 }

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::{EndPoint, Locator};
-use super::protocol::core::{PeerId, WhatAmI};
+use super::protocol::core::{WhatAmI, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::message::{Hello, Scout, TransportBody, TransportMessage};
 use super::transport::TransportUnicast;
@@ -591,7 +591,7 @@ impl Runtime {
         bail!("Unable to connect any of {:?}", locators)
     }
 
-    pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
+    pub async fn connect_peer(&self, pid: &ZenohId, locators: &[Locator]) {
         if pid != &self.manager().pid() {
             if self.manager().get_transport(pid).is_none() {
                 let transport = self.connect(locators).await;

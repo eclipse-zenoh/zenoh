@@ -18,7 +18,7 @@ use super::link;
 use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI};
+use super::protocol::core::{ZenohId, WhatAmI};
 use super::protocol::message::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
@@ -39,7 +39,7 @@ use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::{bail, zerror};
 
 pub struct RuntimeState {
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
@@ -74,14 +74,14 @@ impl Runtime {
             let s = s.replace('-', "");
             let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
             let size = vec.len();
-            if size > PeerId::MAX_SIZE {
-                bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
+            if size > ZenohId::MAX_SIZE {
+                bail!("Invalid id size: {} ({} bytes max)", size, ZenohId::MAX_SIZE)
             }
-            let mut id = [0_u8; PeerId::MAX_SIZE];
+            let mut id = [0_u8; ZenohId::MAX_SIZE];
             id[..size].copy_from_slice(vec.as_slice());
-            PeerId::new(size, id)
+            ZenohId::new(size, id)
         } else {
-            PeerId::from(uuid::Uuid::new_v4())
+            ZenohId::from(uuid::Uuid::new_v4())
         };
 
         log::info!("Using PID: {}", pid);

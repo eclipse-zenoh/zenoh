@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
+        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, ZenohId,
         QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
     },
     io::ZBuf,
@@ -44,7 +44,7 @@ type Handler = Box<
 >;
 
 pub struct AdminSpace {
-    pid: PeerId,
+    pid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<String, Arc<Handler>>,
@@ -275,7 +275,7 @@ impl Primitives for AdminSpace {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,

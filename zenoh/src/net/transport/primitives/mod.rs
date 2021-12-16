@@ -16,7 +16,7 @@ mod mux;
 
 use super::protocol;
 use super::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, KeyExpr, ZenohId, QueryConsolidation, QueryTarget, QueryableInfo,
     SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -77,7 +77,7 @@ pub trait Primitives: Send + Sync {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
@@ -161,7 +161,7 @@ impl Primitives for DummyPrimitives {
         &self,
         _qid: ZInt,
         _replier_kind: ZInt,
-        _replier_id: PeerId,
+        _replier_id: ZenohId,
         _key_expr: KeyExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,

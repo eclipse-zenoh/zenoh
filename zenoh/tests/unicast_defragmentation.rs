@@ -17,7 +17,7 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::message::ZenohMessage;
@@ -32,8 +32,8 @@ const MSG_DEFRAG_BUF: usize = 128_000;
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
 
     // Create the router transport manager
     let config = TransportManagerConfig::builder()

@@ -16,7 +16,7 @@ use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{Cookie, EstablishmentProperties};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use crate::net::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::message::{Attachment, Close, OpenSyn, TransportBody, TransportMessage};
 use crate::net::transport::unicast::manager::Opened;
@@ -37,7 +37,7 @@ type IResult<T> = Result<T, IError>;
 // Read and eventually accept an InitSyn
 struct AcceptInitSynOutput {
     whatami: WhatAmI,
-    pid: PeerId,
+    pid: ZenohId,
     sn_resolution: ZInt,
     is_qos: bool,
     init_syn_properties: EstablishmentProperties,
@@ -83,7 +83,7 @@ async fn accept_recv_init_syn(
             if pid != init_syn.pid {
                 return Err((
                     zerror!(
-                        "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
+                        "Inconsistent ZenohId in InitSyn on {}: {:?} {:?}",
                         link,
                         pid,
                         init_syn.pid

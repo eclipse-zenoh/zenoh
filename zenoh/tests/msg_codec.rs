@@ -53,8 +53,8 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
     buf
 }
 
-fn gen_pid() -> PeerId {
-    PeerId::from(uuid::Uuid::new_v4())
+fn gen_pid() -> ZenohId {
+    ZenohId::from(uuid::Uuid::new_v4())
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {

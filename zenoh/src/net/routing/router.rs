@@ -13,7 +13,7 @@
 //
 use super::face::{Face, FaceState};
 use super::network::{shared_nodes, Network};
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::message::{ZenohBody, ZenohMessage};
 pub use super::pubsub::*;
 pub use super::queries::*;
@@ -37,7 +37,7 @@ zconfigurable! {
 }
 
 pub struct Tables {
-    pub(crate) pid: PeerId,
+    pub(crate) pid: ZenohId,
     pub(crate) whatami: WhatAmI,
     face_counter: usize,
     #[allow(dead_code)]
@@ -51,13 +51,13 @@ pub struct Tables {
     pub(crate) peer_qabls: HashSet<Arc<Resource>>,
     pub(crate) routers_net: Option<Network>,
     pub(crate) peers_net: Option<Network>,
-    pub(crate) shared_nodes: Vec<PeerId>,
+    pub(crate) shared_nodes: Vec<ZenohId>,
     pub(crate) routers_trees_task: Option<JoinHandle<()>>,
     pub(crate) peers_trees_task: Option<JoinHandle<()>>,
 }
 
 impl Tables {
-    pub fn new(pid: PeerId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
+    pub fn new(pid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
         Tables {
             pid,
             whatami,
@@ -110,13 +110,13 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, pid: &PeerId) -> Option<&Arc<FaceState>> {
+    pub(crate) fn get_face(&self, pid: &ZenohId) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.pid == *pid)
     }
 
     fn open_net_face(
         &mut self,
-        pid: PeerId,
+        pid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
@@ -138,7 +138,7 @@ impl Tables {
 
     pub fn open_face(
         &mut self,
-        pid: PeerId,
+        pid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
@@ -242,7 +242,7 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(pid: PeerId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
+    pub fn new(pid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>) -> Self {
         Router {
             whatami,
             tables: Arc::new(RwLock::new(Tables::new(pid, whatami, hlc))),
