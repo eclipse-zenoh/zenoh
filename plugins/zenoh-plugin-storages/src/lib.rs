@@ -308,7 +308,7 @@ impl RunningPluginTrait for StorageRuntime {
                             return;
                         };
                         for (storage, handle) in storages {
-                            with_extended_string(key, &[dbg!(storage)], |key| {
+                            with_extended_string(key, &[storage], |key| {
                                 if zenoh::utils::key_expr::intersect(key, key_selector) {
                                     if let Ok(value) = task::block_on(async {
                                         let (tx, rx) = async_std::channel::bounded(1);
