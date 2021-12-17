@@ -192,6 +192,8 @@ impl Plugin for RestPlugin {
         }
     }
 }
+
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 struct RunningPlugin(String);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
@@ -205,16 +207,40 @@ impl RunningPluginTrait for RunningPlugin {
         selector: &'a Selector<'a>,
         plugin_status_key: &str,
     ) -> ZResult<Vec<zenoh::plugins::Response>> {
-        let port_key = [plugin_status_key, "/port"].concat();
-        if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), &port_key) {
-            Ok(vec![zenoh::plugins::Response {
-                key: port_key,
-                value: self.0.clone().into(),
-            }])
-        } else {
-            Ok(Vec::new())
-        }
+        let mut responses = Vec::new();
+        let mut key = String::from(plugin_status_key);
+        with_extended_string(&mut key, &["/version"], |key| {
+            if zenoh::utils::key_expr::intersect(key, selector.key_selector.as_str()) {
+                responses.push(zenoh::plugins::Response {
+                    key: key.clone(),
+                    value: GIT_VERSION.into(),
+                })
+            }
+        });
+        with_extended_string(&mut key, &["/port"], |port_key| {
+            if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), port_key) {
+                responses.push(zenoh::plugins::Response {
+                    key: port_key.clone(),
+                    value: self.0.clone().into(),
+                })
+            }
+        });
+        Ok(responses)
     }
+}
+
+fn with_extended_string<R, F: FnMut(&mut String) -> R>(
+    prefix: &mut String,
+    suffixes: &[&str],
+    mut closure: F,
+) -> R {
+    let prefix_len = prefix.len();
+    for suffix in suffixes {
+        prefix.push_str(suffix);
+    }
+    let result = closure(prefix);
+    prefix.truncate(prefix_len);
+    result
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {

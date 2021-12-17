@@ -128,7 +128,7 @@
 
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh::prelude::{KeyExpr, Sample, Selector, Value};
+use zenoh::prelude::{KeyExpr, Sample, Selector};
 use zenoh::Result as ZResult;
 
 pub mod config;
@@ -145,7 +145,7 @@ pub type CreateBackend = fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
 pub trait Backend: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this backend.
-    async fn get_admin_status(&self) -> Value;
+    fn get_admin_status(&self) -> serde_json::Value;
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
@@ -164,7 +164,7 @@ pub trait Backend: Send + Sync {
 pub trait Storage: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this storage.
-    async fn get_admin_status(&self) -> Value;
+    fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;

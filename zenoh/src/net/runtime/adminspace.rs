@@ -607,7 +607,7 @@ pub async fn plugins_status(
     let mut responses = Vec::new();
     for (name, (path, plugin)) in guard.running_plugins() {
         with_extended_string(&mut root_key, &[name], |plugin_key| {
-            with_extended_string(plugin_key, &["/path"], |plugin_path_key| {
+            with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if key_expr::intersect(key.as_str(), plugin_path_key) {
                     responses.push(crate::plugins::Response {
                         key: plugin_path_key.clone(),
@@ -615,9 +615,14 @@ pub async fn plugins_status(
                     })
                 }
             });
-            with_extended_string(plugin_key, &["/status"], |plugin_status_key| {
-                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        plugin.adminspace_getter(&selector, plugin_status_key)
+            let matches_plugin = |plugin_status_space: &mut String| {
+                key_expr::intersect(key.as_str(), plugin_status_space)
+            };
+            if !with_extended_string(plugin_key, &["/**"], matches_plugin) {
+                return;
+            }
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        plugin.adminspace_getter(&selector, plugin_key)
                     })) {
                         Ok(Ok(response)) => responses.extend(response),
                         Ok(Err(e)) => {
@@ -632,7 +637,6 @@ pub async fn plugins_status(
                             None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", name, key),
                         },
                     }
-            });
         });
     }
     responses

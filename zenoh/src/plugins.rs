@@ -27,7 +27,7 @@ pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlug
 pub type StartArgs = Runtime;
 /// A zenoh plugin, when started, must return this type.
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub struct Response {
     pub key: String,
     pub value: serde_json::Value,
