@@ -139,10 +139,17 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
         for (name, path, start_result) in plugins.start_all(&runtime) {
             match start_result {
                 Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
-                Ok(None) => log::warn!("plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
-                Err(e) => log::error!("plugin failure: {}", e)
+                Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+                Err(e) => {
+                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
+                        Ok(s) => s,
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                    };
+                    log::error!("Plugin start failure: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                }
             }
         }
+        log::info!("Finished loading plugins");
 
         {
             let mut config_guard = runtime.config.lock();

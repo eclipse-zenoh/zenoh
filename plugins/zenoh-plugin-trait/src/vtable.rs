@@ -1,5 +1,6 @@
 use super::*;
 pub use no_mangle::*;
+use zenoh_util::core::Result as ZResult;
 
 pub type PluginVTableVersion = u16;
 type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;
@@ -13,6 +14,7 @@ type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<Running
 #[repr(C)]
 struct PluginVTableInner<StartArgs, RunningPlugin> {
     start: StartFn<StartArgs, RunningPlugin>,
+    compatibility: fn() -> ZResult<crate::Compatibility>,
 }
 
 /// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
@@ -46,6 +48,7 @@ impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
         PluginVTable {
             inner: PluginVTableInner {
                 start: ConcretePlugin::start,
+                compatibility: ConcretePlugin::compatibility,
             },
             padding: PluginVTablePadding::new(),
         }
@@ -62,6 +65,9 @@ impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
 
     pub fn start(&self, name: &str, start_args: &StartArgs) -> ZResult<RunningPlugin> {
         (self.inner.start)(name, start_args)
+    }
+    pub fn compatibility(&self) -> ZResult<Compatibility> {
+        (self.inner.compatibility)()
     }
 }
 

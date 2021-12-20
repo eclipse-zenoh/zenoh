@@ -3284,6 +3284,7 @@ version = "0.6.0-dev.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "rustc_version 0.4.0",
  "syn",
  "unzip-n",
 ]
@@ -3335,6 +3336,7 @@ dependencies = [
  "libloading",
  "log",
  "serde_json",
+ "zenoh-macros",
  "zenoh-util",
 ]
 
