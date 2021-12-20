@@ -41,11 +41,11 @@
 //!
 //! #[async_trait]
 //! impl Backend for MyBackend {
-//!     async fn get_admin_status(&self) -> Value {
+//!     fn get_admin_status(&self) -> serde_json::Value {
 //!         // This operation is called on GET operation on the admin space for the Backend
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Backend monitoring.
-//!         self.config.to_json_value().into()
+//!         self.config.to_json_value()
 //!     }
 //!
 //!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
@@ -77,11 +77,11 @@
 //!
 //! #[async_trait]
 //! impl Storage for MyStorage {
-//!     async fn get_admin_status(&self) -> Value {
+//!     fn get_admin_status(&self) -> serde_json::Value {
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.config.to_json_value().into()
+//!         self.config.to_json_value()
 //!     }
 //!
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
