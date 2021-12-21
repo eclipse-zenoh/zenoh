@@ -21,7 +21,6 @@ use zenoh::config::Config;
 use zenoh::config::PluginLoad;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
-use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -65,8 +64,10 @@ fn main() {
             If not set, a random UUIDv4 will be used.'",
             ))
             .arg(Arg::from_usage(
-                "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
-             'A plugin that MUST be loaded. Repeat this option to load several plugins. If loading failed, zenohd will exit.'",
+                r#"-P, --plugin=[PLUGIN_NAME | PLUGIN_NAME:LIB_PATH]... \
+             'A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library
+named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+Repeat this option to load several plugins. If loading failed, zenohd will exit.'"#,
             ))
             .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
             'A directory where to search for plugins libraries to load. \
@@ -182,23 +183,23 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_plugins_search_dirs(plugins_search_dirs.map(|c| c.to_owned()).collect())
             .unwrap();
     }
-    if let Some(paths) = args.values_of("plugin") {
-        for path in paths {
-            if path.contains('.') || path.contains('/') {
-                let name = LibLoader::plugin_name(&path).unwrap();
-                config
-                    .insert_json5(
-                        format!("plugins/{}/__path__", name),
-                        &format!("\"{}\"", path),
-                    )
-                    .unwrap();
-                config
-                    .insert_json5(format!("plugins/{}/__required__", name), "true")
-                    .unwrap();
-            } else {
-                config
-                    .insert_json5(format!("plugins/{}/__required__", path), "true")
-                    .unwrap();
+    if let Some(plugins) = args.values_of("plugin") {
+        for plugin in plugins {
+            match plugin.split_once(':') {
+                Some((name, path)) => {
+                    config
+                        .insert_json5(format!("plugins/{}/__required__", name), "true")
+                        .unwrap();
+                    config
+                        .insert_json5(
+                            format!("plugins/{}/__path__", name),
+                            &format!("\"{}\"", path),
+                        )
+                        .unwrap();
+                }
+                None => config
+                    .insert_json5(format!("plugins/{}/__required__", plugin), "true")
+                    .unwrap(),
             }
         }
     }
