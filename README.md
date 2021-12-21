@@ -104,7 +104,10 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
      **WARNING**: this identifier must be unique in the system! If not set, a random UUIDv4 will be used.
   * `--no-timestamp`: By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one.
     This option disables this feature.
-  * `-P, --plugin <PATH_TO_PLUGIN_LIB>...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded.
+  * `-P, --plugin [<PLUGIN_NAME> | <PLUGIN_NAME>:<LIBRARY_PATH>]...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded. Accepted values:
+     - a plugin name; zenohd will search for a library named `libzplugin_<name>.so` on Unix, `libzplugin_<PLUGIN_NAME>.dylib` on MacOS or `zplugin_<PLUGIN_NAME>.dll` on Windows.
+     - `"<PLUGIN_NAME>:<LIBRARY_PATH>"`; the plugin will be loaded from library file at `<LIBRARY_PATH>`.
+
     Repeat this option to load several plugins.
   * `--plugin-search-dir <DIRECTORY>...`: A directory where to search for [plugins](https://zenoh.io/docs/manual/plugins/) libraries to load.
     Repeat this option to specify several search directories'. By default, the plugins libraries will be searched in:
