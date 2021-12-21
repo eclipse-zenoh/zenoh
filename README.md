@@ -109,7 +109,12 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
   * `--plugin-search-dir <DIRECTORY>...`: A directory where to search for [plugins](https://zenoh.io/docs/manual/plugins/) libraries to load.
     Repeat this option to specify several search directories'. By default, the plugins libraries will be searched in:
     `'/usr/local/lib:/usr/lib:~/.zenoh/lib:.'`
-  * `--rest-http-port <rest-http-port>`: Enables the [REST plugin](https://zenoh.io/docs/manual/plugin-http/), while settting its http port [default: 8000]. Any non-integer value will disable the plugin.
+  * `--rest-http-port <rest-http-port>`: Configures the [REST plugin](https://zenoh.io/docs/manual/plugin-http/)'s HTTP port. Accepted values:
+      - a port number
+      - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+      - `"None"` to desactivate the REST plugin
+
+    If not specified, the REST plugin will be active on any interface (`0.0.0.0`) and port `8000`.
 
 -------------------------------
 ## Plugins

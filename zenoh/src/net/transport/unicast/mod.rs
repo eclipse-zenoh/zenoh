@@ -227,6 +227,7 @@ impl fmt::Debug for TransportUnicast {
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .field("is_qos", &transport.is_qos())
                 .field("is_shm", &transport.is_shm())
+                .field("links", &transport.get_links())
                 .finish(),
             Err(e) => {
                 write!(f, "{}", e)

@@ -89,19 +89,13 @@ fn main() {
 KEY must be a valid config path.
 VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
 Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`"#)
-            ).arg(Arg::with_name("rest-port")
+            ).arg(Arg::with_name("rest-http-port")
                 .long("rest-http-port")
                 .required(false)
                 .takes_value(true)
                 .value_name("PORT")
                 .default_value("8000")
-                .help("Maps to `--cfg='plugins/rest/port:PORT'`. To disable the rest plugin, pass `--port=None`")
-            ).arg(Arg::with_name("domain-id")
-                .long("domain-id")
-                .required(false)
-                .takes_value(true)
-                .value_name("DOMAIN")
-                .help("Maps to --cfg='plugins/dds/domain-id:\"DOMAIN\"'")
+                .help("Maps to `--cfg='plugins/rest/http_port:PORT'`. To disable the rest plugin, pass `--rest-http-port=None`")
             );
 
         let args = app.get_matches();
@@ -176,15 +170,12 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_mode(Some(zenoh::config::WhatAmI::Router))
             .unwrap();
     }
-    if let Some(value) = args.value_of("rest-port") {
-        if value.parse::<usize>().is_ok() {
-            config.insert_json5("plugins/rest/port", value).unwrap();
+    if let Some(value) = args.value_of("rest-http-port") {
+        if !value.eq_ignore_ascii_case("none") {
+            config
+                .insert_json5("plugins/rest/http_port", &format!(r#""{}""#, value))
+                .unwrap();
         }
-    }
-    if let Some(value) = args.value_of("domain-id") {
-        config
-            .insert_json5("plugins/dds/domain-id", &format!("\"{}\"", value))
-            .unwrap();
     }
     if let Some(plugins_search_dirs) = args.values_of("plugin-search-dir") {
         config

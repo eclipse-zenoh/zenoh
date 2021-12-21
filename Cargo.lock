@@ -3302,6 +3302,7 @@ dependencies = [
  "git-version",
  "http-types",
  "log",
+ "serde",
  "serde_json",
  "tide",
  "zenoh",

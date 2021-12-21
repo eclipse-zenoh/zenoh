@@ -1484,7 +1484,7 @@ pub fn route_query(
 
                 // let timer = tables.timer.clone();
                 // let timeout = tables.queries_default_timeout;
-                drop(tables);
+                // drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
                     let mut outface = outface.clone();
