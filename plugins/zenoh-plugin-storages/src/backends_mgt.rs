@@ -27,7 +27,7 @@ pub(crate) async fn create_and_start_storage(
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
-) -> ZResult<Sender<()>> {
+) -> ZResult<Sender<StorageMessage>> {
     trace!("Create storage {}", &admin_key);
     let key_expr = config.key_expr.clone();
     let storage = backend.create_storage(config).await?;

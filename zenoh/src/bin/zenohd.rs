@@ -19,8 +19,8 @@ use git_version::git_version;
 use validated_struct::ValidatedMap;
 use zenoh::config::Config;
 use zenoh::config::PluginLoad;
-use zenoh::net::plugins::PluginsManager;
 use zenoh::net::runtime::{AdminSpace, Runtime};
+use zenoh::plugins::PluginsManager;
 use zenoh_util::LibLoader;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -102,9 +102,8 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::builder()
-            // Static plugins are to be added here, with `.add_static::<PluginType>()`
-            .into_dynamic(config.libloader());
+        let mut plugins = PluginsManager::new(config.libloader());
+        // Static plugins are to be added here, with `.add_static::<PluginType>()`
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {
                 name,
@@ -131,20 +130,30 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
             }
         };
 
-        let (handles, failures) = plugins.build().start(&runtime);
-        for p in handles.plugins() {
-            log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
+        for (name, path, start_result) in plugins.start_all(&runtime) {
+            match start_result {
+                Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
+                Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+                Err(e) => {
+                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
+                        Ok(s) => s,
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                    };
+                    log::error!("Plugin start failure: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                }
+            }
         }
-        for f in failures {
-            log::error!("Plugin load failure: {}", f);
+        log::info!("Finished loading plugins");
+
+        {
+            let mut config_guard = runtime.config.lock();
+            for (name, (_, plugin)) in plugins.running_plugins() {
+                let hook = plugin.config_checker();
+                config_guard.add_plugin_validator(name, hook)
+            }
         }
 
-        for (name, plugin) in handles.running_plugins() {
-            let hook = plugin.config_checker();
-            runtime.config.lock().add_plugin_validator(name, hook)
-        }
-
-        AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });

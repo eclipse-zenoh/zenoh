@@ -20,10 +20,10 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
-use zenoh_plugin_trait::{prelude::*, RunningPluginTrait, ValidationFunction};
 use zenoh_util::{core::Result as ZResult, zerror};
 
 mod config;
@@ -132,16 +132,14 @@ impl std::fmt::Display for StringError {
     }
 }
 
+impl ZenohPlugin for RestPlugin {}
+
 impl Plugin for RestPlugin {
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        zenoh_plugin_trait::PluginId {
-            uid: "zenoh-plugin-rest",
-        }
-    }
     type StartArgs = Runtime;
+    type RunningPlugin = zenoh::plugins::RunningPlugin;
     const STATIC_NAME: &'static str = "rest";
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -154,17 +152,59 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf));
-        Ok(Box::new(RunningPlugin))
+        async_std::task::spawn(run(runtime.clone(), conf.clone()));
+        Ok(Box::new(RunningPlugin(conf)))
     }
 }
-struct RunningPlugin;
+
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
-    fn config_checker(&self) -> ValidationFunction {
+    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
         Arc::new(|_, _, _| {
             Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
         })
     }
+
+    fn adminspace_getter<'a>(
+        &'a self,
+        selector: &'a Selector<'a>,
+        plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        let mut responses = Vec::new();
+        let mut key = String::from(plugin_status_key);
+        with_extended_string(&mut key, &["/version"], |key| {
+            if zenoh::utils::key_expr::intersect(key, selector.key_selector.as_str()) {
+                responses.push(zenoh::plugins::Response {
+                    key: key.clone(),
+                    value: GIT_VERSION.into(),
+                })
+            }
+        });
+        with_extended_string(&mut key, &["/port"], |port_key| {
+            if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), port_key) {
+                responses.push(zenoh::plugins::Response {
+                    key: port_key.clone(),
+                    value: (&self.0).into(),
+                })
+            }
+        });
+        Ok(responses)
+    }
+}
+
+fn with_extended_string<R, F: FnMut(&mut String) -> R>(
+    prefix: &mut String,
+    suffixes: &[&str],
+    mut closure: F,
+) -> R {
+    let prefix_len = prefix.len();
+    for suffix in suffixes {
+        prefix.push_str(suffix);
+    }
+    let result = closure(prefix);
+    prefix.truncate(prefix_len);
+    result
 }
 
 async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {

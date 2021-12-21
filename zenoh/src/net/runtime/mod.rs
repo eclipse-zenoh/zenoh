@@ -16,7 +16,6 @@ pub mod orchestrator;
 
 use super::link;
 use super::link::{Link, Locator};
-use super::plugins;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
@@ -36,7 +35,6 @@ use std::any::Any;
 use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_util::core::Result as ZResult;
-use zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::{bail, zerror};
 
@@ -105,9 +103,11 @@ impl Runtime {
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
         let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
-        let queries_default_timeout = config
-            .queries_default_timeout()
-            .unwrap_or_else(|| ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap());
+        let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
+            zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
+                .parse()
+                .unwrap()
+        });
 
         let router = Arc::new(Router::new(
             pid,

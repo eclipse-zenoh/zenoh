@@ -17,6 +17,8 @@
 
 use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
+use crate::plugins::ValidationFunction;
+use crate::Result as ZResult;
 use serde_json::Value;
 use std::{
     any::Any,
@@ -28,7 +30,6 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
-use zenoh_plugin_trait::ValidationFunction;
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 
@@ -352,26 +353,34 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigOpenErr> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
+        let path = path.as_ref();
         match std::fs::File::open(path) {
             Ok(mut f) => {
                 let mut content = String::new();
                 if let Err(e) = f.read_to_string(&mut content) {
-                    return Err(ConfigOpenErr::IoError(e));
+                    bail!(e)
                 }
-                let mut deser = match json5::Deserializer::from_str(&content) {
-                    Ok(d) => d,
-                    Err(e) => return Err(ConfigOpenErr::JsonParseErr(e)),
-                };
-                match Config::from_deserializer(&mut deser) {
-                    Ok(s) => Ok(s),
-                    Err(e) => Err(match e {
-                        Ok(c) => ConfigOpenErr::InvalidConfiguration(Box::new(c)),
-                        Err(e) => ConfigOpenErr::JsonParseErr(e),
+                match path
+                    .extension()
+                    .map(|s| s.to_str().unwrap())
+                {
+                    Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
+                        Ok(mut d) => Config::from_deserializer(&mut d).map_err(|e| match e {
+                            Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                            Err(e) => zerror!("JSON error: {}", e).into(),
+                        }),
+                        Err(e) => bail!(e),
+                    },
+                    Some("yaml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
+                        Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                        Err(e) => zerror!("YAML error: {}", e).into(),
                     }),
+                    Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
+                    None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }
             }
-            Err(e) => Err(ConfigOpenErr::IoError(e)),
+            Err(e) => bail!(e),
         }
     }
     pub fn libloader(&self) -> LibLoader {
@@ -700,7 +709,7 @@ fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, zenoh_plugin_trait::ValidationFunction>,
+    validators: HashMap<String, crate::plugins::ValidationFunction>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -712,6 +721,7 @@ fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub struct PluginLoad {
     pub name: String,
     pub paths: Option<Vec<String>>,
@@ -747,7 +757,9 @@ impl PluginsConfig {
         let mut current = match split.next() {
             Some(first_in_plugin) => first_in_plugin,
             None => {
-                bail!("Removing plugins dynamically is not supported yet")
+                self.values.as_object_mut().unwrap().remove(plugin);
+                self.validators.remove(plugin);
+                return Ok(());
             }
         };
         let validator = self.validators.get(plugin);

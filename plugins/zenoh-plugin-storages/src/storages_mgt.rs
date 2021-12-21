@@ -25,6 +25,11 @@ use zenoh::Session;
 use zenoh_backend_traits::Query;
 use zenoh_util::core::Result as ZResult;
 
+pub(crate) enum StorageMessage {
+    Stop,
+    GetStatus(Sender<serde_json::Value>),
+}
+
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
     admin_key: String,
@@ -32,10 +37,10 @@ pub(crate) async fn start_storage(
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
-) -> ZResult<Sender<()>> {
+) -> ZResult<Sender<StorageMessage>> {
     debug!("Start storage {} on {}", admin_key, key_expr);
 
-    let (tx, rx) = bounded::<()>(1);
+    let (tx, rx) = bounded(1);
     task::spawn(async move {
         // subscribe on key_expr
         let mut storage_sub = match zenoh.subscribe(&key_expr).await {
@@ -81,16 +86,6 @@ pub(crate) async fn start_storage(
             }
         }
 
-        // admin_key is "/@/.../storage/<stid>"
-        // answer to GET on 'admin_key'
-        let mut storage_admin = match zenoh.queryable(&admin_key).await {
-            Ok(storages_admin) => storages_admin,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_key, e);
-                return;
-            }
-        };
-
         // answer to queries on key_expr
         let mut storage_queryable = match zenoh.queryable(&key_expr).kind(queryable::STORAGE).await
         {
@@ -103,11 +98,6 @@ pub(crate) async fn start_storage(
 
         loop {
             select!(
-                // on query on storage_admin
-                query = storage_admin.receiver().next() => {
-                    let query = query.unwrap();
-                    query.reply_async(Sample::new(admin_key.to_string(), storage.get_admin_status().await)).await;
-                },
                 // on sample for key_expr
                 sample = storage_sub.receiver().next() => {
                     // Call incoming data interceptor (if any)
@@ -132,9 +122,17 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on storage handle drop
-                _ = rx.recv().fuse() => {
-                    trace!("Dropping storage {}", admin_key);
-                    return
+                message = rx.recv().fuse() => {
+                    match message {
+                        Ok(StorageMessage::Stop) => {
+                            trace!("Dropping storage {}", admin_key);
+                            return
+                        },
+                        Ok(StorageMessage::GetStatus(tx)) => {
+                            std::mem::drop(tx.send(storage.get_admin_status()).await);
+                        }
+                        Err(e) => {log::error!("Storage Message Channel Error: {}", e); return},
+                    };
                 }
             );
         }
