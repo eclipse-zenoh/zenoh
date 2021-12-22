@@ -21,6 +21,7 @@ use zenoh::config::Config;
 use zenoh::config::PluginLoad;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
+use zenoh::prelude::Locator;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -210,8 +211,8 @@ fn config_from_args(args: &ArgMatches) -> Config {
         config
             .set_peers(
                 peers
-                    .filter_map(|v| match v.parse() {
-                        Ok(v) => Some(v),
+                    .map(|v| match v.parse::<Locator>() {
+                        Ok(v) => v,
                         Err(e) => {
                             panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
                         }
@@ -224,8 +225,8 @@ fn config_from_args(args: &ArgMatches) -> Config {
         config
             .set_listeners(
                 listeners
-                    .filter_map(|v| match v.parse() {
-                        Ok(v) => Some(v),
+                    .map(|v| match v.parse::<Locator>() {
+                        Ok(v) => v,
                         Err(e) => {
                             panic!("Couldn't parse option --listener={} into Locator: {}", v, e);
                         }
