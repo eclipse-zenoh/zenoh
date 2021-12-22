@@ -206,15 +206,14 @@ fn config_from_args(args: &ArgMatches) -> Config {
             }
         }
     }
-    if let Some(peers) = args.values_of("peers") {
+    if let Some(peers) = args.values_of("peer") {
         config
             .set_peers(
                 peers
                     .filter_map(|v| match v.parse() {
                         Ok(v) => Some(v),
                         Err(e) => {
-                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                            None
+                            panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
                         }
                     })
                     .collect(),
@@ -228,8 +227,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
                     .filter_map(|v| match v.parse() {
                         Ok(v) => Some(v),
                         Err(e) => {
-                            log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                            None
+                            panic!("Couldn't parse option --listener={} into Locator: {}", v, e);
                         }
                     })
                     .collect(),
