@@ -171,8 +171,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_mode(Some(zenoh::config::WhatAmI::Router))
             .unwrap();
     }
-    // apply '--rest-http-port' to config only is explicitly set, or if not defined in config file (default value)
-    if args.occurrences_of("rest-http-port") > 0 || config.get("plugins/rest/http_port").is_err() {
+    // apply '--rest-http-port' to config only if explicitly set (overwritting config),
+    // or if no config file is set (to apply its default value)
+    if args.occurrences_of("rest-http-port") > 0 || args.occurrences_of("config") == 0 {
         let value = args.value_of("rest-http-port").unwrap();
         if !value.eq_ignore_ascii_case("none") {
             config
