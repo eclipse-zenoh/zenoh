@@ -762,12 +762,16 @@ impl FromStr for PeerId {
     type Err = zenoh_util::core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = s.parse::<Uuid>().map_err(|e| zerror!(e))?;
-        let pid = PeerId {
-            size: 16,
-            id: *id.as_bytes(),
-        };
-        Ok(pid)
+        // filter-out '-' characters (in case s has UUID format)
+        let s = s.replace('-', "");
+        let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
+        let size = vec.len();
+        if size > PeerId::MAX_SIZE {
+            bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
+        }
+        let mut id = [0_u8; PeerId::MAX_SIZE];
+        id[..size].copy_from_slice(vec.as_slice());
+        Ok(PeerId::new(size, id))
     }
 }
 

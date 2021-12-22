@@ -61,7 +61,7 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config, id: Option<&str>) -> ZResult<Runtime> {
+    pub async fn new(version: u8, mut config: Config) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
@@ -69,17 +69,8 @@ impl Runtime {
             .set_version(Some(version))
             .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
-        let pid = if let Some(s) = id {
-            // filter-out '-' characters (in case s has UUID format)
-            let s = s.replace('-', "");
-            let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-            let size = vec.len();
-            if size > PeerId::MAX_SIZE {
-                bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
-            }
-            let mut id = [0_u8; PeerId::MAX_SIZE];
-            id[..size].copy_from_slice(vec.as_slice());
-            PeerId::new(size, id)
+        let pid = if let Some(s) = config.id() {
+            s.parse()?
         } else {
             PeerId::from(uuid::Uuid::new_v4())
         };

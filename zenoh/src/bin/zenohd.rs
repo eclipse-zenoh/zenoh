@@ -44,61 +44,58 @@ fn main() {
             .version(GIT_VERSION)
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
-                "-c, --config=[FILE] \
-             'The configuration file. Currently, this file must be a valid JSON5 file.'",
+r#"-c, --config=[FILE] \
+'The configuration file. Currently, this file must be a valid JSON5 file.'"#,
             ))
             .arg(Arg::from_usage(
-                "-l, --listener=[LOCATOR]... \
-             'A locator on which this router will listen for incoming sessions. \
-             Repeat this option to open several listeners.'",
+r#"-l, --listener=[LOCATOR]... \
+'A locator on which this router will listen for incoming sessions.
+Repeat this option to open several listeners.'"#,
                 ),
             )
             .arg(Arg::from_usage(
-                "-e, --peer=[LOCATOR]... \
-            'A peer locator this router will try to connect to. \
-            Repeat this option to connect to several peers.'",
+r#"-e, --peer=[LOCATOR]... \
+'A peer locator this router will try to connect to.
+Repeat this option to connect to several peers.'"#,
             ))
             .arg(Arg::from_usage(
-                "-i, --id=[hex_string] \
-            'The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use. \
-            WARNING: this identifier must be unique in the system! \
-            If not set, a random UUIDv4 will be used.'",
+r#"-i, --id=[HEX_STRING] \
+'The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use.
+WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
+If not set, a random UUIDv4 will be used.'"#,
             ))
             .arg(Arg::from_usage(
-                r#"-P, --plugin=[PLUGIN_NAME | PLUGIN_NAME:LIB_PATH]... \
-             'A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library
+r#"-P, --plugin=[PLUGIN_NAME | PLUGIN_NAME:LIB_PATH]... \
+'A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library \
 named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
 Repeat this option to load several plugins. If loading failed, zenohd will exit.'"#,
             ))
-            .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
-            'A directory where to search for plugins libraries to load. \
-            Repeat this option to specify several search directories'."))
             .arg(Arg::from_usage(
-                "--no-timestamp \
-             'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
-             This option disables this feature.'",
+r#"--plugin-search-dir=[DIRECTORY]... \
+'A directory where to search for plugins libraries to load.
+Repeat this option to specify several search directories.'"#))
+            .arg(Arg::from_usage(
+r#"--no-timestamp \
+'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
+This option disables this feature.'"#,
             )).arg(Arg::from_usage(
-                "--no-multicast-scouting \
-                'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
-                This option disables this feature.'",
-            )).arg(Arg::with_name("cfg")
-                .long("cfg")
-                .required(false)
-                .takes_value(true)
-                .multiple(true)
-                .value_name("KEY:VALUE")
-                .help(r#"Allows arbitrary configuration changes.
+r#"--no-multicast-scouting \
+'By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
+This option disables this feature.'"#,
+            )).arg(Arg::from_usage(
+r#"--cfg=[KEY:VALUE]... \
+'Allows arbitrary configuration changes.
 KEY must be a valid config path.
 VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
-Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`"#)
-            ).arg(Arg::with_name("rest-http-port")
-                .long("rest-http-port")
-                .required(false)
-                .takes_value(true)
-                .value_name("PORT")
-                .default_value("8000")
-                .help("Maps to `--cfg='plugins/rest/http_port:PORT'`. To disable the rest plugin, pass `--rest-http-port=None`")
-            );
+Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`'"#
+            )).arg(Arg::from_usage(
+r#"--rest-http-port=[PORT | IP:PORT | none] \
+'Configures HTTP interface for the REST API (enabled by default). Accepted values:
+- either a port number
+- either a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+- either `none` to disable the REST API
+'"#
+            ).default_value("8000"));
 
         let args = app.get_matches();
         let config = config_from_args(&args);
@@ -124,7 +121,7 @@ Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plu
             }
         }
 
-        let runtime = match Runtime::new(0, config, args.value_of("id")).await {
+        let runtime = match Runtime::new(0, config).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);
@@ -170,6 +167,11 @@ fn config_from_args(args: &ArgMatches) -> Config {
     if config.mode().is_none() {
         config
             .set_mode(Some(zenoh::config::WhatAmI::Router))
+            .unwrap();
+    }
+    if args.occurrences_of("id") > 0 {
+        config
+            .set_id(args.value_of("id").map(|s| s.to_string()))
             .unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwritting config),
