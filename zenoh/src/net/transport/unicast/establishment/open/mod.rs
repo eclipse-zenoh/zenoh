@@ -426,7 +426,7 @@ pub(crate) async fn open_link(
     };
 
     // Retrive the transport's transport
-    let t = transport.get_transport()?;
+    let t = transport.get_inner()?;
 
     // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
     let a_guard = t.get_alive().await;

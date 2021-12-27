@@ -122,7 +122,7 @@ impl TransportLinkUnicast {
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
-            let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
+            let c_rx_buff_size = self.transport.config.manager.config.link_rx_buff_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task

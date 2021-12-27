@@ -99,6 +99,7 @@ pub struct Cookie {
     is_qos: bool,
     nonce: ZInt,
 }
+pub type CookieHash = Vec<u8>;
 
 impl Cookie {
     pub(super) fn encrypt(

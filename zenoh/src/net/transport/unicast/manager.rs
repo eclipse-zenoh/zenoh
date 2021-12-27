@@ -55,6 +55,11 @@ impl TransportManagerConfigUnicast {
 }
 
 pub struct TransportManagerConfigBuilderUnicast {
+    // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+    //       set the actual keep_alive timeout to one fourth of the lease time.
+    //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+    //       check which considers a link as failed when no messages are received in 3.5 times the
+    //       target interval.
     pub(super) lease: Duration,
     pub(super) keep_alive: Duration,
     pub(super) open_timeout: Duration,
@@ -224,7 +229,7 @@ pub struct TransportManagerStateUnicast {
     // Outgoing and incoming opened (i.e. established) transports
     pub(super) opened: AsyncArc<AsyncMutex<HashMap<PeerId, Opened>>>,
     // Incoming uninitialized transports
-    pub(super) incoming: AsyncArc<AsyncMutex<HashMap<LinkUnicast, Option<Vec<u8>>>>>,
+    pub(super) incoming: AsyncArc<AsyncMutex<usize>>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
     // Established transports
@@ -235,13 +240,14 @@ impl Default for TransportManagerStateUnicast {
     fn default() -> TransportManagerStateUnicast {
         TransportManagerStateUnicast {
             opened: AsyncArc::new(AsyncMutex::new(HashMap::new())),
-            incoming: AsyncArc::new(AsyncMutex::new(HashMap::new())),
+            incoming: AsyncArc::new(AsyncMutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct Opened {
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
@@ -344,33 +350,46 @@ impl TransportManager {
         let mut guard = zlock!(self.state.unicast.transports);
 
         // First verify if the transport already exists
+        // If it exists, verify that fundamental parameters like are correct.
+        // Ignore the non fundamental parameters like initial SN.
         if let Some(transport) = guard.get(&config.peer) {
-            if transport.whatami != config.whatami {
+            if transport.config.whatami != config.whatami {
                 let e = zerror!(
                     "Transport with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
                     config.peer,
                     config.whatami,
-                    transport.whatami
+                    transport.config.whatami
                 );
                 log::trace!("{}", e);
                 return Err(e.into());
             }
 
-            if transport.sn_resolution != config.sn_resolution {
+            if transport.config.sn_resolution != config.sn_resolution {
                 let e = zerror!(
                     "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
-                    config.peer, config.sn_resolution, transport.sn_resolution
+                    config.peer, config.sn_resolution, transport.config.sn_resolution
                 );
                 log::trace!("{}", e);
                 return Err(e.into());
             }
 
-            if transport.is_shm != config.is_shm {
+            if transport.config.is_shm != config.is_shm {
                 let e = zerror!(
                     "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
                     config.peer,
                     config.is_shm,
-                    transport.is_shm
+                    transport.config.is_shm
+                );
+                log::trace!("{}", e);
+                return Err(e.into());
+            }
+
+            if transport.config.is_qos != config.is_qos {
+                let e = zerror!(
+                    "Transport with peer {} already exist. Invalid is_qos: {}. Execpted: {}.",
+                    config.peer,
+                    config.is_qos,
+                    transport.config.is_qos
                 );
                 log::trace!("{}", e);
                 return Err(e.into());
@@ -490,7 +509,7 @@ impl TransportManager {
 
     pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
-        if guard.len() >= self.config.unicast.open_pending {
+        if *guard >= self.config.unicast.open_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
@@ -503,7 +522,7 @@ impl TransportManager {
 
         // A new link is available
         log::trace!("New link waiting... {}", link);
-        guard.insert(link.clone(), None);
+        *guard += 1;
         drop(guard);
 
         let mut peer_id: Option<PeerId> = None;
@@ -518,7 +537,8 @@ impl TransportManager {
                             if pid1 != pid2 {
                                 log::debug!("Ambigous PeerID identification for link: {}", link);
                                 let _ = link.close().await;
-                                zasynclock!(self.state.unicast.incoming).remove(&link);
+                                let mut guard = zasynclock!(self.state.unicast.incoming);
+                                *guard -= 1;
                                 return;
                             }
                         }
@@ -528,13 +548,14 @@ impl TransportManager {
                 }
                 Err(e) => {
                     log::debug!("{}", e);
+                    let mut guard = zasynclock!(self.state.unicast.incoming);
+                    *guard -= 1;
                     return;
                 }
             }
         }
 
         // Spawn a task to accept the link
-        let c_incoming = self.state.unicast.incoming.clone();
         let c_manager = self.clone();
         task::spawn(async move {
             let mut auth_link = AuthenticatedPeerLink {
@@ -557,7 +578,8 @@ impl TransportManager {
                     let _ = link.close().await;
                 }
             }
-            zasynclock!(c_incoming).remove(&link);
+            let mut guard = zasynclock!(c_manager.state.unicast.incoming);
+            *guard -= 1;
         });
     }
 }
