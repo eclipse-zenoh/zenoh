@@ -14,103 +14,62 @@
 
 //! # The plugin infrastructure for Zenoh.
 //!
-//! To build a plugin, up to 2 types may be constructed :
-//! * A [`Plugin`] type.
-//! * [`Plugin::start`] should be non-blocking, and return a boxed instance of your stoppage type, which should implement [`PluginStopper`].
-
-use std::any::Any;
-use std::error::Error;
-use std::sync::Arc;
+//! To build a plugin, implement [`Plugin`].
+//!
+//! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
+//! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
 pub mod loading;
 pub mod vtable;
+
 use zenoh_util::core::Result as ZResult;
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Compatibility {
+    major: u64,
+    minor: u64,
+    patch: u64,
+    stable: bool,
+    commit: &'static str,
+}
+const RELEASE_AND_COMMIT: (&str, &str) = zenoh_macros::rustc_version_release!();
+impl Compatibility {
+    pub fn new() -> ZResult<Self> {
+        let (release, commit) = RELEASE_AND_COMMIT;
+        let (release, stable) = if let Some(p) = release.chars().position(|c| c == '-') {
+            (&release[..p], false)
+        } else {
+            (release, true)
+        };
+        let mut split = release.split('.').map(|s| s.trim());
+        Ok(Compatibility {
+            major: split.next().unwrap().parse().unwrap(),
+            minor: split.next().unwrap().parse().unwrap(),
+            patch: split.next().unwrap().parse().unwrap(),
+            stable,
+            commit,
+        })
+    }
+    pub fn are_compatible(a: &Self, b: &Self) -> bool {
+        a == b
+    }
+}
 
 pub mod prelude {
     pub use crate::{loading::*, vtable::*, Plugin};
 }
 
-/// Your plugin's identifier.
-/// Currently, this should simply be the plugin crate's name.
-/// This structure may evolve to include more detailed information.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PluginId {
-    pub uid: &'static str,
-}
-
-#[derive(Clone, Debug)]
-pub struct Incompatibility {
-    pub own_compatibility: PluginId,
-    pub conflicting_with: PluginId,
-    pub details: Option<String>,
-}
-
-impl std::fmt::Display for Incompatibility {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} prevented {} from initing",
-            self.conflicting_with.uid, self.own_compatibility.uid
-        )?;
-        if let Some(details) = &self.details {
-            write!(f, ": {}", details)?;
-        }
-        write!(f, ".")
-    }
-}
-
-impl Error for Incompatibility {}
-
-/// Zenoh plugins must implement [`Plugin<Requirements=Option<Arc<dyn Fn(&str, &serde_json::Value)->Result<(), String>>, StartArgs=zenoh::net::runtime::Runtime>`](Plugin)
-///
-/// Plugin lifecycle:
-/// * Each plugin's identity is recovered using `compatibility`
-/// * Compatibility between plugins is asserted using `is_compatible_with`
-/// * Each plugin's requirements are collected through `get_requirements`
-///     * for zenoh plugins, these requirements are dynamic validators to be used upon configuration change requests
-/// *
 pub trait Plugin: Sized + 'static {
     type StartArgs;
+    type RunningPlugin;
+    /// Your plugins' default name when statically linked.
     const STATIC_NAME: &'static str;
-
-    /// Returns this plugin's `Compatibility`.
-    fn compatibility() -> PluginId;
-
-    /// As Zenoh instanciates plugins, it will append their `Compatibility` to an array.
-    /// This array's current state will be shown to the next plugin.
+    /// You probabky don't need to override this function.
     ///
-    /// To signal that your plugin is incompatible with a previously instanciated plugin, return `Err`,
-    /// Otherwise, return `Ok(Self::compatibility())`.
-    ///
-    /// By default, a plugin is non-reentrant to avoid reinstanciation if its dlib is accessible despite it already being statically linked.
-    fn is_compatible_with(others: &[PluginId]) -> Result<PluginId, Incompatibility> {
-        let own_compatibility = Self::compatibility();
-        if others.iter().any(|c| c == &own_compatibility) {
-            let conflicting_with = own_compatibility.clone();
-            Err(Incompatibility {
-                own_compatibility,
-                conflicting_with,
-                details: None,
-            })
-        } else {
-            Ok(own_compatibility)
-        }
+    /// Returns some build information on your plugin, allowing the host to detect potential ABI changes that would break it.
+    fn compatibility() -> ZResult<Compatibility> {
+        Compatibility::new()
     }
-
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<RunningPlugin>;
-}
-
-pub type RunningPlugin = Box<dyn RunningPluginTrait>;
-pub type ValidationFunction = Arc<
-    dyn Fn(
-            &str,
-            &serde_json::Map<String, serde_json::Value>,
-            &serde_json::Map<String, serde_json::Value>,
-        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-        + Send
-        + Sync,
->;
-
-pub trait RunningPluginTrait: Send + Sync + Any {
-    fn config_checker(&self) -> ValidationFunction;
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin>;
 }

@@ -172,10 +172,6 @@ impl BackendConfig {
         if !self.required {
             result.insert("__required__".into(), Value::Bool(false));
         }
-        result.insert(
-            "storages".into(),
-            Value::Array(self.storages.iter().map(|s| s.to_json_value()).collect()),
-        );
         Value::Object(result)
     }
     fn try_from<V: AsObject>(plugin_name: &str, configs: &V) -> ZResult<Vec<Self>> {

@@ -16,7 +16,6 @@ pub mod orchestrator;
 
 use super::link;
 use super::link::{Link, Locator};
-use super::plugins;
 use super::protocol;
 use super::protocol::core::{PeerId, WhatAmI};
 use super::protocol::proto::{ZenohBody, ZenohMessage};
@@ -36,7 +35,6 @@ use std::any::Any;
 use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_util::core::Result as ZResult;
-use zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_util::sync::get_mut_unchecked;
 use zenoh_util::{bail, zerror};
 
@@ -63,7 +61,7 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config, id: Option<&str>) -> ZResult<Runtime> {
+    pub async fn new(version: u8, mut config: Config) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
@@ -71,17 +69,8 @@ impl Runtime {
             .set_version(Some(version))
             .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
-        let pid = if let Some(s) = id {
-            // filter-out '-' characters (in case s has UUID format)
-            let s = s.replace('-', "");
-            let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-            let size = vec.len();
-            if size > PeerId::MAX_SIZE {
-                bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
-            }
-            let mut id = [0_u8; PeerId::MAX_SIZE];
-            id[..size].copy_from_slice(vec.as_slice());
-            PeerId::new(size, id)
+        let pid = if let Some(s) = config.id() {
+            s.parse()?
         } else {
             PeerId::from(uuid::Uuid::new_v4())
         };
@@ -105,9 +94,11 @@ impl Runtime {
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
         let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
-        let queries_default_timeout = config
-            .queries_default_timeout()
-            .unwrap_or_else(|| ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap());
+        let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
+            zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
+                .parse()
+                .unwrap()
+        });
 
         let router = Arc::new(Router::new(
             pid,

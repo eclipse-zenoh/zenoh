@@ -17,11 +17,17 @@ use std::fmt;
 
 const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub http_port: String,
+}
+
+impl From<&Config> for serde_json::Value {
+    fn from(c: &Config) -> Self {
+        serde_json::to_value(c).unwrap()
+    }
 }
 
 fn deserialize_http_port<'de, D>(deserializer: D) -> Result<String, D::Error>
