@@ -22,7 +22,7 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -139,6 +139,10 @@ impl TransportUnicastInner {
         *guard = Some(callback);
     }
 
+    pub(super) async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
+        zasynclock!(self.alive)
+    }
+
     /*************************************/
     /*           INITIATION              */
     /*************************************/
@@ -176,7 +180,7 @@ impl TransportUnicastInner {
         );
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = zasynclock!(self.alive);
+        let mut a_guard = self.get_alive().await;
         *a_guard = false;
 
         // Notify the callback that we are going to close the transport

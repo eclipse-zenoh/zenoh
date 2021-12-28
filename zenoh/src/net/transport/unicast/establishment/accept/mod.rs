@@ -17,110 +17,21 @@ mod open_ack;
 mod open_syn;
 
 use super::authenticator::AuthenticatedPeerLink;
-use super::{
-    attachment_from_properties, close_link, properties_from_attachment, Cookie,
-    EstablishmentProperties,
-};
-use crate::net::link::{Link, LinkUnicast};
+use super::*;
+use crate::net::link::LinkUnicast;
 use crate::net::protocol::proto::tmsg;
-use crate::net::transport::{
-    TransportConfigUnicast, TransportManager, TransportPeer, TransportUnicast,
-};
-use rand::Rng;
-use std::time::Duration;
+use crate::net::transport::TransportManager;
 use zenoh_util::core::Result as ZResult;
 
 pub(super) type AError = (zenoh_util::core::Error, Option<u8>);
 pub(super) type AResult<T> = Result<T, AError>;
-
-/*************************************/
-/*             ACCEPT                */
-/*************************************/
-struct InputInit {
-    cookie: Cookie,
-    is_shm: bool,
-}
-async fn transport_init(
-    manager: &TransportManager,
-    input: self::InputInit,
-) -> AResult<TransportUnicast> {
-    // Initialize the transport if it is new
-    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
-
-    let config = TransportConfigUnicast {
-        peer: input.cookie.pid,
-        whatami: input.cookie.whatami,
-        sn_resolution: input.cookie.sn_resolution,
-        is_shm: input.is_shm,
-        is_qos: input.cookie.is_qos,
-        initial_sn_tx,
-    };
-
-    let ti = manager
-        .init_transport_unicast(config)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-
-    Ok(ti)
-}
-
-struct InputFinalize {
-    transport: TransportUnicast,
-    lease: Duration,
-}
-// Finalize the transport, notify the callback and start the link tasks
-async fn transport_finalize(
-    link: &LinkUnicast,
-    manager: &TransportManager,
-    input: self::InputFinalize,
-) -> ZResult<()> {
-    // Get inner transport
-    let transport = input.transport.get_inner()?;
-
-    // Start the TX loop
-    let _ = transport.start_tx(
-        link,
-        manager.config.unicast.keep_alive,
-        manager.config.batch_size,
-    )?;
-
-    // Assign a callback if the transport is new
-    match transport.get_callback() {
-        Some(callback) => {
-            // Notify the transport handler there is a new link on this transport
-            callback.new_link(Link::from(link));
-        }
-        None => {
-            let peer = TransportPeer {
-                pid: transport.get_pid(),
-                whatami: transport.get_whatami(),
-                is_qos: transport.is_qos(),
-                is_shm: transport.is_shm(),
-                links: vec![Link::from(link)],
-            };
-            // Notify the transport handler that there is a new transport and get back a callback
-            // NOTE: the read loop of the link the open message was sent on remains blocked
-            //       until the new_transport() returns. The read_loop in the various links
-            //       waits for any eventual transport to associate to.
-            let callback = manager
-                .config
-                .handler
-                .new_unicast(peer, input.transport.clone())?;
-            // Set the callback on the transport
-            transport.set_callback(callback);
-        }
-    }
-
-    // Start the RX loop
-    let _ = transport.start_rx(link, input.lease)?;
-
-    Ok(())
-}
 
 pub(crate) async fn accept_link(
     link: &LinkUnicast,
     manager: &TransportManager,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> ZResult<()> {
+    // INIT handshake
     macro_rules! step {
         ($s: expr) => {
             match $s {
@@ -137,13 +48,30 @@ pub(crate) async fn accept_link(
     let output = step!(init_ack::send(link, manager, auth_link, output).await);
     let output = step!(open_syn::recv(link, manager, auth_link, output).await);
 
+    // Initialize the transport
+    macro_rules! step {
+        ($s: expr) => {
+            match $s {
+                Ok(output) => output,
+                Err(e) => {
+                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
+                    return Err(e);
+                }
+            }
+        };
+    }
+
     let pid = output.cookie.pid;
-    let input = self::InputInit {
-        cookie: output.cookie,
+    let input = super::InputInit {
+        pid: output.cookie.pid,
+        whatami: output.cookie.whatami,
+        sn_resolution: output.cookie.sn_resolution,
         is_shm: output.is_shm,
+        is_qos: output.cookie.is_qos,
     };
     let transport = step!(self::transport_init(manager, input).await);
 
+    // OPEN handshake
     macro_rules! step {
         ($s: expr) => {
             match $s {

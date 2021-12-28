@@ -19,10 +19,12 @@ use super::super::TransportManager;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Attachment, TransportMessage};
-use super::{TransportConfigUnicast, TransportUnicast};
-use crate::net::link::LinkUnicast;
+use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
+use crate::net::link::{Link, LinkUnicast};
 use authenticator::AuthenticatedPeerLink;
+use rand::Rng;
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::{bail, zerror};
@@ -190,4 +192,89 @@ pub(super) async fn close_link(
     for pa in manager.config.unicast.peer_authenticator.iter() {
         pa.handle_link_err(auth_link).await;
     }
+}
+
+/*************************************/
+/*            TRANSPORT              */
+/*************************************/
+pub(super) struct InputInit {
+    pub(super) pid: PeerId,
+    pub(super) whatami: WhatAmI,
+    pub(super) sn_resolution: ZInt,
+    pub(super) is_shm: bool,
+    pub(super) is_qos: bool,
+}
+async fn transport_init(
+    manager: &TransportManager,
+    input: self::InputInit,
+) -> ZResult<TransportUnicast> {
+    // Initialize the transport if it is new
+    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.sn_resolution);
+
+    let config = TransportConfigUnicast {
+        peer: input.pid,
+        whatami: input.whatami,
+        sn_resolution: input.sn_resolution,
+        is_shm: input.is_shm,
+        is_qos: input.is_qos,
+        initial_sn_tx,
+    };
+
+    manager.init_transport_unicast(config)
+}
+
+pub(super) struct InputFinalize {
+    pub(super) transport: TransportUnicast,
+    pub(super) lease: Duration,
+}
+// Finalize the transport, notify the callback and start the link tasks
+pub(super) async fn transport_finalize(
+    link: &LinkUnicast,
+    manager: &TransportManager,
+    input: self::InputFinalize,
+) -> ZResult<()> {
+    // Retrive the transport's transport
+    let transport = input.transport.get_inner()?;
+
+    // Start the TX loop
+    let _ = transport.start_tx(
+        link,
+        manager.config.unicast.keep_alive,
+        manager.config.batch_size,
+    )?;
+
+    // Assign a callback if the transport is new
+    // Keep the lock to avoid concurrent new_transport and closing/closed notifications
+    let a_guard = transport.get_alive().await;
+    match transport.get_callback() {
+        Some(callback) => {
+            // Notify the transport handler there is a new link on this transport
+            callback.new_link(Link::from(link));
+        }
+        None => {
+            let peer = TransportPeer {
+                pid: transport.get_pid(),
+                whatami: transport.get_whatami(),
+                is_qos: transport.is_qos(),
+                is_shm: transport.is_shm(),
+                links: vec![Link::from(link)],
+            };
+            // Notify the transport handler that there is a new transport and get back a callback
+            // NOTE: the read loop of the link the open message was sent on remains blocked
+            //       until new_unicast() returns. The read_loop in the various links
+            //       waits for any eventual transport to associate to.
+            let callback = manager
+                .config
+                .handler
+                .new_unicast(peer, input.transport.clone())?;
+            // Set the callback on the transport
+            transport.set_callback(callback);
+        }
+    }
+    drop(a_guard);
+
+    // Start the RX loop
+    let _ = transport.start_rx(link, input.lease)?;
+
+    Ok(())
 }
