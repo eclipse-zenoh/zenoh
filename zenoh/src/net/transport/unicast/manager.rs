@@ -250,12 +250,6 @@ impl Default for TransportManagerStateUnicast {
 /*************************************/
 /*         TRANSPORT MANAGER         */
 /*************************************/
-#[allow(dead_code)]
-pub(super) struct TransportInit {
-    pub(super) inner: TransportUnicast,
-    pub(super) is_new: bool,
-}
-
 impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
@@ -348,7 +342,7 @@ impl TransportManager {
     pub(super) fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-    ) -> ZResult<TransportInit> {
+    ) -> ZResult<TransportUnicast> {
         let mut guard = zlock!(self.state.unicast.transports);
 
         // First verify if the transport already exists
@@ -398,11 +392,7 @@ impl TransportManager {
                     return Err(e.into());
                 }
 
-                let ti = TransportInit {
-                    inner: transport.into(),
-                    is_new: false,
-                };
-                Ok(ti)
+                Ok(transport.into())
             }
             None => {
                 // Then verify that we haven't reached the transport number limit
@@ -442,11 +432,7 @@ impl TransportManager {
                     config.is_qos
                 );
 
-                let ti = TransportInit {
-                    inner: transport,
-                    is_new: true,
-                };
-                Ok(ti)
+                Ok(transport)
             }
         }
     }
@@ -486,7 +472,12 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open::open_link(self, &link).await
+        let mut auth_link = AuthenticatedPeerLink {
+            src: link.get_src(),
+            dst: link.get_src(),
+            peer_id: None,
+        };
+        super::establishment::open::open_link(&link, self, &mut auth_link).await
     }
 
     pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
@@ -514,6 +505,7 @@ impl TransportManager {
         for pa in self.config.unicast.peer_authenticator.iter() {
             pa.handle_close(peer).await;
         }
+
         Ok(())
     }
 
@@ -574,7 +566,7 @@ impl TransportManager {
                 peer_id,
             };
 
-            let res = super::establishment::accept::accept_link(&c_manager, &link, &mut auth_link)
+            let res = super::establishment::accept::accept_link(&link, &c_manager, &mut auth_link)
                 .timeout(c_manager.config.unicast.open_timeout)
                 .await;
             match res {

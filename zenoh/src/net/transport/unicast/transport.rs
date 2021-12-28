@@ -22,7 +22,7 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast};
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -139,17 +139,13 @@ impl TransportUnicastInner {
         *guard = Some(callback);
     }
 
-    pub(super) async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
-        zasynclock!(self.alive)
-    }
-
     /*************************************/
     /*           INITIATION              */
     /*************************************/
     pub(super) async fn sync(&self, initial_sn_rx: ZInt) -> ZResult<()> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
+        let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.pid);
             log::debug!("{}", e);
@@ -173,11 +169,14 @@ impl TransportUnicastInner {
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!("Closing transport with peer: {}", self.config.pid);
-
+        log::debug!(
+            "[{}] Closing transport with peer: {}",
+            self.config.manager.config.pid,
+            self.config.pid
+        );
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
+        let mut a_guard = zasynclock!(self.alive);
         *a_guard = false;
 
         // Notify the callback that we are going to close the transport
