@@ -19,7 +19,7 @@ use super::super::TransportManager;
 use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Attachment, TransportMessage};
-use super::{TransportConfigUnicast, TransportUnicast};
+use super::{TransportConfigUnicast, TransportInit, TransportUnicast};
 use crate::net::link::LinkUnicast;
 use authenticator::AuthenticatedPeerLink;
 use std::ops::{Deref, DerefMut};
@@ -169,8 +169,8 @@ impl Cookie {
 }
 
 pub(super) async fn close_link(
-    manager: &TransportManager,
     link: &LinkUnicast,
+    manager: &TransportManager,
     auth_link: &AuthenticatedPeerLink,
     mut reason: Option<u8>,
 ) {

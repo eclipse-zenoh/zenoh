@@ -81,10 +81,9 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: PeerId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn_tx: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
-    pub(crate) initial_sn_tx: ZInt,
-    pub(crate) initial_sn_rx: ZInt,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

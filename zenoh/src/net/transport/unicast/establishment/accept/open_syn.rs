@@ -43,51 +43,40 @@ pub(super) async fn recv(
     // Wait to read an OpenSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        return Err((
-            zerror!(
-                "Received multiple messages instead of a single OpenSyn on {}: {:?}",
-                link,
-                messages
-            )
-            .into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
+        let e = zerror!(
+            "Received multiple messages instead of a single OpenSyn on {}: {:?}",
+            link,
+            messages
+        );
+        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
     }
 
     let mut msg = messages.remove(0);
     let open_syn = match msg.body {
         TransportBody::OpenSyn(open_syn) => open_syn,
         TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
-                    reason,
-                    link,
-                )
-                .into(),
-                None,
-            ));
+            let e = zerror!(
+                "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
+                reason,
+                link,
+            );
+            return Err((e.into(), None));
         }
         _ => {
-            return Err((
-                zerror!(
-                    "Received invalid message instead of an OpenSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
+            let e = zerror!(
+                "Received invalid message instead of an OpenSyn on {}: {:?}",
+                link,
+                msg.body
+            );
+            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
         }
     };
     let encrypted = open_syn.cookie.to_vec();
 
     // Verify that the cookie is the one we sent
     if input.cookie_hash != hmac::digest(&encrypted) {
-        return Err((
-            zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link).into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
+        let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
+        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
     }
 
     // Decrypt the cookie with the cyper

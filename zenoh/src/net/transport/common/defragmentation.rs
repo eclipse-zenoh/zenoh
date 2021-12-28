@@ -21,24 +21,24 @@ use zenoh_util::core::Result as ZResult;
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {
     reliability: Reliability,
-    sn: SeqNum,
+    pub(crate) sn: SeqNum,
     capacity: usize,
     buffer: ZBuf,
 }
 
 impl DefragBuffer {
-    pub(crate) fn new(
+    pub(crate) fn make(
         reliability: Reliability,
-        initial_sn: ZInt,
         sn_resolution: ZInt,
         capacity: usize,
-    ) -> DefragBuffer {
-        DefragBuffer {
+    ) -> ZResult<DefragBuffer> {
+        let db = DefragBuffer {
             reliability,
-            sn: SeqNum::new(initial_sn, sn_resolution),
+            sn: SeqNum::make(0, sn_resolution)?,
             capacity,
             buffer: ZBuf::new(),
-        }
+        };
+        Ok(db)
     }
 
     #[inline(always)]

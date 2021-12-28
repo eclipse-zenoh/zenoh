@@ -39,30 +39,24 @@ pub(super) async fn recv(
     // Wait to read an InitSyn
     let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
     if messages.len() != 1 {
-        return Err((
-            zerror!(
-                "Received multiple messages instead of a single InitSyn on {}: {:?}",
-                link,
-                messages,
-            )
-            .into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
+        let e = zerror!(
+            "Received multiple messages instead of a single InitSyn on {}: {:?}",
+            link,
+            messages,
+        );
+        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
     }
 
     let mut msg = messages.remove(0);
     let init_syn = match msg.body {
         TransportBody::InitSyn(init_syn) => init_syn,
         _ => {
-            return Err((
-                zerror!(
-                    "Received invalid message instead of an InitSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
+            let e = zerror!(
+                "Received invalid message instead of an InitSyn on {}: {:?}",
+                link,
+                msg.body
+            );
+            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
         }
     };
 
@@ -70,16 +64,13 @@ pub(super) async fn recv(
     match auth_link.peer_id {
         Some(pid) => {
             if pid != init_syn.pid {
-                return Err((
-                    zerror!(
-                        "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
-                        link,
-                        pid,
-                        init_syn.pid
-                    )
-                    .into(),
-                    Some(tmsg::close_reason::INVALID),
-                ));
+                let e = zerror!(
+                    "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
+                    link,
+                    pid,
+                    init_syn.pid
+                );
+                return Err((e.into(), Some(tmsg::close_reason::INVALID)));
             }
         }
         None => auth_link.peer_id = Some(init_syn.pid),
@@ -87,15 +78,12 @@ pub(super) async fn recv(
 
     // Check if the version is supported
     if init_syn.version != manager.config.version {
-        return Err((
-            zerror!(
-                "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
-                link,
-                init_syn.pid
-            )
-            .into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
+        let e = zerror!(
+            "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
+            link,
+            init_syn.pid
+        );
+        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
     }
 
     // Validate the InitSyn with the peer authenticators

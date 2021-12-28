@@ -19,7 +19,7 @@ mod open_syn;
 use super::authenticator::AuthenticatedPeerLink;
 use super::{
     attachment_from_properties, close_link, properties_from_attachment, Cookie,
-    EstablishmentProperties, TransportUnicast,
+    EstablishmentProperties, TransportInit,
 };
 use crate::net::link::{Link, LinkUnicast};
 use crate::net::protocol::core::ZInt;
@@ -38,7 +38,7 @@ pub(super) type AResult<T> = Result<T, AError>;
 /*************************************/
 struct InputInit {
     cookie: Cookie,
-    initial_sn: ZInt,
+    initial_sn_rx: ZInt,
     is_shm: bool,
 }
 async fn transport_init(
@@ -46,30 +46,35 @@ async fn transport_init(
     manager: &TransportManager,
     _auth_link: &AuthenticatedPeerLink,
     input: self::InputInit,
-) -> AResult<TransportUnicast> {
+) -> AResult<TransportInit> {
     // Initialize the transport if it is new
-    let open_ack_initial_sn = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
-
+    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.cookie.sn_resolution);
     let config = TransportConfigUnicast {
         peer: input.cookie.pid,
         whatami: input.cookie.whatami,
         sn_resolution: input.cookie.sn_resolution,
         is_shm: input.is_shm,
         is_qos: input.cookie.is_qos,
-        initial_sn_tx: open_ack_initial_sn,
-        initial_sn_rx: input.initial_sn,
+        initial_sn_tx,
     };
-    let transport = manager
+
+    let ti = manager
         .init_transport_unicast(config)
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
-    // Retrieve the inner transport
-    let t = transport.get_inner().map_err(|e| (e, None))?;
+    // Get inner transport
+    let transport = ti
+        .inner
+        .get_inner()
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
 
     // Add the link to the transport
-    let _ = t
+    let _ = transport
         .add_link(link.clone())
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+
+    // Sync the RX sequence number
+    let _ = transport.sync(input.initial_sn_rx).await;
 
     log::debug!(
         "New transport link established from {}: {}",
@@ -77,7 +82,7 @@ async fn transport_init(
         link
     );
 
-    Ok(transport)
+    Ok(ti)
 }
 
 // Finalize the transport, notify the callback and start the link tasks
@@ -86,31 +91,31 @@ async fn transport_finalize(
     manager: &TransportManager,
     input: self::OutputInit,
 ) -> ZResult<()> {
-    // Retrive the transport's transport
-    let t = input.transport.get_inner()?;
+    // Get inner transport
+    let transport = input.transport.inner.get_inner()?;
 
     // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
-    let a_guard = t.get_alive().await;
+    let a_guard = transport.get_alive().await;
     if *a_guard {
         // Start the TX loop
-        let _ = t.start_tx(
+        let _ = transport.start_tx(
             link,
             manager.config.unicast.keep_alive,
             manager.config.batch_size,
         )?;
 
         // Assign a callback if the transport is new
-        match t.get_callback() {
+        match transport.get_callback() {
             Some(callback) => {
                 // Notify the transport handler there is a new link on this transport
                 callback.new_link(Link::from(link));
             }
             None => {
                 let peer = TransportPeer {
-                    pid: t.get_pid(),
-                    whatami: t.get_whatami(),
-                    is_qos: t.is_qos(),
-                    is_shm: t.is_shm(),
+                    pid: transport.get_pid(),
+                    whatami: transport.get_whatami(),
+                    is_qos: transport.is_qos(),
+                    is_shm: transport.is_shm(),
                     links: vec![Link::from(link)],
                 };
                 // Notify the transport handler that there is a new transport and get back a callback
@@ -120,7 +125,7 @@ async fn transport_finalize(
                 let callback = manager
                     .config
                     .handler
-                    .new_unicast(peer, input.transport.clone())
+                    .new_unicast(peer, input.transport.inner.clone())
                     .map_err(|e| {
                         zerror!(
                             "Rejecting OpenSyn on: {}. New transport error: {:?}",
@@ -129,12 +134,12 @@ async fn transport_finalize(
                         )
                     })?;
                 // Set the callback on the transport
-                t.set_callback(callback);
+                transport.set_callback(callback);
             }
         }
 
         // Start the RX loop
-        let _ = t.start_rx(link, input.lease)?;
+        let _ = transport.start_rx(link, input.lease)?;
     }
     drop(a_guard);
 
@@ -142,7 +147,7 @@ async fn transport_finalize(
 }
 
 struct OutputInit {
-    transport: TransportUnicast,
+    transport: TransportInit,
     lease: Duration,
 }
 async fn link_handshake(
@@ -156,14 +161,15 @@ async fn link_handshake(
 
     let input = self::InputInit {
         cookie: output.cookie,
-        initial_sn: output.initial_sn,
+        initial_sn_rx: output.initial_sn,
         is_shm: output.is_shm,
     };
     let transport = self::transport_init(link, manager, auth_link, input).await?;
 
     let initial_sn = transport
+        .inner
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
         .config
         .initial_sn_tx;
     let input = open_ack::Input {
@@ -188,12 +194,12 @@ pub(crate) async fn accept_link(
     let output = match res {
         Ok(output) => output,
         Err((e, reason)) => {
-            close_link(manager, link, auth_link, reason).await;
+            close_link(link, manager, auth_link, reason).await;
             return Err(e);
         }
     };
 
-    let transport = output.transport.clone();
+    let transport = output.transport.inner.clone();
     let res = transport_finalize(link, manager, output).await;
     if let Err(e) = res {
         let _ = transport.close().await;

@@ -11,381 +11,183 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+mod init_ack;
+mod init_syn;
+mod open_ack;
+mod open_syn;
+
 use super::authenticator::AuthenticatedPeerLink;
-use super::{attachment_from_properties, close_link, properties_from_attachment};
-use super::{TransportConfigUnicast, TransportUnicast};
-use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
-use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{
-    tmsg, Attachment, Close, OpenAck, TransportBody, TransportMessage,
+use super::{
+    attachment_from_properties, close_link, properties_from_attachment, TransportConfigUnicast,
+    TransportInit, TransportUnicast,
 };
-use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
-use crate::net::transport::unicast::manager::Opened;
+use crate::net::link::{Link, LinkUnicast};
+use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
+use crate::net::protocol::proto::tmsg;
 use crate::net::transport::{TransportManager, TransportPeer};
 use rand::Rng;
 use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::{zasynclock, zerror};
 
-type IError = (zenoh_util::core::Error, Option<u8>);
-type IResult<T> = Result<T, IError>;
+type OError = (zenoh_util::core::Error, Option<u8>);
+type OResult<T> = Result<T, OError>;
 
-/*************************************/
-/*              OPEN                 */
-/*************************************/
-struct OpenInitSynOutput {
-    sn_resolution: ZInt,
-}
-async fn open_send_init_syn(
-    manager: &TransportManager,
-    link: &LinkUnicast,
-    auth_link: &mut AuthenticatedPeerLink,
-) -> IResult<OpenInitSynOutput> {
-    let mut ps_attachment = EstablishmentProperties::new();
-    for pa in manager.config.unicast.peer_authenticator.iter() {
-        let mut att = pa
-            .get_init_syn_properties(auth_link, &manager.config.pid)
-            .await
-            .map_err(|e| (e, None))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
-        }
-    }
-
-    // Build and send the InitSyn message
-    let mut message = TransportMessage::make_init_syn(
-        manager.config.version,
-        manager.config.whatami,
-        manager.config.pid,
-        manager.config.sn_resolution,
-        manager.config.unicast.is_qos,
-        attachment_from_properties(&ps_attachment).ok(),
-    );
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
-
-    let output = OpenInitSynOutput {
-        sn_resolution: manager.config.sn_resolution,
-    };
-    Ok(output)
-}
-
-struct OpenInitAckOutput {
+struct InputInit {
     pid: PeerId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
-    is_qos: bool,
     is_shm: bool,
-    initial_sn_tx: ZInt,
-    cookie: ZSlice,
-    open_syn_attachment: Option<Attachment>,
-}
-async fn open_recv_init_ack(
-    manager: &TransportManager,
-    link: &LinkUnicast,
-    auth_link: &mut AuthenticatedPeerLink,
-    input: OpenInitSynOutput,
-) -> IResult<OpenInitAckOutput> {
-    // Wait to read an InitAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
-        return Err((
-            zerror!(
-                "Received multiple messages in response to an InitSyn on {}: {:?}",
-                link,
-                messages,
-            )
-            .into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
-    }
-
-    let mut msg = messages.remove(0);
-    let init_ack = match msg.body {
-        TransportBody::InitAck(init_ack) => init_ack,
-        TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    reason,
-                    link,
-                )
-                .into(),
-                None,
-            ));
-        }
-        _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an InitSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
-        }
-    };
-
-    // Store the peer id associate do this link
-    auth_link.peer_id = Some(init_ack.pid);
-
-    // Check if a transport is already open with the target peer
-    let mut guard = zasynclock!(manager.state.unicast.opened);
-    let (sn_resolution, initial_sn_tx, is_opened) = if let Some(s) = guard.get(&init_ack.pid) {
-        if let Some(sn_resolution) = init_ack.sn_resolution {
-            if sn_resolution != s.sn_resolution {
-                return Err((
-                    zerror!(
-                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                        link,
-                        sn_resolution
-                    )
-                    .into(),
-                    Some(tmsg::close_reason::INVALID),
-                ));
-            }
-        }
-        (s.sn_resolution, s.initial_sn, true)
-    } else {
-        let sn_resolution = match init_ack.sn_resolution {
-            Some(sn_resolution) => {
-                if sn_resolution > input.sn_resolution {
-                    return Err((
-                        zerror!(
-                            "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                            link,
-                            sn_resolution
-                        )
-                        .into(),
-                        Some(tmsg::close_reason::INVALID),
-                    ));
-                }
-                sn_resolution
-            }
-            None => input.sn_resolution,
-        };
-        let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..sn_resolution);
-        (sn_resolution, initial_sn_tx, false)
-    };
-
-    let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
-        None => EstablishmentProperties::new(),
-    };
-
-    let mut is_shm = false;
-    let mut ps_attachment = EstablishmentProperties::new();
-    for pa in manager.config.unicast.peer_authenticator.iter() {
-        let mut att = pa
-            .handle_init_ack(
-                auth_link,
-                &init_ack.pid,
-                sn_resolution,
-                init_ack_properties.remove(pa.id().into()).map(|x| x.value),
-            )
-            .await;
-
-        #[cfg(feature = "shared-memory")]
-        if pa.id() == PeerAuthenticatorId::Shm {
-            // Check if SHM has been validated from the other side
-            att = match att {
-                Ok(att) => {
-                    is_shm = att.is_some();
-                    Ok(att)
-                }
-                Err(e) => {
-                    if e.is::<zenoh_util::core::zresult::ShmError>() {
-                        is_shm = false;
-                        Ok(None)
-                    } else {
-                        Err(e)
-                    }
-                }
-            };
-        }
-
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
-        }
-    }
-
-    if !is_opened {
-        // Store the data
-        guard.insert(
-            init_ack.pid,
-            Opened {
-                whatami: init_ack.whatami,
-                sn_resolution,
-                initial_sn: initial_sn_tx,
-            },
-        );
-    }
-    drop(guard);
-
-    let output = OpenInitAckOutput {
-        pid: init_ack.pid,
-        whatami: init_ack.whatami,
-        sn_resolution,
-        is_qos: init_ack.is_qos,
-        is_shm,
-        initial_sn_tx,
-        cookie: init_ack.cookie,
-        open_syn_attachment: attachment_from_properties(&ps_attachment).ok(),
-    };
-    Ok(output)
-}
-
-struct OpenOpenSynOutput {
-    pid: PeerId,
-    whatami: WhatAmI,
-    sn_resolution: ZInt,
-    initial_sn_tx: ZInt,
     is_qos: bool,
-    is_shm: bool,
 }
-async fn open_send_open_syn(
-    manager: &TransportManager,
+async fn transport_init(
     link: &LinkUnicast,
+    manager: &TransportManager,
     _auth_link: &AuthenticatedPeerLink,
-    input: OpenInitAckOutput,
-) -> IResult<OpenOpenSynOutput> {
-    // Build and send an OpenSyn message
-    let lease = manager.config.unicast.lease;
-    let mut message = TransportMessage::make_open_syn(
-        lease,
-        input.initial_sn_tx,
-        input.cookie,
-        input.open_syn_attachment,
+    input: self::InputInit,
+) -> OResult<TransportInit> {
+    // Initialize the transport if it is new
+    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.sn_resolution);
+
+    let config = TransportConfigUnicast {
+        peer: input.pid,
+        whatami: input.whatami,
+        sn_resolution: input.sn_resolution,
+        is_shm: input.is_shm,
+        is_qos: input.is_qos,
+        initial_sn_tx,
+    };
+
+    let ti = manager
+        .init_transport_unicast(config)
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+
+    // Get inner transport
+    let transport = ti
+        .inner
+        .get_inner()
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+
+    // Add the link to the transport
+    let _ = transport
+        .add_link(link.clone())
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+
+    log::debug!(
+        "New transport link established with {}: {}",
+        input.pid,
+        link
     );
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
 
-    let output = OpenOpenSynOutput {
-        pid: input.pid,
-        whatami: input.whatami,
-        sn_resolution: input.sn_resolution,
-        initial_sn_tx: input.initial_sn_tx,
-        is_qos: input.is_qos,
-        is_shm: input.is_shm,
-    };
-    Ok(output)
+    Ok(ti)
 }
 
-struct OpenAckOutput {
-    pid: PeerId,
-    whatami: WhatAmI,
-    sn_resolution: ZInt,
-    is_qos: bool,
-    is_shm: bool,
-    initial_sn_tx: ZInt,
-    initial_sn_rx: ZInt,
+// Finalize the transport, notify the callback and start the link tasks
+async fn transport_finalize(
+    link: &LinkUnicast,
+    manager: &TransportManager,
+    input: self::OutputInit,
+) -> ZResult<()> {
+    // Retrive the transport's transport
+    let t = input.transport.inner.get_inner()?;
+
+    // Sync RX sequence number
+    let _ = t.sync(input.initial_sn_rx).await;
+
+    // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
+    let a_guard = t.get_alive().await;
+    if *a_guard {
+        // Start the TX loop
+        let _ = t.start_tx(
+            link,
+            manager.config.unicast.keep_alive,
+            manager.config.batch_size,
+        )?;
+
+        // Assign a callback if the transport is new
+        match t.get_callback() {
+            Some(callback) => {
+                // Notify the transport handler there is a new link on this transport
+                callback.new_link(Link::from(link));
+            }
+            None => {
+                let peer = TransportPeer {
+                    pid: t.get_pid(),
+                    whatami: t.get_whatami(),
+                    is_qos: t.is_qos(),
+                    is_shm: t.is_shm(),
+                    links: vec![Link::from(link)],
+                };
+                // Notify the transport handler that there is a new transport and get back a callback
+                // NOTE: the read loop of the link the open message was sent on remains blocked
+                //       until the new_transport() returns. The read_loop in the various links
+                //       waits for any eventual transport to associate to.
+                let callback = manager
+                    .config
+                    .handler
+                    .new_unicast(peer, input.transport.inner.clone())
+                    .map_err(|e| {
+                        zerror!(
+                            "Rejecting OpenSyn on: {}. New transport error: {:?}",
+                            link,
+                            e
+                        )
+                    })?;
+                // Set the callback on the transport
+                t.set_callback(callback);
+            }
+        }
+
+        // Start the RX loop
+        let _ = t.start_rx(link, input.lease)?;
+    }
+    drop(a_guard);
+
+    Ok(())
+}
+
+struct OutputInit {
+    transport: TransportInit,
     lease: Duration,
+    initial_sn_rx: ZInt,
 }
-async fn open_recv_open_ack(
-    manager: &TransportManager,
+async fn link_handshake(
     link: &LinkUnicast,
-    auth_link: &AuthenticatedPeerLink,
-    input: OpenOpenSynOutput,
-) -> IResult<OpenAckOutput> {
-    // Wait to read an OpenAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
-        return Err((
-            zerror!(
-                "Received multiple messages in response to an InitSyn on {}: {:?}",
-                link,
-                messages,
-            )
-            .into(),
-            Some(tmsg::close_reason::INVALID),
-        ));
-    }
+    manager: &TransportManager,
+    auth_link: &mut AuthenticatedPeerLink,
+) -> OResult<OutputInit> {
+    let output = init_syn::send(link, manager, auth_link).await?;
+    let output = init_ack::recv(link, manager, auth_link, output).await?;
 
-    let mut msg = messages.remove(0);
-    let (lease, initial_sn_rx) = match msg.body {
-        TransportBody::OpenAck(OpenAck { lease, initial_sn }) => (lease, initial_sn),
-        TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                    reason,
-                    link,
-                )
-                .into(),
-                None,
-            ));
-        }
-        _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an OpenSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
-        }
+    let input = self::InputInit {
+        pid: output.pid,
+        whatami: output.whatami,
+        sn_resolution: output.sn_resolution,
+        is_shm: output.is_shm,
+        is_qos: output.is_qos,
     };
+    let transport = self::transport_init(link, manager, auth_link, input).await?;
 
-    let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
-        None => EstablishmentProperties::new(),
+    let initial_sn = transport
+        .inner
+        .get_inner()
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?
+        .config
+        .initial_sn_tx;
+    let input = open_syn::Input {
+        cookie: output.cookie,
+        initial_sn,
+        attachment: output.open_syn_attachment,
     };
-    for pa in manager.config.unicast.peer_authenticator.iter() {
-        let _ = pa
-            .handle_open_ack(
-                auth_link,
-                opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
-            )
-            .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
-    }
+    let output = open_syn::send(link, manager, auth_link, input).await?;
+    let output = open_ack::recv(link, manager, auth_link, output).await?;
 
-    let output = OpenAckOutput {
-        pid: input.pid,
-        whatami: input.whatami,
-        sn_resolution: input.sn_resolution,
-        is_qos: input.is_qos,
-        is_shm: input.is_shm,
-        initial_sn_tx: input.initial_sn_tx,
-        initial_sn_rx,
-        lease,
+    let output = self::OutputInit {
+        transport,
+        lease: output.lease,
+        initial_sn_rx: output.initial_sn,
     };
     Ok(output)
-}
-
-async fn open_stages(
-    manager: &TransportManager,
-    link: &LinkUnicast,
-    auth_link: &mut AuthenticatedPeerLink,
-) -> IResult<OpenAckOutput> {
-    let output = open_send_init_syn(manager, link, auth_link).await?;
-    let output = open_recv_init_ack(manager, link, auth_link, output).await?;
-    let output = open_send_open_syn(manager, link, auth_link, output).await?;
-    open_recv_open_ack(manager, link, auth_link, output).await
 }
 
 pub(crate) async fn open_link(
@@ -398,88 +200,21 @@ pub(crate) async fn open_link(
         peer_id: None,
     };
 
-    let res = open_stages(manager, link, &mut auth_link).await;
-    let info = match res {
+    let res = link_handshake(link, manager, &mut auth_link).await;
+    let output = match res {
         Ok(v) => v,
         Err((e, reason)) => {
-            let _ = close_link(manager, link, &auth_link, reason).await;
+            let _ = close_link(link, manager, &auth_link, reason).await;
             return Err(e);
         }
     };
 
-    let config = TransportConfigUnicast {
-        peer: info.pid,
-        whatami: info.whatami,
-        sn_resolution: info.sn_resolution,
-        initial_sn_tx: info.initial_sn_tx,
-        initial_sn_rx: info.initial_sn_rx,
-        is_qos: info.is_qos,
-        is_shm: info.is_shm,
-    };
-    let res = manager.init_transport_unicast(config);
-    let transport = match res {
-        Ok(s) => s,
-        Err(e) => {
-            let _ = close_link(manager, link, &auth_link, Some(tmsg::close_reason::INVALID)).await;
-            return Err(e);
-        }
-    };
-
-    // Retrive the transport's transport
-    let t = transport.get_inner()?;
-
-    // Acquire the lock to avoid concurrent new_transport and closing/closed notifications
-    let a_guard = t.get_alive().await;
-    if *a_guard {
-        // Compute a suitable keep alive interval based on the lease
-        // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
-        //       set the actual keep_alive timeout to one fourth of the agreed transport lease.
-        //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
-        //       check which considers a link as failed when no messages are received in 3.5 times the
-        //       target interval. For simplicity, we compute the keep_alive interval as 1/4 of the
-        //       transport lease.
-        let keep_alive = manager.config.unicast.keep_alive.min(info.lease / 4);
-        let _ = t.add_link(link.clone())?;
-
-        // Start the TX loop
-        let _ = t.start_tx(link, keep_alive, manager.config.batch_size)?;
-
-        // Assign a callback if the transport is new
-        loop {
-            match t.get_callback() {
-                Some(callback) => {
-                    // Notify the transport handler there is a new link on this transport
-                    callback.new_link(Link::from(link));
-                    break;
-                }
-                None => {
-                    let peer = TransportPeer {
-                        pid: info.pid,
-                        whatami: info.whatami,
-                        is_qos: info.is_qos,
-                        is_shm: info.is_shm,
-                        links: vec![Link::from(link)],
-                    };
-                    // Notify the transport handler that there is a new transport and get back a callback
-                    // NOTE: the read loop of the link the open message was sent on remains blocked
-                    //       until the new_transport() returns. The read_loop in the various links
-                    //       waits for any eventual transport to associate to.
-                    let callback = manager
-                        .config
-                        .handler
-                        .new_unicast(peer, transport.clone())?;
-                    // Set the callback on the transport
-                    let _ = t.set_callback(callback);
-                }
-            }
-        }
-
-        // Start the RX loop
-        let _ = t.start_rx(link, info.lease)?;
+    let transport = output.transport.inner.clone();
+    let res = transport_finalize(link, manager, output).await;
+    if let Err(e) = res {
+        let _ = transport.close().await;
+        return Err(e);
     }
-    drop(a_guard);
-
-    zasynclock!(manager.state.unicast.opened).remove(&info.pid);
 
     Ok(transport)
 }

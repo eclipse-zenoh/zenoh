@@ -50,6 +50,17 @@ macro_rules! zlinkindex {
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
+pub(crate) struct TransportUnicastConfig {
+    pub(crate) manager: TransportManager,
+    pub(crate) pid: PeerId,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) is_shm: bool,
+    pub(crate) is_qos: bool,
+}
+
+#[derive(Clone)]
 pub(crate) struct TransportUnicastInner {
     // Transport config
     pub(super) config: TransportUnicastConfig,
@@ -68,75 +79,59 @@ pub(crate) struct TransportUnicastInner {
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
-#[derive(Clone)]
-pub(crate) struct TransportUnicastConfig {
-    pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
-    pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
-    pub(crate) initial_sn_rx: ZInt,
-    pub(crate) is_shm: bool,
-    pub(crate) is_qos: bool,
-}
-
 impl TransportUnicastInner {
-    pub(super) fn new(config: TransportUnicastConfig) -> TransportUnicastInner {
+    pub(super) fn make(config: TransportUnicastConfig) -> ZResult<TransportUnicastInner> {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
-        // @TODO: potentially manage different initial SNs per conduit channel
-        let conduit_sn_tx = ConduitSn {
+        if config.is_qos {
+            for c in 0..Priority::NUM {
+                conduit_tx.push(TransportConduitTx::make(
+                    (c as u8).try_into().unwrap(),
+                    config.sn_resolution,
+                )?);
+            }
+
+            for c in 0..Priority::NUM {
+                conduit_rx.push(TransportConduitRx::make(
+                    (c as u8).try_into().unwrap(),
+                    config.sn_resolution,
+                    config.manager.config.defrag_buff_size,
+                )?);
+            }
+        } else {
+            conduit_tx.push(TransportConduitTx::make(
+                Priority::default(),
+                config.sn_resolution,
+            )?);
+
+            conduit_rx.push(TransportConduitRx::make(
+                Priority::default(),
+                config.sn_resolution,
+                config.manager.config.defrag_buff_size,
+            )?);
+        }
+
+        let initial_sn = ConduitSn {
             reliable: config.initial_sn_tx,
             best_effort: config.initial_sn_tx,
         };
-        let conduit_sn_rx = ConduitSn {
-            reliable: config.initial_sn_rx,
-            best_effort: config.initial_sn_rx,
-        };
-
-        if config.is_qos {
-            for c in 0..Priority::NUM {
-                conduit_tx.push(TransportConduitTx::new(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                    conduit_sn_tx,
-                ));
-            }
-
-            for c in 0..Priority::NUM {
-                conduit_rx.push(TransportConduitRx::new(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                    conduit_sn_rx,
-                    config.manager.config.defrag_buff_size,
-                ));
-            }
-        } else {
-            conduit_tx.push(TransportConduitTx::new(
-                Priority::default(),
-                config.sn_resolution,
-                conduit_sn_tx,
-            ));
-
-            conduit_rx.push(TransportConduitRx::new(
-                Priority::default(),
-                config.sn_resolution,
-                conduit_sn_rx,
-                config.manager.config.defrag_buff_size,
-            ));
+        for c in conduit_tx.iter() {
+            let _ = c.sync(initial_sn)?;
         }
 
-        TransportUnicastInner {
+        let t = TransportUnicastInner {
             config,
             conduit_tx: conduit_tx.into_boxed_slice().into(),
             conduit_rx: conduit_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
-            alive: AsyncArc::new(AsyncMutex::new(true)),
+            alive: AsyncArc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
-        }
+        };
+
+        Ok(t)
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
@@ -146,6 +141,32 @@ impl TransportUnicastInner {
 
     pub(super) async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
         zasynclock!(self.alive)
+    }
+
+    /*************************************/
+    /*           INITIATION              */
+    /*************************************/
+    pub(super) async fn sync(&self, initial_sn_rx: ZInt) -> ZResult<()> {
+        // Mark the transport as alive and keep the lock
+        // to avoid concurrent new_transport and closing/closed notifications
+        let mut a_guard = self.get_alive().await;
+        if *a_guard {
+            let e = zerror!("Transport already synched with peer: {}", self.config.pid);
+            log::debug!("{}", e);
+            return Err(e.into());
+        }
+
+        *a_guard = true;
+
+        let csn = ConduitSn {
+            reliable: initial_sn_rx,
+            best_effort: initial_sn_rx,
+        };
+        for c in self.conduit_rx.iter() {
+            let _ = c.sync(csn)?;
+        }
+
+        Ok(())
     }
 
     /*************************************/
