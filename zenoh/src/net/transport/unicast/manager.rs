@@ -19,7 +19,7 @@ use super::*;
 use crate::config::Config;
 use crate::net::link::*;
 use async_std::prelude::*;
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -41,23 +41,27 @@ pub struct TransportManagerConfigUnicast {
     pub is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
-    pub peer_authenticator: HashSet<PeerAuthenticator>,
-    pub link_authenticator: HashSet<LinkAuthenticator>,
 }
 
-impl Default for TransportManagerConfigUnicast {
-    fn default() -> Self {
-        Self::builder().build().unwrap()
-    }
+pub struct TransportManagerStateUnicast {
+    // Incoming uninitialized transports
+    pub(super) incoming: AsyncArc<AsyncMutex<usize>>,
+    // Active peer authenticators
+    pub(super) peer_authenticator: AsyncArc<AsyncRwLock<HashSet<PeerAuthenticator>>>,
+    // Active link authenticators
+    pub(super) link_authenticator: AsyncArc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
+    // Established listeners
+    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
+    // Established transports
+    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
 }
 
-impl TransportManagerConfigUnicast {
-    pub fn builder() -> TransportManagerConfigBuilderUnicast {
-        TransportManagerConfigBuilderUnicast::default()
-    }
+pub struct TransportManagerParamsUnicast {
+    pub config: TransportManagerConfigUnicast,
+    pub state: TransportManagerStateUnicast,
 }
 
-pub struct TransportManagerConfigBuilderUnicast {
+pub struct TransportManagerBuilderUnicast {
     // NOTE: In order to consider eventual packet loss and transmission latency and jitter,
     //       set the actual keep_alive timeout to one fourth of the lease time.
     //       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
@@ -77,26 +81,7 @@ pub struct TransportManagerConfigBuilderUnicast {
     pub(super) link_authenticator: HashSet<LinkAuthenticator>,
 }
 
-impl Default for TransportManagerConfigBuilderUnicast {
-    fn default() -> Self {
-        Self {
-            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
-            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
-            open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
-            open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
-            #[cfg(feature = "transport_multilink")]
-            max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
-            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
-            #[cfg(feature = "shared-memory")]
-            is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
-            peer_authenticator: HashSet::new(),
-            link_authenticator: HashSet::new(),
-        }
-    }
-}
-
-impl TransportManagerConfigBuilderUnicast {
+impl TransportManagerBuilderUnicast {
     pub fn lease(mut self, lease: Duration) -> Self {
         self.lease = lease;
         self
@@ -152,7 +137,7 @@ impl TransportManagerConfigBuilderUnicast {
     pub async fn from_config(
         mut self,
         properties: &Config,
-    ) -> ZResult<TransportManagerConfigBuilderUnicast> {
+    ) -> ZResult<TransportManagerBuilderUnicast> {
         if let Some(v) = properties.transport().link().lease() {
             self = self.lease(Duration::from_millis(*v));
         }
@@ -188,29 +173,8 @@ impl TransportManagerConfigBuilderUnicast {
     pub fn build(
         #[allow(unused_mut)] // auth_pubkey and shared-memory features require mut
         mut self,
-    ) -> ZResult<TransportManagerConfigUnicast> {
-        #[cfg(feature = "auth_pubkey")]
-        if !self
-            .peer_authenticator
-            .iter()
-            .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
-        {
-            self.peer_authenticator
-                .insert(PubKeyAuthenticator::init()?.into());
-        }
-
-        #[cfg(feature = "shared-memory")]
-        if self.is_shm
-            && !self
-                .peer_authenticator
-                .iter()
-                .any(|a| a.id() == PeerAuthenticatorId::Shm)
-        {
-            self.peer_authenticator
-                .insert(SharedMemoryAuthenticator::new().into());
-        }
-
-        let tmcu = TransportManagerConfigUnicast {
+    ) -> ZResult<TransportManagerParamsUnicast> {
+        let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             open_timeout: self.open_timeout,
@@ -221,28 +185,58 @@ impl TransportManagerConfigBuilderUnicast {
             is_qos: self.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
-            peer_authenticator: self.peer_authenticator,
-            link_authenticator: self.link_authenticator,
         };
-        Ok(tmcu)
-    }
-}
 
-pub struct TransportManagerStateUnicast {
-    // Incoming uninitialized transports
-    pub(super) incoming: AsyncArc<AsyncMutex<usize>>,
-    // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
-    // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
-}
+        #[cfg(feature = "auth_pubkey")]
+        if !self
+            .peer_authenticator
+            .iter()
+            .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
+        {
+            self.peer_authenticator
+                .insert(PubKeyAuthenticator::make()?.into());
+        }
 
-impl Default for TransportManagerStateUnicast {
-    fn default() -> TransportManagerStateUnicast {
-        TransportManagerStateUnicast {
+        #[cfg(feature = "shared-memory")]
+        if self.is_shm
+            && !self
+                .peer_authenticator
+                .iter()
+                .any(|a| a.id() == PeerAuthenticatorId::Shm)
+        {
+            self.peer_authenticator
+                .insert(SharedMemoryAuthenticator::make()?.into());
+        }
+
+        let state = TransportManagerStateUnicast {
             incoming: AsyncArc::new(AsyncMutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
+            link_authenticator: AsyncArc::new(AsyncRwLock::new(self.link_authenticator)),
+            peer_authenticator: AsyncArc::new(AsyncRwLock::new(self.peer_authenticator)),
+        };
+
+        let params = TransportManagerParamsUnicast { config, state };
+
+        Ok(params)
+    }
+}
+
+impl Default for TransportManagerBuilderUnicast {
+    fn default() -> Self {
+        Self {
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
+            open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
+            #[cfg(feature = "transport_multilink")]
+            max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
+            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
+            #[cfg(feature = "shared-memory")]
+            is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
+            peer_authenticator: HashSet::new(),
+            link_authenticator: HashSet::new(),
         }
     }
 }
@@ -251,6 +245,44 @@ impl Default for TransportManagerStateUnicast {
 /*         TRANSPORT MANAGER         */
 /*************************************/
 impl TransportManager {
+    pub fn config_unicast() -> TransportManagerBuilderUnicast {
+        TransportManagerBuilderUnicast::default()
+    }
+
+    pub async fn close_unicast(&self) {
+        log::trace!("TransportManagerUnicast::clear())");
+
+        let mut la_guard = zasyncwrite!(self.state.unicast.link_authenticator);
+        let mut pa_guard = zasyncwrite!(self.state.unicast.peer_authenticator);
+
+        for la in la_guard.drain() {
+            let _ = la.close().await;
+        }
+
+        for pa in pa_guard.drain() {
+            let _ = pa.close().await;
+        }
+
+        let mut pl_guard = zlock!(self.state.unicast.protocols)
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<Arc<dyn LinkManagerUnicastTrait>>>();
+
+        for pl in pl_guard.drain(..) {
+            for ep in pl.get_listeners().iter() {
+                let _ = pl.del_listener(ep).await;
+            }
+        }
+
+        let mut tu_guard = zlock!(self.state.unicast.transports)
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<Arc<TransportUnicastInner>>>();
+        for tu in tu_guard.drain(..) {
+            let _ = tu.close(tmsg::close_reason::GENERIC).await;
+        }
+    }
+
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
@@ -370,6 +402,7 @@ impl TransportManager {
                     return Err(e.into());
                 }
 
+                #[cfg(feature = "shared-memory")]
                 if transport.config.is_shm != config.is_shm {
                     let e = zerror!(
                         "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
@@ -502,7 +535,7 @@ impl TransportManager {
                 e
             })?;
 
-        for pa in self.config.unicast.peer_authenticator.iter() {
+        for pa in zasyncread!(self.state.unicast.peer_authenticator).iter() {
             pa.handle_close(peer).await;
         }
 
@@ -529,7 +562,7 @@ impl TransportManager {
 
         let mut peer_id: Option<PeerId> = None;
         let peer_link = Link::from(&link);
-        for la in self.config.unicast.link_authenticator.iter() {
+        for la in zasyncread!(self.state.unicast.link_authenticator).iter() {
             let res = la.handle_new_link(&peer_link).await;
             match res {
                 Ok(pid) => {

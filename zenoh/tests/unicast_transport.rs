@@ -24,9 +24,8 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
-    TransportMulticast, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
@@ -159,33 +158,31 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManagerConfigUnicast::builder();
+    let mut unicast = TransportManager::config_unicast();
     #[cfg(feature = "transport_multilink")]
     {
         unicast = unicast.max_links(endpoints.len());
     }
-    let config = TransportManagerConfig::builder()
+    let router_manager = TransportManager::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
-    let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManagerConfigUnicast::builder();
+    let mut unicast = TransportManager::config_unicast();
     #[cfg(feature = "transport_multilink")]
     {
         unicast = unicast.max_links(endpoints.len());
     }
-    let config = TransportManagerConfig::builder()
+    let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClient::default()))
         .unwrap();
-    let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
     for e in endpoints.iter() {

@@ -30,7 +30,7 @@ pub(super) async fn send(
     auth_link: &mut AuthenticatedPeerLink,
 ) -> OResult<Output> {
     let mut ps_attachment = EstablishmentProperties::new();
-    for pa in manager.config.unicast.peer_authenticator.iter() {
+    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let mut att = pa
             .get_init_syn_properties(auth_link, &manager.config.pid)
             .await

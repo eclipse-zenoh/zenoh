@@ -189,7 +189,7 @@ pub(super) async fn close_link(
     // Close the link
     let _ = link.close().await;
     // Notify the authenticators
-    for pa in manager.config.unicast.peer_authenticator.iter() {
+    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         pa.handle_link_err(auth_link).await;
     }
 }

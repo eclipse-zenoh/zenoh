@@ -24,7 +24,7 @@ async fn main() {
 
     let z = zenoh::open(config).await.unwrap();
     let id = z.id().await;
-    let mut shm = SharedMemoryManager::new(id, sm_size).unwrap();
+    let mut shm = SharedMemoryManager::make(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();
     let bs = unsafe { buf.as_mut_slice() };
     for b in bs {

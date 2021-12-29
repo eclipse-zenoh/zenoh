@@ -79,7 +79,7 @@ pub(super) async fn recv(
         }
         None => EstablishmentProperties::new(),
     };
-    for pa in manager.config.unicast.peer_authenticator.iter() {
+    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let _ = pa
             .handle_open_ack(
                 auth_link,

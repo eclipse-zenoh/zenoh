@@ -111,7 +111,7 @@ pub(super) async fn recv(
 
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
-    for pa in manager.config.unicast.peer_authenticator.iter() {
+    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let mut att = pa
             .handle_init_ack(
                 auth_link,

@@ -59,7 +59,7 @@ pub(super) async fn send(
     // Build the attachment from the authenticators
     let mut ps_attachment = EstablishmentProperties::new();
     let mut ps_cookie = EstablishmentProperties::new();
-    for pa in manager.config.unicast.peer_authenticator.iter() {
+    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let (mut att, mut cke) = pa
             .handle_init_syn(
                 auth_link,

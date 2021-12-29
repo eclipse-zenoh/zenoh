@@ -302,7 +302,7 @@ unsafe impl Send for SharedMemoryManager {}
 impl SharedMemoryManager {
     /// Creates a new SharedMemoryManager managing allocations of a region of the
     /// given size.
-    pub fn new(id: String, size: usize) -> ZResult<SharedMemoryManager> {
+    pub fn make(id: String, size: usize) -> ZResult<SharedMemoryManager> {
         let mut temp_dir = std::env::temp_dir();
         let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
         temp_dir.push(file_name);
@@ -373,7 +373,7 @@ impl SharedMemoryManager {
         }
     }
 
-    pub fn alloc(&mut self, len: usize) -> Option<SharedMemoryBuf> {
+    pub fn alloc(&mut self, len: usize) -> ZResult<SharedMemoryBuf> {
         log::trace!("SharedMemoryManager::alloc({})", len);
         // Always allocate a size that will keep the proper alignment requirements
         let required_len = align_addr_at(len + CHUNK_HEADER_SIZE, self.alignment);
@@ -402,32 +402,23 @@ impl SharedMemoryManager {
                     log::trace!("The allocated Chunk is ({:?})", &chunk);
                     log::trace!("Allocated Shared Memory Buffer: {:?}", &shm_buf);
                     self.busy_list.push(chunk);
-                    Some(shm_buf)
+                    Ok(shm_buf)
                 }
                 Some(c) => {
                     self.free_list.push(c);
-                    log::trace!(
-                        "SharedMemoryManager::alloc({}) cannot find any available chunk of the appropriate size.",
-                        len
-                    );
-                    log::trace!("SharedMemoryManager::free_list = {:?}", self.free_list);
-                    None
+                    let e = zerror!("SharedMemoryManager::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
+                    Err(e.into())
                 }
                 None => {
-                    log::trace!(
-                        "SharedMemoryManager::alloc({}) cannot find any available chunk",
-                        len
-                    );
-                    log::trace!("SharedMemoryManager::free_list = {:?}", self.free_list);
-                    None
+                    let e = zerror!("SharedMemoryManager::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
+                    log::trace!("{}", e);
+                    Err(e.into())
                 }
             }
         } else {
-            log::warn!(
-                "SharedMemoryManager does not have sufficient free memory to allocate {} bytes, try de-fragmenting!",
-                len
-            );
-            None
+            let e = zerror!( "SharedMemoryManager does not have sufficient free memory to allocate {} bytes, try de-fragmenting!", len);
+            log::warn!("{}", e);
+            Err(e.into())
         }
     }
 

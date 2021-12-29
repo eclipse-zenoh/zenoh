@@ -24,8 +24,8 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::zasync_executor_init;
@@ -174,20 +174,18 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
-    let config = TransportManagerConfig::builder()
+    let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
         .build(router_handler.clone())
         .unwrap();
-    let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
-    let config = TransportManagerConfig::builder()
+    let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .build(Arc::new(SHClient::default()))
         .unwrap();
-    let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
     for e in endpoints.iter() {

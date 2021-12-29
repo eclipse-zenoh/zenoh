@@ -26,9 +26,8 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_util::core::Result as ZResult;
     use zenoh_util::zasync_executor_init;
@@ -107,26 +106,24 @@ mod tests {
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new());
         let unicast =
-            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
-        let config = TransportManagerConfig::builder()
+            TransportManager::config_unicast().max_links(endpoint01.len() + endpoint02.len());
+        let peer01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id01)
             .unicast(unicast)
             .build(peer_sh01.clone())
             .unwrap();
-        let peer01_manager = TransportManager::new(config);
 
         // Create the peer01 transport manager
         let peer_sh02 = Arc::new(SHPeer::new());
         let unicast =
-            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
-        let config = TransportManagerConfig::builder()
+            TransportManager::config_unicast().max_links(endpoint01.len() + endpoint02.len());
+        let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id02)
             .unicast(unicast)
             .build(peer_sh02.clone())
             .unwrap();
-        let peer02_manager = TransportManager::new(config);
 
         // Barrier to synchronize the two tasks
         let barrier_peer = Arc::new(Barrier::new(2));

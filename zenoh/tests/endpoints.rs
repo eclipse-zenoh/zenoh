@@ -19,8 +19,8 @@ use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{PeerId, WhatAmI};
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
@@ -71,12 +71,11 @@ impl TransportPeerEventHandler for SC {
 
 async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
-    let config = TransportManagerConfig::builder()
+    let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
         .build(Arc::new(SH::default()))
         .unwrap();
-    let sm = TransportManager::new(config);
 
     for _ in 0..RUNS {
         // Create the listeners

@@ -24,8 +24,8 @@ use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use super::transport;
 use super::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use crate::config::{Config, Notifier};
 pub use adminspace::AdminSpace;
@@ -110,7 +110,8 @@ impl Runtime {
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
         });
-        let sm_config = TransportManagerConfig::builder()
+
+        let transport_manager = TransportManager::builder()
             .from_config(&config)
             .await?
             .version(version)
@@ -120,7 +121,6 @@ impl Runtime {
 
         let config = Notifier::new(config);
 
-        let transport_manager = TransportManager::new(sm_config);
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
@@ -168,9 +168,7 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        for session in &mut self.manager().get_transports() {
-            session.close().await?;
-        }
+        self.manager().close().await;
         Ok(())
     }
 
