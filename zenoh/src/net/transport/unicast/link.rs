@@ -90,13 +90,14 @@ impl TransportLinkUnicast {
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
                 let res = tx_task(
-                    pipeline,
+                    pipeline.clone(),
                     c_link.clone(),
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
                 )
                 .await;
+                pipeline.disable();
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -122,7 +123,7 @@ impl TransportLinkUnicast {
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
-            let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
+            let c_rx_buff_size = self.transport.config.manager.config.link_rx_buff_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task

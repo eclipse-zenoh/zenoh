@@ -51,7 +51,7 @@ pub(crate) async fn open_link(
         initial_sns,
         link: link.clone(),
     };
-    let ti = Arc::new(TransportMulticastInner::new(config));
+    let ti = Arc::new(TransportMulticastInner::make(config)?);
 
     // Store the active transport
     let transport: TransportMulticast = (&ti).into();

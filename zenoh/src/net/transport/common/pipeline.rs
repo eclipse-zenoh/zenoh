@@ -630,9 +630,7 @@ impl fmt::Debug for TransmissionPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::protocol::core::{
-        Channel, ConduitSn, CongestionControl, Priority, Reliability, ZInt,
-    };
+    use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
     use crate::net::protocol::io::ZBuf;
     use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
     use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
@@ -727,12 +725,8 @@ mod tests {
         // Pipeline
         let batch_size = BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![TransportConduitTx::new(
-            Priority::Control,
-            SEQ_NUM_RES,
-            ConduitSn::default(),
-        )]
-        .into_boxed_slice();
+        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let conduit = vec![tct].into_boxed_slice();
         let queue = Arc::new(TransmissionPipeline::new(
             batch_size,
             is_streamed,
@@ -825,12 +819,8 @@ mod tests {
         // Pipeline
         let batch_size = BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![TransportConduitTx::new(
-            Priority::Control,
-            SEQ_NUM_RES,
-            ConduitSn::default(),
-        )]
-        .into_boxed_slice();
+        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let conduit = vec![tct].into_boxed_slice();
         let queue = Arc::new(TransmissionPipeline::new(
             batch_size,
             is_streamed,
@@ -935,12 +925,8 @@ mod tests {
         // Queue
         let batch_size = BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![TransportConduitTx::new(
-            Priority::Control,
-            SEQ_NUM_RES,
-            ConduitSn::default(),
-        )]
-        .into_boxed_slice();
+        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let conduit = vec![tct].into_boxed_slice();
         let queue = Arc::new(TransmissionPipeline::new(
             batch_size,
             is_streamed,
@@ -999,12 +985,8 @@ mod tests {
         // Queue
         let batch_size = BATCH_SIZE;
         let is_streamed = true;
-        let conduit = vec![TransportConduitTx::new(
-            Priority::Control,
-            SEQ_NUM_RES,
-            ConduitSn::default(),
-        )]
-        .into_boxed_slice();
+        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let conduit = vec![tct].into_boxed_slice();
         let pipeline = Arc::new(TransmissionPipeline::new(
             batch_size,
             is_streamed,

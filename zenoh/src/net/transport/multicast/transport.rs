@@ -104,22 +104,26 @@ pub(crate) struct TransportMulticastConfig {
 }
 
 impl TransportMulticastInner {
-    pub(super) fn new(config: TransportMulticastConfig) -> TransportMulticastInner {
+    pub(super) fn make(config: TransportMulticastConfig) -> ZResult<TransportMulticastInner> {
         let mut conduit_tx = vec![];
 
         match config.initial_sns {
-            ConduitSnList::Plain(sn) => conduit_tx.push(TransportConduitTx::new(
-                Priority::default(),
-                config.manager.config.sn_resolution,
-                sn,
-            )),
+            ConduitSnList::Plain(sn) => {
+                let tct = TransportConduitTx::make(
+                    Priority::default(),
+                    config.manager.config.sn_resolution,
+                )?;
+                let _ = tct.sync(sn)?;
+                conduit_tx.push(tct);
+            }
             ConduitSnList::QoS(sns) => {
                 for (i, sn) in sns.iter().enumerate() {
-                    conduit_tx.push(TransportConduitTx::new(
+                    let tct = TransportConduitTx::make(
                         (i as u8).try_into().unwrap(),
                         config.manager.config.sn_resolution,
-                        *sn,
-                    ));
+                    )?;
+                    let _ = tct.sync(*sn)?;
+                    conduit_tx.push(tct);
                 }
             }
         }
@@ -140,7 +144,7 @@ impl TransportMulticastInner {
         *w_guard = Some(TransportLinkMulticast::new(ti.clone(), config.link));
         drop(w_guard);
 
-        ti
+        Ok(ti)
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
@@ -349,25 +353,27 @@ impl TransportMulticastInner {
 
         let conduit_rx = match join.next_sns {
             ConduitSnList::Plain(sn) => {
-                vec![TransportConduitRx::new(
+                let tcr = TransportConduitRx::make(
                     Priority::default(),
                     join.sn_resolution,
-                    sn,
                     self.manager.config.defrag_buff_size,
-                )]
+                )?;
+                tcr.sync(sn)?;
+                vec![tcr]
             }
-            ConduitSnList::QoS(ref sns) => sns
-                .iter()
-                .enumerate()
-                .map(|(prio, sn)| {
-                    TransportConduitRx::new(
+            ConduitSnList::QoS(ref sns) => {
+                let mut tcrs = Vec::with_capacity(sns.len());
+                for (prio, sn) in sns.iter().enumerate() {
+                    let tcr = TransportConduitRx::make(
                         (prio as u8).try_into().unwrap(),
                         join.sn_resolution,
-                        *sn,
                         self.manager.config.defrag_buff_size,
-                    )
-                })
-                .collect(),
+                    )?;
+                    tcr.sync(*sn)?;
+                    tcrs.push(tcr);
+                }
+                tcrs
+            }
         }
         .into_boxed_slice();
 
