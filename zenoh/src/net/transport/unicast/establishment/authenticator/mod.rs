@@ -84,16 +84,17 @@ impl Hash for LinkAuthenticator {
 /*************************************/
 #[async_trait]
 pub trait LinkUnicastAuthenticatorTrait {
+    /// Return the ID of this authenticator.
     fn id(&self) -> LinkAuthenticatorId;
 
+    /// Close the authenticator
+    async fn close(&self);
+
+    /// Handle new links
     async fn handle_new_link(&self, link: &Link) -> ZResult<Option<PeerId>>;
 
     /// Handle any error on a link. This callback is mainly used to clean-up any internal state
-    /// of the authenticator in such a way no unnecessary data is left around
-    ///
-    /// # Arguments
-    /// * `link` - The [`Link`][Link] generating the error
-    ///
+    /// of the authenticator in such a way no unnecessary data is left around.
     async fn handle_link_err(&self, link: &Link);
 }
 
@@ -110,6 +111,8 @@ impl LinkUnicastAuthenticatorTrait for DummyLinkUnicastAuthenticator {
     fn id(&self) -> LinkAuthenticatorId {
         LinkAuthenticatorId::Reserved
     }
+
+    async fn close(&self) {}
 
     async fn handle_new_link(&self, _link: &Link) -> ZResult<Option<PeerId>> {
         Ok(None)
@@ -211,6 +214,9 @@ impl fmt::Display for AuthenticatedPeerLink {
 pub trait PeerAuthenticatorTrait: Send + Sync {
     /// Return the ID of this authenticator.
     fn id(&self) -> PeerAuthenticatorId;
+
+    /// Close the authenticator
+    async fn close(&self);
 
     /// Return the attachment to be included in the InitSyn message.
     ///
@@ -326,6 +332,8 @@ impl PeerAuthenticatorTrait for DummyPeerAuthenticator {
     fn id(&self) -> PeerAuthenticatorId {
         PeerAuthenticatorId::Reserved
     }
+
+    async fn close(&self) {}
 
     async fn get_init_syn_properties(
         &self,

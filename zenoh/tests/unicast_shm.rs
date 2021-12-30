@@ -27,9 +27,8 @@ mod tests {
     use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh::publication::CongestionControl;
     use zenoh_util::core::Result as ZResult;
@@ -131,44 +130,41 @@ mod tests {
         let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
-        let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
+        let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let unicast =
-            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::new().into(),
+            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let config = TransportManagerConfig::builder()
+        let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
             .unicast(unicast)
             .build(peer_shm01_handler.clone())
             .unwrap();
-        let peer_shm01_manager = TransportManager::new(config);
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let unicast =
-            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::new().into(),
+            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let config = TransportManagerConfig::builder()
+        let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
             .unicast(unicast)
             .build(peer_shm02_handler.clone())
             .unwrap();
-        let peer_shm02_manager = TransportManager::new(config);
 
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
-        let config = TransportManagerConfig::builder()
+        let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_net01)
             .build(peer_net01_handler.clone())
             .unwrap();
-        let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer
         println!("\nTransport SHM [1a]");
@@ -212,8 +208,8 @@ mod tests {
             let mut sbuf = async {
                 loop {
                     match shm01.alloc(MSG_SIZE) {
-                        Some(sbuf) => break sbuf,
-                        None => task::sleep(USLEEP).await,
+                        Ok(sbuf) => break sbuf,
+                        Err(_) => task::sleep(USLEEP).await,
                     }
                 }
             }
@@ -270,8 +266,8 @@ mod tests {
             let mut sbuf = async {
                 loop {
                     match shm01.alloc(MSG_SIZE) {
-                        Some(sbuf) => break sbuf,
-                        None => task::sleep(USLEEP).await,
+                        Ok(sbuf) => break sbuf,
+                        Err(_) => task::sleep(USLEEP).await,
                     }
                 }
             }

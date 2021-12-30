@@ -21,7 +21,7 @@ use zenoh::net::protocol::core::{
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
-use zenoh::net::transport::{DummyTransportEventHandler, TransportManager, TransportManagerConfig};
+use zenoh::net::transport::{DummyTransportEventHandler, TransportManager};
 use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -36,22 +36,20 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
 
     // Create the router transport manager
-    let config = TransportManagerConfig::builder()
+    let router_manager = TransportManager::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
         .unwrap();
-    let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
-    let config = TransportManagerConfig::builder()
+    let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
         .unwrap();
-    let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
     println!("Add locator: {}", endpoint);

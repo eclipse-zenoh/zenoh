@@ -30,7 +30,7 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::proto::ZenohMessage;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+        TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_util::core::Result as ZResult;
@@ -137,21 +137,19 @@ mod tests {
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
-        let config = TransportManagerConfig::builder()
+        let peer01_manager = TransportManager::builder()
             .pid(peer01_id)
             .whatami(WhatAmI::Peer)
             .build(peer01_handler.clone())
             .unwrap();
-        let peer01_manager = TransportManager::new(config);
 
         // Create the peer02 transport manager
         let peer02_handler = Arc::new(SHPeer::default());
-        let config = TransportManagerConfig::builder()
+        let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer02_id)
             .build(peer02_handler.clone())
             .unwrap();
-        let peer02_manager = TransportManager::new(config);
 
         // Create an empty transport with the peer01
         // Open transport -> This should be accepted

@@ -217,6 +217,10 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         PeerAuthenticatorId::UserPassword
     }
 
+    async fn close(&self) {
+        // No cleanup needed
+    }
+
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,

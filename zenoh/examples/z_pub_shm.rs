@@ -32,14 +32,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("Creating Shared Memory Manager...");
     let id = session.id().await;
-    let mut shm = SharedMemoryManager::new(id, N * 1024).unwrap();
+    let mut shm = SharedMemoryManager::make(id, N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
-            Some(buf) => buf,
-            None => {
+            Ok(buf) => buf,
+            Err(_) => {
                 sleep(Duration::from_millis(100)).await;
                 println!(
                     "Afer failing allocation the GC collected: {} bytes -- retrying",
