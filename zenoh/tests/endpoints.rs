@@ -11,6 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
@@ -26,8 +27,16 @@ use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
+const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
+
 const RUNS: usize = 10;
+
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 
 // Transport Handler
 #[derive(Default)]
@@ -81,7 +90,7 @@ async fn run(endpoints: &[EndPoint]) {
         // Create the listeners
         for e in endpoints.iter() {
             println!("Add {}", e);
-            let res = sm.add_listener(e.clone()).await;
+            let res = ztimeout!(sm.add_listener(e.clone()));
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
@@ -91,7 +100,7 @@ async fn run(endpoints: &[EndPoint]) {
         // Delete the listeners
         for e in endpoints.iter() {
             println!("Del {}", e);
-            let res = sm.del_listener(e).await;
+            let res = ztimeout!(sm.del_listener(e));
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }

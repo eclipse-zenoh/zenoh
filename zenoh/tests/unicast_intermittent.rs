@@ -38,6 +38,11 @@ const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
 
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 #[cfg(test)]
 #[derive(Default)]
 struct SHRouterIntermittent;
@@ -205,17 +210,14 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [1] */
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
-    let _ = router_manager.add_listener(endpoint.clone()).await.unwrap();
+    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     let locators = router_manager.get_listeners();
     println!("Transport Intermittent [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a transport from client01 to the router
-    let c_ses1 = client01_manager
-        .open_transport(endpoint.clone())
-        .await
-        .unwrap();
+    let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
     assert_eq!(client01_manager.get_transports().len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -230,10 +232,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("+");
             std::io::stdout().flush().unwrap();
 
-            let c_ses2 = c_client02_manager
-                .open_transport(c_endpoint.clone())
-                .await
-                .unwrap();
+            let c_ses2 = ztimeout!(c_client02_manager.open_transport(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
             assert_eq!(c_client02_manager.get_transports().len(), 1);
             assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
@@ -243,7 +242,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("-");
             std::io::stdout().flush().unwrap();
 
-            c_ses2.close().timeout(TIMEOUT).await.unwrap().unwrap();
+            ztimeout!(c_ses2.close()).unwrap();
 
             task::sleep(SLEEP).await;
         }
@@ -257,10 +256,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("*");
             std::io::stdout().flush().unwrap();
 
-            let c_ses3 = c_client03_manager
-                .open_transport(c_endpoint.clone())
-                .await
-                .unwrap();
+            let c_ses3 = ztimeout!(c_client03_manager.open_transport(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
             assert_eq!(c_client03_manager.get_transports().len(), 1);
             assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);
@@ -270,7 +266,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("/");
             std::io::stdout().flush().unwrap();
 
-            c_ses3.close().timeout(TIMEOUT).await.unwrap().unwrap();
+            ztimeout!(c_ses3.close()).unwrap();
 
             task::sleep(SLEEP).await;
         }
@@ -279,7 +275,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [4] */
     println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
-    let res = task::spawn_blocking(move || {
+    let res = ztimeout!(task::spawn_blocking(move || {
         // Create the message to send
         let key = "/test".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
@@ -335,19 +331,16 @@ async fn transport_intermittent(endpoint: &EndPoint) {
                 thread::sleep(USLEEP);
             }
         }
-    })
-    .timeout(TIMEOUT)
-    .await
-    .unwrap();
+    }));
 
     // Stop the tasks
-    c2_handle.cancel().await;
-    c3_handle.cancel().await;
+    ztimeout!(c2_handle.cancel());
+    ztimeout!(c3_handle.cancel());
     println!("\nTransport Intermittent [4a2]: {:?}", res);
 
     // Check that client01 received all the messages
     println!("Transport Intermittent [4b1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let c = counter.load(Ordering::Acquire);
             if c == MSG_COUNT {
@@ -356,29 +349,28 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             println!("Transport Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Intermittent [4b3]: {:?}", res);
 
     /* [5] */
     // Close the open transport on the client
     println!("Transport Intermittent [5a1]");
     for s in client01_manager.get_transports().iter() {
-        s.close().timeout(TIMEOUT).await.unwrap().unwrap();
+        ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a2]");
     for s in client02_manager.get_transports().iter() {
-        s.close().timeout(TIMEOUT).await.unwrap().unwrap();
+        ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a3]");
     for s in client03_manager.get_transports().iter() {
-        s.close().timeout(TIMEOUT).await.unwrap().unwrap();
+        ztimeout!(s.close()).unwrap();
     }
 
     /* [6] */
     // Verify that the transport has been closed also on the router
     println!("Transport Intermittent [6a1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -386,17 +378,25 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Intermittent [6a2]: {:?}", res);
 
     /* [7] */
     // Perform clean up of the open locators
     println!("\nTransport Intermittent [7a1]");
-    let res = router_manager.del_listener(endpoint).await;
+    let res = ztimeout!(router_manager.del_listener(endpoint));
     println!("Transport Intermittent [7a2]: {:?}", res);
     assert!(res.is_ok());
 
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+    ztimeout!(client02_manager.close());
+    ztimeout!(client03_manager.close());
+
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 
