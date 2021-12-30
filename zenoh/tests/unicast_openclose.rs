@@ -28,6 +28,12 @@ use zenoh_util::zasync_executor_init;
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
 
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
+
 #[cfg(test)]
 #[derive(Default)]
 struct SHRouterOpenClose;
@@ -129,7 +135,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = router_manager.add_listener(endpoint.clone()).await;
+    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
     println!("Transport Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
@@ -142,7 +148,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let mut links_num = 1;
 
     println!("Transport Open Close [1c1]");
-    let res = client01_manager.open_transport(endpoint.clone()).await;
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
     println!("Transport Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -158,7 +164,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [1f1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -174,8 +180,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [1f2]: {:?}", res);
 
     /* [2] */
@@ -186,7 +191,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         links_num = 2;
 
         println!("\nTransport Open Close [2a1]");
-        let res = client01_manager.open_transport(endpoint.clone()).await;
+        let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
         println!("Transport Open Close [2a2]: {:?}", res);
         assert!(res.is_ok());
         let c_ses2 = res.unwrap();
@@ -204,7 +209,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [2d1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -218,15 +223,14 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [2d2]: {:?}", res);
 
     /* [3] */
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
     println!("\nTransport Open Close [3a1]");
-    let res = client01_manager.open_transport(endpoint.clone()).await;
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
     println!("Transport Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [3b1]");
@@ -241,7 +245,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [3d1]");
-    let check = async {
+    let res = ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -251,14 +255,13 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [3d2]: {:?}", res);
 
     /* [4] */
     // Close the open transport on the client
     println!("\nTransport Open Close [4a1]");
-    let res = c_ses1.close().await;
+    let res = ztimeout!(c_ses1.close());
     println!("Transport Open Close [4a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [4b1]");
@@ -268,7 +271,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [4c1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let index = transports
@@ -279,8 +282,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [4c2]: {:?}", res);
 
     /* [5] */
@@ -289,7 +291,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     links_num = 1;
 
     println!("\nTransport Open Close [5a1]");
-    let res = client01_manager.open_transport(endpoint.clone()).await;
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
     println!("Transport Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -305,7 +307,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [5d1]");
-    let check = async {
+    let res = ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -315,15 +317,14 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [5d2]: {:?}", res);
 
     /* [6] */
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
     println!("\nTransport Open Close [6a1]");
-    let res = client02_manager.open_transport(endpoint.clone()).await;
+    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
     println!("Transport Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [6b1]");
@@ -333,7 +334,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [6c1]");
-    let check = async {
+    let res = ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -343,14 +344,13 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [6c2]: {:?}", res);
 
     /* [7] */
     // Close the open transport on the client
     println!("\nTransport Open Close [7a1]");
-    let res = c_ses3.close().await;
+    let res = ztimeout!(c_ses3.close());
     println!("Transport Open Close [7a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [7b1]");
@@ -360,7 +360,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [7c1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -368,8 +368,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [7c2]: {:?}", res);
 
     /* [8] */
@@ -378,7 +377,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     links_num = 1;
 
     println!("\nTransport Open Close [8a1]");
-    let res = client02_manager.open_transport(endpoint.clone()).await;
+    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
     println!("Transport Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();
@@ -393,7 +392,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [8d1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -408,14 +407,13 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [8d2]: {:?}", res);
 
     /* [9] */
     // Close the open transport on the client
     println!("Transport Open Close [9a1]");
-    let res = c_ses4.close().await;
+    let res = ztimeout!(c_ses4.close());
     println!("Transport Open Close [9a2]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [9b1]");
@@ -425,7 +423,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [9c1]");
-    let check = async {
+    let res = ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -433,17 +431,24 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-    };
-    let res = check.timeout(TIMEOUT).await.unwrap();
+    });
     println!("Transport Open Close [9c2]: {:?}", res);
 
     /* [10] */
     // Perform clean up of the open locators
     println!("\nTransport Open Close [10a1]");
-    let res = router_manager.del_listener(endpoint).await;
+    let res = ztimeout!(router_manager.del_listener(endpoint));
     println!("Transport Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+    ztimeout!(client02_manager.close());
+
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 
