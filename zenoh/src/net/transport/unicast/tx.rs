@@ -25,8 +25,9 @@ impl TransportUnicastInner {
                 // Drop the guard before the push_zenoh_message since
                 // the link could be congested and this operation could
                 // block for fairly long time
+                let pl = $pipeline.clone();
                 drop($guard);
-                $pipeline.push_zenoh_message($msg);
+                pl.push_zenoh_message($msg);
 
                 return;
             };
@@ -60,21 +61,20 @@ impl TransportUnicastInner {
 
         let guard = zread!(self.links);
         // First try to find the best match between msg and link reliability
-        for sl in guard.iter() {
-            if let Some(pipeline) = sl.get_pipeline() {
-                let link = sl.get_link();
-                if msg.is_reliable() && link.is_reliable() {
+        for tl in guard.iter() {
+            if let Some(pipeline) = tl.pipeline.as_ref() {
+                if msg.is_reliable() && tl.link.is_reliable() {
                     zpush!(guard, pipeline, msg);
                 }
-                if !msg.is_reliable() && !link.is_reliable() {
+                if !msg.is_reliable() && !tl.link.is_reliable() {
                     zpush!(guard, pipeline, msg);
                 }
             }
         }
 
         // No best match found, take the first available link
-        for sl in guard.iter() {
-            if let Some(pipeline) = sl.get_pipeline() {
+        for tl in guard.iter() {
+            if let Some(pipeline) = tl.pipeline.as_ref() {
                 zpush!(guard, pipeline, msg);
             }
         }
