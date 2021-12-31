@@ -18,7 +18,7 @@ mod open_syn;
 
 use super::authenticator::AuthenticatedPeerLink;
 use super::*;
-use crate::net::link::LinkUnicast;
+use crate::net::link::{LinkUnicast, LinkUnicastDirection};
 use crate::net::protocol::proto::tmsg;
 use crate::net::transport::TransportManager;
 use zenoh_util::core::Result as ZResult;
@@ -93,7 +93,7 @@ pub(crate) async fn accept_link(
     let _ = step!(step!(transport
         .get_inner()
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
-    .add_link(link.clone())
+    .add_link(link.clone(), LinkUnicastDirection::Inbound)
     .map_err(|e| (e, Some(tmsg::close_reason::MAX_LINKS))));
 
     // Sync the RX sequence number

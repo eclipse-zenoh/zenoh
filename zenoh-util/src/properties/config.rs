@@ -279,13 +279,13 @@ mod consts {
     pub const ZN_MAX_SESSIONS_UNICAST_STR: &str = "max_sessions_unicast";
     pub const ZN_MAX_SESSIONS_UNICAST_DEFAULT: &str = "1024";
 
-    /// Configures the maximum number of links per open session.
+    /// Configures the maximum number of inbound links per open session.
     /// String key : `"max_links"`.
     /// Accepted values : `<unsigned integer>`.
-    /// Default value : `2`.
+    /// Default value : `1`.
     pub const ZN_MAX_LINKS_KEY: u64 = 0x71;
     pub const ZN_MAX_LINKS_STR: &str = "max_links";
-    pub const ZN_MAX_LINKS_DEFAULT: &str = "2";
+    pub const ZN_MAX_LINKS_DEFAULT: &str = "1";
 
     /// Configures the zenoh version.
     /// String key : `"version"`.

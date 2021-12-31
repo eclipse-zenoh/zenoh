@@ -21,7 +21,7 @@ use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::net::link::{Link, LinkUnicast};
+use crate::net::link::{Link, LinkUnicast, LinkUnicastDirection};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -30,19 +30,19 @@ use zenoh_util::core::Result as ZResult;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
-        $guard.iter().find(|l| l.get_link() == $link)
+        $guard.iter().find(|tl| &tl.link == $link)
     };
 }
 
 macro_rules! zlinkgetmut {
     ($guard:expr, $link:expr) => {
-        $guard.iter_mut().find(|l| l.get_link() == $link)
+        $guard.iter_mut().find(|tl| &tl.link == $link)
     };
 }
 
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
-        $guard.iter().position(|l| l.get_link() == $link)
+        $guard.iter().position(|tl| &tl.link == $link)
     };
 }
 
@@ -152,7 +152,7 @@ impl TransportUnicastInner {
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
             let e = zerror!("Transport already synched with peer: {}", self.config.pid);
-            log::debug!("{}", e);
+            log::trace!("{}", e);
             return Err(e.into());
         }
 
@@ -218,40 +218,33 @@ impl TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn can_add_link(
+    pub(super) fn add_link(
         &self,
-        #[allow(unused_variables)] // transport_multilink feature requires link
-        link: &LinkUnicast,
-    ) -> bool {
-        let guard = zread!(self.links);
-        #[cfg(feature = "transport_multilink")]
-        {
-            if guard.len() < self.config.manager.config.unicast.max_links {
-                zlinkget!(guard, link).is_none()
-            } else {
-                false
-            }
-        }
-        #[cfg(not(feature = "transport_multilink"))]
-        {
-            guard.is_empty()
-        }
-    }
+        link: LinkUnicast,
+        direction: LinkUnicastDirection,
+    ) -> ZResult<()> {
+        // Add the link to the channel
+        let mut guard = zwrite!(self.links);
 
-    pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
-        if !self.can_add_link(&link) {
-            bail!(
-                "Can not add Link {} with peer {}: max num of links reached",
-                link,
-                self.config.pid,
-            )
+        // Check if we can add more inbound links
+        if let LinkUnicastDirection::Inbound = direction {
+            let count = guard.iter().filter(|l| l.direction == direction).count();
+            let limit = self.config.manager.config.unicast.max_links;
+            if count >= limit {
+                let e = zerror!(
+                    "Can not add Link {} with peer {}: max num of links reached {}/{}",
+                    link,
+                    self.config.pid,
+                    count,
+                    limit
+                );
+                return Err(e.into());
+            }
         }
 
         // Create a channel link from a link
-        let link = TransportLinkUnicast::new(self.clone(), link);
+        let link = TransportLinkUnicast::new(self.clone(), link, direction);
 
-        // Add the link to the channel
-        let mut guard = zwrite!(self.links);
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link);
@@ -414,7 +407,7 @@ impl TransportUnicastInner {
 
         let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
-            let mut pipeline = l.get_pipeline();
+            let mut pipeline = l.pipeline.clone();
             // Drop the guard
             drop(guard);
 
@@ -442,7 +435,7 @@ impl TransportUnicastInner {
 
         let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
             .iter()
-            .filter_map(|sl| sl.get_pipeline())
+            .filter_map(|sl| sl.pipeline.clone())
             .collect();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
@@ -483,9 +476,6 @@ impl TransportUnicastInner {
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {
-        zread!(self.links)
-            .iter()
-            .map(|l| l.get_link().clone())
-            .collect()
+        zread!(self.links).iter().map(|l| l.link.clone()).collect()
     }
 }
