@@ -43,24 +43,23 @@ pub(super) struct TransportLinkMulticastConfig {
     pub(super) batch_size: u16,
 }
 
-#[derive(Clone)]
 pub(super) struct TransportLinkMulticast {
     // The underlying link
     pub(super) inner: LinkMulticast,
     // The transport this link is associated to
-    transport: TransportMulticastInner,
+    transport: Arc<TransportMulticastInner>,
     // The transmission pipeline
     pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>,
+    handle_tx: Option<JoinHandle<()>>,
     active_rx: Arc<AtomicBool>,
     signal_rx: Signal,
-    handle_rx: Option<Arc<JoinHandle<()>>>,
+    handle_rx: Option<JoinHandle<()>>,
 }
 
 impl TransportLinkMulticast {
     pub(super) fn new(
-        transport: TransportMulticastInner,
+        transport: Arc<TransportMulticastInner>,
         link: LinkMulticast,
     ) -> TransportLinkMulticast {
         TransportLinkMulticast {
@@ -129,7 +128,7 @@ impl TransportLinkMulticast {
                     task::spawn(async move { c_transport.delete().await });
                 }
             });
-            self.handle_tx = Some(Arc::new(handle));
+            self.handle_tx = Some(handle);
         }
     }
 
@@ -167,7 +166,7 @@ impl TransportLinkMulticast {
                     task::spawn(async move { c_transport.delete().await });
                 }
             });
-            self.handle_rx = Some(Arc::new(handle));
+            self.handle_rx = Some(handle);
         }
     }
 
@@ -179,16 +178,14 @@ impl TransportLinkMulticast {
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.inner);
         self.stop_rx();
-        if let Some(handle) = self.handle_rx.take() {
+        if let Some(handle_rx) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
             handle_rx.await;
         }
 
         self.stop_tx();
-        if let Some(handle) = self.handle_tx.take() {
+        if let Some(handle_tx) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_tx = Arc::try_unwrap(handle).unwrap();
             handle_tx.await;
         }
 
@@ -325,7 +322,7 @@ async fn tx_task(
 
 async fn rx_task(
     link: LinkMulticast,
-    transport: TransportMulticastInner,
+    transport: Arc<TransportMulticastInner>,
     signal: Signal,
     active: Arc<AtomicBool>,
     rx_buff_size: usize,
@@ -381,7 +378,7 @@ async fn rx_task(
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
 
-                            transport.receive_message(msg, &loc)?
+                            transport.clone().receive_message(msg, &loc)?
                         }
                         None => {
                             bail!("{}: decoding error", link);

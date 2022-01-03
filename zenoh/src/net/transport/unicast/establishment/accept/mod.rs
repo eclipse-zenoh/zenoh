@@ -28,7 +28,7 @@ pub(super) type AResult<T> = Result<T, AError>;
 
 pub(crate) async fn accept_link(
     link: &LinkUnicast,
-    manager: &TransportManager,
+    manager: Arc<TransportManager>,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> ZResult<()> {
     // INIT handshake
@@ -37,16 +37,16 @@ pub(crate) async fn accept_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    close_link(link, manager, auth_link, reason).await;
+                    close_link(link, &manager, auth_link, reason).await;
                     return Err(e);
                 }
             }
         };
     }
 
-    let output = step!(init_syn::recv(link, manager, auth_link).await);
-    let output = step!(init_ack::send(link, manager, auth_link, output).await);
-    let output = step!(open_syn::recv(link, manager, auth_link, output).await);
+    let output = step!(init_syn::recv(link, &manager, auth_link).await);
+    let output = step!(init_ack::send(link, &manager, auth_link, output).await);
+    let output = step!(open_syn::recv(link, &manager, auth_link, output).await);
 
     // Initialize the transport
     macro_rules! step {
@@ -54,7 +54,7 @@ pub(crate) async fn accept_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
+                    close_link(link, &manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
                     return Err(e);
                 }
             }
@@ -69,7 +69,7 @@ pub(crate) async fn accept_link(
         is_shm: output.is_shm,
         is_qos: output.cookie.is_qos,
     };
-    let transport = step!(self::transport_init(manager, input).await);
+    let transport = step!(self::transport_init(manager.clone(), input).await);
 
     // OPEN handshake
     macro_rules! step {
@@ -82,7 +82,7 @@ pub(crate) async fn accept_link(
                             let _ = manager.del_transport_unicast(&pid).await;
                         }
                     }
-                    close_link(link, manager, auth_link, reason).await;
+                    close_link(link, &manager, auth_link, reason).await;
                     return Err(e);
                 }
             }
@@ -115,13 +115,13 @@ pub(crate) async fn accept_link(
         attachment: output.open_ack_attachment,
     };
     let lease = output.lease;
-    let _output = step!(open_ack::send(link, manager, auth_link, input).await);
+    let _output = step!(open_ack::send(link, &manager, auth_link, input).await);
 
     let input = self::InputFinalize {
         transport: transport.clone(),
         lease,
     };
-    let _ = step!(transport_finalize(link, manager, input)
+    let _ = step!(transport_finalize(link, &manager, input)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID))));
 

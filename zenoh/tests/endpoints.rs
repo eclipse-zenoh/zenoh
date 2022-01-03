@@ -80,17 +80,19 @@ impl TransportPeerEventHandler for SC {
 
 async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
-    let sm = TransportManager::builder()
-        .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
-        .build(Arc::new(SH::default()))
-        .unwrap();
+    let sm = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+            .build(Arc::new(SH::default()))
+            .unwrap(),
+    );
 
     for _ in 0..RUNS {
         // Create the listeners
         for e in endpoints.iter() {
             println!("Add {}", e);
-            let res = ztimeout!(sm.add_listener(e.clone()));
+            let res = ztimeout!(sm.clone().add_listener(e.clone()));
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }

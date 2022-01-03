@@ -30,7 +30,6 @@ use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
-#[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
     // Inbound / outbound
     pub(super) direction: LinkUnicastDirection,
@@ -39,17 +38,17 @@ pub(super) struct TransportLinkUnicast {
     // The transmission pipeline
     pub(super) pipeline: Option<Arc<TransmissionPipeline>>,
     // The transport this link is associated to
-    transport: TransportUnicastInner,
+    transport: Arc<TransportUnicastInner>,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>,
+    handle_tx: Option<JoinHandle<()>>,
     active_rx: Arc<AtomicBool>,
     signal_rx: Signal,
-    handle_rx: Option<Arc<JoinHandle<()>>>,
+    handle_rx: Option<JoinHandle<()>>,
 }
 
 impl TransportLinkUnicast {
     pub(super) fn new(
-        transport: TransportUnicastInner,
+        transport: Arc<TransportUnicastInner>,
         link: LinkUnicast,
         direction: LinkUnicastDirection,
     ) -> TransportLinkUnicast {
@@ -102,7 +101,7 @@ impl TransportLinkUnicast {
                     task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
-            self.handle_tx = Some(Arc::new(handle));
+            self.handle_tx = Some(handle);
         }
     }
 
@@ -141,7 +140,7 @@ impl TransportLinkUnicast {
                     task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
-            self.handle_rx = Some(Arc::new(handle));
+            self.handle_rx = Some(handle);
         }
     }
 
@@ -153,16 +152,14 @@ impl TransportLinkUnicast {
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
         self.stop_rx();
-        if let Some(handle) = self.handle_rx.take() {
+        if let Some(handle_rx) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
             handle_rx.await;
         }
 
         self.stop_tx();
-        if let Some(handle) = self.handle_tx.take() {
+        if let Some(handle_tx) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_tx = Arc::try_unwrap(handle).unwrap();
             handle_tx.await;
         }
 
@@ -228,7 +225,7 @@ async fn tx_task(
 
 async fn rx_task_stream(
     link: LinkUnicast,
-    transport: TransportUnicastInner,
+    transport: Arc<TransportUnicastInner>,
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -287,7 +284,7 @@ async fn rx_task_stream(
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
 
-                            transport.receive_message(msg, &link)?
+                            transport.clone().receive_message(msg, &link)?
                         }
                         None => {
                             bail!("{}: decoding error", link);
@@ -303,7 +300,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: LinkUnicast,
-    transport: TransportUnicastInner,
+    transport: Arc<TransportUnicastInner>,
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,
@@ -364,7 +361,7 @@ async fn rx_task_dgram(
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
 
-                            transport.receive_message(msg, &link)?
+                            transport.clone().receive_message(msg, &link)?
                         }
                         None => {
                             bail!("{}: decoding error", link)
@@ -380,7 +377,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: LinkUnicast,
-    transport: TransportUnicastInner,
+    transport: Arc<TransportUnicastInner>,
     lease: Duration,
     signal: Signal,
     active: Arc<AtomicBool>,

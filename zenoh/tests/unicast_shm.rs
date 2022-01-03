@@ -144,12 +144,14 @@ mod tests {
             TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
                 SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let peer_shm01_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_shm01)
-            .unicast(unicast)
-            .build(peer_shm01_handler.clone())
-            .unwrap();
+        let peer_shm01_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_shm01)
+                .unicast(unicast)
+                .build(peer_shm01_handler.clone())
+                .unwrap(),
+        );
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
@@ -157,35 +159,40 @@ mod tests {
             TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
                 SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let peer_shm02_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_shm02)
-            .unicast(unicast)
-            .build(peer_shm02_handler.clone())
-            .unwrap();
+        let peer_shm02_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_shm02)
+                .unicast(unicast)
+                .build(peer_shm02_handler.clone())
+                .unwrap(),
+        );
 
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
-        let peer_net01_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_net01)
-            .build(peer_net01_handler.clone())
-            .unwrap();
+        let peer_net01_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_net01)
+                .build(peer_net01_handler.clone())
+                .unwrap(),
+        );
 
         // Create the listener on the peer
         println!("\nTransport SHM [1a]");
         let _ = ztimeout!(peer_shm01_manager
+            .clone()
             .add_listener(endpoint.clone())
             .timeout(TIMEOUT))
         .unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
-        let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        let _ = ztimeout!(peer_shm02_manager.clone().open_transport(endpoint.clone())).unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
-        let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        let _ = ztimeout!(peer_net01_manager.clone().open_transport(endpoint.clone())).unwrap();
 
         // Retrieve the transports
         println!("Transport SHM [2a]");

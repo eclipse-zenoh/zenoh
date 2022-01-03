@@ -42,29 +42,33 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
 
     // Create the router transport manager
-    let router_manager = TransportManager::builder()
-        .pid(router_id)
-        .whatami(WhatAmI::Router)
-        .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()))
-        .unwrap();
+    let router_manager = Arc::new(
+        TransportManager::builder()
+            .pid(router_id)
+            .whatami(WhatAmI::Router)
+            .defrag_buff_size(MSG_DEFRAG_BUF)
+            .build(Arc::new(DummyTransportEventHandler::default()))
+            .unwrap(),
+    );
 
     // Create the client transport manager
-    let client_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client_id)
-        .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()))
-        .unwrap();
+    let client_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client_id)
+            .defrag_buff_size(MSG_DEFRAG_BUF)
+            .build(Arc::new(DummyTransportEventHandler::default()))
+            .unwrap(),
+    );
 
     // Create the listener on the router
     println!("Add locator: {}", endpoint);
-    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+    let _ = ztimeout!(router_manager.clone().add_listener(endpoint.clone())).unwrap();
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     println!("Opening transport with {}", endpoint);
-    let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
+    let _ = ztimeout!(client_manager.clone().open_transport(endpoint.clone())).unwrap();
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 

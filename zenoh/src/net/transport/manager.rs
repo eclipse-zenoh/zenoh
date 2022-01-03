@@ -260,7 +260,7 @@ impl Default for TransportManagerBuilder {
     }
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct TransportManager {
     pub config: Arc<TransportManagerConfig>,
     pub(crate) state: Arc<TransportManagerState>,
@@ -305,7 +305,7 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+    pub async fn add_listener(self: Arc<Self>, endpoint: EndPoint) -> ZResult<Locator> {
         if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();
@@ -346,7 +346,7 @@ impl TransportManager {
         // @TODO: multicast
     }
 
-    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+    pub async fn open_transport(self: Arc<Self>, endpoint: EndPoint) -> ZResult<TransportUnicast> {
         if endpoint.locator.address.is_multicast() {
             // @TODO: multicast
             unimplemented!();

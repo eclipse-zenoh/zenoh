@@ -28,7 +28,7 @@ type OResult<T> = Result<T, OError>;
 
 pub(crate) async fn open_link(
     link: &LinkUnicast,
-    manager: &TransportManager,
+    manager: Arc<TransportManager>,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> ZResult<TransportUnicast> {
     // INIT handshake
@@ -37,15 +37,15 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    close_link(link, manager, auth_link, reason).await;
+                    close_link(link, &manager, auth_link, reason).await;
                     return Err(e);
                 }
             }
         };
     }
 
-    let output = step!(init_syn::send(link, manager, auth_link).await);
-    let output = step!(init_ack::recv(link, manager, auth_link, output).await);
+    let output = step!(init_syn::send(link, &manager, auth_link).await);
+    let output = step!(init_ack::recv(link, &manager, auth_link, output).await);
 
     // Initialize the transport
     macro_rules! step {
@@ -53,7 +53,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
+                    close_link(link, &manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
                     return Err(e);
                 }
             }
@@ -68,7 +68,7 @@ pub(crate) async fn open_link(
         is_shm: output.is_shm,
         is_qos: output.is_qos,
     };
-    let transport = step!(super::transport_init(manager, input).await);
+    let transport = step!(super::transport_init(manager.clone(), input).await);
 
     // OPEN handshake
     macro_rules! step {
@@ -81,7 +81,7 @@ pub(crate) async fn open_link(
                             let _ = manager.del_transport_unicast(&pid).await;
                         }
                     }
-                    close_link(link, manager, auth_link, reason).await;
+                    close_link(link, &manager, auth_link, reason).await;
                     return Err(e);
                 }
             }
@@ -98,8 +98,8 @@ pub(crate) async fn open_link(
         initial_sn,
         attachment: output.open_syn_attachment,
     };
-    let output = step!(open_syn::send(link, manager, auth_link, input).await);
-    let output = step!(open_ack::recv(link, manager, auth_link, output).await);
+    let output = step!(open_syn::send(link, &manager, auth_link, input).await);
+    let output = step!(open_ack::recv(link, &manager, auth_link, output).await);
 
     // Finalize the transport
     // Add the link to the transport
@@ -123,7 +123,7 @@ pub(crate) async fn open_link(
         lease: output.lease,
     };
     let transport = output.transport.clone();
-    let res = transport_finalize(link, manager, output).await;
+    let res = transport_finalize(link, &manager, output).await;
     if let Err(e) = res {
         let _ = transport.close().await;
         return Err(e);

@@ -200,12 +200,12 @@ impl ListenerUnicastTcp {
 }
 
 pub struct LinkManagerUnicastTcp {
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTcp>>>,
 }
 
 impl LinkManagerUnicastTcp {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub(crate) fn new(manager: Arc<TransportManager>) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -353,7 +353,7 @@ async fn accept_task(
     socket: TcpListener,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
 ) -> ZResult<()> {
     enum Action {
         Accept((TcpStream, SocketAddr)),
@@ -402,7 +402,10 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(LinkUnicast(link)).await;
+        manager
+            .clone()
+            .handle_new_link_unicast(LinkUnicast(link))
+            .await;
     }
 
     Ok(())

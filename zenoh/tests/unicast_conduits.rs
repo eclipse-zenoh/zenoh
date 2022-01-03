@@ -174,9 +174,9 @@ async fn open_transport(
     endpoints: &[EndPoint],
     priority: Priority,
 ) -> (
-    TransportManager,
+    Arc<TransportManager>,
     Arc<SHRouter>,
-    TransportManager,
+    Arc<TransportManager>,
     TransportUnicast,
 ) {
     // Define client and router IDs
@@ -185,30 +185,34 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
-    let router_manager = TransportManager::builder()
-        .whatami(WhatAmI::Router)
-        .pid(router_id)
-        .build(router_handler.clone())
-        .unwrap();
+    let router_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Router)
+            .pid(router_id)
+            .build(router_handler.clone())
+            .unwrap(),
+    );
 
     // Create the client transport manager
-    let client_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client_id)
-        .build(Arc::new(SHClient::default()))
-        .unwrap();
+    let client_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client_id)
+            .build(Arc::new(SHClient::default()))
+            .unwrap(),
+    );
 
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Add locator: {}", e);
-        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.clone().add_listener(e.clone())).unwrap();
     }
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(client_manager.clone().open_transport(e.clone())).unwrap();
     }
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
@@ -223,8 +227,8 @@ async fn open_transport(
 }
 
 async fn close_transport(
-    router_manager: TransportManager,
-    client_manager: TransportManager,
+    router_manager: Arc<TransportManager>,
+    client_manager: Arc<TransportManager>,
     client_transport: TransportUnicast,
     endpoints: &[EndPoint],
 ) {

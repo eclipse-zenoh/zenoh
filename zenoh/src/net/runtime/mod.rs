@@ -43,7 +43,7 @@ pub struct RuntimeState {
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
-    pub manager: TransportManager,
+    pub manager: Arc<TransportManager>,
     pub hlc: Option<Arc<HLC>>,
 }
 
@@ -111,13 +111,15 @@ impl Runtime {
             runtime: std::sync::RwLock::new(None),
         });
 
-        let transport_manager = TransportManager::builder()
-            .from_config(&config)
-            .await?
-            .version(version)
-            .whatami(whatami)
-            .pid(pid)
-            .build(handler.clone())?;
+        let transport_manager = Arc::new(
+            TransportManager::builder()
+                .from_config(&config)
+                .await?
+                .version(version)
+                .whatami(whatami)
+                .pid(pid)
+                .build(handler.clone())?,
+        );
 
         let config = Notifier::new(config);
 
@@ -162,8 +164,8 @@ impl Runtime {
     }
 
     #[inline(always)]
-    pub fn manager(&self) -> &TransportManager {
-        &self.manager
+    pub fn manager(&self) -> Arc<TransportManager> {
+        self.manager.clone()
     }
 
     pub async fn close(&self) -> ZResult<()> {

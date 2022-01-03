@@ -145,26 +145,30 @@ mod tests {
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new(peer_id01));
         let unicast = TransportManager::config_unicast().max_links(endpoint01.len());
-        let peer01_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_id01)
-            .unicast(unicast)
-            .build(peer_sh01.clone())
-            .unwrap();
+        let peer01_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_id01)
+                .unicast(unicast)
+                .build(peer_sh01.clone())
+                .unwrap(),
+        );
 
         // Create the peer02 transport manager
         let peer_sh02 = Arc::new(SHPeer::new(peer_id02));
         let unicast = TransportManager::config_unicast().max_links(endpoint02.len());
-        let peer02_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_id02)
-            .unicast(unicast)
-            .build(peer_sh02.clone())
-            .unwrap();
+        let peer02_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_id02)
+                .unicast(unicast)
+                .build(peer_sh02.clone())
+                .unwrap(),
+        );
 
         // Add the endpoints on the peer01
         for e in endpoint01.iter() {
-            let res = ztimeout!(peer01_manager.add_listener(e.clone()));
+            let res = ztimeout!(peer01_manager.clone().add_listener(e.clone()));
             println!("[Simultaneous 01a] => Adding endpoint {:?}: {:?}", e, res);
             assert!(res.is_ok());
         }
@@ -177,7 +181,7 @@ mod tests {
 
         // Add the endpoints on peer02
         for e in endpoint02.iter() {
-            let res = ztimeout!(peer02_manager.add_listener(e.clone()));
+            let res = ztimeout!(peer02_manager.clone().add_listener(e.clone()));
             println!("[Simultaneous 02a] => Adding endpoint {:?}: {:?}", e, res);
             assert!(res.is_ok());
         }
@@ -199,13 +203,13 @@ mod tests {
             // These open should succeed
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01c] => Opening transport with {:?}...", e);
-                let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p01m.clone().open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01d] => Exceeding transport with {:?}...", e);
-                let res = ztimeout!(c_p01m.open_transport(e.clone()));
+                let res = ztimeout!(c_p01m.clone().open_transport(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -254,13 +258,13 @@ mod tests {
             // These open should succeed
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02c] => Opening transport with {:?}...", e);
-                let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p02m.clone().open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02d] => Exceeding transport with {:?}...", e);
-                let res = ztimeout!(c_p02m.open_transport(e.clone()));
+                let res = ztimeout!(c_p02m.clone().open_transport(e.clone()));
                 assert!(res.is_err());
             }
 

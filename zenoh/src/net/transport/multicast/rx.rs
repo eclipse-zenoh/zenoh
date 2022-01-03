@@ -20,6 +20,7 @@ use super::protocol::proto::{
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
+use std::sync::Arc;
 use std::sync::MutexGuard;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::zerror;
@@ -145,7 +146,11 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn handle_join_from_unknown(&self, join: Join, locator: &Locator) -> ZResult<()> {
+    pub(super) fn handle_join_from_unknown(
+        self: Arc<Self>,
+        join: Join,
+        locator: &Locator,
+    ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
@@ -192,7 +197,11 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
+    pub(super) fn receive_message(
+        self: Arc<Self>,
+        msg: TransportMessage,
+        locator: &Locator,
+    ) -> ZResult<()> {
         // Process the received message
         let r_guard = zread!(self.peers);
         match r_guard.get(locator) {

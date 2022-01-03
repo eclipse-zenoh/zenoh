@@ -256,12 +256,12 @@ impl ListenerUnicastUdp {
 }
 
 pub struct LinkManagerUnicastUdp {
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
 }
 
 impl LinkManagerUnicastUdp {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub(crate) fn new(manager: Arc<TransportManager>) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -442,7 +442,7 @@ async fn accept_read_task(
     socket: UdpSocket,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
 ) -> ZResult<()> {
     let socket = Arc::new(socket);
     let links: LinkHashMap = Arc::new(Mutex::new(HashMap::new()));
@@ -534,7 +534,10 @@ async fn accept_read_task(
                         LinkUnicastUdpVariant::Unconnected(unconnected),
                     ));
                     // Add the new link to the set of connected peers
-                    manager.handle_new_link_unicast(LinkUnicast(link)).await;
+                    manager
+                        .clone()
+                        .handle_new_link_unicast(LinkUnicast(link))
+                        .await;
                 }
             }
         };

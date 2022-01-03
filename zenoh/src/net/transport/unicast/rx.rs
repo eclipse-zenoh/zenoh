@@ -21,9 +21,10 @@ use super::protocol::proto::{
 use super::transport::TransportUnicastInner;
 use crate::net::link::LinkUnicast;
 use async_std::task;
+use std::sync::Arc;
 use std::sync::MutexGuard;
 use zenoh_util::core::Result as ZResult;
-use zenoh_util::{zerror, zread};
+use zenoh_util::zerror;
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -77,7 +78,7 @@ impl TransportUnicastInner {
     }
 
     fn handle_close(
-        &self,
+        self: Arc<Self>,
         link: &LinkUnicast,
         pid: Option<PeerId>,
         reason: u8,
@@ -101,7 +102,7 @@ impl TransportUnicastInner {
         let _ = self.stop_tx(link);
 
         // Delete and clean up
-        let c_transport = self.clone();
+        let c_transport = self;
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
@@ -166,7 +167,11 @@ impl TransportUnicastInner {
         }
     }
 
-    pub(super) fn receive_message(&self, msg: TransportMessage, link: &LinkUnicast) -> ZResult<()> {
+    pub(super) fn receive_message(
+        self: Arc<Self>,
+        msg: TransportMessage,
+        link: &LinkUnicast,
+    ) -> ZResult<()> {
         log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {

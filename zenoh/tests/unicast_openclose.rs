@@ -93,12 +93,14 @@ async fn openclose_transport(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(2);
     }
-    let router_manager = TransportManager::builder()
-        .whatami(WhatAmI::Router)
-        .pid(router_id)
-        .unicast(unicast)
-        .build(router_handler.clone())
-        .unwrap();
+    let router_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Router)
+            .pid(router_id)
+            .unicast(unicast)
+            .build(router_handler.clone())
+            .unwrap(),
+    );
 
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
@@ -111,12 +113,14 @@ async fn openclose_transport(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(2);
     }
-    let client01_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client01_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientOpenClose::new()))
-        .unwrap();
+    let client01_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client01_id)
+            .unicast(unicast)
+            .build(Arc::new(SHClientOpenClose::new()))
+            .unwrap(),
+    );
 
     // Create the transport transport manager for the second client
     #[allow(unused_mut)]
@@ -125,17 +129,19 @@ async fn openclose_transport(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(1);
     }
-    let client02_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client02_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientOpenClose::new()))
-        .unwrap();
+    let client02_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client02_id)
+            .unicast(unicast)
+            .build(Arc::new(SHClientOpenClose::new()))
+            .unwrap(),
+    );
 
     /* [1] */
     println!("\nTransport Open Close [1a1]");
     // Add the locator on the router
-    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
+    let res = ztimeout!(router_manager.clone().add_listener(endpoint.clone()));
     println!("Transport Open Close [1a1]: {:?}", res);
     assert!(res.is_ok());
     println!("Transport Open Close [1a2]");
@@ -148,7 +154,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let mut links_num = 1;
 
     println!("Transport Open Close [1c1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client01_manager.clone().open_transport(endpoint.clone()));
     println!("Transport Open Close [1c2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -191,7 +197,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         links_num = 2;
 
         println!("\nTransport Open Close [2a1]");
-        let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+        let res = ztimeout!(client01_manager.clone().open_transport(endpoint.clone()));
         println!("Transport Open Close [2a2]: {:?}", res);
         assert!(res.is_ok());
         let c_ses2 = res.unwrap();
@@ -230,7 +236,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     // Open transport -> This should be rejected because
     // of the maximum limit of links per transport
     println!("\nTransport Open Close [3a1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client01_manager.clone().open_transport(endpoint.clone()));
     println!("Transport Open Close [3a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [3b1]");
@@ -291,7 +297,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     links_num = 1;
 
     println!("\nTransport Open Close [5a1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client01_manager.clone().open_transport(endpoint.clone()));
     println!("Transport Open Close [5a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses3 = res.unwrap();
@@ -324,7 +330,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     // Open transport -> This should be rejected because
     // of the maximum limit of transports
     println!("\nTransport Open Close [6a1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client02_manager.clone().open_transport(endpoint.clone()));
     println!("Transport Open Close [6a2]: {:?}", res);
     assert!(res.is_err());
     println!("Transport Open Close [6b1]");
@@ -377,7 +383,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     links_num = 1;
 
     println!("\nTransport Open Close [8a1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client02_manager.clone().open_transport(endpoint.clone()));
     println!("Transport Open Close [8a2]: {:?}", res);
     assert!(res.is_ok());
     let c_ses4 = res.unwrap();

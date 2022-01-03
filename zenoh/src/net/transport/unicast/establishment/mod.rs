@@ -24,6 +24,7 @@ use crate::net::link::{Link, LinkUnicast};
 use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
@@ -205,7 +206,7 @@ pub(super) struct InputInit {
     pub(super) is_qos: bool,
 }
 async fn transport_init(
-    manager: &TransportManager,
+    manager: Arc<TransportManager>,
     input: self::InputInit,
 ) -> ZResult<TransportUnicast> {
     // Initialize the transport if it is new

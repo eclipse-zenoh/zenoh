@@ -112,22 +112,26 @@ mod tests {
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new());
         let unicast01 = TransportManager::config_unicast().max_links(endpoint02.len());
-        let peer01_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_id01)
-            .unicast(unicast01)
-            .build(peer_sh01.clone())
-            .unwrap();
+        let peer01_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_id01)
+                .unicast(unicast01)
+                .build(peer_sh01.clone())
+                .unwrap(),
+        );
 
         // Create the peer01 transport manager
         let peer_sh02 = Arc::new(SHPeer::new());
         let unicast02 = TransportManager::config_unicast().max_links(endpoint01.len());
-        let peer02_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
-            .pid(peer_id02)
-            .unicast(unicast02)
-            .build(peer_sh02.clone())
-            .unwrap();
+        let peer02_manager = Arc::new(
+            TransportManager::builder()
+                .whatami(WhatAmI::Peer)
+                .pid(peer_id02)
+                .unicast(unicast02)
+                .build(peer_sh02.clone())
+                .unwrap(),
+        );
 
         // Barrier to synchronize the two tasks
         let barrier_peer = Arc::new(Barrier::new(2));
@@ -144,7 +148,7 @@ mod tests {
         let peer01_task = task::spawn(async move {
             // Add the endpoints on the first peer
             for e in c_end01.iter() {
-                let res = ztimeout!(peer01_manager.add_listener(e.clone()));
+                let res = ztimeout!(peer01_manager.clone().add_listener(e.clone()));
                 println!("[Transport Peer 01a] => Adding endpoint {:?}: {:?}", e, res);
                 assert!(res.is_ok());
             }
@@ -165,7 +169,7 @@ mod tests {
                     println!("[Transport Peer 01c] => Waiting for opening transport");
                     // Syncrhonize before opening the transports
                     ztimeout!(cc_barow.wait());
-                    let res = ztimeout!(c_p01m.open_transport(c_end.clone()));
+                    let res = ztimeout!(c_p01m.clone().open_transport(c_end.clone()));
                     println!(
                         "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
                         c_end, res
@@ -252,7 +256,7 @@ mod tests {
         let peer02_task = task::spawn(async move {
             // Add the endpoints on the first peer
             for e in c_end02.iter() {
-                let res = ztimeout!(peer02_manager.add_listener(e.clone()));
+                let res = ztimeout!(peer02_manager.clone().add_listener(e.clone()));
                 println!("[Transport Peer 02a] => Adding endpoint {:?}: {:?}", e, res);
                 assert!(res.is_ok());
             }
@@ -274,7 +278,7 @@ mod tests {
                     // Syncrhonize before opening the transports
                     ztimeout!(cc_barow.wait());
 
-                    let res = ztimeout!(c_p02m.open_transport(c_end.clone()));
+                    let res = ztimeout!(c_p02m.clone().open_transport(c_end.clone()));
                     println!(
                         "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
                         c_end, res

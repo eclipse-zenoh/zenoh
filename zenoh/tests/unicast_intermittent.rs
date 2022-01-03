@@ -152,12 +152,14 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(1);
     }
-    let router_manager = TransportManager::builder()
-        .whatami(WhatAmI::Router)
-        .pid(router_id)
-        .unicast(unicast)
-        .build(router_handler.clone())
-        .unwrap();
+    let router_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Router)
+            .pid(router_id)
+            .unicast(unicast)
+            .build(router_handler.clone())
+            .unwrap(),
+    );
 
     /* [CLIENT] */
     let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
@@ -172,12 +174,14 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(1);
     }
-    let client01_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client01_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientStable::new(counter.clone())))
-        .unwrap();
+    let client01_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client01_id)
+            .unicast(unicast)
+            .build(Arc::new(SHClientStable::new(counter.clone())))
+            .unwrap(),
+    );
 
     // Create the transport transport manager for the second client
     #[allow(unused_mut)]
@@ -186,12 +190,14 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(1);
     }
-    let client02_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client02_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent::default()))
-        .unwrap();
+    let client02_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client02_id)
+            .unicast(unicast)
+            .build(Arc::new(SHClientIntermittent::default()))
+            .unwrap(),
+    );
 
     // Create the transport transport manager for the third client
     #[allow(unused_mut)]
@@ -200,24 +206,26 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     {
         unicast = unicast.max_links(1);
     }
-    let client03_manager = TransportManager::builder()
-        .whatami(WhatAmI::Client)
-        .pid(client03_id)
-        .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent::default()))
-        .unwrap();
+    let client03_manager = Arc::new(
+        TransportManager::builder()
+            .whatami(WhatAmI::Client)
+            .pid(client03_id)
+            .unicast(unicast)
+            .build(Arc::new(SHClientIntermittent::default()))
+            .unwrap(),
+    );
 
     /* [1] */
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
-    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+    let _ = ztimeout!(router_manager.clone().add_listener(endpoint.clone())).unwrap();
     let locators = router_manager.get_listeners();
     println!("Transport Intermittent [1a2]: {:?}", locators);
     assert_eq!(locators.len(), 1);
 
     /* [2] */
     // Open a transport from client01 to the router
-    let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
+    let c_ses1 = ztimeout!(client01_manager.clone().open_transport(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
     assert_eq!(client01_manager.get_transports().len(), 1);
     assert_eq!(c_ses1.get_pid().unwrap(), router_id);
@@ -232,7 +240,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("+");
             std::io::stdout().flush().unwrap();
 
-            let c_ses2 = ztimeout!(c_client02_manager.open_transport(c_endpoint.clone())).unwrap();
+            let c_ses2 = ztimeout!(c_client02_manager
+                .clone()
+                .open_transport(c_endpoint.clone()))
+            .unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
             assert_eq!(c_client02_manager.get_transports().len(), 1);
             assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
@@ -256,7 +267,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("*");
             std::io::stdout().flush().unwrap();
 
-            let c_ses3 = ztimeout!(c_client03_manager.open_transport(c_endpoint.clone())).unwrap();
+            let c_ses3 = ztimeout!(c_client03_manager
+                .clone()
+                .open_transport(c_endpoint.clone()))
+            .unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
             assert_eq!(c_client03_manager.get_transports().len(), 1);
             assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);

@@ -24,7 +24,9 @@ use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast, LinkUnicastDirection};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
-use std::sync::{Arc, RwLock};
+use std::mem;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
 
@@ -51,7 +53,7 @@ macro_rules! zlinkindex {
 /*************************************/
 #[derive(Clone)]
 pub(crate) struct TransportUnicastConfig {
-    pub(crate) manager: TransportManager,
+    pub(crate) manager: Arc<TransportManager>,
     pub(crate) pid: PeerId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
@@ -60,18 +62,17 @@ pub(crate) struct TransportUnicastConfig {
     pub(crate) is_qos: bool,
 }
 
-#[derive(Clone)]
 pub(crate) struct TransportUnicastInner {
     // Transport config
     pub(super) config: TransportUnicastConfig,
     // Tx conduits
     pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Rx conduits
-    pub(super) conduit_rx: Arc<[TransportConduitRx]>,
+    pub(super) conduit_rx: Vec<TransportConduitRx>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[TransportLinkUnicast]>>>,
+    pub(super) links: RwLock<Vec<TransportLinkUnicast>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
+    pub(super) callback: RwLock<Option<Arc<dyn TransportPeerEventHandler>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
     // Transport statistics
@@ -123,9 +124,9 @@ impl TransportUnicastInner {
         let t = TransportUnicastInner {
             config,
             conduit_tx: conduit_tx.into_boxed_slice().into(),
-            conduit_rx: conduit_rx.into_boxed_slice().into(),
-            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
-            callback: Arc::new(RwLock::new(None)),
+            conduit_rx,
+            links: RwLock::new(vec![]),
+            callback: RwLock::new(None),
             alive: AsyncArc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
@@ -197,13 +198,8 @@ impl TransportUnicastInner {
             .await;
 
         // Close all the links
-        let mut links = {
-            let mut l_guard = zwrite!(self.links);
-            let links = l_guard.to_vec();
-            *l_guard = vec![].into_boxed_slice();
-            links
-        };
-        for l in links.drain(..) {
+        let links = mem::take(&mut *zwrite!(self.links));
+        for l in links {
             let _ = l.close().await;
         }
 
@@ -219,7 +215,7 @@ impl TransportUnicastInner {
     /*               LINK                */
     /*************************************/
     pub(super) fn add_link(
-        &self,
+        self: Arc<Self>,
         link: LinkUnicast,
         direction: LinkUnicastDirection,
     ) -> ZResult<()> {
@@ -244,11 +240,7 @@ impl TransportUnicastInner {
 
         // Create a channel link from a link
         let link = TransportLinkUnicast::new(self.clone(), link, direction);
-
-        let mut links = Vec::with_capacity(guard.len() + 1);
-        links.extend_from_slice(&guard);
-        links.push(link);
-        *guard = links.into_boxed_slice();
+        guard.push(link);
 
         Ok(())
     }
@@ -345,10 +337,9 @@ impl TransportUnicastInner {
                     Target::Transport
                 } else {
                     // Remove the link
-                    let mut links = guard.to_vec();
-                    let stl = links.remove(index);
-                    *guard = links.into_boxed_slice();
+                    let stl = guard.remove(index);
                     drop(guard);
+
                     // Notify the callback
                     if let Some(callback) = zread!(self.callback).as_ref() {
                         callback.del_link(Link::from(link));

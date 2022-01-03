@@ -479,7 +479,7 @@ pub async fn router_data(
     _key: &KeyExpr<'_>,
     #[allow(unused_variables)] selector: &str,
 ) -> (ZBuf, Encoding) {
-    let transport_mgr = context.runtime.manager().clone();
+    let transport_mgr = context.runtime.manager();
 
     // plugins info
     let plugins: Vec<serde_json::Value> = {

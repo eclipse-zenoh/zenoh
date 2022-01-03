@@ -14,7 +14,7 @@
 use super::defragmentation::DefragBuffer;
 use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
 use super::seq_num::{SeqNum, SeqNumGenerator};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use zenoh_util::core::zresult::ZResult;
 use zenoh_util::zlock;
 
@@ -67,11 +67,11 @@ impl TransportChannelRx {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct TransportConduitTx {
     pub(crate) priority: Priority,
-    pub(crate) reliable: Arc<Mutex<TransportChannelTx>>,
-    pub(crate) best_effort: Arc<Mutex<TransportChannelTx>>,
+    pub(crate) reliable: Mutex<TransportChannelTx>,
+    pub(crate) best_effort: Mutex<TransportChannelTx>,
 }
 
 impl TransportConduitTx {
@@ -80,8 +80,8 @@ impl TransportConduitTx {
         let bch = TransportChannelTx::make(sn_resolution)?;
         let ctx = TransportConduitTx {
             priority,
-            reliable: Arc::new(Mutex::new(rch)),
-            best_effort: Arc::new(Mutex::new(bch)),
+            reliable: Mutex::new(rch),
+            best_effort: Mutex::new(bch),
         };
         Ok(ctx)
     }
@@ -92,11 +92,11 @@ impl TransportConduitTx {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct TransportConduitRx {
     pub(crate) priority: Priority,
-    pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
-    pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,
+    pub(crate) reliable: Mutex<TransportChannelRx>,
+    pub(crate) best_effort: Mutex<TransportChannelRx>,
 }
 
 impl TransportConduitRx {
@@ -110,8 +110,8 @@ impl TransportConduitRx {
             TransportChannelRx::make(Reliability::BestEffort, sn_resolution, defrag_buff_size)?;
         let ctr = TransportConduitRx {
             priority,
-            reliable: Arc::new(Mutex::new(rch)),
-            best_effort: Arc::new(Mutex::new(bch)),
+            reliable: Mutex::new(rch),
+            best_effort: Mutex::new(bch),
         };
         Ok(ctr)
     }

@@ -21,7 +21,7 @@ use zenoh_util::core::Result as ZResult;
 use zenoh_util::zasynclock;
 
 pub(crate) async fn open_link(
-    manager: &TransportManager,
+    manager: Arc<TransportManager>,
     link: LinkMulticast,
 ) -> ZResult<TransportMulticast> {
     // Create and configure the multicast transport
@@ -51,7 +51,7 @@ pub(crate) async fn open_link(
         initial_sns,
         link: link.clone(),
     };
-    let ti = Arc::new(TransportMulticastInner::make(config)?);
+    let ti = TransportMulticastInner::make(config)?;
 
     // Store the active transport
     let transport: TransportMulticast = (&ti).into();

@@ -19,7 +19,7 @@ use super::*;
 use crate::config::Config;
 use crate::net::link::*;
 use async_std::prelude::*;
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -45,15 +45,15 @@ pub struct TransportManagerConfigUnicast {
 
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
-    pub(super) incoming: AsyncArc<AsyncMutex<usize>>,
+    pub(super) incoming: AsyncMutex<usize>,
     // Active peer authenticators
-    pub(super) peer_authenticator: AsyncArc<AsyncRwLock<HashSet<PeerAuthenticator>>>,
+    pub(super) peer_authenticator: AsyncRwLock<HashSet<PeerAuthenticator>>,
     // Active link authenticators
-    pub(super) link_authenticator: AsyncArc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
+    pub(super) link_authenticator: AsyncRwLock<HashSet<LinkAuthenticator>>,
     // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
+    pub(super) protocols: Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
+    pub(super) transports: Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -209,11 +209,11 @@ impl TransportManagerBuilderUnicast {
         }
 
         let state = TransportManagerStateUnicast {
-            incoming: AsyncArc::new(AsyncMutex::new(0)),
-            protocols: Arc::new(Mutex::new(HashMap::new())),
-            transports: Arc::new(Mutex::new(HashMap::new())),
-            link_authenticator: AsyncArc::new(AsyncRwLock::new(self.link_authenticator)),
-            peer_authenticator: AsyncArc::new(AsyncRwLock::new(self.peer_authenticator)),
+            incoming: AsyncMutex::new(0),
+            protocols: Mutex::new(HashMap::new()),
+            transports: Mutex::new(HashMap::new()),
+            link_authenticator: AsyncRwLock::new(self.link_authenticator),
+            peer_authenticator: AsyncRwLock::new(self.peer_authenticator),
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -286,7 +286,10 @@ impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    fn new_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
+    fn new_link_manager_unicast(
+        self: Arc<Self>,
+        protocol: &LocatorProtocol,
+    ) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
         if let Some(lm) = w_guard.get(protocol) {
             Ok(lm.clone())
@@ -320,8 +323,10 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+    pub async fn add_listener_unicast(self: Arc<Self>, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let manager = self
+            .clone()
+            .new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self
             .config
@@ -372,7 +377,7 @@ impl TransportManager {
     /*             TRANSPORT             */
     /*************************************/
     pub(super) fn init_transport_unicast(
-        &self,
+        self: Arc<Self>,
         config: TransportConfigUnicast,
     ) -> ZResult<TransportUnicast> {
         let mut guard = zlock!(self.state.unicast.transports);
@@ -471,7 +476,7 @@ impl TransportManager {
     }
 
     pub async fn open_transport_unicast(
-        &self,
+        self: Arc<Self>,
         mut endpoint: EndPoint,
     ) -> ZResult<TransportUnicast> {
         if endpoint.locator.address.is_multicast() {
@@ -482,7 +487,9 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        let manager = self
+            .clone()
+            .new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self
             .config
@@ -542,7 +549,7 @@ impl TransportManager {
         Ok(())
     }
 
-    pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
+    pub(crate) async fn handle_new_link_unicast(self: Arc<Self>, link: LinkUnicast) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
         if *guard >= self.config.unicast.open_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
@@ -599,9 +606,10 @@ impl TransportManager {
                 peer_id,
             };
 
-            let res = super::establishment::accept::accept_link(&link, &c_manager, &mut auth_link)
-                .timeout(c_manager.config.unicast.open_timeout)
-                .await;
+            let res =
+                super::establishment::accept::accept_link(&link, c_manager.clone(), &mut auth_link)
+                    .timeout(c_manager.config.unicast.open_timeout)
+                    .await;
             match res {
                 Ok(res) => {
                     if let Err(e) = res {

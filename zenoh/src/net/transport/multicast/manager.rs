@@ -41,9 +41,9 @@ pub struct TransportManagerBuilderMulticast {
 
 pub struct TransportManagerStateMulticast {
     // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerMulticast>>>,
+    pub(super) protocols: Mutex<HashMap<LocatorProtocol, LinkManagerMulticast>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
+    pub(super) transports: Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -110,8 +110,8 @@ impl TransportManagerBuilderMulticast {
         };
 
         let state = TransportManagerStateMulticast {
-            protocols: Arc::new(Mutex::new(HashMap::new())),
-            transports: Arc::new(Mutex::new(HashMap::new())),
+            protocols: Mutex::new(HashMap::new()),
+            transports: Mutex::new(HashMap::new()),
         };
 
         let params = TransportManagerParamsMulticast { config, state };
@@ -183,7 +183,7 @@ impl TransportManager {
     /*             TRANSPORT             */
     /*************************************/
     pub async fn open_transport_multicast(
-        &self,
+        self: Arc<Self>,
         mut endpoint: EndPoint,
     ) -> ZResult<TransportMulticast> {
         if !endpoint.locator.address.is_multicast() {

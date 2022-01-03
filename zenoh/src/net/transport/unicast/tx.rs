@@ -15,7 +15,6 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportUnicastInner;
-use zenoh_util::zread;
 
 impl TransportUnicastInner {
     #[inline(always)]

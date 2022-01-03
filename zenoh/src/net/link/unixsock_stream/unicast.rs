@@ -182,12 +182,12 @@ impl ListenerUnixSocketStream {
 }
 
 pub struct LinkManagerUnicastUnixSocketStream {
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
     listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnicastUnixSocketStream {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub(crate) fn new(manager: Arc<TransportManager>) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -449,7 +449,7 @@ async fn accept_task(
     socket: UnixListener,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: Arc<TransportManager>,
 ) -> ZResult<()> {
     enum Action {
         Accept(UnixStream),
@@ -530,7 +530,10 @@ async fn accept_task(
         ));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(LinkUnicast(link)).await;
+        manager
+            .clone()
+            .handle_new_link_unicast(LinkUnicast(link))
+            .await;
     }
 
     Ok(())

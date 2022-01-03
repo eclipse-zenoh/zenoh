@@ -33,7 +33,6 @@ use zenoh_util::core::Result as ZResult;
 /*************************************/
 /*             TRANSPORT             */
 /*************************************/
-#[derive(Clone)]
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
@@ -43,7 +42,7 @@ pub(super) struct TransportMulticastPeer {
     pub(super) lease: Duration,
     pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
-    pub(super) conduit_rx: Box<[TransportConduitRx]>,
+    pub(super) conduit_rx: Vec<TransportConduitRx>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
 }
 
@@ -57,11 +56,10 @@ impl TransportMulticastPeer {
     }
 }
 
-#[derive(Clone)]
 pub(super) struct TransportMulticastPeerLeaseTimer {
     pub(super) whatchdog: Arc<AtomicBool>,
     locator: Locator,
-    transport: TransportMulticastInner,
+    transport: Arc<TransportMulticastInner>,
 }
 
 #[async_trait]
@@ -76,35 +74,34 @@ impl Timed for TransportMulticastPeerLeaseTimer {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct TransportMulticastInner {
     // The manager this channel is associated to
-    pub(super) manager: TransportManager,
+    pub(super) manager: Arc<TransportManager>,
     // The multicast locator
     pub(super) locator: Locator,
     // Tx conduits
     pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Remote peers
-    pub(super) peers: Arc<RwLock<HashMap<Locator, TransportMulticastPeer>>>,
+    pub(super) peers: RwLock<HashMap<Locator, TransportMulticastPeer>>,
     // The multicast link
-    pub(super) link: Arc<RwLock<Option<TransportLinkMulticast>>>,
+    pub(super) link: RwLock<Option<TransportLinkMulticast>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
+    pub(super) callback: RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>,
     // The timer for peer leases
-    pub(super) timer: Arc<Timer>,
+    pub(super) timer: Timer,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportMulticastStatsAtomic>,
 }
 
 pub(crate) struct TransportMulticastConfig {
-    pub(crate) manager: TransportManager,
+    pub(crate) manager: Arc<TransportManager>,
     pub(crate) initial_sns: ConduitSnList,
     pub(crate) link: LinkMulticast,
 }
 
 impl TransportMulticastInner {
-    pub(super) fn make(config: TransportMulticastConfig) -> ZResult<TransportMulticastInner> {
+    pub(super) fn make(config: TransportMulticastConfig) -> ZResult<Arc<TransportMulticastInner>> {
         let mut conduit_tx = vec![];
 
         match config.initial_sns {
@@ -128,17 +125,17 @@ impl TransportMulticastInner {
             }
         }
 
-        let ti = TransportMulticastInner {
+        let ti = Arc::new(TransportMulticastInner {
             manager: config.manager,
             locator: config.link.get_dst(),
             conduit_tx: conduit_tx.into_boxed_slice().into(),
-            peers: Arc::new(RwLock::new(HashMap::new())),
-            link: Arc::new(RwLock::new(None)),
-            callback: Arc::new(RwLock::new(None)),
-            timer: Arc::new(Timer::new(false)),
+            peers: RwLock::new(HashMap::new()),
+            link: RwLock::new(None),
+            callback: RwLock::new(None),
+            timer: Timer::new(false),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportMulticastStatsAtomic::default()),
-        };
+        });
 
         let mut w_guard = zwrite!(ti.link);
         *w_guard = Some(TransportLinkMulticast::new(ti.clone(), config.link));
@@ -334,7 +331,7 @@ impl TransportMulticastInner {
     /*************************************/
     /*               PEER                */
     /*************************************/
-    pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
+    pub(super) fn new_peer(self: Arc<Self>, locator: &Locator, join: Join) -> ZResult<()> {
         let mut link = Link::from(self.get_link());
         link.dst = locator.clone();
 
@@ -374,8 +371,7 @@ impl TransportMulticastInner {
                 }
                 tcrs
             }
-        }
-        .into_boxed_slice();
+        };
 
         // Create lease event
         let whatchdog = Arc::new(AtomicBool::new(false));

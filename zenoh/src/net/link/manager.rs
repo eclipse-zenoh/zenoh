@@ -45,7 +45,7 @@ pub(crate) struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
     pub(crate) fn make(
-        manager: TransportManager,
+        manager: Arc<TransportManager>,
         protocol: &LocatorProtocol,
     ) -> ZResult<LinkManagerUnicast> {
         match protocol {
