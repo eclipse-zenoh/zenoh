@@ -1221,6 +1221,7 @@ impl Session {
 
         if local {
             let this = self.clone();
+            // TODO: join this task
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
@@ -1236,6 +1237,7 @@ impl Session {
                 this.send_reply_final(qid);
             });
         } else {
+            // TODO: join this task
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();

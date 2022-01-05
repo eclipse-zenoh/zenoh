@@ -98,6 +98,7 @@ impl TransportLinkUnicast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
+                    // TODO: join this task
                     task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
@@ -135,8 +136,10 @@ impl TransportLinkUnicast {
                 c_active.store(false, Ordering::Release);
                 if let Err(e) = res {
                     log::debug!("{}", e);
+
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
+                    // TODO: join this task
                     task::spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });

@@ -601,6 +601,7 @@ impl TransportManager {
         let c_manager = self.clone();
         let incoming = incoming.clone();
 
+        // TODO: join this task
         task::spawn(async move {
             let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src(),

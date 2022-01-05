@@ -106,6 +106,7 @@ impl TransportUnicastInner {
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
+        // TODO: join this task
         task::spawn(async move {
             if link_only {
                 let _ = c_transport.del_link(&c_link).await;

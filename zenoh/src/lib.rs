@@ -333,6 +333,7 @@ where
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
+            // TODO: join this task
             async_std::task::spawn(async move {
                 let hello_sender = &hello_sender;
                 let mut stop_receiver = stop_receiver.stream();

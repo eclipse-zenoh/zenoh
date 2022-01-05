@@ -143,6 +143,7 @@ impl Runtime {
         }
 
         let receiver = config.subscribe();
+        // TODO: join this task
         async_std::task::spawn({
             let runtime = runtime.clone();
             async move {

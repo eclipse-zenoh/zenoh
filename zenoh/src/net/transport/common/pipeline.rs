@@ -997,6 +997,7 @@ mod tests {
 
         let c_pipeline = pipeline.clone();
         let c_size = size.clone();
+        // TODO: join this task
         task::spawn(async move {
             loop {
                 let payload_sizes: [usize; 16] = [
@@ -1041,6 +1042,7 @@ mod tests {
 
         let c_pipeline = pipeline;
         let c_count = count.clone();
+        // TODO: join this task
         task::spawn(async move {
             loop {
                 let (batch, priority) = c_pipeline.pull().await.unwrap();
@@ -1050,6 +1052,7 @@ mod tests {
             }
         });
 
+        // TODO: join this task
         task::block_on(async {
             let mut prev_size: usize = usize::MAX;
             loop {

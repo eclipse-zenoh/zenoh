@@ -125,6 +125,7 @@ impl TransportLinkMulticast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
+                    // TODO: join this task
                     task::spawn(async move { c_transport.delete().await });
                 }
             });
@@ -163,6 +164,7 @@ impl TransportLinkMulticast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
+                    // TODO: join this task
                     task::spawn(async move { c_transport.delete().await });
                 }
             });

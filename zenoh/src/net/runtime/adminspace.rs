@@ -105,6 +105,7 @@ impl AdminSpace {
         });
 
         let cfg_rx = admin.context.runtime.config.subscribe();
+        // TODO: join this task
         task::spawn({
             let admin = admin.clone();
             async move {
@@ -384,6 +385,7 @@ impl Primitives for AdminSpace {
         let value_selector = value_selector.to_string();
 
         // router is not re-entrant
+        // TODO: join this task
         task::spawn(async move {
             let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
                 |(key, handler)| async {

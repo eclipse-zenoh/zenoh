@@ -460,6 +460,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         let tables_ref = self.tables.clone();
         let pid = self.transport.get_pid().unwrap();
         let whatami = self.transport.get_whatami();
+        // TODO: join this task
         async_std::task::spawn(async move {
             async_std::task::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY)).await;
             let mut tables = zwrite!(tables_ref);
