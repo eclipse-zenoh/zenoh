@@ -19,13 +19,15 @@ use super::*;
 use crate::config::Config;
 use crate::net::link::*;
 use async_std::prelude::*;
-use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use async_std::sync::RwLock as AsyncRwLock;
 use async_std::task;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasynclock, zerror, zlock, zparse};
+use zenoh_util::{zerror, zlock, zparse};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -45,7 +47,7 @@ pub struct TransportManagerConfigUnicast {
 
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
-    pub(super) incoming: AsyncMutex<usize>,
+    pub(super) incoming: Arc<AtomicUsize>,
     // Active peer authenticators
     pub(super) peer_authenticator: AsyncRwLock<HashSet<PeerAuthenticator>>,
     // Active link authenticators
@@ -209,7 +211,7 @@ impl TransportManagerBuilderUnicast {
         }
 
         let state = TransportManagerStateUnicast {
-            incoming: AsyncMutex::new(0),
+            incoming: Arc::new(AtomicUsize::new(0)),
             protocols: Mutex::new(HashMap::new()),
             transports: Mutex::new(HashMap::new()),
             link_authenticator: AsyncRwLock::new(self.link_authenticator),
@@ -550,8 +552,9 @@ impl TransportManager {
     }
 
     pub(crate) async fn handle_new_link_unicast(self: Arc<Self>, link: LinkUnicast) {
-        let mut guard = zasynclock!(self.state.unicast.incoming);
-        if *guard >= self.config.unicast.open_pending {
+        let incoming = &self.state.unicast.incoming;
+
+        if incoming.load(SeqCst) >= self.config.unicast.open_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
@@ -564,8 +567,7 @@ impl TransportManager {
 
         // A new link is available
         log::trace!("New link waiting... {}", link);
-        *guard += 1;
-        drop(guard);
+        incoming.fetch_add(1, SeqCst);
 
         let mut peer_id: Option<PeerId> = None;
         let peer_link = Link::from(&link);
@@ -579,8 +581,7 @@ impl TransportManager {
                             if pid1 != pid2 {
                                 log::debug!("Ambigous PeerID identification for link: {}", link);
                                 let _ = link.close().await;
-                                let mut guard = zasynclock!(self.state.unicast.incoming);
-                                *guard -= 1;
+                                incoming.fetch_sub(1, SeqCst);
                                 return;
                             }
                         }
@@ -590,8 +591,7 @@ impl TransportManager {
                 }
                 Err(e) => {
                     log::debug!("{}", e);
-                    let mut guard = zasynclock!(self.state.unicast.incoming);
-                    *guard -= 1;
+                    incoming.fetch_sub(1, SeqCst);
                     return;
                 }
             }
@@ -599,6 +599,8 @@ impl TransportManager {
 
         // Spawn a task to accept the link
         let c_manager = self.clone();
+        let incoming = incoming.clone();
+
         task::spawn(async move {
             let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src(),
@@ -621,8 +623,7 @@ impl TransportManager {
                     let _ = link.close().await;
                 }
             }
-            let mut guard = zasynclock!(c_manager.state.unicast.incoming);
-            *guard -= 1;
+            incoming.fetch_sub(1, SeqCst);
         });
     }
 }
