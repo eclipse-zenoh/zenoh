@@ -121,7 +121,7 @@ fn parse_args() -> (Config, String) {
     if let Some(values) = args.values_of("peer") {
         config.peers.extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listener") {
         config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
