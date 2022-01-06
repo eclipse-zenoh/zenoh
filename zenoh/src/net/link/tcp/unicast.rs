@@ -22,7 +22,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
@@ -178,7 +177,6 @@ impl fmt::Debug for LinkUnicastTcp {
 /*************************************/
 struct ListenerUnicastTcp {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
@@ -186,13 +184,11 @@ struct ListenerUnicastTcp {
 impl ListenerUnicastTcp {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastTcp {
         ListenerUnicastTcp {
             endpoint,
-            active,
             signal,
             handle,
         }
@@ -251,23 +247,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         endpoint.locator.address = LocatorAddress::Tcp(LocatorTcp::SocketAddr(local_addr));
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
-        let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_active, c_signal, c_manager).await;
+            let res = accept_task(socket, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
         });
 
         let locator = endpoint.locator.clone();
-        let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
+        let listener = ListenerUnicastTcp::new(endpoint, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -288,7 +282,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
         listener.signal.trigger();
         listener.handle.await
     }
@@ -351,7 +344,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
 async fn accept_task(
     socket: TcpListener,
-    active: Arc<AtomicBool>,
     signal: Signal,
     manager: Arc<TransportManager>,
 ) -> ZResult<()> {
@@ -377,7 +369,7 @@ async fn accept_task(
     })?;
 
     log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
-    while active.load(Ordering::Acquire) {
+    while !signal.is_triggered() {
         // Wait for incoming connections
         let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
             Ok(action) => match action {

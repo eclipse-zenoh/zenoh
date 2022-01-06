@@ -32,10 +32,11 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_util::sync::Signal;
 use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
 use zenoh_util::zlock;
 
@@ -64,14 +65,14 @@ macro_rules! zgetbatch {
                 drop($stage_in);
 
                 // Verify that the pipeline is still active
-                if !$self.active.load(Ordering::Acquire) {
+                if $self.signal.is_triggered() {
                     return false;
                 }
 
                 refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
 
                 // Verify that the pipeline is still active
-                if !$self.active.load(Ordering::Acquire) {
+                if $self.signal.is_triggered() {
                     return false;
                 }
 
@@ -191,7 +192,7 @@ impl StageRefill {
 /// Link queue
 pub(crate) struct TransmissionPipeline {
     // Status variable of transmission pipeline
-    active: AtomicBool,
+    signal: Signal,
     // The conduit TX containing the SN generators
     conduit: Arc<[TransportConduitTx]>,
     // Each conduit queue has its own Mutex
@@ -282,7 +283,7 @@ impl TransmissionPipeline {
         let stage_in = stage_in.into_boxed_slice();
 
         TransmissionPipeline {
-            active: AtomicBool::new(true),
+            signal: Signal::new(),
             conduit,
             stage_in,
             bytes_in,
@@ -547,14 +548,14 @@ impl TransmissionPipeline {
             match action {
                 Action::Wait(waiter) => {
                     // Check if the pipeline is still active
-                    if !self.active.load(Ordering::Acquire) {
+                    if self.signal.is_triggered() {
                         return None;
                     }
 
                     waiter.await;
 
                     // Check if the pipeline is still active
-                    if !self.active.load(Ordering::Acquire) {
+                    if self.signal.is_triggered() {
                         return None;
                     }
                 }
@@ -576,7 +577,7 @@ impl TransmissionPipeline {
 
     pub(crate) fn disable(&self) {
         // Mark the pipeline as no longer active
-        self.active.store(false, Ordering::Release);
+        self.signal.trigger();
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks

@@ -21,7 +21,6 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
@@ -234,7 +233,6 @@ impl fmt::Debug for LinkUnicastUdp {
 /*************************************/
 struct ListenerUnicastUdp {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
 }
@@ -242,13 +240,11 @@ struct ListenerUnicastUdp {
 impl ListenerUnicastUdp {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastUdp {
         ListenerUnicastUdp {
             endpoint,
-            active,
             signal,
             handle,
         }
@@ -340,23 +336,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         endpoint.locator.address = LocatorAddress::Udp(LocatorUdp::SocketAddr(local_addr));
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
-        let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
+            let res = accept_read_task(socket, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
         });
 
         let locator = endpoint.locator.clone();
-        let listener = ListenerUnicastUdp::new(endpoint, active, signal, handle);
+        let listener = ListenerUnicastUdp::new(endpoint, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -377,7 +371,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
         listener.signal.trigger();
         listener.handle.await
     }
@@ -440,7 +433,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
 async fn accept_read_task(
     socket: UdpSocket,
-    active: Arc<AtomicBool>,
     signal: Signal,
     manager: Arc<TransportManager>,
 ) -> ZResult<()> {
@@ -489,7 +481,7 @@ async fn accept_read_task(
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
     // Buffers for deserialization
     let pool = RecyclingObjectPool::new(1, || vec![0_u8; UDP_MAX_MTU as usize].into_boxed_slice());
-    while active.load(Ordering::Acquire) {
+    while !signal.is_triggered() {
         let mut buff = pool.take().await;
         // Wait for incoming connections
         let (n, dst_addr) = match receive(socket.clone(), &mut buff)

@@ -24,7 +24,6 @@ use std::fmt;
 use std::fs::remove_file;
 use std::net::Shutdown;
 use std::os::unix::io::RawFd;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
@@ -157,7 +156,6 @@ impl fmt::Debug for LinkUnicastUnixSocketStream {
 /*************************************/
 struct ListenerUnixSocketStream {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
     lock_fd: RawFd,
@@ -166,14 +164,12 @@ struct ListenerUnixSocketStream {
 impl ListenerUnixSocketStream {
     fn new(
         endpoint: EndPoint,
-        active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
         lock_fd: RawFd,
     ) -> ListenerUnixSocketStream {
         ListenerUnixSocketStream {
             endpoint,
-            active,
             signal,
             handle,
             lock_fd,
@@ -378,23 +374,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             LocatorAddress::UnixSocketStream(LocatorUnixSocketStream { path: local_path });
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
 
-        let c_active = active.clone();
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_path = local_path_str.clone();
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(socket, c_active, c_signal, c_manager).await;
+            let res = accept_task(socket, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_path);
             res
         });
 
         let locator = endpoint.locator.clone();
-        let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
+        let listener = ListenerUnixSocketStream::new(endpoint, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str, listener);
 
         Ok(locator)
@@ -414,7 +408,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
         listener.signal.trigger();
         let res = listener.handle.await;
 
@@ -447,7 +440,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
 async fn accept_task(
     socket: UnixListener,
-    active: Arc<AtomicBool>,
     signal: Signal,
     manager: Arc<TransportManager>,
 ) -> ZResult<()> {
@@ -498,7 +490,7 @@ async fn accept_task(
         "Ready to accept UnixSocketStream connections on: {}",
         src_path
     );
-    while active.load(Ordering::Acquire) {
+    while !signal.is_triggered() {
         // Wait for incoming connections
         let stream = match accept(&socket).race(stop(signal.clone())).await {
             Ok(action) => match action {
