@@ -13,25 +13,43 @@
 //
 use async_std::sync::Arc;
 use event_listener::Event;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::*;
 
 #[derive(Clone)]
 pub struct Signal {
-    event: Arc<Event>,
+    shared: Arc<Shared>,
+}
+
+pub struct Shared {
+    event: Event,
+    triggered: AtomicBool,
 }
 
 impl Signal {
     pub fn new() -> Self {
-        let event = Arc::new(Event::new());
-        Signal { event }
+        Signal {
+            shared: Arc::new(Shared {
+                event: Event::new(),
+                triggered: AtomicBool::new(false),
+            }),
+        }
     }
 
     pub fn trigger(&self) {
-        self.event.notify_additional(usize::MAX);
+        self.shared.triggered.store(true, Release);
+        self.shared.event.notify_additional(usize::MAX);
+    }
+
+    pub fn is_triggered(&self) -> bool {
+        self.shared.triggered.load(Acquire)
     }
 
     pub async fn wait(&self) {
-        let listener = self.event.listen();
-        listener.await;
+        if !self.is_triggered() {
+            let listener = self.shared.event.listen();
+            listener.await;
+        }
     }
 }
 
