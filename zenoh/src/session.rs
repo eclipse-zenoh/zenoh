@@ -36,6 +36,7 @@ use net::runtime::Runtime;
 use net::transport::Primitives;
 use std::collections::HashMap;
 use std::fmt;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
@@ -187,6 +188,32 @@ impl Resource {
     }
 }
 
+#[derive(Clone)]
+pub(crate) enum SessionRef<'a> {
+    Borrow(&'a Session),
+    Shared(Arc<Session>),
+}
+
+impl Deref for SessionRef<'_> {
+    type Target = Session;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            SessionRef::Borrow(b) => b,
+            SessionRef::Shared(s) => &*s,
+        }
+    }
+}
+
+impl fmt::Debug for SessionRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionRef::Borrow(b) => Session::fmt(b, f),
+            SessionRef::Shared(s) => Session::fmt(&*s, f),
+        }
+    }
+}
+
 /// A zenoh session.
 ///
 pub struct Session {
@@ -240,6 +267,36 @@ impl Session {
         })
     }
 
+    /// Consumes the given `Session`, returning a thread-safe reference-counting
+    /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
+    ///
+    /// This is useful to share ownership of the `Session` between several threads
+    /// and tasks. It also alows to create [`Subscriber`](Subscriber) and
+    /// [`Queryable`](Queryable) with static lifetime that can be moved to several
+    /// threads and tasks
+    ///
+    /// Note: the given zenoh `Session` will be closed when the last reference to
+    /// it is dropped.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    pub fn arc(self) -> Arc<Self> {
+        Arc::new(self)
+    }
+
     /// Consumes and leaks the given `Session`, returning a `'static` mutable
     /// reference to it. The given `Session` will live  for the remainder of
     /// the program's life. Dropping the returned reference will cause a memory
@@ -249,7 +306,8 @@ impl Session {
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
-    /// termination the zenoh session will terminate abruptly.
+    /// termination the zenoh session will terminate abruptly. If possible prefer
+    /// using [`Session::arc()`](Session::arc).
     ///
     /// # Examples
     /// ```no_run
@@ -774,7 +832,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         SubscriberBuilder {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             reliability: Reliability::default(),
             mode: SubMode::default(),
@@ -906,7 +964,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         QueryableBuilder {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             kind: EVAL,
             complete: true,
@@ -1286,6 +1344,80 @@ impl Session {
     pub fn key_expr_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
         let state = zread!(self.state);
         state.remotekey_to_expr(key_expr)
+    }
+}
+
+impl EntityFactory for Arc<Session> {
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        SubscriberBuilder {
+            session: SessionRef::Shared(self.clone()),
+            key_expr: key_expr.into(),
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
+            local: false,
+        }
+    }
+
+    /// Create a [`Queryable`](Queryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](Queryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(query) = queryable.receiver().next().await {
+    ///         query.reply_async(Sample::new(
+    ///             "/key/expression".to_string(),
+    ///             "value",
+    ///         )).await;
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn queryable<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        QueryableBuilder {
+            session: SessionRef::Shared(self.clone()),
+            key_expr: key_expr.into(),
+            kind: EVAL,
+            complete: true,
+        }
     }
 }
 

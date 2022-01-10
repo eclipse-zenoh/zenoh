@@ -19,9 +19,8 @@ use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
 use crate::time::Period;
-use crate::Result as ZResult;
-use crate::Session;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
+use crate::{Result as ZResult, SessionRef};
 use async_std::sync::Arc;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
 use std::fmt;
@@ -105,7 +104,7 @@ zreceiver! {
 ///
 /// Subscribers are automatically undeclared when dropped.
 pub struct Subscriber<'a> {
-    pub(crate) session: &'a Session,
+    pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
     pub(crate) receiver: SampleReceiver,
@@ -139,7 +138,7 @@ impl Subscriber<'_> {
         self.session.pull(&self.state.key_expr)
     }
 
-    /// Close a [`Subscriber`](Subscriber) previously created with [`subscribe`](Session::subscribe).
+    /// Close a [`Subscriber`](Subscriber) previously created with [`subscribe`](crate::Session::subscribe).
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Subscriber asynchronously.
@@ -180,7 +179,7 @@ impl fmt::Debug for Subscriber<'_> {
 ///
 /// Subscribers are automatically undeclared when dropped.
 pub struct CallbackSubscriber<'a> {
-    pub(crate) session: &'a Session,
+    pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
 }
@@ -267,7 +266,7 @@ derive_zfuture! {
     /// ```
     #[derive(Debug, Clone)]
     pub struct SubscriberBuilder<'a, 'b> {
-        pub(crate) session: &'a Session,
+        pub(crate) session: SessionRef<'a>,
         pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) reliability: Reliability,
         pub(crate) mode: SubMode,
@@ -363,7 +362,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
             self.session
                 .declare_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| Subscriber {
-                    session: self.session,
+                    session: self.session.clone(),
                     state: sub_state,
                     alive: true,
                     receiver: SampleReceiver::new(receiver),
@@ -380,7 +379,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                     },
                 )
                 .map(|sub_state| Subscriber {
-                    session: self.session,
+                    session: self.session.clone(),
                     state: sub_state,
                     alive: true,
                     receiver: SampleReceiver::new(receiver),
@@ -412,7 +411,7 @@ derive_zfuture! {
     /// ```
     #[derive(Clone)]
     pub struct CallbackSubscriberBuilder<'a, 'b> {
-        session: &'a Session,
+        session: SessionRef<'a>,
         key_expr: KeyExpr<'b>,
         reliability: Reliability,
         mode: SubMode,
@@ -425,7 +424,7 @@ derive_zfuture! {
 impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
-            .field("session", self.session)
+            .field("session", &self.session)
             .field("key_expr", &self.key_expr)
             .field("reliability", &self.reliability)
             .field("mode", &self.mode)
@@ -506,7 +505,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                     SubscriberInvoker::Handler(self.handler.clone()),
                 )
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session,
+                    session: self.session.clone(),
                     state: sub_state,
                     alive: true,
                 })
@@ -522,7 +521,7 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session,
+                    session: self.session.clone(),
                     state: sub_state,
                     alive: true,
                 })

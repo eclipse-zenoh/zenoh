@@ -20,6 +20,7 @@ use crate::prelude::*;
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
 use crate::Session;
+use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use async_std::sync::Arc;
 use flume::{
@@ -167,7 +168,7 @@ zreceiver! {
 ///
 /// Queryables are automatically undeclared when dropped.
 pub struct Queryable<'a> {
-    pub(crate) session: &'a Session,
+    pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
     pub(crate) alive: bool,
     pub(crate) receiver: QueryReceiver,
@@ -322,7 +323,7 @@ derive_zfuture! {
     /// ```
     #[derive(Debug, Clone)]
     pub struct QueryableBuilder<'a, 'b> {
-        pub(crate) session: &'a Session,
+        pub(crate) session: SessionRef<'a>,
         pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) kind: ZInt,
         pub(crate) complete: bool,
@@ -400,7 +401,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
         }
 
         Ok(Queryable {
-            session: self.session,
+            session: self.session.clone(),
             state: qable_state,
             alive: true,
             receiver: QueryReceiver::new(receiver),
