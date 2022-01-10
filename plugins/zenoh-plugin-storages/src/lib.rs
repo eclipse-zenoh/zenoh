@@ -16,24 +16,25 @@
 use async_std::channel::Sender;
 use async_std::sync::Arc;
 use async_std::task;
+use libloading::Library;
+use log::debug;
 use memory_backend::create_memory_backend;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::mem::MaybeUninit;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::Session;
 use zenoh_backend_traits::CreateBackend;
 use zenoh_backend_traits::CREATE_BACKEND_FN_NAME;
-// use zenoh_backend_traits::Storage;
-use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh_backend_traits::{config::*, Backend};
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::LibLoader;
-use zenoh_util::{bail, zerror, zlock};
+use zenoh_util::{bail, zlock};
 
 mod backends_mgt;
 use backends_mgt::*;
@@ -128,6 +129,7 @@ impl StorageRuntimeInner {
         Ok(())
     }
     fn kill_backend(&mut self, backend: BackendConfig) {
+        debug!("Close backend {} and all its storages", backend.name);
         if let Some(storages) = self.storages.remove(&backend.name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
@@ -137,64 +139,97 @@ impl StorageRuntimeInner {
         }
         std::mem::drop(self.backends.remove(&backend.name));
     }
-    fn spawn_backend(&mut self, backend: BackendConfig) -> ZResult<()> {
-        let backend_name = backend.name.clone();
-        let (backend, lib_path) = if backend_name == MEMORY_BACKEND_NAME {
-            match create_memory_backend(backend) {
-                Ok(backend) => (backend, "<static-memory>".into()),
+    fn spawn_backend(&mut self, config: BackendConfig) -> ZResult<()> {
+        let backend_name = config.name.clone();
+        if backend_name == MEMORY_BACKEND_NAME {
+            match create_memory_backend(config) {
+                Ok(backend) => {
+                    self.backends.insert(
+                        backend_name,
+                        BackendHandle::new(backend, None, "<static-memory>".into()),
+                    );
+                }
                 Err(e) => bail!("{}", e),
             }
         } else {
-            let mut loaded_backend: ZResult<_> = Err(zerror!("file not found").into());
-            let mut lib_path = MaybeUninit::uninit();
-            match &backend.paths {
+            match &config.paths {
                 Some(paths) => {
                     for path in paths {
                         unsafe {
                             if let Ok((lib, path)) = LibLoader::load_file(path) {
-                                if let Ok(create_backend) =
-                                    lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME)
-                                {
-                                    loaded_backend = create_backend(backend.clone())
-                                        .map_err(|e| zerror!("{}", e).into());
-                                    if loaded_backend.is_ok() {
-                                        lib_path = MaybeUninit::new(path);
-                                        break;
-                                    }
-                                }
+                                self.loaded_backend_from_lib(
+                                    &backend_name,
+                                    config.clone(),
+                                    lib,
+                                    path,
+                                )?;
+                                break;
                             }
                         }
                     }
+                    bail!(
+                        "Failed to find a suitable library for Backend {} from paths: {:?}",
+                        backend_name,
+                        paths
+                    );
                 }
                 None => unsafe {
                     if let Ok((lib, path)) = self
                         .lib_loader
                         .search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, &backend_name))
                     {
-                        if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME)
-                        {
-                            loaded_backend = create_backend(backend.clone())
-                                .map_err(|e| zerror!("{}", e).into());
-                            lib_path = MaybeUninit::new(path);
-                        }
+                        self.loaded_backend_from_lib(&backend_name, config.clone(), lib, path)?;
+                    } else {
+                        bail!(
+                            "Failed to find a suitable library for Backend {}",
+                            backend_name
+                        );
                     }
                 },
             };
-            match loaded_backend {
-                Ok(loaded_backend) => (loaded_backend, unsafe {
-                    lib_path.assume_init().to_string_lossy().into_owned()
-                }),
-                Err(e) => bail!("Couldn't load `{}` backend: {}", &backend_name, e),
-            }
         };
-        let flag = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        self.backends
-            .insert(backend_name, BackendHandle::new(backend, lib_path, flag));
         Ok(())
     }
-    fn kill_storage(&mut self, backend: &str, storage: StorageConfig) {
+    unsafe fn loaded_backend_from_lib(
+        &mut self,
+        backend_name: &str,
+        config: BackendConfig,
+        lib: Library,
+        lib_path: PathBuf,
+    ) -> ZResult<()> {
+        if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
+            match create_backend(config) {
+                Ok(backend) => {
+                    self.backends.insert(
+                        backend_name.to_string(),
+                        BackendHandle::new(
+                            backend,
+                            Some(lib),
+                            lib_path.to_string_lossy().into_owned(),
+                        ),
+                    );
+                    Ok(())
+                }
+                Err(e) => bail!(
+                    "Failed to load Backend {} from {} : {}",
+                    backend_name,
+                    lib_path.display(),
+                    e
+                ),
+            }
+        } else {
+            bail!(
+                "Failed to load Backend {} from {} : function {}(BackendConfig) not found in lib",
+                backend_name,
+                lib_path.display(),
+                String::from_utf8_lossy(CREATE_BACKEND_FN_NAME)
+            );
+        }
+    }
+    fn kill_storage(&mut self, backend: &str, config: StorageConfig) {
         if let Some(storages) = self.storages.get_mut(backend) {
-            if let Some(storage) = storages.get_mut(&storage.key_expr) {
+            if let Some(storage) = storages.get_mut(&config.name) {
+                debug!("Close storage {} from backend {}", config.name, backend);
                 let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
             }
         }
@@ -226,15 +261,17 @@ impl StorageRuntimeInner {
 }
 struct BackendHandle {
     backend: Box<dyn Backend>,
+    _lib: Option<Library>,
     lib_path: String,
     stopper: Arc<AtomicBool>,
 }
 impl BackendHandle {
-    fn new(backend: Box<dyn Backend>, lib_path: String, stopper: Arc<AtomicBool>) -> Self {
+    fn new(backend: Box<dyn Backend>, lib: Option<Library>, lib_path: String) -> Self {
         BackendHandle {
             backend,
+            _lib: lib,
             lib_path,
-            stopper,
+            stopper: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         }
     }
 }
