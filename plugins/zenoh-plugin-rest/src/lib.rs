@@ -40,8 +40,11 @@ fn value_to_json(value: Value) -> String {
             // convert to Json string for special characters escaping
             serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(&Encoding::APP_JSON) => value.to_string(),
-        p if p.starts_with(&Encoding::APP_INTEGER) || p.starts_with(&Encoding::APP_FLOAT) => {
+        p if p.starts_with(&Encoding::APP_JSON)
+            || p.starts_with(&Encoding::APP_X_WWW_FORM_URLENCODED)
+            || p.starts_with(&Encoding::APP_INTEGER)
+            || p.starts_with(&Encoding::APP_FLOAT) =>
+        {
             value.to_string()
         }
         _ => {
