@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::message::ZenohMessage;

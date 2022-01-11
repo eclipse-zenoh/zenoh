@@ -22,7 +22,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{Channel, ZenohId, Priority, Reliability, WhatAmI};
+    use zenoh::net::protocol::core::{Channel, Priority, Reliability, WhatAmI, ZenohId};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::message::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;

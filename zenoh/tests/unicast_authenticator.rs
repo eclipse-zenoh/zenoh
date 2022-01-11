@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{ZenohId, WhatAmI};
+use zenoh::net::protocol::core::{WhatAmI, ZenohId};
 use zenoh::net::protocol::message::ZenohMessage;
 #[cfg(feature = "auth_pubkey")]
 use zenoh::net::transport::unicast::establishment::authenticator::PubKeyAuthenticator;

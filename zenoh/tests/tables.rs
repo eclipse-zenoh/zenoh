@@ -18,8 +18,8 @@ use uhlc::HLC;
 use zenoh::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh::net::protocol::core::key_expr::intersect;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, KeyExpr, ZenohId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
+    Channel, CongestionControl, KeyExpr, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, SubInfo, SubMode, WhatAmI, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::message::{DataInfo, RoutingContext};

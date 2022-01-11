@@ -16,7 +16,7 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
-use zenoh::net::protocol::core::{ZenohId, WhatAmI};
+use zenoh::net::protocol::core::{WhatAmI, ZenohId};
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,

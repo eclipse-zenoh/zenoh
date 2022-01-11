@@ -20,7 +20,7 @@ pub mod unicast;
 
 use super::link::Link;
 use super::protocol;
-use super::protocol::core::{ZenohId, WhatAmI};
+use super::protocol::core::{WhatAmI, ZenohId};
 use super::protocol::message::ZenohMessage;
 pub use manager::*;
 pub use multicast::*;

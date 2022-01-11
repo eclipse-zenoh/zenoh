@@ -13,7 +13,7 @@
 //
 use super::face::FaceState;
 use super::protocol::core::key_expr;
-use super::protocol::core::{KeyExpr, ZenohId, QueryableInfo, SubInfo, ZInt};
+use super::protocol::core::{KeyExpr, QueryableInfo, SubInfo, ZInt, ZenohId};
 use super::protocol::io::ZBuf;
 use super::protocol::message::{DataInfo, RoutingContext};
 use super::router::Tables;
