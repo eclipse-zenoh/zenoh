@@ -11,9 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::queryable::EVAL;
@@ -43,7 +45,11 @@ async fn main() {
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
-                if input[0] == b'q' {break}
+                match input[0] {
+                    b'q' => break,
+                    0 => sleep(Duration::from_secs(1)).await,
+                    _ => (),
+                }
             }
         );
     }
@@ -94,7 +100,7 @@ fn parse_args() -> (Config, String, String) {
     if let Some(values) = args.values_of("peer") {
         config.peers.extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listener") {
         config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {

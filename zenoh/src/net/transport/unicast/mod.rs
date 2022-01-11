@@ -22,7 +22,7 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::message::{Close, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 use crate::net::link::Link;
@@ -78,11 +78,10 @@ stats_struct! {
 /*************************************/
 #[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) peer: PeerId,
+    pub(crate) peer: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
-    pub(crate) initial_sn_rx: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
 }
@@ -94,50 +93,50 @@ pub struct TransportUnicast(Weak<TransportUnicastInner>);
 
 impl TransportUnicast {
     #[inline(always)]
-    pub(super) fn get_transport(&self) -> ZResult<Arc<TransportUnicastInner>> {
+    pub(super) fn get_inner(&self) -> ZResult<Arc<TransportUnicastInner>> {
         self.0
             .upgrade()
             .ok_or_else(|| zerror!("Transport unicast closed").into())
     }
 
     #[inline(always)]
-    pub fn get_pid(&self) -> ZResult<PeerId> {
-        let transport = self.get_transport()?;
+    pub fn get_pid(&self) -> ZResult<ZenohId> {
+        let transport = self.get_inner()?;
         Ok(transport.get_pid())
     }
 
     #[inline(always)]
     pub fn get_whatami(&self) -> ZResult<WhatAmI> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport.get_whatami())
     }
 
     #[inline(always)]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport.get_sn_resolution())
     }
 
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport.is_shm())
     }
 
     #[inline(always)]
     pub fn is_qos(&self) -> ZResult<bool> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport.is_qos())
     }
 
     #[inline(always)]
     pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportPeerEventHandler>>> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport.get_callback())
     }
 
     pub fn get_peer(&self) -> ZResult<TransportPeer> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         let tp = TransportPeer {
             pid: transport.get_pid(),
             whatami: transport.get_whatami(),
@@ -154,7 +153,7 @@ impl TransportUnicast {
 
     #[inline(always)]
     pub fn get_links(&self) -> ZResult<Vec<Link>> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         Ok(transport
             .get_links()
             .into_iter()
@@ -164,14 +163,14 @@ impl TransportUnicast {
 
     #[inline(always)]
     pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         transport.schedule(message);
         Ok(())
     }
 
     #[inline(always)]
     pub async fn close_link(&self, link: &Link) -> ZResult<()> {
-        let transport = self.get_transport()?;
+        let transport = self.get_inner()?;
         let link = transport
             .get_links()
             .into_iter()
@@ -184,7 +183,7 @@ impl TransportUnicast {
     #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
-        match self.get_transport() {
+        match self.get_inner() {
             Ok(transport) => transport.close(Close::GENERIC).await,
             Err(_) => Ok(()),
         }
@@ -197,7 +196,7 @@ impl TransportUnicast {
 
     #[cfg(feature = "stats")]
     pub fn get_stats(&self) -> ZResult<TransportUnicastStats> {
-        Ok(self.get_transport()?.stats.snapshot())
+        Ok(self.get_inner()?.stats.snapshot())
     }
 }
 
@@ -217,7 +216,7 @@ impl PartialEq for TransportUnicast {
 
 impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.get_transport() {
+        match self.get_inner() {
             Ok(transport) => f
                 .debug_struct("Transport Unicast")
                 .field("pid", &transport.get_pid())
@@ -225,6 +224,7 @@ impl fmt::Debug for TransportUnicast {
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .field("is_qos", &transport.is_qos())
                 .field("is_shm", &transport.is_shm())
+                .field("links", &transport.get_links())
                 .finish(),
             Err(e) => {
                 write!(f, "{}", e)

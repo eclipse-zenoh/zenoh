@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-plugin-storages"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -42,6 +42,7 @@ async-trait = "0.1"
 clap = "2.33.3"
 env_logger = "0.9.0"
 futures = "0.3.12"
+git-version = "0.3.5"
 lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4.14"
@@ -57,4 +58,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.6.0~dev)"
+depends = "zenohd (=0.6.0~dev.0)"

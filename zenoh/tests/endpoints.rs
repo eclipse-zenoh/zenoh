@@ -11,23 +11,32 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use async_std::prelude::*;
 use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{PeerId, WhatAmI};
+use zenoh::net::protocol::core::{WhatAmI, ZenohId};
 use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
 use zenoh_util::zasync_executor_init;
 
+const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
+
 const RUNS: usize = 10;
+
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 
 // Transport Handler
 #[derive(Default)]
@@ -71,18 +80,17 @@ impl TransportPeerEventHandler for SC {
 
 async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
-    let config = TransportManagerConfig::builder()
+    let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .pid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
         .build(Arc::new(SH::default()))
         .unwrap();
-    let sm = TransportManager::new(config);
 
     for _ in 0..RUNS {
         // Create the listeners
         for e in endpoints.iter() {
             println!("Add {}", e);
-            let res = sm.add_listener(e.clone()).await;
+            let res = ztimeout!(sm.add_listener(e.clone()));
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }
@@ -92,7 +100,7 @@ async fn run(endpoints: &[EndPoint]) {
         // Delete the listeners
         for e in endpoints.iter() {
             println!("Del {}", e);
-            let res = sm.del_listener(e).await;
+            let res = ztimeout!(sm.del_listener(e));
             println!("Res: {:?}", res);
             assert!(res.is_ok());
         }

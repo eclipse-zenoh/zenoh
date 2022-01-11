@@ -11,7 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::whatami::WhatAmIMatcher;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::flag as iflag;
@@ -19,8 +18,6 @@ use super::id as iid;
 use super::io::ZSlice;
 use super::zenoh::ZenohMessage;
 use super::{Attachment, Header, Options};
-use crate::net::link::Locator;
-use std::fmt;
 use std::time::Duration;
 
 /*************************************/
@@ -29,8 +26,6 @@ use std::time::Duration;
 // Transport message IDs -- Re-export of some of the Inner Message IDs
 pub mod id {
     // Messages
-    pub const SCOUT: u8 = super::iid::SCOUT;
-    pub const HELLO: u8 = super::iid::HELLO;
     pub const INIT: u8 = super::iid::INIT;
     pub const OPEN: u8 = super::iid::OPEN;
     pub const CLOSE: u8 = super::iid::CLOSE;
@@ -52,9 +47,8 @@ pub mod flag {
     pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
     pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
     pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
-    pub const I: u8 = 1 << 5; // 0x20 PeerID        if I==1 then the PeerID is requested or present
+    pub const I: u8 = 1 << 5; // 0x20 ZenohId        if I==1 then the ZenohId is requested or present
     pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
-    pub const L: u8 = 1 << 7; // 0x80 Locators      if L==1 then Locators are present
     pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
     pub const O: u8 = 1 << 7; // 0x80 Options       if O==1 then Options are present
     pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
@@ -62,7 +56,6 @@ pub mod flag {
     pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
     pub const T1: u8 = 1 << 5; // 0x20 TimeRes       if U==1 then the time resolution is in seconds
     pub const T2: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
-    pub const W: u8 = 1 << 6; // 0x40 WhatAmI       if W==1 then WhatAmI is indicated
     pub const Z: u8 = super::iflag::Z; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
     // pub const X: u8 = 0; // Unused flags are set to zero
@@ -71,130 +64,6 @@ pub mod flag {
 /*************************************/
 /*       TRANSPORT MESSAGES          */
 /*************************************/
-#[derive(Debug, Clone)]
-pub enum TransportMode {
-    Push,
-    Pull,
-    PeriodicPush(u32),
-    PeriodicPull(u32),
-    PushPull,
-}
-
-/// # Scout message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |X|W|I|  SCOUT  |
-/// +-+-+-+-+-------+
-/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Routers
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct Scout {
-    pub what: Option<WhatAmIMatcher>,
-    pub pid_request: bool,
-}
-
-impl Header for Scout {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::SCOUT;
-        if self.pid_request {
-            header |= flag::I;
-        }
-        if self.what.is_some() {
-            header |= flag::W;
-        }
-        header
-    }
-}
-
-/// # Hello message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The HELLO message is sent in any of the following three cases:
-///     1) in response to a SCOUT message;
-///     2) to (periodically) advertise (e.g., on multicast) the Peer and the locators it is reachable at;
-///     3) in a already established transport to update the corresponding peer on the new capabilities
-///        (i.e., whatmai) and/or new set of locators (i.e., added or deleted).
-/// Locators are expressed as:
-/// <code>
-///  udp/192.168.0.2:1234
-///  tcp/192.168.0.2:1234
-///  udp/239.255.255.123:5555
-/// <code>
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |L|W|I|  HELLO  |
-/// +-+-+-+-+-------+
-/// ~    peer-id    ~ if I==1
-/// +---------------+
-/// ~    whatami    ~ if W==1 -- Otherwise it is from a Router
-/// +---------------+
-/// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct Hello {
-    pub pid: Option<PeerId>,
-    pub whatami: Option<WhatAmI>,
-    pub locators: Option<Vec<Locator>>,
-}
-
-impl Header for Hello {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::HELLO;
-        if self.pid.is_some() {
-            header |= flag::I
-        }
-        if self.whatami.is_some() && self.whatami.unwrap() != WhatAmI::Router {
-            header |= flag::W;
-        }
-        if self.locators.is_some() {
-            header |= flag::L;
-        }
-        header
-    }
-}
-
-impl fmt::Display for Hello {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let what = match self.whatami {
-            Some(what) => what.to_str(),
-            None => WhatAmI::Router.to_str(),
-        };
-        let locators = match &self.locators {
-            Some(locators) => locators
-                .iter()
-                .map(|locator| locator.to_string())
-                .collect::<Vec<String>>(),
-            None => vec![],
-        };
-        f.debug_struct("Hello")
-            .field("pid", &self.pid)
-            .field("whatami", &what)
-            .field("locators", &locators)
-            .finish()
-    }
-}
-
 /// # Init message
 ///
 /// ```text
@@ -235,7 +104,7 @@ impl fmt::Display for Hello {
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
@@ -278,7 +147,7 @@ impl Options for InitSyn {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub sn_resolution: Option<ZInt>,
     pub is_qos: bool,
     pub cookie: ZSlice,
@@ -418,7 +287,7 @@ impl Header for OpenAck {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub lease: Duration,
     pub sn_resolution: ZInt,
     pub next_sns: ConduitSnList,
@@ -495,7 +364,7 @@ impl Options for Join {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
     pub reason: u8,
     pub link_only: bool,
 }
@@ -628,7 +497,7 @@ impl Header for AckNack {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeepAlive {
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
 }
 
 impl Header for KeepAlive {
@@ -790,8 +659,6 @@ pub enum FramePayload {
 // Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransportBody {
-    Scout(Scout),
-    Hello(Hello),
     InitSyn(InitSyn),
     InitAck(InitAck),
     OpenSyn(OpenSyn),
@@ -815,41 +682,10 @@ pub struct TransportMessage {
 }
 
 impl TransportMessage {
-    pub fn make_scout(
-        what: Option<WhatAmIMatcher>,
-        pid_request: bool,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Scout(Scout { what, pid_request }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_hello(
-        pid: Option<PeerId>,
-        whatami: Option<WhatAmI>,
-        locators: Option<Vec<Locator>>,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Hello(Hello {
-                pid,
-                whatami,
-                locators,
-            }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
     pub fn make_init_syn(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
@@ -870,7 +706,7 @@ impl TransportMessage {
 
     pub fn make_init_ack(
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         sn_resolution: Option<ZInt>,
         is_qos: bool,
         cookie: ZSlice,
@@ -924,7 +760,7 @@ impl TransportMessage {
     pub fn make_join(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         lease: Duration,
         sn_resolution: ZInt,
         next_sns: ConduitSnList,
@@ -946,7 +782,7 @@ impl TransportMessage {
     }
 
     pub fn make_close(
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
@@ -995,7 +831,7 @@ impl TransportMessage {
     }
 
     pub fn make_keep_alive(
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {

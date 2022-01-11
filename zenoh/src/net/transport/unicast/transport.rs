@@ -17,11 +17,11 @@ use super::common::{
     pipeline::TransmissionPipeline,
 };
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::message::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::net::link::{Link, LinkUnicast};
+use crate::net::link::{Link, LinkUnicast, LinkUnicastDirection};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -30,19 +30,19 @@ use zenoh_util::core::Result as ZResult;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
-        $guard.iter().find(|l| l.get_link() == $link)
+        $guard.iter().find(|tl| &tl.link == $link)
     };
 }
 
 macro_rules! zlinkgetmut {
     ($guard:expr, $link:expr) => {
-        $guard.iter_mut().find(|l| l.get_link() == $link)
+        $guard.iter_mut().find(|tl| &tl.link == $link)
     };
 }
 
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
-        $guard.iter().position(|l| l.get_link() == $link)
+        $guard.iter().position(|tl| &tl.link == $link)
     };
 }
 
@@ -50,15 +50,20 @@ macro_rules! zlinkindex {
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
+pub(crate) struct TransportUnicastConfig {
+    pub(crate) manager: TransportManager,
+    pub(crate) pid: ZenohId,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) sn_resolution: ZInt,
+    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) is_shm: bool,
+    pub(crate) is_qos: bool,
+}
+
+#[derive(Clone)]
 pub(crate) struct TransportUnicastInner {
-    // The manager this channel is associated to
-    pub(super) manager: TransportManager,
-    // The remote peer id
-    pub(super) pid: PeerId,
-    // The remote whatami
-    pub(super) whatami: WhatAmI,
-    // The SN resolution
-    pub(super) sn_resolution: ZInt,
+    // Transport config
+    pub(super) config: TransportUnicastConfig,
     // Tx conduits
     pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Rx conduits
@@ -69,85 +74,64 @@ pub(crate) struct TransportUnicastInner {
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
     pub(super) alive: AsyncArc<AsyncMutex<bool>>,
-    // The transport can do shm
-    pub(super) is_shm: bool,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
-pub(crate) struct TransportUnicastConfig {
-    pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
-    pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
-    pub(crate) initial_sn_rx: ZInt,
-    pub(crate) is_shm: bool,
-    pub(crate) is_qos: bool,
-}
-
 impl TransportUnicastInner {
-    pub(super) fn new(config: TransportUnicastConfig) -> TransportUnicastInner {
+    pub(super) fn make(config: TransportUnicastConfig) -> ZResult<TransportUnicastInner> {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
-        // @TODO: potentially manage different initial SNs per conduit channel
-        let conduit_sn_tx = ConduitSn {
+        if config.is_qos {
+            for c in 0..Priority::NUM {
+                conduit_tx.push(TransportConduitTx::make(
+                    (c as u8).try_into().unwrap(),
+                    config.sn_resolution,
+                )?);
+            }
+
+            for c in 0..Priority::NUM {
+                conduit_rx.push(TransportConduitRx::make(
+                    (c as u8).try_into().unwrap(),
+                    config.sn_resolution,
+                    config.manager.config.defrag_buff_size,
+                )?);
+            }
+        } else {
+            conduit_tx.push(TransportConduitTx::make(
+                Priority::default(),
+                config.sn_resolution,
+            )?);
+
+            conduit_rx.push(TransportConduitRx::make(
+                Priority::default(),
+                config.sn_resolution,
+                config.manager.config.defrag_buff_size,
+            )?);
+        }
+
+        let initial_sn = ConduitSn {
             reliable: config.initial_sn_tx,
             best_effort: config.initial_sn_tx,
         };
-        let conduit_sn_rx = ConduitSn {
-            reliable: config.initial_sn_rx,
-            best_effort: config.initial_sn_rx,
-        };
-
-        if config.is_qos {
-            for c in 0..Priority::NUM {
-                conduit_tx.push(TransportConduitTx::new(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                    conduit_sn_tx,
-                ));
-            }
-
-            for c in 0..Priority::NUM {
-                conduit_rx.push(TransportConduitRx::new(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                    conduit_sn_rx,
-                    config.manager.config.defrag_buff_size,
-                ));
-            }
-        } else {
-            conduit_tx.push(TransportConduitTx::new(
-                Priority::default(),
-                config.sn_resolution,
-                conduit_sn_tx,
-            ));
-
-            conduit_rx.push(TransportConduitRx::new(
-                Priority::default(),
-                config.sn_resolution,
-                conduit_sn_rx,
-                config.manager.config.defrag_buff_size,
-            ));
+        for c in conduit_tx.iter() {
+            let _ = c.sync(initial_sn)?;
         }
 
-        TransportUnicastInner {
-            manager: config.manager,
-            pid: config.pid,
-            whatami: config.whatami,
-            sn_resolution: config.sn_resolution,
+        let t = TransportUnicastInner {
+            config,
             conduit_tx: conduit_tx.into_boxed_slice().into(),
             conduit_rx: conduit_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
-            alive: AsyncArc::new(AsyncMutex::new(true)),
-            is_shm: config.is_shm,
+            alive: AsyncArc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
-        }
+        };
+
+        Ok(t)
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
@@ -160,11 +144,40 @@ impl TransportUnicastInner {
     }
 
     /*************************************/
+    /*           INITIATION              */
+    /*************************************/
+    pub(super) async fn sync(&self, initial_sn_rx: ZInt) -> ZResult<()> {
+        // Mark the transport as alive and keep the lock
+        // to avoid concurrent new_transport and closing/closed notifications
+        let mut a_guard = zasynclock!(self.alive);
+        if *a_guard {
+            let e = zerror!("Transport already synched with peer: {}", self.config.pid);
+            log::trace!("{}", e);
+            return Err(e.into());
+        }
+
+        *a_guard = true;
+
+        let csn = ConduitSn {
+            reliable: initial_sn_rx,
+            best_effort: initial_sn_rx,
+        };
+        for c in self.conduit_rx.iter() {
+            let _ = c.sync(csn)?;
+        }
+
+        Ok(())
+    }
+
+    /*************************************/
     /*           TERMINATION             */
     /*************************************/
     pub(super) async fn delete(&self) -> ZResult<()> {
-        log::debug!("Closing transport with peer: {}", self.pid);
-
+        log::debug!(
+            "[{}] Closing transport with peer: {}",
+            self.config.manager.config.pid,
+            self.config.pid
+        );
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;
@@ -177,7 +190,11 @@ impl TransportUnicastInner {
         }
 
         // Delete the transport on the manager
-        let _ = self.manager.del_transport_unicast(&self.pid).await;
+        let _ = self
+            .config
+            .manager
+            .del_transport_unicast(&self.config.pid)
+            .await;
 
         // Close all the links
         let mut links = {
@@ -201,40 +218,33 @@ impl TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn can_add_link(
+    pub(super) fn add_link(
         &self,
-        #[allow(unused_variables)] // transport_multilink feature requires link
-        link: &LinkUnicast,
-    ) -> bool {
-        let guard = zread!(self.links);
-        #[cfg(feature = "transport_multilink")]
-        {
-            if guard.len() < self.manager.config.unicast.max_links {
-                zlinkget!(guard, link).is_none()
-            } else {
-                false
-            }
-        }
-        #[cfg(not(feature = "transport_multilink"))]
-        {
-            guard.is_empty()
-        }
-    }
+        link: LinkUnicast,
+        direction: LinkUnicastDirection,
+    ) -> ZResult<()> {
+        // Add the link to the channel
+        let mut guard = zwrite!(self.links);
 
-    pub(super) fn add_link(&self, link: LinkUnicast) -> ZResult<()> {
-        if !self.can_add_link(&link) {
-            bail!(
-                "Can not add Link {} with peer {}: max num of links reached",
-                link,
-                self.pid,
-            )
+        // Check if we can add more inbound links
+        if let LinkUnicastDirection::Inbound = direction {
+            let count = guard.iter().filter(|l| l.direction == direction).count();
+            let limit = self.config.manager.config.unicast.max_links;
+            if count >= limit {
+                let e = zerror!(
+                    "Can not add Link {} with peer {}: max num of links reached {}/{}",
+                    link,
+                    self.config.pid,
+                    count,
+                    limit
+                );
+                return Err(e.into());
+            }
         }
 
         // Create a channel link from a link
-        let link = TransportLinkUnicast::new(self.clone(), link);
+        let link = TransportLinkUnicast::new(self.clone(), link, direction);
 
-        // Add the link to the channel
-        let mut guard = zwrite!(self.links);
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link);
@@ -257,7 +267,11 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                bail!("Can not start Link TX {} with peer: {}", link, self.pid)
+                bail!(
+                    "Can not start Link TX {} with peer: {}",
+                    link,
+                    self.config.pid
+                )
             }
         }
     }
@@ -270,7 +284,11 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                bail!("Can not stop Link TX {} with peer: {}", link, self.pid)
+                bail!(
+                    "Can not stop Link TX {} with peer: {}",
+                    link,
+                    self.config.pid
+                )
             }
         }
     }
@@ -283,7 +301,11 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                bail!("Can not start Link RX {} with peer: {}", link, self.pid)
+                bail!(
+                    "Can not start Link RX {} with peer: {}",
+                    link,
+                    self.config.pid
+                )
             }
         }
     }
@@ -296,7 +318,11 @@ impl TransportUnicastInner {
                 Ok(())
             }
             None => {
-                bail!("Can not stop Link RX {} with peer: {}", link, self.pid)
+                bail!(
+                    "Can not stop Link RX {} with peer: {}",
+                    link,
+                    self.config.pid
+                )
             }
         }
     }
@@ -330,7 +356,11 @@ impl TransportUnicastInner {
                     Target::Link(stl.into())
                 }
             } else {
-                bail!("Can not delete Link {} with peer: {}", link, self.pid)
+                bail!(
+                    "Can not delete Link {} with peer: {}",
+                    link,
+                    self.config.pid
+                )
             }
         };
 
@@ -345,24 +375,24 @@ impl TransportUnicastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
-        self.pid
+    pub(crate) fn get_pid(&self) -> ZenohId {
+        self.config.pid
     }
 
     pub(crate) fn get_whatami(&self) -> WhatAmI {
-        self.whatami
+        self.config.whatami
     }
 
     pub(crate) fn get_sn_resolution(&self) -> ZInt {
-        self.sn_resolution
+        self.config.sn_resolution
     }
 
     pub(crate) fn is_shm(&self) -> bool {
-        self.is_shm
+        self.config.is_shm
     }
 
     pub(crate) fn is_qos(&self) -> bool {
-        self.conduit_tx[0].priority != Priority::default()
+        self.config.is_qos
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
@@ -373,18 +403,18 @@ impl TransportUnicastInner {
     /*           TERMINATION             */
     /*************************************/
     pub(crate) async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.pid);
+        log::trace!("Closing link {} with peer: {}", link, self.config.pid);
 
         let guard = zread!(self.links);
         if let Some(l) = zlinkget!(guard, link) {
-            let mut pipeline = l.get_pipeline();
+            let mut pipeline = l.pipeline.clone();
             // Drop the guard
             drop(guard);
 
             // Schedule the close message for transmission
             if let Some(pipeline) = pipeline.take() {
                 // Close message to be sent on the target link
-                let peer_id = Some(self.manager.pid());
+                let peer_id = Some(self.config.manager.pid());
                 let reason_id = reason;
                 let link_only = true; // This is should always be true when closing a link
                 let attachment = None; // No attachment here
@@ -401,15 +431,15 @@ impl TransportUnicastInner {
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.pid);
+        log::trace!("Closing transport with peer: {}", self.config.pid);
 
         let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
             .iter()
-            .filter_map(|sl| sl.get_pipeline())
+            .filter_map(|sl| sl.pipeline.clone())
             .collect();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
-            let peer_id = Some(self.manager.pid());
+            let peer_id = Some(self.config.manager.pid());
             let reason_id = reason;
             // link_only should always be false for user-triggered close. However, in case of
             // multiple links, it is safer to close all the links first. When no links are left,
@@ -431,10 +461,10 @@ impl TransportUnicastInner {
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self.is_shm {
+            let res = if self.config.is_shm {
                 message.map_to_shminfo()
             } else {
-                message.map_to_shmbuf(self.manager.shmr.clone())
+                message.map_to_shmbuf(self.config.manager.shmr.clone())
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
@@ -446,9 +476,6 @@ impl TransportUnicastInner {
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {
-        zread!(self.links)
-            .iter()
-            .map(|l| l.get_link().clone())
-            .collect()
+        zread!(self.links).iter().map(|l| l.link.clone()).collect()
     }
 }

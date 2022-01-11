@@ -61,6 +61,37 @@ impl Parse for IntKeyAttribute {
     }
 }
 
+const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
+
+#[proc_macro]
+pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
+    let release = RUSTC_VERSION
+        .split('\n')
+        .filter_map(|l| {
+            let line = l.trim();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line)
+            }
+        })
+        .find_map(|l| l.strip_prefix("release: "))
+        .unwrap();
+    let commit = RUSTC_VERSION
+        .split('\n')
+        .filter_map(|l| {
+            let line = l.trim();
+            if line.is_empty() {
+                None
+            } else {
+                Some(line)
+            }
+        })
+        .find_map(|l| l.strip_prefix("commit-hash: "))
+        .unwrap();
+    (quote! {(#release, #commit)}).into()
+}
+
 #[proc_macro_derive(IntKeyMapLike, attributes(intkey))]
 pub fn derive_intkey_maplike(tokens: TokenStream) -> TokenStream {
     unzip_n::unzip_n!(4);

@@ -17,6 +17,8 @@
 
 use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
+use crate::plugins::ValidationFunction;
+use crate::Result as ZResult;
 use serde_json::Value;
 use std::{
     any::Any,
@@ -28,7 +30,6 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
-use zenoh_plugin_trait::ValidationFunction;
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 
@@ -76,10 +77,8 @@ validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
     Config {
-        #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
-        version: Option<u8>,
         #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
-        peer_id: Option<String>,
+        id: Option<String>,
         /// The node's mode (router, peer or client)
         #[intkey(ZN_MODE_KEY, into = whatami_to_cowstr, from = whatami_from_str)]
         mode: Option<whatami::WhatAmI>,
@@ -134,6 +133,9 @@ validated_struct::validator! {
         /// Whether local writes/queries should reach local subscribers/queryables
         #[intkey(ZN_LOCAL_ROUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
         local_routing: Option<bool>,
+        /// The default timeout to apply to queries in milliseconds
+        #[intkey(ZN_QUERIES_DEFAULT_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
+        queries_default_timeout: Option<ZInt>,
         #[serde(default)]
         pub join_on_startup: JoinConfig {
             #[serde(default)]
@@ -288,7 +290,9 @@ impl Config {
     where
         validated_struct::InsertionError: From<serde_json::Error>,
     {
-        self.insert(key.as_ref(), &mut serde_json::Deserializer::from_str(value))
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        self.insert(key, &mut serde_json::Deserializer::from_str(value))
     }
 
     pub fn insert_json5<K: AsRef<str>>(
@@ -299,7 +303,9 @@ impl Config {
     where
         validated_struct::InsertionError: From<json5::Error>,
     {
-        self.insert(key.as_ref(), &mut json5::Deserializer::from_str(value)?)
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        self.insert(key, &mut json5::Deserializer::from_str(value)?)
     }
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
@@ -310,6 +316,17 @@ impl Config {
         let mut copy = self.clone();
         copy.plugins.sift_privates();
         copy
+    }
+
+    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> crate::Result<()> {
+        let key = key.as_ref();
+        let key = key.strip_prefix('/').unwrap_or(key);
+        if !key.starts_with("plugins/") {
+            bail!(
+                "Removal of values from Config is only supported for keys starting with `plugins/`"
+            )
+        }
+        self.plugins.remove(&key["plugins/".len()..])
     }
 }
 
@@ -334,26 +351,34 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigOpenErr> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
+        let path = path.as_ref();
         match std::fs::File::open(path) {
             Ok(mut f) => {
                 let mut content = String::new();
                 if let Err(e) = f.read_to_string(&mut content) {
-                    return Err(ConfigOpenErr::IoError(e));
+                    bail!(e)
                 }
-                let mut deser = match json5::Deserializer::from_str(&content) {
-                    Ok(d) => d,
-                    Err(e) => return Err(ConfigOpenErr::JsonParseErr(e)),
-                };
-                match Config::from_deserializer(&mut deser) {
-                    Ok(s) => Ok(s),
-                    Err(e) => Err(match e {
-                        Ok(c) => ConfigOpenErr::InvalidConfiguration(Box::new(c)),
-                        Err(e) => ConfigOpenErr::JsonParseErr(e),
+                match path
+                    .extension()
+                    .map(|s| s.to_str().unwrap())
+                {
+                    Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
+                        Ok(mut d) => Config::from_deserializer(&mut d).map_err(|e| match e {
+                            Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                            Err(e) => zerror!("JSON error: {}", e).into(),
+                        }),
+                        Err(e) => bail!(e),
+                    },
+                    Some("yaml") => Config::from_deserializer(serde_yaml::Deserializer::from_str(&content)).map_err(|e| match e {
+                        Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                        Err(e) => zerror!("YAML error: {}", e).into(),
                     }),
+                    Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
+                    None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }
             }
-            Err(e) => Err(ConfigOpenErr::IoError(e)),
+            Err(e) => bail!(e),
         }
     }
     pub fn libloader(&self) -> LibLoader {
@@ -393,6 +418,17 @@ impl<T> Clone for Notifier<T> {
         Self {
             inner: self.inner.clone(),
         }
+    }
+}
+impl Notifier<Config> {
+    pub fn remove<K: AsRef<str>>(&self, key: K) -> crate::Result<()> {
+        let key = key.as_ref();
+        {
+            let mut guard = zlock!(self.inner.inner);
+            guard.remove(key)?;
+        }
+        self.notify(key);
+        Ok(())
     }
 }
 impl<T: ValidatedMap> Notifier<T> {
@@ -636,14 +672,6 @@ fn u64_from_str(s: &str) -> Option<Option<u64>> {
     s.parse().ok().map(Some)
 }
 
-fn u8_to_cowstr(s: &Option<u8>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn u8_from_str(s: &str) -> Option<Option<u8>> {
-    s.parse().ok().map(Some)
-}
-
 fn u16_to_cowstr(s: &Option<u16>) -> Option<Cow<str>> {
     s.map(|s| format!("{}", s).into())
 }
@@ -671,7 +699,7 @@ fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, zenoh_plugin_trait::ValidationFunction>,
+    validators: HashMap<String, crate::plugins::ValidationFunction>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -683,6 +711,7 @@ fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+#[derive(Debug, Clone)]
 pub struct PluginLoad {
     pub name: String,
     pub paths: Option<Vec<String>>,
@@ -711,6 +740,73 @@ impl PluginsConfig {
                 PluginLoad {name: name.clone(), paths: None, required}
             }
         })
+    }
+    pub fn remove(&mut self, key: &str) -> crate::Result<()> {
+        let mut split = key.split('/');
+        let plugin = split.next().unwrap();
+        let mut current = match split.next() {
+            Some(first_in_plugin) => first_in_plugin,
+            None => {
+                self.values.as_object_mut().unwrap().remove(plugin);
+                self.validators.remove(plugin);
+                return Ok(());
+            }
+        };
+        let validator = self.validators.get(plugin);
+        let (old_conf, mut new_conf) = match self.values.get_mut(plugin) {
+            Some(plugin) => {
+                let clone = plugin.clone();
+                (plugin, clone)
+            }
+            None => bail!("No plugin {} to edit", plugin),
+        };
+        let mut remove_from = &mut new_conf;
+        for next in split {
+            match remove_from {
+                Value::Object(o) => match o.get_mut(current) {
+                    Some(v) => unsafe { remove_from = std::mem::transmute(v) },
+                    None => bail!("{:?} has no {} property", o, current),
+                },
+                Value::Array(a) => {
+                    let index: usize = current.parse()?;
+                    if a.len() <= index {
+                        bail!("{:?} cannot be indexed at {}", a, index)
+                    }
+                    remove_from = &mut a[index];
+                }
+                other => bail!("{} cannot be indexed", other),
+            }
+            current = next
+        }
+        match remove_from {
+            Value::Object(o) => {
+                if o.remove(current).is_none() {
+                    bail!("{:?} has no {} property", o, current)
+                }
+            }
+            Value::Array(a) => {
+                let index: usize = current.parse()?;
+                if a.len() <= index {
+                    bail!("{:?} cannot be indexed at {}", a, index)
+                }
+                a.remove(index);
+            }
+            other => bail!("{} cannot be indexed", other),
+        }
+        let new_conf = if let Some(validator) = validator {
+            match validator(
+                &key[("plugins/".len() + plugin.len())..],
+                old_conf.as_object().unwrap(),
+                new_conf.as_object().unwrap(),
+            )? {
+                None => new_conf,
+                Some(new_conf) => Value::Object(new_conf),
+            }
+        } else {
+            new_conf
+        };
+        *old_conf = new_conf;
+        Ok(())
     }
 }
 impl serde::Serialize for PluginsConfig {

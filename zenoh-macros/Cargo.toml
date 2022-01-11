@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-macros"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -35,6 +35,7 @@ proc-macro2 = "1"
 syn = { version = "1", features = ["full"] }
 quote = "1.0.2"
 unzip-n = "0.1.2"
+rustc_version = "0.4"
 
 [lib]
 proc-macro = true

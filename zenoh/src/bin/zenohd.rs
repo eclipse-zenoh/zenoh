@@ -19,9 +19,9 @@ use git_version::git_version;
 use validated_struct::ValidatedMap;
 use zenoh::config::Config;
 use zenoh::config::PluginLoad;
-use zenoh::net::plugins::PluginsManager;
 use zenoh::net::runtime::{AdminSpace, Runtime};
-use zenoh_util::LibLoader;
+use zenoh::plugins::PluginsManager;
+use zenoh::prelude::Locator;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -44,69 +44,65 @@ fn main() {
             .version(GIT_VERSION)
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
-                "-c, --config=[FILE] \
-             'The configuration file. Currently, this file must be a valid JSON5 file.'",
+r#"-c, --config=[FILE] \
+'The configuration file. Currently, this file must be a valid JSON5 file.'"#,
             ))
             .arg(Arg::from_usage(
-                "-l, --listener=[LOCATOR]... \
-             'A locator on which this router will listen for incoming sessions. \
-             Repeat this option to open several listeners.'",
-                ).default_value(DEFAULT_LISTENER),
+r#"-l, --listener=[LOCATOR]... \
+'A locator on which this router will listen for incoming sessions.
+Repeat this option to open several listeners.'"#,
+                ),
             )
             .arg(Arg::from_usage(
-                "-e, --peer=[LOCATOR]... \
-            'A peer locator this router will try to connect to. \
-            Repeat this option to connect to several peers.'",
+r#"-e, --peer=[LOCATOR]... \
+'A peer locator this router will try to connect to.
+Repeat this option to connect to several peers.'"#,
             ))
             .arg(Arg::from_usage(
-                "-i, --id=[hex_string] \
-            'The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use. \
-            WARNING: this identifier must be unique in the system! \
-            If not set, a random UUIDv4 will be used.'",
+r#"-i, --id=[HEX_STRING] \
+'The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use.
+WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
+If not set, a random UUIDv4 will be used.'"#,
             ))
             .arg(Arg::from_usage(
-                "-P, --plugin=[PATH_TO_PLUGIN_LIB]... \
-             'A plugin that MUST be loaded. Repeat this option to load several plugins. If loading failed, zenohd will exit.'",
+r#"-P, --plugin=[PLUGIN_NAME | PLUGIN_NAME:LIB_PATH]... \
+'A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library \
+named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+Repeat this option to load several plugins. If loading failed, zenohd will exit.'"#,
             ))
-            .arg(Arg::from_usage("--plugin-search-dir=[DIRECTORY]... \
-            'A directory where to search for plugins libraries to load. \
-            Repeat this option to specify several search directories'."))
             .arg(Arg::from_usage(
-                "--no-timestamp \
-             'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
-             This option disables this feature.'",
+r#"--plugin-search-dir=[DIRECTORY]... \
+'A directory where to search for plugins libraries to load.
+Repeat this option to specify several search directories.'"#))
+            .arg(Arg::from_usage(
+r#"--no-timestamp \
+'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
+This option disables this feature.'"#,
             )).arg(Arg::from_usage(
-                "--no-multicast-scouting \
-                'By default zenohd replies to multicast scouting messages for being discovered by peers and clients. 
-                This option disables this feature.'",
-            )).arg(Arg::with_name("cfg")
-                .long("cfg")
-                .required(false)
-                .takes_value(true)
-                .value_name("KEY:VALUE")
-                .help("Allows arbitrary configuration changes.\r\nKEY must be a valid config path.\r\nVALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.")
-            ).arg(Arg::with_name("rest-port")
-                .long("rest-http-port")
-                .required(false)
-                .takes_value(true)
-                .value_name("PORT")
-                .default_value("8000")
-                .help("Maps to `--cfg=/plugins/rest/port:PORT`. To disable the rest plugin, pass `--port=None`")
-            ).arg(Arg::with_name("domain-id")
-                .long("domain-id")
-                .required(false)
-                .takes_value(true)
-                .value_name("DOMAIN")
-                .help("Maps to --cfg=/plugins/dds/domain-id:\"DOMAIN\"")
-            );
+r#"--no-multicast-scouting \
+'By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
+This option disables this feature.'"#,
+            )).arg(Arg::from_usage(
+r#"--cfg=[KEY:VALUE]... \
+'Allows arbitrary configuration changes.
+KEY must be a valid config path.
+VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`'"#
+            )).arg(Arg::from_usage(
+r#"--rest-http-port=[PORT | IP:PORT | none] \
+'Configures HTTP interface for the REST API (enabled by default). Accepted values:
+- either a port number
+- either a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+- either `none` to disable the REST API
+'"#
+            ).default_value("8000"));
 
         let args = app.get_matches();
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::builder()
-            // Static plugins are to be added here, with `.add_static::<PluginType>()`
-            .into_dynamic(config.libloader());
+        let mut plugins = PluginsManager::new(config.libloader());
+        // Static plugins are to be added here, with `.add_static::<PluginType>()`
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {
                 name,
@@ -125,7 +121,7 @@ fn main() {
             }
         }
 
-        let runtime = match Runtime::new(0, config, args.value_of("id")).await {
+        let runtime = match Runtime::new(config).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);
@@ -133,20 +129,30 @@ fn main() {
             }
         };
 
-        let (handles, failures) = plugins.build().start(&runtime);
-        for p in handles.plugins() {
-            log::debug!("loaded plugin: {} from {:?}", p.name, p.path);
+        for (name, path, start_result) in plugins.start_all(&runtime) {
+            match start_result {
+                Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
+                Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+                Err(e) => {
+                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
+                        Ok(s) => s,
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                    };
+                    log::error!("Plugin start failure: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                }
+            }
         }
-        for f in failures {
-            log::debug!("plugin_failure: {}", f);
+        log::info!("Finished loading plugins");
+
+        {
+            let mut config_guard = runtime.config.lock();
+            for (name, (_, plugin)) in plugins.running_plugins() {
+                let hook = plugin.config_checker();
+                config_guard.add_plugin_validator(name, hook)
+            }
         }
 
-        for (name, plugin) in handles.running_plugins() {
-            let hook = plugin.config_checker();
-            runtime.config.lock().add_plugin_validator(name, hook)
-        }
-
-        AdminSpace::start(&runtime, handles, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });
@@ -163,68 +169,77 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_mode(Some(zenoh::config::WhatAmI::Router))
             .unwrap();
     }
-    if let Some(value) = args.value_of("rest-port") {
-        if value.parse::<usize>().is_ok() {
-            config.insert_json5("plugins/rest/port", value).unwrap();
-        }
-    }
-    if let Some(value) = args.value_of("domain-id") {
+    if args.occurrences_of("id") > 0 {
         config
-            .insert_json5("plugins/dds/domain-id", &format!("\"{}\"", value))
+            .set_id(args.value_of("id").map(|s| s.to_string()))
             .unwrap();
+    }
+    // apply '--rest-http-port' to config only if explicitly set (overwritting config),
+    // or if no config file is set (to apply its default value)
+    if args.occurrences_of("rest-http-port") > 0 || args.occurrences_of("config") == 0 {
+        let value = args.value_of("rest-http-port").unwrap();
+        if !value.eq_ignore_ascii_case("none") {
+            config
+                .insert_json5("plugins/rest/http_port", &format!(r#""{}""#, value))
+                .unwrap();
+        }
     }
     if let Some(plugins_search_dirs) = args.values_of("plugin-search-dir") {
         config
             .set_plugins_search_dirs(plugins_search_dirs.map(|c| c.to_owned()).collect())
             .unwrap();
     }
-    if !args.is_present("plugin-nolookup") {
-        config.set_plugins_search_dirs(Vec::new()).unwrap();
-    }
-    if let Some(paths) = args.values_of("plugin") {
-        for path in paths {
-            if path.contains('.') || path.contains('/') {
-                let name = LibLoader::plugin_name(&path).unwrap();
-                config
-                    .insert_json5(
-                        format!("plugins/{}/__path__", name),
-                        &format!("\"{}\"", path),
-                    )
-                    .unwrap();
-                config
-                    .insert_json5(format!("plugins/{}/__required__", name), "true")
-                    .unwrap();
-            } else {
-                config
-                    .insert_json5(format!("plugins/{}/__required__", path), "true")
-                    .unwrap();
+    if let Some(plugins) = args.values_of("plugin") {
+        for plugin in plugins {
+            match plugin.split_once(':') {
+                Some((name, path)) => {
+                    config
+                        .insert_json5(format!("plugins/{}/__required__", name), "true")
+                        .unwrap();
+                    config
+                        .insert_json5(
+                            format!("plugins/{}/__path__", name),
+                            &format!("\"{}\"", path),
+                        )
+                        .unwrap();
+                }
+                None => config
+                    .insert_json5(format!("plugins/{}/__required__", plugin), "true")
+                    .unwrap(),
             }
         }
     }
-    config
-        .peers
-        .extend(
-            args.values_of("peer")
-                .unwrap_or_default()
-                .filter_map(|v| match v.parse() {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                        None
-                    }
-                }),
-        );
-    config.listeners.extend(
-        args.values_of("listener")
-            .unwrap_or_default()
-            .filter_map(|v| match v.parse() {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    log::warn!("Couldn't parse {} into Locator: {}", v, e);
-                    None
-                }
-            }),
-    );
+    if let Some(peers) = args.values_of("peer") {
+        config
+            .set_peers(
+                peers
+                    .map(|v| match v.parse::<Locator>() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
+                        }
+                    })
+                    .collect(),
+            )
+            .unwrap();
+    }
+    if let Some(listeners) = args.values_of("listener") {
+        config
+            .set_listeners(
+                listeners
+                    .map(|v| match v.parse::<Locator>() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            panic!("Couldn't parse option --listener={} into Locator: {}", v, e);
+                        }
+                    })
+                    .collect(),
+            )
+            .unwrap();
+    }
+    if config.listeners.is_empty() {
+        config.listeners.push(DEFAULT_LISTENER.parse().unwrap())
+    }
     match (
         config.add_timestamp().is_none(),
         args.is_present("no-timestamp"),
@@ -253,7 +268,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
         if let Some((key, value)) = json.split_once(':') {
             match json5::Deserializer::from_str(value) {
                 Ok(mut deserializer) => {
-                    if let Err(e) = config.insert(key, &mut deserializer) {
+                    if let Err(e) =
+                        config.insert(key.strip_prefix('/').unwrap_or(key), &mut deserializer)
+                    {
                         log::warn!("Couldn't perform configuration {}: {}", json, e);
                     }
                 }

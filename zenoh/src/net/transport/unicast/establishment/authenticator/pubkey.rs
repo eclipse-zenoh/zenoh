@@ -14,7 +14,7 @@
 use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
-use super::{PeerId, WBuf, ZBuf, ZInt};
+use super::{WBuf, ZBuf, ZInt, ZenohId};
 use crate::config::Config;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::{Arc, Mutex};
@@ -174,7 +174,7 @@ impl ZBuf {
 struct InnerState {
     prng: PseudoRng,
     known_keys: Option<HashSet<RsaPublicKey>>,
-    authenticated: HashMap<PeerId, Option<RsaPublicKey>>,
+    authenticated: HashMap<ZenohId, Option<RsaPublicKey>>,
 }
 
 pub struct PubKeyAuthenticator {
@@ -196,7 +196,7 @@ impl PubKeyAuthenticator {
         }
     }
 
-    pub fn init() -> ZResult<PubKeyAuthenticator> {
+    pub fn make() -> ZResult<PubKeyAuthenticator> {
         let mut prng = PseudoRng::from_entropy();
         let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT)?;
         let pri_key = RsaPrivateKey::new(&mut prng, bits)?;
@@ -290,10 +290,14 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         PeerAuthenticatorId::PublicKey
     }
 
+    async fn close(&self) {
+        // No cleanup needed
+    }
+
     async fn get_init_syn_properties(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: MULTILINK_VERSION,
@@ -407,7 +411,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             None => {
                 let guard = zasynclock!(self.state);
                 if guard.authenticated.get(&cookie.pid).is_some() {
-                    println!("\nERROR: {:?}\n", guard.authenticated);
                     // The peer is already present but no multilink intereset is declared.
                     // Rejecting for inconsistent declaration.
                     bail!("No multilink supported on link: {}", link);
@@ -422,7 +425,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -524,7 +527,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             (None, None) => {
                 // No multilink
                 let mut guard = zasynclock!(self.state);
-                println!("\nINSERTING: {} {:?}\n", cookie.pid, guard.authenticated);
                 if guard.authenticated.get(&cookie.pid).is_some() {
                     // The peer did not previously express interest in multilink
                     bail!("Invalid multilink pub key on link: {}", link);
@@ -555,7 +557,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         }
     }
 
-    async fn handle_close(&self, peer_id: &PeerId) {
+    async fn handle_close(&self, peer_id: &ZenohId) {
         zasynclock!(self.state).authenticated.remove(peer_id);
     }
 }

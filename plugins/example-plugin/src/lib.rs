@@ -22,12 +22,10 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
-use zenoh_plugin_trait::prelude::*;
-use zenoh_plugin_trait::RunningPluginTrait;
-use zenoh_plugin_trait::ValidationFunction;
 use zenoh_util::bail;
 use zenoh_util::{core::Result as ZResult, zlock};
 
@@ -36,16 +34,13 @@ pub struct ExamplePlugin {}
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
 const DEFAULT_SELECTOR: &str = "/demo/example/**";
+impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        zenoh_plugin_trait::PluginId {
-            uid: "zenoh-example-plugin",
-        }
-    }
+    type RunningPlugin = zenoh::plugins::RunningPlugin;
     const STATIC_NAME: &'static str = "example";
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Box<dyn RunningPluginTrait>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         let selector;
@@ -111,6 +106,13 @@ impl RunningPluginTrait for RunningPlugin {
             }
             bail!("unknown option {} for {}", path, &name)
         })
+    }
+    fn adminspace_getter<'a>(
+        &'a self,
+        _selector: &'a Selector<'a>,
+        _plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        Ok(Vec::new())
     }
 }
 impl Drop for RunningPlugin {

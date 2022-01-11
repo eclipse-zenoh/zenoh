@@ -1,3 +1,5 @@
+use crate::{net::protocol::message::data_kind, prelude::Selector};
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -12,8 +14,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
     io::ZBuf,
     message::{DataInfo, RoutingContext},
@@ -21,6 +23,7 @@ use super::protocol::{
 use super::routing::face::Face;
 use super::transport::{Primitives, TransportUnicast};
 use super::Runtime;
+use crate::plugins::PluginsManager;
 use async_std::sync::Arc;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
@@ -28,11 +31,10 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-type PluginsHandles = zenoh_plugin_trait::loading::PluginsHandles<super::plugins::StartArgs>;
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: PluginsHandles,
+    plugins_mgr: Mutex<PluginsManager>,
     pid_str: String,
     version: String,
 }
@@ -44,15 +46,21 @@ type Handler = Box<
 >;
 
 pub struct AdminSpace {
-    pid: PeerId,
+    pid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<String, Arc<Handler>>,
     context: Arc<AdminContext>,
 }
 
+#[derive(Debug, Clone)]
+enum PluginDiff {
+    Delete(String),
+    Start(crate::config::PluginLoad),
+}
+
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsHandles, version: String) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
         let root_key = format!("/@/router/{}", pid_str);
 
@@ -75,9 +83,16 @@ impl AdminSpace {
                 linkstate_peers_data(context, key, args).boxed()
             })),
         );
+
+        let mut active_plugins = plugins_mgr
+            .running_plugins_info()
+            .into_iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect::<HashMap<_, _>>();
+
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
-            plugins_mgr,
+            plugins_mgr: Mutex::new(plugins_mgr),
             pid_str,
             version,
         });
@@ -87,6 +102,99 @@ impl AdminSpace {
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
+        });
+
+        let cfg_rx = admin.context.runtime.config.subscribe();
+        task::spawn({
+            let admin = admin.clone();
+            async move {
+                while let Ok(change) = cfg_rx.recv_async().await {
+                    let change = change.strip_prefix('/').unwrap_or(&change);
+                    if !change.starts_with("plugins") {
+                        continue;
+                    }
+
+                    let requested_plugins = {
+                        let cfg_guard = admin.context.runtime.config.lock();
+                        cfg_guard.plugins().load_requests().collect::<Vec<_>>()
+                    };
+                    let mut diffs = Vec::new();
+                    for plugin in active_plugins.keys() {
+                        if !requested_plugins.iter().any(|r| &r.name == plugin) {
+                            diffs.push(PluginDiff::Delete(plugin.clone()))
+                        }
+                    }
+                    for request in requested_plugins {
+                        if let Some(active) = active_plugins.get(&request.name) {
+                            if request
+                                .paths
+                                .as_ref()
+                                .map(|p| p.contains(active))
+                                .unwrap_or(true)
+                            {
+                                continue;
+                            }
+                            diffs.push(PluginDiff::Delete(request.name.clone()))
+                        }
+                        diffs.push(PluginDiff::Start(request))
+                    }
+                    let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
+                    for diff in diffs {
+                        match diff {
+                            PluginDiff::Delete(plugin) => {
+                                active_plugins.remove(plugin.as_str());
+                                plugins_mgr.stop(&plugin);
+                            }
+                            PluginDiff::Start(plugin) => {
+                                let load = match &plugin.paths {
+                                    Some(paths) => {
+                                        plugins_mgr.load_plugin_by_paths(plugin.name.clone(), paths)
+                                    }
+                                    None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
+                                };
+                                match load {
+                                    Err(e) => {
+                                        if plugin.required {
+                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                        } else {
+                                            log::error!(
+                                                "Failed to load plugin `{}`: {}",
+                                                plugin.name,
+                                                e
+                                            )
+                                        }
+                                    }
+                                    Ok(path) => {
+                                        let name = &plugin.name;
+                                        log::info!("Loaded plugin `{}` from {}", name, &path);
+                                        match plugins_mgr.start(name, &admin.context.runtime) {
+                                            Ok(Some((path, plugin))) => {
+                                                active_plugins.insert(name.into(), path.into());
+                                                let mut cfg_guard =
+                                                    admin.context.runtime.config.lock();
+                                                cfg_guard.add_plugin_validator(
+                                                    name,
+                                                    plugin.config_checker(),
+                                                );
+                                                log::info!(
+                                                    "Successfully started plugin `{}` from {}",
+                                                    name,
+                                                    path
+                                                );
+                                            }
+                                            Ok(None) => {
+                                                log::warn!("Plugin `{}` was already running", name)
+                                            }
+                                            Err(e) => log::error!("{}", e),
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    log::info!("Running plugins: {:?}", &active_plugins)
+                }
+            }
         });
 
         let primitives = runtime.router.new_primitives(admin.clone());
@@ -199,25 +307,40 @@ impl Primitives for AdminSpace {
             .as_str()
             .strip_prefix(&format!("/@/router/{}/config/", &self.context.pid_str))
         {
-            match std::str::from_utf8(payload.contiguous().as_slice()) {
-                Ok(json) => {
-                    log::trace!(
-                        "Insert conf value /@/router/{}/config/{}:{}",
-                        &self.context.pid_str,
-                        key,
-                        json
-                    );
-                    if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
-                        error!(
-                            "Error inserting conf value /@/router/{}/config/{}:{} - {}",
-                            &self.context.pid_str, key, json, e
-                        );
-                    }
+            if let Some(DataInfo {
+                kind: Some(data_kind::DELETE),
+                ..
+            }) = data_info
+            {
+                log::trace!(
+                    "Deleting conf value /@/router/{}/config/{}",
+                    &self.context.pid_str,
+                    key
+                );
+                if let Err(e) = self.context.runtime.config.remove(key) {
+                    log::error!("Error deleting conf value {}: {}", key_expr, e)
                 }
-                Err(e) => error!(
-                    "Received non utf8 conf value on /@/router/{}/config/{} : {}",
-                    &self.context.pid_str, key, e
-                ),
+            } else {
+                match std::str::from_utf8(payload.contiguous().as_slice()) {
+                    Ok(json) => {
+                        log::trace!(
+                            "Insert conf value /@/router/{}/config/{}:{}",
+                            &self.context.pid_str,
+                            key,
+                            json
+                        );
+                        if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
+                            error!(
+                                "Error inserting conf value /@/router/{}/config/{}:{} - {}",
+                                &self.context.pid_str, key, json, e
+                            );
+                        }
+                    }
+                    Err(e) => error!(
+                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
+                        &self.context.pid_str, key, e
+                    ),
+                }
             }
         }
     }
@@ -239,19 +362,22 @@ impl Primitives for AdminSpace {
             _consolidation
         );
         let pid = self.pid;
+        let plugin_key = format!("/@/router/{}/status/plugins/**", &pid);
+        let mut ask_plugins = false;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
             Some(name) => {
+                ask_plugins = key_expr::intersect(&name, &plugin_key);
                 for (key, handler) in &self.handlers {
                     if key_expr::intersect(&name, key) {
                         matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
             }
-            None => error!("Unknown KeyExpr!!"),
+            None => log::error!("Unknown KeyExpr!!"),
         };
 
         let key_expr = key_expr.to_owned();
@@ -259,12 +385,44 @@ impl Primitives for AdminSpace {
 
         // router is not re-entrant
         task::spawn(async move {
-            for (key, handler) in matching_handlers {
-                let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
-                let mut data_info = DataInfo::new();
-                data_info.encoding = Some(encoding);
+            let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
+                |(key, handler)| async {
+                    let handler = handler;
+                    let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(encoding);
 
-                primitives.send_reply_data(qid, EVAL, pid, key.into(), Some(data_info), payload);
+                    primitives.send_reply_data(
+                        qid,
+                        EVAL,
+                        pid,
+                        key.into(),
+                        Some(data_info),
+                        payload,
+                    );
+                },
+            ));
+            if ask_plugins {
+                futures::join!(handler_tasks, async {
+                    let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
+                    for status in plugin_status {
+                        let crate::plugins::Response { key, value } = status;
+                        let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
+                        let mut data_info = DataInfo::new();
+                        data_info.encoding = Some(Encoding::APP_JSON);
+
+                        primitives.send_reply_data(
+                            qid,
+                            EVAL,
+                            pid,
+                            key.into(),
+                            Some(data_info),
+                            payload.into(),
+                        );
+                    }
+                });
+            } else {
+                handler_tasks.await;
             }
 
             primitives.send_reply_final(qid);
@@ -275,7 +433,7 @@ impl Primitives for AdminSpace {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
@@ -324,17 +482,18 @@ pub async fn router_data(
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    let plugins: Vec<serde_json::Value> = context
-        .plugins_mgr
-        .plugins()
-        .iter()
-        .map(|plugin| {
-            json!({
-                "name": plugin.name,
-                "path": plugin.path
+    let plugins: Vec<serde_json::Value> = {
+        zlock!(context.plugins_mgr)
+            .running_plugins_info()
+            .iter()
+            .map(|(name, path)| {
+                json!({
+                    "name": name,
+                    "path": path
+                })
             })
-        })
-        .collect();
+            .collect()
+    };
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
@@ -420,21 +579,79 @@ pub async fn linkstate_peers_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    (
-        ZBuf::from(
-            context
-                .runtime
-                .router
-                .tables
-                .read()
-                .unwrap()
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .dot()
-                .as_bytes()
-                .to_vec(),
-        ),
-        Encoding::TEXT_PLAIN,
-    )
+    let data: Vec<u8> = context
+        .runtime
+        .router
+        .tables
+        .read()
+        .unwrap()
+        .peers_net
+        .as_ref()
+        .unwrap()
+        .dot()
+        .into();
+    (ZBuf::from(data), Encoding::TEXT_PLAIN)
+}
+
+pub async fn plugins_status(
+    context: &AdminContext,
+    key: &KeyExpr<'_>,
+    args: &str,
+) -> Vec<crate::plugins::Response> {
+    let selector = Selector {
+        key_selector: key.clone(),
+        value_selector: args,
+    };
+    let guard = zlock!(context.plugins_mgr);
+    let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);
+    let mut responses = Vec::new();
+    for (name, (path, plugin)) in guard.running_plugins() {
+        with_extended_string(&mut root_key, &[name], |plugin_key| {
+            with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
+                if key_expr::intersect(key.as_str(), plugin_path_key) {
+                    responses.push(crate::plugins::Response {
+                        key: plugin_path_key.clone(),
+                        value: path.into(),
+                    })
+                }
+            });
+            let matches_plugin = |plugin_status_space: &mut String| {
+                key_expr::intersect(key.as_str(), plugin_status_space)
+            };
+            if !with_extended_string(plugin_key, &["/**"], matches_plugin) {
+                return;
+            }
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        plugin.adminspace_getter(&selector, plugin_key)
+                    })) {
+                        Ok(Ok(response)) => responses.extend(response),
+                        Ok(Err(e)) => {
+                            log::error!("Plugin {} bailed from responding to {}: {}", name, key, e)
+                        }
+                        Err(e) => match e
+                            .downcast_ref::<String>()
+                            .map(|s| s.as_str())
+                            .or_else(|| e.downcast_ref::<&str>().copied())
+                        {
+                            Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", name, key, e),
+                            None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", name, key),
+                        },
+                    }
+        });
+    }
+    responses
+}
+
+fn with_extended_string<R, F: FnMut(&mut String) -> R>(
+    prefix: &mut String,
+    suffixes: &[&str],
+    mut closure: F,
+) -> R {
+    let prefix_len = prefix.len();
+    for suffix in suffixes {
+        prefix.push_str(suffix);
+    }
+    let result = closure(prefix);
+    prefix.truncate(prefix_len);
+    result
 }

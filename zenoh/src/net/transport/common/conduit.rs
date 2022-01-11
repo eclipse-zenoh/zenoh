@@ -13,8 +13,10 @@
 //
 use super::defragmentation::DefragBuffer;
 use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
-use super::seq_num::*;
+use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
+use zenoh_util::core::zresult::ZResult;
+use zenoh_util::zlock;
 
 #[derive(Debug)]
 pub(crate) struct TransportChannelTx {
@@ -22,10 +24,15 @@ pub(crate) struct TransportChannelTx {
 }
 
 impl TransportChannelTx {
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> TransportChannelTx {
-        TransportChannelTx {
-            sn: SeqNumGenerator::new(initial_sn, sn_resolution),
-        }
+    pub(crate) fn make(sn_resolution: ZInt) -> ZResult<TransportChannelTx> {
+        let tch = TransportChannelTx {
+            sn: SeqNumGenerator::make(0, sn_resolution)?,
+        };
+        Ok(tch)
+    }
+
+    pub(crate) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
+        self.sn.set(sn)
     }
 }
 
@@ -36,23 +43,27 @@ pub(crate) struct TransportChannelRx {
 }
 
 impl TransportChannelRx {
-    pub(crate) fn new(
+    pub(crate) fn make(
         reliability: Reliability,
-        initial_sn: ZInt,
         sn_resolution: ZInt,
         defrag_buff_size: usize,
-    ) -> TransportChannelRx {
-        // Set the sequence number in the state as it had received a message with initial_sn - 1
-        let last_initial_sn = if initial_sn == 0 {
-            sn_resolution - 1
+    ) -> ZResult<TransportChannelRx> {
+        let sn = SeqNum::make(0, sn_resolution)?;
+        let defrag = DefragBuffer::make(reliability, sn_resolution, defrag_buff_size)?;
+        let tch = TransportChannelRx { sn, defrag };
+        Ok(tch)
+    }
+
+    pub(crate) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
+        // Set the sequence number in the state as it had received a message with sn - 1
+        let sn = if sn == 0 {
+            self.sn.resolution() - 1
         } else {
-            initial_sn - 1
+            sn - 1
         };
 
-        TransportChannelRx {
-            sn: SeqNum::new(last_initial_sn, sn_resolution),
-            defrag: DefragBuffer::new(reliability, initial_sn, sn_resolution, defrag_buff_size),
-        }
+        let _ = self.sn.set(sn)?;
+        self.defrag.sync(sn)
     }
 }
 
@@ -64,22 +75,20 @@ pub(crate) struct TransportConduitTx {
 }
 
 impl TransportConduitTx {
-    pub(crate) fn new(
-        priority: Priority,
-        sn_resolution: ZInt,
-        initial_sn: ConduitSn,
-    ) -> TransportConduitTx {
-        TransportConduitTx {
+    pub(crate) fn make(priority: Priority, sn_resolution: ZInt) -> ZResult<TransportConduitTx> {
+        let rch = TransportChannelTx::make(sn_resolution)?;
+        let bch = TransportChannelTx::make(sn_resolution)?;
+        let ctx = TransportConduitTx {
             priority,
-            reliable: Arc::new(Mutex::new(TransportChannelTx::new(
-                initial_sn.reliable,
-                sn_resolution,
-            ))),
-            best_effort: Arc::new(Mutex::new(TransportChannelTx::new(
-                initial_sn.best_effort,
-                sn_resolution,
-            ))),
-        }
+            reliable: Arc::new(Mutex::new(rch)),
+            best_effort: Arc::new(Mutex::new(bch)),
+        };
+        Ok(ctx)
+    }
+
+    pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
+        let _ = zlock!(self.reliable).sync(sn.reliable)?;
+        zlock!(self.best_effort).sync(sn.best_effort)
     }
 }
 
@@ -91,26 +100,24 @@ pub(crate) struct TransportConduitRx {
 }
 
 impl TransportConduitRx {
-    pub(crate) fn new(
+    pub(crate) fn make(
         priority: Priority,
         sn_resolution: ZInt,
-        initial_sn: ConduitSn,
         defrag_buff_size: usize,
-    ) -> TransportConduitRx {
-        TransportConduitRx {
+    ) -> ZResult<TransportConduitRx> {
+        let rch = TransportChannelRx::make(Reliability::Reliable, sn_resolution, defrag_buff_size)?;
+        let bch =
+            TransportChannelRx::make(Reliability::BestEffort, sn_resolution, defrag_buff_size)?;
+        let ctr = TransportConduitRx {
             priority,
-            reliable: Arc::new(Mutex::new(TransportChannelRx::new(
-                Reliability::Reliable,
-                initial_sn.reliable,
-                sn_resolution,
-                defrag_buff_size,
-            ))),
-            best_effort: Arc::new(Mutex::new(TransportChannelRx::new(
-                Reliability::BestEffort,
-                initial_sn.best_effort,
-                sn_resolution,
-                defrag_buff_size,
-            ))),
-        }
+            reliable: Arc::new(Mutex::new(rch)),
+            best_effort: Arc::new(Mutex::new(bch)),
+        };
+        Ok(ctr)
+    }
+
+    pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
+        let _ = zlock!(self.reliable).sync(sn.reliable)?;
+        zlock!(self.best_effort).sync(sn.best_effort)
     }
 }

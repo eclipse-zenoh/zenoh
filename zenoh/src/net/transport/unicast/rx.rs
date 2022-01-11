@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
+use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
 #[cfg(feature = "stats")]
 use super::protocol::message::ZenohBody;
 use super::protocol::message::{
@@ -64,12 +64,12 @@ impl TransportUnicastInner {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
             #[cfg(feature = "shared-memory")]
-            let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+            let _ = msg.map_to_shmbuf(self.config.manager.shmr.clone())?;
             callback.handle_message(msg)
         } else {
             log::debug!(
                 "Transport: {}. No callback available, dropping message: {}",
-                self.pid,
+                self.config.pid,
                 msg
             );
             Ok(())
@@ -79,13 +79,13 @@ impl TransportUnicastInner {
     fn handle_close(
         &self,
         link: &LinkUnicast,
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
     ) -> ZResult<()> {
         // Check if the PID is correct when provided
         if let Some(pid) = pid {
-            if pid != self.pid {
+            if pid != self.config.pid {
                 log::debug!(
                     "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
                     link,
@@ -126,7 +126,7 @@ impl TransportUnicastInner {
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.pid,
+                self.config.pid,
                 sn,
                 guard.sn.get()
             );
@@ -150,7 +150,7 @@ impl TransportUnicastInner {
                 if is_final {
                     // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        zerror!("Transport: {}. Defragmentation error.", self.pid)
+                        zerror!("Transport: {}. Defragmentation error.", self.config.pid)
                     })?;
                     self.trigger_callback(msg)
                 } else {
@@ -182,7 +182,7 @@ impl TransportUnicastInner {
                 } else {
                     bail!(
                         "Transport: {}. Unknown conduit: {:?}.",
-                        self.pid,
+                        self.config.pid,
                         channel.priority
                     );
                 };
@@ -203,7 +203,7 @@ impl TransportUnicastInner {
             _ => {
                 log::debug!(
                     "Transport: {}. Message handling not implemented: {:?}",
-                    self.pid,
+                    self.config.pid,
                     msg
                 );
                 Ok(())

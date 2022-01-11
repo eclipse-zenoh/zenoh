@@ -45,7 +45,7 @@ impl WBuf {
         zcheck!(self.write_zint(reply_context.qid));
         if let Some(replier) = reply_context.replier.as_ref() {
             zcheck!(self.write_zint(replier.kind));
-            zcheck!(self.write_peeexpr_id(&replier.id));
+            zcheck!(self.write_zenohid(&replier.id));
         }
         true
     }
@@ -89,8 +89,6 @@ impl WBuf {
 
         let res = match &mut msg.body {
             TransportBody::Frame(frame) => self.write_frame(frame),
-            TransportBody::Scout(scout) => self.write_scout(scout),
-            TransportBody::Hello(hello) => self.write_hello(hello),
             TransportBody::InitSyn(init_syn) => self.write_init_syn(init_syn),
             TransportBody::InitAck(init_ack) => self.write_init_ack(init_ack),
             TransportBody::OpenSyn(open_syn) => self.write_open_syn(open_syn),
@@ -131,30 +129,6 @@ impl WBuf {
         }
     }
 
-    fn write_scout(&mut self, scout: &Scout) -> bool {
-        zcheck!(self.write(scout.header()));
-        match scout.what {
-            Some(w) => self.write_zint(w.into()),
-            None => true,
-        }
-    }
-
-    fn write_hello(&mut self, hello: &Hello) -> bool {
-        zcheck!(self.write(hello.header()));
-        if let Some(pid) = hello.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
-        }
-        if let Some(w) = hello.whatami {
-            if w != WhatAmI::Router {
-                zcheck!(self.write_zint(w.into()));
-            }
-        }
-        if let Some(locs) = hello.locators.as_ref() {
-            zcheck!(self.write_locators(locs));
-        }
-        true
-    }
-
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
         let header = init_syn.header();
         zcheck!(self.write(header));
@@ -162,8 +136,8 @@ impl WBuf {
             zcheck!(self.write_zint(init_syn.options()));
         }
         zcheck!(self.write(init_syn.version));
-        zcheck!(self.write_zint(init_syn.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_syn.pid));
+        zcheck!(self.write(init_syn.whatami.into()));
+        zcheck!(self.write_zenohid(&init_syn.pid));
         if super::has_flag(header, transport::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
         }
@@ -175,8 +149,8 @@ impl WBuf {
         if init_ack.has_options() {
             zcheck!(self.write_zint(init_ack.options()));
         }
-        zcheck!(self.write_zint(init_ack.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_ack.pid));
+        zcheck!(self.write(init_ack.whatami.into()));
+        zcheck!(self.write_zenohid(&init_ack.pid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
         }
@@ -213,8 +187,8 @@ impl WBuf {
             zcheck!(self.write_zint(join.options()));
         }
         zcheck!(self.write(join.version));
-        zcheck!(self.write_zint(join.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&join.pid));
+        zcheck!(self.write(join.whatami.into()));
+        zcheck!(self.write_zenohid(&join.pid));
         if super::has_flag(header, transport::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
         } else {
@@ -241,7 +215,7 @@ impl WBuf {
     fn write_close(&mut self, close: &Close) -> bool {
         zcheck!(self.write(close.header()));
         if let Some(p) = close.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+            zcheck!(self.write_zenohid(p));
         }
         self.write(close.reason)
     }
@@ -267,7 +241,7 @@ impl WBuf {
     fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
         zcheck!(self.write(keep_alive.header()));
         if let Some(p) = keep_alive.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+            zcheck!(self.write_zenohid(p));
         }
         true
     }
@@ -374,13 +348,13 @@ impl WBuf {
             zcheck!(self.write_timestamp(ts));
         }
         if let Some(pid) = info.source_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+            zcheck!(self.write_zenohid(pid));
         }
         if let Some(sn) = info.source_sn {
             zcheck!(self.write_zint(sn));
         }
         if let Some(pid) = info.first_router_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+            zcheck!(self.write_zenohid(pid));
         }
         if let Some(sn) = info.first_router_sn {
             zcheck!(self.write_zint(sn));
@@ -506,10 +480,10 @@ impl WBuf {
         zcheck!(self.write_zint(link_state.psid));
         zcheck!(self.write_zint(link_state.sn));
         if let Some(pid) = link_state.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+            zcheck!(self.write_zenohid(pid));
         }
         if let Some(&whatami) = link_state.whatami.as_ref() {
-            zcheck!(self.write_zint(whatami.into()));
+            zcheck!(self.write(whatami.into()));
         }
         if let Some(locators) = link_state.locators.as_ref() {
             zcheck!(self.write_locators(locators));

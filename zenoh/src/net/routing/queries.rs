@@ -12,15 +12,20 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::Arc;
+use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::{RwLock, Weak};
+// use std::time::Instant;
+// use zenoh_util::collections::{Timed, TimedEvent};
+use zenoh_util::collections::Timed;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
-    key_expr, queryable, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Target,
-    WhatAmI, ZInt,
+    key_expr, queryable, KeyExpr, QueryConsolidation, QueryTarget, QueryableInfo, Target, WhatAmI,
+    ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::message::{DataInfo, RoutingContext};
@@ -130,7 +135,7 @@ fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> Que
 
 fn local_qabl_info(
     whatami: WhatAmI,
-    local_pid: &PeerId,
+    local_pid: &ZenohId,
     res: &Arc<Resource>,
     kind: ZInt,
     face: &Arc<FaceState>,
@@ -266,7 +271,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
     kind: ZInt,
     qabl_info: &QueryableInfo,
     src_face: Option<Face>,
-    source: &PeerId,
+    source: &ZenohId,
     net_type: WhatAmI,
 ) {
     let net = tables.get_net(net_type).unwrap();
@@ -306,7 +311,7 @@ fn register_router_queryable(
     res: &mut Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    router: PeerId,
+    router: ZenohId,
 ) {
     let current_info = res.context().router_qabls.get(&(router, kind));
     if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -353,7 +358,7 @@ pub fn declare_router_queryable(
     expr: &KeyExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    router: PeerId,
+    router: ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
@@ -373,7 +378,7 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
     res: &mut Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    peer: PeerId,
+    peer: ZenohId,
 ) {
     let current_info = res.context().peer_qabls.get(&(peer, kind));
     if current_info.is_none() || current_info.unwrap() != qabl_info {
@@ -403,7 +408,7 @@ pub fn declare_peer_queryable(
     expr: &KeyExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    peer: PeerId,
+    peer: ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
@@ -592,7 +597,7 @@ fn propagate_forget_sourced_queryable(
     res: &mut Arc<Resource>,
     kind: ZInt,
     src_face: Option<&Arc<FaceState>>,
-    source: &PeerId,
+    source: &ZenohId,
     net_type: WhatAmI,
 ) {
     let net = tables.get_net(net_type).unwrap();
@@ -629,7 +634,7 @@ fn unregister_router_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     kind: ZInt,
-    router: &PeerId,
+    router: &ZenohId,
 ) {
     log::debug!(
         "Unregister router queryable {} (router: {}, kind: {})",
@@ -655,7 +660,7 @@ fn undeclare_router_queryable(
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     kind: ZInt,
-    router: &PeerId,
+    router: &ZenohId,
 ) {
     if res.context().router_qabls.contains_key(&(*router, kind)) {
         unregister_router_queryable(tables, res, kind, router);
@@ -668,7 +673,7 @@ pub fn forget_router_queryable(
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
     kind: ZInt,
-    router: &PeerId,
+    router: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
@@ -688,7 +693,7 @@ fn unregister_peer_queryable(
     tables: &mut Tables,
     res: &mut Arc<Resource>,
     kind: ZInt,
-    peer: &PeerId,
+    peer: &ZenohId,
 ) {
     log::debug!(
         "Unregister peer queryable {} (peer: {}, kind: {})",
@@ -711,7 +716,7 @@ fn undeclare_peer_queryable(
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
     kind: ZInt,
-    peer: &PeerId,
+    peer: &ZenohId,
 ) {
     if res.context().peer_qabls.contains_key(&(*peer, kind)) {
         unregister_peer_queryable(tables, res, kind, peer);
@@ -724,7 +729,7 @@ pub fn forget_peer_queryable(
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
     kind: ZInt,
-    peer: &PeerId,
+    peer: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
@@ -888,7 +893,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     }
 }
 
-pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: WhatAmI) {
+pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             let mut qabls = vec![];
@@ -1013,7 +1018,7 @@ fn insert_target_for_qabls(
     tables: &Tables,
     net: &Network,
     source: usize,
-    qabls: &HashMap<(PeerId, ZInt), QueryableInfo>,
+    qabls: &HashMap<(ZenohId, ZInt), QueryableInfo>,
     complete: bool,
 ) {
     if net.trees.len() > source {
@@ -1322,9 +1327,37 @@ fn compute_final_route(
     }
 }
 
+#[derive(Clone)]
+struct QueryCleanup {
+    tables: Arc<RwLock<Tables>>,
+    face: Weak<FaceState>,
+    qid: ZInt,
+}
+
+#[async_trait]
+impl Timed for QueryCleanup {
+    async fn run(&mut self) {
+        if let Some(mut face) = self.face.upgrade() {
+            let mut _tables = zwrite!(self.tables);
+            if let Some(query) = get_mut_unchecked(&mut face)
+                .pending_queries
+                .remove(&self.qid)
+            {
+                log::warn!(
+                    "Didn't receive final reply {}:{} from {}: Timeout!",
+                    query.src_face,
+                    self.qid,
+                    face
+                );
+                finalize_pending_query(&mut _tables, &query);
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(
-    tables: &mut Tables,
+    tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
     expr: &KeyExpr,
     value_selector: &str,
@@ -1333,6 +1366,7 @@ pub fn route_query(
     consolidation: QueryConsolidation,
     routing_context: Option<RoutingContext>,
 ) {
+    let tables = zwrite!(tables_ref);
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
             log::debug!(
@@ -1354,7 +1388,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1371,7 +1405,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1384,7 +1418,7 @@ pub fn route_query(
                         .flatten()
                         .unwrap_or_else(|| {
                             compute_query_route(
-                                tables,
+                                &tables,
                                 prefix,
                                 expr.suffix.as_ref(),
                                 None,
@@ -1402,7 +1436,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1415,7 +1449,7 @@ pub fn route_query(
                         .flatten()
                         .unwrap_or_else(|| {
                             compute_query_route(
-                                tables,
+                                &tables,
                                 prefix,
                                 expr.suffix.as_ref(),
                                 None,
@@ -1428,7 +1462,7 @@ pub fn route_query(
                     .flatten()
                     .unwrap_or_else(|| {
                         compute_query_route(
-                            tables,
+                            &tables,
                             prefix,
                             expr.suffix.as_ref(),
                             None,
@@ -1448,6 +1482,9 @@ pub fn route_query(
                     src_qid: qid,
                 });
 
+                // let timer = tables.timer.clone();
+                // let timeout = tables.queries_default_timeout;
+                // drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
                     let mut outface = outface.clone();
@@ -1455,6 +1492,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
@@ -1478,6 +1523,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timeout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
@@ -1508,7 +1561,7 @@ pub(crate) fn route_send_reply_data(
     face: &mut Arc<FaceState>,
     qid: ZInt,
     replier_kind: ZInt,
-    replier_id: PeerId,
+    replier_id: ZenohId,
     key_expr: KeyExpr,
     info: Option<DataInfo>,
     payload: ZBuf,
@@ -1524,12 +1577,17 @@ pub(crate) fn route_send_reply_data(
                 payload,
             );
         }
-        None => log::error!("Route reply for unknown query!"),
+        None => log::warn!(
+            "Route reply {}:{} from {}: Query nof found!",
+            face,
+            qid,
+            face
+        ),
     }
 }
 
 pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
-    match face.pending_queries.get(&qid) {
+    match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             log::debug!(
                 "Received final reply {}:{} from {}",
@@ -1537,17 +1595,14 @@ pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceSt
                 qid,
                 face
             );
-            if Arc::strong_count(query) == 1 {
-                log::debug!("Propagate final reply {}:{}", query.src_face, qid);
-                query
-                    .src_face
-                    .primitives
-                    .clone()
-                    .send_reply_final(query.src_qid);
-            }
-            get_mut_unchecked(face).pending_queries.remove(&qid);
+            finalize_pending_query(_tables, &query);
         }
-        None => log::error!("Route reply for unknown query!"),
+        None => log::warn!(
+            "Route final reply {}:{} from {}: Query nof found!",
+            face,
+            qid,
+            face
+        ),
     }
 }
 
@@ -1559,14 +1614,18 @@ pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face
             query.src_qid,
             face
         );
-        if Arc::strong_count(query) == 1 {
-            log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
-            query
-                .src_face
-                .primitives
-                .clone()
-                .send_reply_final(query.src_qid);
-        }
+        finalize_pending_query(_tables, query);
     }
     get_mut_unchecked(face).pending_queries.clear();
+}
+
+pub(crate) fn finalize_pending_query(_tables: &mut Tables, query: &Arc<Query>) {
+    if Arc::strong_count(query) == 1 {
+        log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
+        query
+            .src_face
+            .primitives
+            .clone()
+            .send_reply_final(query.src_qid);
+    }
 }

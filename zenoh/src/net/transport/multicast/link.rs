@@ -18,7 +18,7 @@ use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
-use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use crate::net::protocol::core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;
@@ -34,7 +34,7 @@ use zenoh_util::zerror;
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) version: u8,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) keep_alive: Duration,
@@ -113,7 +113,7 @@ impl TransportLinkMulticast {
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
                 let res = tx_task(
-                    pipeline,
+                    pipeline.clone(),
                     c_link.clone(),
                     config,
                     initial_sns,
@@ -121,6 +121,7 @@ impl TransportLinkMulticast {
                     c_transport.stats.clone(),
                 )
                 .await;
+                pipeline.disable();
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task

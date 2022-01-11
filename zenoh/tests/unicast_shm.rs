@@ -22,14 +22,13 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
+    use zenoh::net::protocol::core::{Channel, Priority, Reliability, WhatAmI, ZenohId};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh::net::protocol::message::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh::publication::CongestionControl;
     use zenoh_util::core::Result as ZResult;
@@ -41,6 +40,12 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
+
+    macro_rules! ztimeout {
+        ($f:expr) => {
+            $f.timeout(TIMEOUT).await.unwrap()
+        };
+    }
 
     // Transport Handler for the router
     struct SHPeer {
@@ -126,76 +131,61 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+        let peer_shm02 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+        let peer_net01 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
-        let mut shm01 = SharedMemoryManager::new("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
+        let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
         let unicast =
-            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::new().into(),
+            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let config = TransportManagerConfig::builder()
+        let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm01)
             .unicast(unicast)
             .build(peer_shm01_handler.clone())
             .unwrap();
-        let peer_shm01_manager = TransportManager::new(config);
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
         let unicast =
-            TransportManagerConfigUnicast::builder().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::new().into(),
+            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
+                SharedMemoryAuthenticator::make().unwrap().into(),
             ]));
-        let config = TransportManagerConfig::builder()
+        let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_shm02)
             .unicast(unicast)
             .build(peer_shm02_handler.clone())
             .unwrap();
-        let peer_shm02_manager = TransportManager::new(config);
 
         // Create a peer manager with shared-memory authenticator disabled
         let peer_net01_handler = Arc::new(SHPeer::new(false));
-        let config = TransportManagerConfig::builder()
+        let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_net01)
             .build(peer_net01_handler.clone())
             .unwrap();
-        let peer_net01_manager = TransportManager::new(config);
 
         // Create the listener on the peer
         println!("\nTransport SHM [1a]");
-        let _ = peer_shm01_manager
+        let _ = ztimeout!(peer_shm01_manager
             .add_listener(endpoint.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+            .timeout(TIMEOUT))
+        .unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
-        let _ = peer_shm02_manager
-            .open_transport(endpoint.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
-        let _ = peer_net01_manager
-            .open_transport(endpoint.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
@@ -209,17 +199,14 @@ mod tests {
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = async {
+            let mut sbuf = ztimeout!(async {
                 loop {
                     match shm01.alloc(MSG_SIZE) {
-                        Some(sbuf) => break sbuf,
-                        None => task::sleep(USLEEP).await,
+                        Ok(sbuf) => break sbuf,
+                        Err(_) => task::sleep(USLEEP).await,
                     }
                 }
-            }
-            .timeout(TIMEOUT)
-            .await
-            .unwrap();
+            });
 
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
@@ -255,29 +242,25 @@ mod tests {
 
         // Wait for the messages to arrive to the other side
         println!("\nTransport SHM [3b]");
-        let count = async {
+        ztimeout!(async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
             }
-        };
-        let _ = count.timeout(TIMEOUT).await.unwrap();
+        });
 
         // Send the message
         println!("Transport SHM [4a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = async {
+            let mut sbuf = ztimeout!(async {
                 loop {
                     match shm01.alloc(MSG_SIZE) {
-                        Some(sbuf) => break sbuf,
-                        None => task::sleep(USLEEP).await,
+                        Ok(sbuf) => break sbuf,
+                        Err(_) => task::sleep(USLEEP).await,
                     }
                 }
-            }
-            .timeout(TIMEOUT)
-            .await
-            .unwrap();
+            });
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
@@ -312,44 +295,35 @@ mod tests {
 
         // Wait for the messages to arrive to the other side
         println!("\nTransport SHM [4b]");
-        let count = async {
+        ztimeout!(async {
             while peer_net01_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
             }
-        };
-        let _ = count.timeout(TIMEOUT).await.unwrap();
+        });
 
         // Wait a little bit
         task::sleep(SLEEP).await;
 
         // Close the transports
         println!("Transport SHM [5a]");
-        let _ = peer_shm02_transport
-            .close()
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer_shm02_transport.close()).unwrap();
 
         println!("Transport SHM [5b]");
-        let _ = peer_net01_transport
-            .close()
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer_net01_transport.close()).unwrap();
 
         // Wait a little bit
         task::sleep(SLEEP).await;
 
         // Delete the listener
         println!("Transport SHM [6a]");
-        let _ = peer_shm01_manager
-            .del_listener(endpoint)
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
+
+        // Wait a little bit
+        task::sleep(SLEEP).await;
+
+        ztimeout!(peer_net01_manager.close());
+        ztimeout!(peer_shm01_manager.close());
+        ztimeout!(peer_shm02_manager.close());
 
         // Wait a little bit
         task::sleep(SLEEP).await;
@@ -358,7 +332,6 @@ mod tests {
     #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
     #[test]
     fn transport_tcp_shm() {
-        env_logger::init();
         task::block_on(async {
             zasync_executor_init!();
         });

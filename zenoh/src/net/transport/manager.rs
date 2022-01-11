@@ -12,16 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::multicast::manager::{
-    TransportManagerConfigBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::{Version, WhatAmI, ZInt, ZenohId};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
-use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
+use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES};
+use super::protocol::VERSION;
 use super::unicast::manager::{
-    TransportManagerConfigBuilderUnicast, TransportManagerConfigUnicast,
-    TransportManagerStateUnicast,
+    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
@@ -42,7 +42,7 @@ use zenoh_util::zparse;
 /// ```
 /// use async_std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
+/// use zenoh::net::protocol::core::{ZenohId, WhatAmI, whatami};
 /// use zenoh::net::transport::*;
 /// use zenoh::Result as ZResult;
 ///
@@ -66,34 +66,33 @@ use zenoh_util::zparse;
 /// }
 ///
 /// // Create the default TransportManager
-/// let config = TransportManagerConfig::builder()
+/// let manager = TransportManager::builder()
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
-/// let manager = TransportManager::new(config);
 ///
 /// // Create the TransportManager with custom configuration
 /// // Configure the unicast transports parameters
-/// let unicast = TransportManagerConfigUnicast::builder()
+/// let unicast = TransportManager::config_unicast()
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(Duration::from_millis(100))
 ///         .open_timeout(Duration::from_secs(1))
 ///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports
-///         .max_sessions(5)    // Allow max 5 transports open
-///         .max_links(2);      // Allow max 2 links per transport
-/// let config = TransportManagerConfig::builder()
-///         .pid(PeerId::rand())
+///         // #[cfg(feature = "transport_multilink")]
+///         // .max_links(2)    // Allow max 2 links per transport
+///         .max_sessions(5);   // Allow max 5 transports open
+/// let manager = TransportManager::builder()
+///         .pid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
-/// let manager = TransportManager::new(config);
 /// ```
 
 pub struct TransportManagerConfig {
-    pub version: u8,
-    pub pid: PeerId,
+    pub version: Version,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: u16,
@@ -105,32 +104,31 @@ pub struct TransportManagerConfig {
     pub handler: Arc<dyn TransportEventHandler>,
 }
 
-impl TransportManagerConfig {
-    pub fn builder() -> TransportManagerConfigBuilder {
-        TransportManagerConfigBuilder::default()
-    }
+pub struct TransportManagerState {
+    pub unicast: TransportManagerStateUnicast,
+    pub multicast: TransportManagerStateMulticast,
 }
 
-pub struct TransportManagerConfigBuilder {
-    version: u8,
-    pid: PeerId,
+pub struct TransportManagerParams {
+    config: TransportManagerConfig,
+    state: TransportManagerState,
+}
+
+pub struct TransportManagerBuilder {
+    version: Version,
+    pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: u16,
     defrag_buff_size: usize,
     link_rx_buff_size: usize,
-    unicast: TransportManagerConfigBuilderUnicast,
-    multicast: TransportManagerConfigBuilderMulticast,
+    unicast: TransportManagerBuilderUnicast,
+    multicast: TransportManagerBuilderMulticast,
     endpoint: HashMap<LocatorProtocol, Properties>,
 }
 
-impl TransportManagerConfigBuilder {
-    pub fn version(mut self, version: u8) -> Self {
-        self.version = version;
-        self
-    }
-
-    pub fn pid(mut self, pid: PeerId) -> Self {
+impl TransportManagerBuilder {
+    pub fn pid(mut self, pid: ZenohId) -> Self {
         self.pid = pid;
         self
     }
@@ -165,41 +163,18 @@ impl TransportManagerConfigBuilder {
         self
     }
 
-    pub fn unicast(mut self, unicast: TransportManagerConfigBuilderUnicast) -> Self {
+    pub fn unicast(mut self, unicast: TransportManagerBuilderUnicast) -> Self {
         self.unicast = unicast;
         self
     }
 
-    pub fn multicast(mut self, multicast: TransportManagerConfigBuilderMulticast) -> Self {
+    pub fn multicast(mut self, multicast: TransportManagerBuilderMulticast) -> Self {
         self.multicast = multicast;
         self
     }
 
-    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManagerConfig> {
-        let tmc = TransportManagerConfig {
-            version: self.version,
-            pid: self.pid,
-            whatami: self.whatami,
-            sn_resolution: self.sn_resolution,
-            batch_size: self.batch_size,
-            defrag_buff_size: self.defrag_buff_size,
-            link_rx_buff_size: self.link_rx_buff_size,
-            unicast: self.unicast.build()?,
-            multicast: self.multicast.build()?,
-            endpoint: self.endpoint,
-            handler,
-        };
-        Ok(tmc)
-    }
-
-    pub async fn from_config(
-        mut self,
-        properties: &Config,
-    ) -> ZResult<TransportManagerConfigBuilder> {
-        if let Some(v) = properties.version() {
-            self = self.version(*v);
-        }
-        if let Some(v) = properties.peer_id() {
+    pub async fn from_config(mut self, properties: &Config) -> ZResult<TransportManagerBuilder> {
+        if let Some(v) = properties.id() {
             self = self.pid(zparse!(v)?);
         }
         if let Some(v) = properties.mode() {
@@ -219,41 +194,63 @@ impl TransportManagerConfigBuilder {
         }
         self = self.endpoint(LocatorConfig::from_config(properties)?);
         self = self.unicast(
-            TransportManagerConfigUnicast::builder()
+            TransportManager::config_unicast()
                 .from_config(properties)
                 .await?,
         );
         self = self.multicast(
-            TransportManagerConfigMulticast::builder()
+            TransportManagerBuilderMulticast::default()
                 .from_config(properties)
                 .await?,
         );
 
         Ok(self)
     }
+
+    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+        let unicast = self.unicast.build()?;
+        let multicast = self.multicast.build()?;
+
+        let config = TransportManagerConfig {
+            version: self.version,
+            pid: self.pid,
+            whatami: self.whatami,
+            sn_resolution: self.sn_resolution,
+            batch_size: self.batch_size,
+            defrag_buff_size: self.defrag_buff_size,
+            link_rx_buff_size: self.link_rx_buff_size,
+            unicast: unicast.config,
+            multicast: multicast.config,
+            endpoint: self.endpoint,
+            handler,
+        };
+
+        let state = TransportManagerState {
+            unicast: unicast.state,
+            multicast: multicast.state,
+        };
+
+        let params = TransportManagerParams { config, state };
+
+        Ok(TransportManager::new(params))
+    }
 }
 
-impl Default for TransportManagerConfigBuilder {
+impl Default for TransportManagerBuilder {
     fn default() -> Self {
         Self {
             version: VERSION,
-            pid: PeerId::rand(),
+            pid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             endpoint: HashMap::new(),
-            unicast: TransportManagerConfigUnicast::builder(),
-            multicast: TransportManagerConfigMulticast::builder(),
+            unicast: TransportManagerBuilderUnicast::default(),
+            multicast: TransportManagerBuilderMulticast::default(),
         }
     }
-}
-
-#[derive(Default)]
-pub struct TransportManagerState {
-    pub unicast: TransportManagerStateUnicast,
-    pub multicast: TransportManagerStateMulticast,
 }
 
 #[derive(Clone)]
@@ -267,7 +264,7 @@ pub struct TransportManager {
 }
 
 impl TransportManager {
-    pub fn new(config: TransportManagerConfig) -> TransportManager {
+    pub fn new(params: TransportManagerParams) -> TransportManager {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
@@ -275,8 +272,8 @@ impl TransportManager {
         let cipher = BlockCipher::new(key);
 
         TransportManager {
-            config: Arc::new(config),
-            state: Arc::new(TransportManagerState::default()),
+            config: Arc::new(params.config),
+            state: Arc::new(params.state),
             prng: AsyncArc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
             #[cfg(feature = "shared-memory")]
@@ -284,8 +281,18 @@ impl TransportManager {
         }
     }
 
-    pub fn pid(&self) -> PeerId {
+    pub fn builder() -> TransportManagerBuilder {
+        TransportManagerBuilder::default()
+    }
+
+    pub fn pid(&self) -> ZenohId {
         self.config.pid
+    }
+
+    pub async fn close(&self) {
+        log::trace!("TransportManager::clear())");
+        self.close_unicast().await;
+        self.close_multicast().await;
     }
 
     /*************************************/
@@ -322,7 +329,7 @@ impl TransportManager {
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
-    pub fn get_transport(&self, peer: &PeerId) -> Option<TransportUnicast> {
+    pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         self.get_transport_unicast(peer)
         // @TODO: multicast
     }

@@ -32,14 +32,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     println!("Creating Shared Memory Manager...");
     let id = session.id().await;
-    let mut shm = SharedMemoryManager::new(id, N * 1024).unwrap();
+    let mut shm = SharedMemoryManager::make(id, N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
-            Some(buf) => buf,
-            None => {
+            Ok(buf) => buf,
+            Err(_) => {
                 sleep(Duration::from_millis(100)).await;
                 println!(
                     "Afer failing allocation the GC collected: {} bytes -- retrying",
@@ -140,7 +140,7 @@ fn parse_args() -> (Config, String, String) {
     if let Some(values) = args.values_of("peer") {
         config.peers.extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listener") {
         config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {

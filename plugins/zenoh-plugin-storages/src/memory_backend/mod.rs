@@ -35,8 +35,8 @@ pub struct MemoryBackend {
 
 #[async_trait]
 impl Backend for MemoryBackend {
-    async fn get_admin_status(&self) -> Value {
-        self.config.to_json_value().into()
+    fn get_admin_status(&self) -> serde_json::Value {
+        self.config.to_json_value()
     }
 
     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
@@ -109,7 +109,7 @@ impl MemoryStorage {
         Ok(MemoryStorage {
             config: properties,
             map: Arc::new(RwLock::new(HashMap::new())),
-            timer: Timer::new(),
+            timer: Timer::new(false),
         })
     }
 }
@@ -124,15 +124,15 @@ impl MemoryStorage {
             },
         );
         let handle = event.get_handle();
-        self.timer.add(event).await;
+        self.timer.add_async(event).await;
         handle
     }
 }
 
 #[async_trait]
 impl Storage for MemoryStorage {
-    async fn get_admin_status(&self) -> Value {
-        self.config.to_json_value().into()
+    fn get_admin_status(&self) -> serde_json::Value {
+        self.config.to_json_value()
     }
 
     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {

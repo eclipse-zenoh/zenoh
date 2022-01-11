@@ -156,13 +156,14 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        if join.version != self.manager.config.version {
+        // @TODO: handle experimental versions
+        if join.version != self.manager.config.version.stable {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
                 locator,
                 join.pid,
                 join.version,
-                self.manager.config.version,
+                self.manager.config.version.stable, // @TODO: handle experimental versions
             );
             return Ok(());
         }

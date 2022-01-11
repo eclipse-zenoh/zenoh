@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
+use super::core::{Property, Timestamp, ZInt, ZenohId, ZINT_MAX_BYTES};
 #[cfg(feature = "shared-memory")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "shared-memory")]
@@ -129,15 +129,15 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_peeexpr_id(&mut self) -> Option<PeerId> {
+    pub fn read_zenohid(&mut self) -> Option<ZenohId> {
         let size = self.read_zint_as_usize()?;
-        if size > PeerId::MAX_SIZE {
-            log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
+        if size > ZenohId::MAX_SIZE {
+            log::trace!("Reading a ZenohId size that exceed 16 bytes: {}", size);
             return None;
         }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
-            Some(PeerId::new(size, id))
+            Some(ZenohId::new(size, id))
         } else {
             None
         }
@@ -253,7 +253,7 @@ impl ZBuf {
             );
             return None;
         }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         if self.read_bytes(&mut id[..size]) {
             Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
         } else {
@@ -304,7 +304,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
+    pub fn write_zenohid(&mut self, pid: &ZenohId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 

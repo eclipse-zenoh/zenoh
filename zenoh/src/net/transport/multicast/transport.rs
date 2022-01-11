@@ -13,7 +13,7 @@
 //
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
-use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::message::{Close, Join, TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
@@ -21,7 +21,6 @@ use crate::net::link::{Link, LinkMulticast, Locator};
 use crate::net::transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
-use async_std::task;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -38,7 +37,7 @@ use zenoh_util::core::Result as ZResult;
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) lease: Duration,
@@ -103,22 +102,26 @@ pub(crate) struct TransportMulticastConfig {
 }
 
 impl TransportMulticastInner {
-    pub(super) fn new(config: TransportMulticastConfig) -> TransportMulticastInner {
+    pub(super) fn make(config: TransportMulticastConfig) -> ZResult<TransportMulticastInner> {
         let mut conduit_tx = vec![];
 
         match config.initial_sns {
-            ConduitSnList::Plain(sn) => conduit_tx.push(TransportConduitTx::new(
-                Priority::default(),
-                config.manager.config.sn_resolution,
-                sn,
-            )),
+            ConduitSnList::Plain(sn) => {
+                let tct = TransportConduitTx::make(
+                    Priority::default(),
+                    config.manager.config.sn_resolution,
+                )?;
+                let _ = tct.sync(sn)?;
+                conduit_tx.push(tct);
+            }
             ConduitSnList::QoS(sns) => {
                 for (i, sn) in sns.iter().enumerate() {
-                    conduit_tx.push(TransportConduitTx::new(
+                    let tct = TransportConduitTx::make(
                         (i as u8).try_into().unwrap(),
                         config.manager.config.sn_resolution,
-                        *sn,
-                    ));
+                    )?;
+                    let _ = tct.sync(*sn)?;
+                    conduit_tx.push(tct);
                 }
             }
         }
@@ -130,7 +133,7 @@ impl TransportMulticastInner {
             peers: Arc::new(RwLock::new(HashMap::new())),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
-            timer: Arc::new(Timer::new()),
+            timer: Arc::new(Timer::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportMulticastStatsAtomic::default()),
         };
@@ -139,7 +142,7 @@ impl TransportMulticastInner {
         *w_guard = Some(TransportLinkMulticast::new(ti.clone(), config.link));
         drop(w_guard);
 
-        ti
+        Ok(ti)
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
@@ -253,7 +256,7 @@ impl TransportMulticastInner {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
                 let config = TransportLinkMulticastConfig {
-                    version: self.manager.config.version,
+                    version: self.manager.config.version.stable, // @TODO: handle experimental versions
                     pid: self.manager.config.pid,
                     whatami: self.manager.config.whatami,
                     lease: self.manager.config.multicast.lease,
@@ -348,25 +351,27 @@ impl TransportMulticastInner {
 
         let conduit_rx = match join.next_sns {
             ConduitSnList::Plain(sn) => {
-                vec![TransportConduitRx::new(
+                let tcr = TransportConduitRx::make(
                     Priority::default(),
                     join.sn_resolution,
-                    sn,
                     self.manager.config.defrag_buff_size,
-                )]
+                )?;
+                tcr.sync(sn)?;
+                vec![tcr]
             }
-            ConduitSnList::QoS(ref sns) => sns
-                .iter()
-                .enumerate()
-                .map(|(prio, sn)| {
-                    TransportConduitRx::new(
+            ConduitSnList::QoS(ref sns) => {
+                let mut tcrs = Vec::with_capacity(sns.len());
+                for (prio, sn) in sns.iter().enumerate() {
+                    let tcr = TransportConduitRx::make(
                         (prio as u8).try_into().unwrap(),
                         join.sn_resolution,
-                        *sn,
                         self.manager.config.defrag_buff_size,
-                    )
-                })
-                .collect(),
+                    )?;
+                    tcr.sync(*sn)?;
+                    tcrs.push(tcr);
+                }
+                tcrs
+            }
         }
         .into_boxed_slice();
 
@@ -398,7 +403,7 @@ impl TransportMulticastInner {
         }
 
         // Add the event to the timer
-        task::block_on(self.timer.add(event));
+        self.timer.add(event);
 
         log::debug!(
                 "New transport joined on {}: pid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",

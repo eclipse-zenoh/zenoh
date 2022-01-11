@@ -15,7 +15,7 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use crate::config::Config;
-use crate::net::protocol::core::{PeerId, ZInt};
+use crate::net::protocol::core::{ZInt, ZenohId};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
@@ -136,23 +136,24 @@ pub struct SharedMemoryAuthenticator {
 }
 
 impl SharedMemoryAuthenticator {
-    pub fn new() -> SharedMemoryAuthenticator {
+    pub fn make() -> ZResult<SharedMemoryAuthenticator> {
         let mut prng = PseudoRng::from_entropy();
         let challenge = prng.gen::<ZInt>();
 
         let mut _manager =
-            SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE).unwrap();
+            SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
 
         let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
         let slice = unsafe { buffer.as_mut_slice() };
         slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
-        SharedMemoryAuthenticator {
+        let shmauth = SharedMemoryAuthenticator {
             challenge,
             buffer,
             _manager,
             reader: Arc::new(RwLock::new(SharedMemoryReader::new())),
-        }
+        };
+        Ok(shmauth)
     }
 
     pub async fn from_config(config: &Config) -> ZResult<Option<SharedMemoryAuthenticator>> {
@@ -162,11 +163,9 @@ impl SharedMemoryAuthenticator {
             let challenge = prng.gen::<ZInt>();
 
             let mut _manager =
-                SharedMemoryManager::new(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
+                SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
 
-            let mut buffer = _manager
-                .alloc(SHM_SIZE)
-                .ok_or_else(|| zerror!("unable to allocate shm segment of size {}", SHM_SIZE))?;
+            let mut buffer = _manager.alloc(SHM_SIZE)?;
             let slice = unsafe { buffer.as_mut_slice() };
             slice[0..SHM_SIZE].copy_from_slice(&challenge.to_le_bytes());
 
@@ -183,12 +182,6 @@ impl SharedMemoryAuthenticator {
     }
 }
 
-impl Default for SharedMemoryAuthenticator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 unsafe impl Send for SharedMemoryAuthenticator {}
 unsafe impl Sync for SharedMemoryAuthenticator {}
 
@@ -198,10 +191,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         PeerAuthenticatorId::Shm
     }
 
+    async fn close(&self) {
+        // No cleanup needed
+    }
+
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
@@ -278,7 +275,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
+        peer_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -370,7 +367,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
 
-    async fn handle_close(&self, _peer_id: &PeerId) {}
+    async fn handle_close(&self, _peer_id: &ZenohId) {}
 }
 
 impl From<Arc<SharedMemoryAuthenticator>> for PeerAuthenticator {

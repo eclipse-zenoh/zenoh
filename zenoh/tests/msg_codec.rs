@@ -53,8 +53,8 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
     buf
 }
 
-fn gen_pid() -> PeerId {
-    PeerId::from(uuid::Uuid::new_v4())
+fn gen_zid() -> ZenohId {
+    ZenohId::from(uuid::Uuid::new_v4())
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
@@ -76,7 +76,7 @@ fn gen_reply_context(is_final: bool) -> ReplyContext {
     let replier = if !is_final {
         Some(ReplierInfo {
             kind: thread_rng().gen_range(0..4),
-            id: gen_pid(),
+            id: gen_zid(),
         })
     } else {
         None
@@ -242,9 +242,9 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
-        source_id: option_gen!(gen_pid()),
+        source_id: option_gen!(gen_zid()),
         source_sn: option_gen!(gen!(ZInt)),
-        first_router_id: option_gen!(gen_pid()),
+        first_router_id: option_gen!(gen_zid()),
         first_router_sn: option_gen!(gen!(ZInt)),
     }
 }
@@ -256,6 +256,108 @@ fn gen_initial_sn() -> ConduitSn {
     }
 }
 
+fn gen_wireproperties() -> WireProperties {
+    let mut wps = WireProperties::new();
+
+    let num = gen!(usize) % 8;
+    for _ in 0..num {
+        let key = gen!(ZInt) % 8;
+        let value = gen_buffer(1 + gen!(usize) % 7);
+        wps.insert(key, value);
+    }
+
+    wps
+}
+
+/*************************************/
+/*       SCOUTING MESSAGES           */
+/*************************************/
+fn test_write_read_scouting_message(mut msg: ScoutingMessage) {
+    let mut buf = WBuf::new(164, false);
+    println!("\nWrite message: {:?}", msg);
+    buf.write_scouting_message(&mut msg);
+    println!("Read message from: {:?}", buf);
+    let result = ZBuf::from(buf).read_scouting_message().unwrap();
+    println!("Message read: {:?}", result);
+    assert_eq!(msg, result);
+}
+
+#[test]
+fn codec_scout() {
+    for _ in 0..NUM_ITER {
+        let version = [
+            Version {
+                stable: gen!(u8),
+                experimental: None,
+            },
+            Version {
+                stable: gen!(u8),
+                experimental: NonZeroZInt::new(gen!(ZInt)),
+            },
+        ];
+        let tmp = 1 + (gen!(u8) % 6);
+        println!("{}", tmp);
+        let what = WhatAmIMatcher::try_from(tmp).unwrap();
+        let zid = [None, Some(gen_zid())];
+        let s_ps = gen_wireproperties();
+        let u_ps = gen_wireproperties();
+
+        for v in version.iter() {
+            for z in zid.iter() {
+                let msg =
+                    ScoutingMessage::make_scout(v.clone(), what, *z, s_ps.clone(), u_ps.clone());
+                test_write_read_scouting_message(msg);
+            }
+        }
+    }
+}
+
+#[test]
+fn codec_hello() {
+    for _ in 0..NUM_ITER {
+        let version = [
+            Version {
+                stable: gen!(u8),
+                experimental: None,
+            },
+            Version {
+                stable: gen!(u8),
+                experimental: NonZeroZInt::new(gen!(ZInt)),
+            },
+        ];
+        let wami = [WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router];
+        let zid = gen_zid();
+        let locators = [
+            vec![],
+            vec![
+                "tcp/1.2.3.4:1234".parse().unwrap(),
+                "tcp/5.6.7.8:5678".parse().unwrap(),
+            ],
+        ];
+        let h_ps = gen_wireproperties();
+        let u_ps = gen_wireproperties();
+
+        for v in version.iter() {
+            for w in wami.iter() {
+                for l in locators.iter() {
+                    let msg = ScoutingMessage::make_hello(
+                        v.clone(),
+                        *w,
+                        zid,
+                        l.clone(),
+                        h_ps.clone(),
+                        u_ps.clone(),
+                    );
+                    test_write_read_scouting_message(msg);
+                }
+            }
+        }
+    }
+}
+
+/*************************************/
+/*       TRANSPORT MESSAGES          */
+/*************************************/
 fn test_write_read_transport_message(mut msg: TransportMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
@@ -268,80 +370,6 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
         println!("Properties read: {:?}", properties);
     }
     assert_eq!(msg, result);
-}
-
-fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
-    let mut buf = WBuf::new(164, false);
-    println!("\nWrite message: {:?}", msg);
-    buf.write_zenoh_message(&mut msg);
-    println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(buf)
-        .read_zenoh_message(msg.channel.reliability)
-        .unwrap();
-    println!("Message read: {:?}", result);
-    if let Some(attachment) = &mut result.attachment {
-        let properties = attachment.buffer.read_properties();
-        println!("Properties read: {:?}", properties);
-    }
-    assert_eq!(msg, result);
-}
-
-/*************************************/
-/*       TRANSPORTMESSAGES           */
-/*************************************/
-
-#[test]
-fn codec_scout() {
-    for _ in 0..NUM_ITER {
-        let wami = [None, Some(gen!(ZInt))];
-        let pid_req = [true, false];
-        let attachment = [None, Some(gen_attachment())];
-
-        for w in wami.iter() {
-            for p in pid_req.iter() {
-                for a in attachment.iter() {
-                    let msg = TransportMessage::make_scout(
-                        w.map(WhatAmIMatcher::try_from).flatten(),
-                        *p,
-                        a.clone(),
-                    );
-                    test_write_read_transport_message(msg);
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn codec_hello() {
-    for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
-        let wami = [None, Some(gen!(ZInt))];
-        let locators = [
-            None,
-            Some(vec![
-                "tcp/1.2.3.4:1234".parse().unwrap(),
-                "tcp/5.6.7.8:5678".parse().unwrap(),
-            ]),
-        ];
-        let attachment = [None, Some(gen_attachment())];
-
-        for p in pid.iter() {
-            for w in wami.iter() {
-                for l in locators.iter() {
-                    for a in attachment.iter() {
-                        let msg = TransportMessage::make_hello(
-                            *p,
-                            w.map(WhatAmI::try_from).flatten(),
-                            l.clone(),
-                            a.clone(),
-                        );
-                        test_write_read_transport_message(msg);
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[test]
@@ -359,7 +387,7 @@ fn codec_init() {
                         let msg = TransportMessage::make_init_syn(
                             gen!(u8),
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             a.clone(),
@@ -377,7 +405,7 @@ fn codec_init() {
                     for a in attachment.iter() {
                         let msg = TransportMessage::make_init_ack(
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             gen_buffer(64).into(),
@@ -438,7 +466,7 @@ fn codec_join() {
                             let msg = TransportMessage::make_join(
                                 gen!(u8),
                                 *w,
-                                gen_pid(),
+                                gen_zid(),
                                 *l,
                                 *s,
                                 i.clone(),
@@ -456,7 +484,7 @@ fn codec_join() {
 #[test]
 fn codec_close() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let pid = [None, Some(gen_zid())];
         let link_only = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
@@ -507,7 +535,7 @@ fn codec_ack_nack() {
 #[test]
 fn codec_keep_alive() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let pid = [None, Some(gen_zid())];
         let attachment = [None, Some(gen_attachment())];
 
         for p in pid.iter() {
@@ -715,6 +743,21 @@ fn codec_frame_batching() {
 /*************************************/
 /*         ZENOH MESSAGES            */
 /*************************************/
+fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
+    let mut buf = WBuf::new(164, false);
+    println!("\nWrite message: {:?}", msg);
+    buf.write_zenoh_message(&mut msg);
+    println!("Read message from: {:?}", buf);
+    let mut result = ZBuf::from(buf)
+        .read_zenoh_message(msg.channel.reliability)
+        .unwrap();
+    println!("Message read: {:?}", result);
+    if let Some(attachment) = &mut result.attachment {
+        let properties = attachment.buffer.read_properties();
+        println!("Properties read: {:?}", properties);
+    }
+    assert_eq!(msg, result);
+}
 
 #[test]
 fn codec_declare() {
