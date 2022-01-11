@@ -1,5 +1,3 @@
-use crate::net::protocol::core::whatami::WhatAmIMatcher;
-
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -73,8 +71,6 @@ impl ZBuf {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
-                SCOUT => break self.read_scout(header)?,
-                HELLO => break self.read_hello(header)?,
                 INIT => {
                     if super::has_flag(header, tmsg::flag::A) {
                         break self.read_init_ack(header)?;
@@ -160,40 +156,6 @@ impl ZBuf {
         }))
     }
 
-    fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let pid_request = super::has_flag(header, tmsg::flag::I);
-        let what = if super::has_flag(header, tmsg::flag::W) {
-            WhatAmIMatcher::try_from(self.read_zint()?)
-        } else {
-            None
-        };
-        Some(TransportBody::Scout(Scout { what, pid_request }))
-    }
-
-    fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if super::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
-        } else {
-            None
-        };
-        let whatami = if super::has_flag(header, tmsg::flag::W) {
-            WhatAmI::try_from(self.read_zint()?)
-        } else {
-            None
-        };
-        let locators = if super::has_flag(header, tmsg::flag::L) {
-            Some(self.read_locators()?)
-        } else {
-            None
-        };
-
-        Some(TransportBody::Hello(Hello {
-            pid,
-            whatami,
-            locators,
-        }))
-    }
-
     fn read_init_syn(&mut self, header: u8) -> Option<TransportBody> {
         let options = if super::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
@@ -201,8 +163,8 @@ impl ZBuf {
             0
         };
         let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
         let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
@@ -225,8 +187,8 @@ impl ZBuf {
         } else {
             0
         };
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
         let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
@@ -280,8 +242,8 @@ impl ZBuf {
             0
         };
         let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
         let lease = self.read_zint()?;
         let lease = if super::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
@@ -321,7 +283,7 @@ impl ZBuf {
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
         let link_only = super::has_flag(header, tmsg::flag::K);
         let pid = if super::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+            Some(self.read_zenohid()?)
         } else {
             None
         };
@@ -366,7 +328,7 @@ impl ZBuf {
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
         let pid = if super::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+            Some(self.read_zenohid()?)
         } else {
             None
         };
@@ -402,7 +364,7 @@ impl ZBuf {
         } else {
             Some(ReplierInfo {
                 kind: self.read_zint()?,
-                id: self.read_peeexpr_id()?,
+                id: self.read_zenohid()?,
             })
         };
 
@@ -551,13 +513,13 @@ impl ZBuf {
             info.timestamp = Some(self.read_timestamp()?);
         }
         if super::has_option(options, DataInfo::OPT_SRCID) {
-            info.source_id = Some(self.read_peeexpr_id()?);
+            info.source_id = Some(self.read_zenohid()?);
         }
         if super::has_option(options, DataInfo::OPT_SRCSN) {
             info.source_sn = Some(self.read_zint()?);
         }
         if super::has_option(options, DataInfo::OPT_RTRID) {
-            info.first_router_id = Some(self.read_peeexpr_id()?);
+            info.first_router_id = Some(self.read_zenohid()?);
         }
         if super::has_option(options, DataInfo::OPT_RTRSN) {
             info.first_router_sn = Some(self.read_zint()?);
@@ -720,12 +682,12 @@ impl ZBuf {
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
         let pid = if super::has_option(options, LinkState::OPT_PID) {
-            Some(self.read_peeexpr_id()?)
+            Some(self.read_zenohid()?)
         } else {
             None
         };
         let whatami = if super::has_option(options, LinkState::OPT_WAI) {
-            WhatAmI::try_from(self.read_zint()?)
+            WhatAmI::try_from(self.read()?)
         } else {
             None
         };

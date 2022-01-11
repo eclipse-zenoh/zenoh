@@ -15,3 +15,32 @@
 pub mod core;
 pub mod io;
 pub mod message;
+
+use self::core::{NonZeroZInt, Version};
+
+/*************************************/
+/*             CONCEPTS              */
+/*************************************/
+/// # Zenoh System
+///
+/// A zenoh system is a graph composed of interconnected zenoh nodes.
+///
+/// # Zenoh Node
+///
+/// A zenoh node is a physical or virtual device capable of
+/// interworking with other zenoh nodes via the zenoh protocol.
+///
+/// A zenoh node is identified by:
+/// - an unique ID, called ZenohId
+/// - a role, among Client, Router, or Peer
+///
+
+// Zenoh version
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// | v_maj | v_min |
+// +-------+-------+
+pub const VERSION: Version = Version {
+    stable: 0x06,
+    experimental: NonZeroZInt::new(0),
+};

@@ -13,7 +13,7 @@
 //
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
-use super::protocol::core::{ConduitSnList, ZenohId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::message::{Close, Join, TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
@@ -253,7 +253,7 @@ impl TransportMulticastInner {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
                 let config = TransportLinkMulticastConfig {
-                    version: self.manager.config.version,
+                    version: self.manager.config.version.stable, // @TODO: handle experimental versions
                     pid: self.manager.config.pid,
                     whatami: self.manager.config.whatami,
                     lease: self.manager.config.multicast.lease,

@@ -222,7 +222,7 @@ impl Session {
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(0, config, None).await {
+            match Runtime::new(config, None).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,

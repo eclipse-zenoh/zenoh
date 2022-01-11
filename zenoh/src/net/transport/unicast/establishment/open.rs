@@ -15,7 +15,7 @@ use super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
+use crate::net::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::message::{Attachment, Close, OpenAck, TransportBody, TransportMessage};
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
@@ -59,7 +59,7 @@ async fn open_send_init_syn(
 
     // Build and send the InitSyn message
     let mut message = TransportMessage::make_init_syn(
-        manager.config.version,
+        manager.config.version.stable, // @TODO: handle experimental versions
         manager.config.whatami,
         manager.config.pid,
         manager.config.sn_resolution,

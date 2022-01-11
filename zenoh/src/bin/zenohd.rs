@@ -125,7 +125,7 @@ fn main() {
             }
         }
 
-        let runtime = match Runtime::new(0, config, args.value_of("id")).await {
+        let runtime = match Runtime::new(config, args.value_of("id")).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);

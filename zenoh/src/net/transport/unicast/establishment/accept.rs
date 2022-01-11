@@ -16,7 +16,7 @@ use super::{attachment_from_properties, close_link, properties_from_attachment};
 use super::{Cookie, EstablishmentProperties};
 use super::{TransportConfigUnicast, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
+use crate::net::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::message::{Attachment, Close, OpenSyn, TransportBody, TransportMessage};
 use crate::net::transport::unicast::manager::Opened;
@@ -115,7 +115,8 @@ async fn accept_recv_init_syn(
     }
 
     // Check if the version is supported
-    if init_syn.version != manager.config.version {
+    // @TODO: handle experimental versions
+    if init_syn.version != manager.config.version.stable {
         return Err((
             zerror!(
                 "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",

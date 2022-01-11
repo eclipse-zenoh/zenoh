@@ -15,10 +15,11 @@ use super::multicast::manager::{
     TransportManagerConfigBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{ZenohId, WhatAmI, ZInt};
+use super::protocol::core::{Version, WhatAmI, ZInt, ZenohId};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
-use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
+use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES};
+use super::protocol::VERSION;
 use super::unicast::manager::{
     TransportManagerConfigBuilderUnicast, TransportManagerConfigUnicast,
     TransportManagerStateUnicast,
@@ -92,7 +93,7 @@ use zenoh_util::zparse;
 /// ```
 
 pub struct TransportManagerConfig {
-    pub version: u8,
+    pub version: Version,
     pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
@@ -112,7 +113,6 @@ impl TransportManagerConfig {
 }
 
 pub struct TransportManagerConfigBuilder {
-    version: u8,
     pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
@@ -125,11 +125,6 @@ pub struct TransportManagerConfigBuilder {
 }
 
 impl TransportManagerConfigBuilder {
-    pub fn version(mut self, version: u8) -> Self {
-        self.version = version;
-        self
-    }
-
     pub fn pid(mut self, pid: ZenohId) -> Self {
         self.pid = pid;
         self
@@ -177,7 +172,7 @@ impl TransportManagerConfigBuilder {
 
     pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManagerConfig> {
         let tmc = TransportManagerConfig {
-            version: self.version,
+            version: VERSION,
             pid: self.pid,
             whatami: self.whatami,
             sn_resolution: self.sn_resolution,
@@ -196,9 +191,6 @@ impl TransportManagerConfigBuilder {
         mut self,
         properties: &Config,
     ) -> ZResult<TransportManagerConfigBuilder> {
-        if let Some(v) = properties.version() {
-            self = self.version(*v);
-        }
         if let Some(v) = properties.peer_id() {
             self = self.pid(zparse!(v)?);
         }
@@ -236,7 +228,6 @@ impl TransportManagerConfigBuilder {
 impl Default for TransportManagerConfigBuilder {
     fn default() -> Self {
         Self {
-            version: VERSION,
             pid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,

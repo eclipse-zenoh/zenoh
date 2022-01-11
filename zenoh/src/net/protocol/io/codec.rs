@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{ZenohId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
+use super::core::{Property, Timestamp, ZInt, ZenohId, ZINT_MAX_BYTES};
 #[cfg(feature = "shared-memory")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "shared-memory")]
@@ -129,7 +129,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_peeexpr_id(&mut self) -> Option<ZenohId> {
+    pub fn read_zenohid(&mut self) -> Option<ZenohId> {
         let size = self.read_zint_as_usize()?;
         if size > ZenohId::MAX_SIZE {
             log::trace!("Reading a ZenohId size that exceed 16 bytes: {}", size);
@@ -304,7 +304,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_peeexpr_id(&mut self, pid: &ZenohId) -> bool {
+    pub fn write_zenohid(&mut self, pid: &ZenohId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 

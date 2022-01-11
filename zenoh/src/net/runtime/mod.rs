@@ -18,7 +18,7 @@ use super::link;
 use super::link::{Link, Locator};
 use super::plugins;
 use super::protocol;
-use super::protocol::core::{ZenohId, WhatAmI};
+use super::protocol::core::{WhatAmI, ZenohId};
 use super::protocol::message::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
@@ -61,13 +61,9 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config, id: Option<&str>) -> ZResult<Runtime> {
+    pub async fn new(config: Config, id: Option<&str>) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
-
-        config
-            .set_version(Some(version))
-            .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
         let pid = if let Some(s) = id {
             // filter-out '-' characters (in case s has UUID format)
@@ -75,7 +71,11 @@ impl Runtime {
             let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
             let size = vec.len();
             if size > ZenohId::MAX_SIZE {
-                bail!("Invalid id size: {} ({} bytes max)", size, ZenohId::MAX_SIZE)
+                bail!(
+                    "Invalid id size: {} ({} bytes max)",
+                    size,
+                    ZenohId::MAX_SIZE
+                )
             }
             let mut id = [0_u8; ZenohId::MAX_SIZE];
             id[..size].copy_from_slice(vec.as_slice());
@@ -112,7 +112,6 @@ impl Runtime {
         let sm_config = TransportManagerConfig::builder()
             .from_config(&config)
             .await?
-            .version(version)
             .whatami(whatami)
             .pid(pid)
             .build(handler.clone())?;

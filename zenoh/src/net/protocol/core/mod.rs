@@ -18,7 +18,7 @@ use std::borrow::Cow;
 use std::convert::{From, TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::num::NonZeroU64;
+use std::num::{NonZeroU64, NonZeroU8};
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
@@ -29,24 +29,56 @@ use zenoh_util::core::Result as ZResult;
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
-/// A zenoh integer.
+/// A zenoh integer
 pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub type NonZeroZInt = NonZeroU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
+// Size in bits of a zenoh integer
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ZIntSize {
+    U8 = 8,
+    U16 = 16,
+    U32 = 32,
+    U64 = 64,
+}
+
+impl ZIntSize {
+    pub fn get() -> ZIntSize {
+        match ZInt::BITS {
+            8 => ZIntSize::U8,
+            16 => ZIntSize::U16,
+            32 => ZIntSize::U32,
+            64 => ZIntSize::U64,
+            unknown => unreachable!(
+                "Unsupported zint size: {}. Admitted values are: 8, 16, 32, 64.",
+                unknown
+            ),
+        }
+    }
+}
+
+/// The zenoh version
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Version {
+    pub stable: u8,
+    pub experimental: Option<NonZeroZInt>,
+}
+
 // WhatAmI values
 pub type WhatAmI = whatami::WhatAmI;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
-    use super::{NonZeroZInt, ZInt};
+    use super::NonZeroU8;
 
     #[repr(u8)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum WhatAmI {
-        Router = 1,
+        Router = 1 << 0,
         Peer = 1 << 1,
         Client = 1 << 2,
     }
@@ -73,10 +105,11 @@ pub mod whatami {
             }
         }
 
-        pub fn try_from(value: ZInt) -> Option<Self> {
-            const CLIENT: ZInt = WhatAmI::Client as ZInt;
-            const ROUTER: ZInt = WhatAmI::Router as ZInt;
-            const PEER: ZInt = WhatAmI::Peer as ZInt;
+        pub fn try_from(value: u8) -> Option<Self> {
+            const CLIENT: u8 = WhatAmI::Client as u8;
+            const ROUTER: u8 = WhatAmI::Router as u8;
+            const PEER: u8 = WhatAmI::Peer as u8;
+
             match value {
                 CLIENT => Some(WhatAmI::Client),
                 ROUTER => Some(WhatAmI::Router),
@@ -142,40 +175,40 @@ pub mod whatami {
         }
     }
 
-    impl From<WhatAmI> for ZInt {
+    impl From<WhatAmI> for u8 {
         fn from(w: WhatAmI) -> Self {
-            w as ZInt
+            w as u8
         }
     }
 
     use std::ops::BitOr;
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct WhatAmIMatcher(pub NonZeroZInt);
+    pub struct WhatAmIMatcher(pub NonZeroU8);
 
     impl WhatAmIMatcher {
-        pub fn try_from<T: std::convert::TryInto<ZInt>>(i: T) -> Option<Self> {
+        pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
             let i = i.try_into().ok()?;
             if 0 < i && i < 8 {
-                Some(WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(i) }))
+                Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
             } else {
                 None
             }
         }
 
         pub fn matches(self, w: WhatAmI) -> bool {
-            (self.0.get() & w as ZInt) != 0
+            (self.0.get() & w as u8) != 0
         }
 
         pub fn to_str(self) -> &'static str {
             match self.0.get() {
+                1 => "router",
                 2 => "peer",
                 4 => "client",
-                1 => "router",
                 3 => "router|peer",
-                6 => "client|peer",
-                5 => "client|router",
-                7 => "client|router|peer",
+                5 => "router|client",
+                6 => "peer|client",
+                7 => "router|peer|client",
                 _ => "invalid_matcher",
             }
         }
@@ -188,9 +221,9 @@ pub mod whatami {
             let mut inner = 0;
             for s in s.split('|') {
                 match s.trim() {
-                    "router" => inner |= WhatAmI::Router as ZInt,
-                    "client" => inner |= WhatAmI::Client as ZInt,
-                    "peer" => inner |= WhatAmI::Peer as ZInt,
+                    "router" => inner |= WhatAmI::Router as u8,
+                    "client" => inner |= WhatAmI::Client as u8,
+                    "peer" => inner |= WhatAmI::Peer as u8,
                     _ => return Err(()),
                 }
             }
@@ -206,9 +239,11 @@ pub mod whatami {
             serializer.serialize_str(self.to_str())
         }
     }
+
     struct WhatAmIMatcherVisitor;
     impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
         type Value = WhatAmIMatcher;
+
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter
                 .write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
@@ -256,15 +291,15 @@ pub mod whatami {
         }
     }
 
-    impl From<WhatAmIMatcher> for ZInt {
-        fn from(w: WhatAmIMatcher) -> ZInt {
-            w.0.get() as ZInt
+    impl From<WhatAmIMatcher> for u8 {
+        fn from(w: WhatAmIMatcher) -> u8 {
+            w.0.get() as u8
         }
     }
 
     impl<T> BitOr<T> for WhatAmIMatcher
     where
-        NonZeroZInt: BitOr<T, Output = NonZeroZInt>,
+        NonZeroU8: BitOr<T, Output = NonZeroU8>,
     {
         type Output = Self;
         fn bitor(self, rhs: T) -> Self::Output {
@@ -275,7 +310,7 @@ pub mod whatami {
     impl BitOr<WhatAmI> for WhatAmIMatcher {
         type Output = Self;
         fn bitor(self, rhs: WhatAmI) -> Self::Output {
-            self | rhs as ZInt
+            self | rhs as u8
         }
     }
 
@@ -289,13 +324,13 @@ pub mod whatami {
     impl BitOr for WhatAmI {
         type Output = WhatAmIMatcher;
         fn bitor(self, rhs: Self) -> Self::Output {
-            WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(self as ZInt | rhs as ZInt) })
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8) })
         }
     }
 
     impl From<WhatAmI> for WhatAmIMatcher {
         fn from(w: WhatAmI) -> Self {
-            WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(w as ZInt) })
+            WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8) })
         }
     }
 }
