@@ -18,7 +18,7 @@ use super::protocol::message::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::net::link::LinkUnicast;
+use crate::net::link::{LinkUnicast, LinkUnicastDirection};
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -32,12 +32,14 @@ use zenoh_util::zerror;
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
+    // Inbound / outbound
+    pub(super) direction: LinkUnicastDirection,
     // The underlying link
-    pub(super) inner: LinkUnicast,
+    pub(super) link: LinkUnicast,
+    // The transmission pipeline
+    pub(super) pipeline: Option<Arc<TransmissionPipeline>>,
     // The transport this link is associated to
     transport: TransportUnicastInner,
-    // The transmission pipeline
-    pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
     handle_tx: Option<Arc<JoinHandle<()>>>,
     active_rx: Arc<AtomicBool>,
@@ -46,10 +48,15 @@ pub(super) struct TransportLinkUnicast {
 }
 
 impl TransportLinkUnicast {
-    pub(super) fn new(transport: TransportUnicastInner, link: LinkUnicast) -> TransportLinkUnicast {
+    pub(super) fn new(
+        transport: TransportUnicastInner,
+        link: LinkUnicast,
+        direction: LinkUnicastDirection,
+    ) -> TransportLinkUnicast {
         TransportLinkUnicast {
+            direction,
             transport,
-            inner: link,
+            link,
             pipeline: None,
             handle_tx: None,
             active_rx: Arc::new(AtomicBool::new(false)),
@@ -60,16 +67,6 @@ impl TransportLinkUnicast {
 }
 
 impl TransportLinkUnicast {
-    #[inline]
-    pub(super) fn get_link(&self) -> &LinkUnicast {
-        &self.inner
-    }
-
-    #[inline]
-    pub(super) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
-        self.pipeline.clone()
-    }
-
     pub(super) fn start_tx(
         &mut self,
         keep_alive: Duration,
@@ -79,24 +76,25 @@ impl TransportLinkUnicast {
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(
-                batch_size.min(self.inner.get_mtu()),
-                self.inner.is_streamed(),
+                batch_size.min(self.link.get_mtu()),
+                self.link.is_streamed(),
                 conduit_tx,
             ));
             self.pipeline = Some(pipeline.clone());
 
             // Spawn the TX task
-            let c_link = self.inner.clone();
+            let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
                 let res = tx_task(
-                    pipeline,
+                    pipeline.clone(),
                     c_link.clone(),
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
                 )
                 .await;
+                pipeline.disable();
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -118,11 +116,11 @@ impl TransportLinkUnicast {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
-            let c_link = self.inner.clone();
+            let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
-            let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
+            let c_rx_buff_size = self.transport.config.manager.config.link_rx_buff_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -153,7 +151,7 @@ impl TransportLinkUnicast {
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
-        log::trace!("{}: closing", self.inner);
+        log::trace!("{}: closing", self.link);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
@@ -168,7 +166,7 @@ impl TransportLinkUnicast {
             handle_tx.await;
         }
 
-        self.inner.close().await
+        self.link.close().await
     }
 }
 

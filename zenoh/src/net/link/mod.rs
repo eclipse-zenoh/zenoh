@@ -98,6 +98,11 @@ impl From<LinkMulticast> for Link {
 /*************************************/
 /*            UNICAST                */
 /*************************************/
+#[derive(Clone, PartialEq)]
+pub(crate) enum LinkUnicastDirection {
+    Inbound,
+    Outbound,
+}
 
 #[derive(Clone)]
 pub(crate) struct LinkUnicast(Arc<dyn LinkUnicastTrait>);

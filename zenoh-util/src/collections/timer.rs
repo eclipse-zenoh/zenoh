@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use async_std::channel::{bounded, Receiver, RecvError, Sender};
 use async_std::prelude::*;
 use async_std::sync::{Arc, Mutex, Weak};
 use async_std::task;
 use async_trait::async_trait;
+use flume::{bounded, Receiver, RecvError, Sender};
 
 use std::cmp::Ordering as ComparisonOrdering;
 use std::collections::BinaryHeap;
@@ -119,7 +119,7 @@ async fn timer_task(
 
     loop {
         // Fuuture for adding new events
-        let new = new_event.recv();
+        let new = new_event.recv_async();
 
         match events.peek() {
             Some(next) => {
@@ -187,7 +187,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new() -> Timer {
+    pub fn new(spawn_blocking: bool) -> Timer {
         // Create the channels
         let (ev_sender, ev_receiver) = bounded::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
         let (sl_sender, sl_receiver) = bounded::<()>(1);
@@ -201,16 +201,24 @@ impl Timer {
 
         // Start the timer task
         let c_e = timer.events.clone();
-        task::spawn(async move {
-            let _ = sl_receiver.recv().race(timer_task(c_e, ev_receiver)).await;
+        let fut = async move {
+            let _ = sl_receiver
+                .recv_async()
+                .race(timer_task(c_e, ev_receiver))
+                .await;
             log::trace!("A - Timer task no longer running...");
-        });
+        };
+        if spawn_blocking {
+            task::spawn_blocking(|| task::block_on(fut));
+        } else {
+            task::spawn(fut);
+        }
 
         // Return the timer object
         timer
     }
 
-    pub async fn start(&mut self) {
+    pub fn start(&mut self, spawn_blocking: bool) {
         if self.sl_sender.is_none() {
             // Create the channels
             let (ev_sender, ev_receiver) =
@@ -223,17 +231,30 @@ impl Timer {
 
             // Start the timer task
             let c_e = self.events.clone();
-            task::spawn(async move {
-                let _ = sl_receiver.recv().race(timer_task(c_e, ev_receiver)).await;
-                log::trace!("B - Timer task no longer running...");
-            });
+            let fut = async move {
+                let _ = sl_receiver
+                    .recv_async()
+                    .race(timer_task(c_e, ev_receiver))
+                    .await;
+                log::trace!("A - Timer task no longer running...");
+            };
+            if spawn_blocking {
+                task::spawn_blocking(|| task::block_on(fut));
+            } else {
+                task::spawn(fut);
+            }
         }
     }
 
-    pub async fn stop(&mut self) {
+    #[inline]
+    pub async fn start_async(&mut self, spawn_blocking: bool) {
+        self.start(spawn_blocking)
+    }
+
+    pub fn stop(&mut self) {
         if let Some(sl_sender) = &self.sl_sender {
             // Stop the timer task
-            let _ = sl_sender.send(()).await;
+            let _ = sl_sender.send(());
 
             log::trace!("Stopping timer...");
             // Remove the channels handlers
@@ -242,16 +263,34 @@ impl Timer {
         }
     }
 
-    pub async fn add(&self, event: TimedEvent) {
+    pub async fn stop_async(&mut self) {
+        if let Some(sl_sender) = &self.sl_sender {
+            // Stop the timer task
+            let _ = sl_sender.send_async(()).await;
+
+            log::trace!("Stopping timer...");
+            // Remove the channels handlers
+            self.sl_sender = None;
+            self.ev_sender = None;
+        }
+    }
+
+    pub fn add(&self, event: TimedEvent) {
         if let Some(ev_sender) = &self.ev_sender {
-            let _ = ev_sender.send((true, event)).await;
+            let _ = ev_sender.send((true, event));
+        }
+    }
+
+    pub async fn add_async(&self, event: TimedEvent) {
+        if let Some(ev_sender) = &self.ev_sender {
+            let _ = ev_sender.send_async((true, event)).await;
         }
     }
 }
 
 impl Default for Timer {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
@@ -279,7 +318,7 @@ mod tests {
 
         async fn run() {
             // Create the timer
-            let mut timer = Timer::new();
+            let mut timer = Timer::new(false);
 
             // Counter for testing
             let counter = Arc::new(AtomicUsize::new(0));
@@ -299,7 +338,7 @@ mod tests {
             let event = TimedEvent::once(now + (2 * interval), myev.clone());
 
             // Add the event to the timer
-            timer.add(event).await;
+            timer.add_async(event).await;
 
             // Wait for the event to occur
             task::sleep(3 * interval).await;
@@ -316,7 +355,7 @@ mod tests {
             let handle = event.get_handle();
 
             // Add the event to the timer
-            timer.add(event).await;
+            timer.add_async(event).await;
             //
             handle.defuse();
 
@@ -340,7 +379,7 @@ mod tests {
             let handle = event.get_handle();
 
             // Add the event to the timer
-            timer.add(event).await;
+            timer.add_async(event).await;
 
             // Wait for the events to occur
             task::sleep(to_elapse + interval).await;
@@ -366,7 +405,7 @@ mod tests {
             let event = TimedEvent::periodic(2 * interval, myev);
 
             // Add the event to the timer
-            timer.add(event).await;
+            timer.add_async(event).await;
 
             // Wait for the events to occur
             task::sleep(to_elapse + interval).await;
@@ -376,7 +415,7 @@ mod tests {
             assert_eq!(value, amount);
 
             // Stop the timer
-            timer.stop().await;
+            timer.stop_async().await;
 
             // Wait some time
             task::sleep(to_elapse).await;
@@ -386,7 +425,7 @@ mod tests {
             assert_eq!(value, 0);
 
             // Restart the timer
-            timer.start().await;
+            timer.start_async(false).await;
 
             // Wait for the events to occur
             task::sleep(to_elapse).await;

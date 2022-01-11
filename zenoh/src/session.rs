@@ -222,7 +222,7 @@ impl Session {
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(config, None).await {
+            match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
@@ -238,6 +238,36 @@ impl Session {
                 Err(err) => Err(err),
             }
         })
+    }
+
+    /// Consumes and leaks the given `Session`, returning a `'static` mutable
+    /// reference to it. The given `Session` will live  for the remainder of
+    /// the program's life. Dropping the returned reference will cause a memory
+    /// leak.
+    ///
+    /// This is useful to move entities (like [`Subscriber`](Subscriber)) which
+    /// lifetimes are bound to the session lifetime in several threads or tasks.
+    ///
+    /// Note: the given zenoh `Session` cannot be closed any more. At process
+    /// termination the zenoh session will terminate abruptly.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().leak();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    pub fn leak(self) -> &'static mut Self {
+        Box::leak(Box::new(self))
     }
 
     /// Returns the identifier for this session.

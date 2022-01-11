@@ -12,10 +12,15 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::sync::Arc;
+use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::{RwLock, Weak};
+// use std::time::Instant;
+// use zenoh_util::collections::{Timed, TimedEvent};
+use zenoh_util::collections::Timed;
 use zenoh_util::sync::get_mut_unchecked;
 
 use super::protocol::core::{
@@ -1322,9 +1327,37 @@ fn compute_final_route(
     }
 }
 
+#[derive(Clone)]
+struct QueryCleanup {
+    tables: Arc<RwLock<Tables>>,
+    face: Weak<FaceState>,
+    qid: ZInt,
+}
+
+#[async_trait]
+impl Timed for QueryCleanup {
+    async fn run(&mut self) {
+        if let Some(mut face) = self.face.upgrade() {
+            let mut _tables = zwrite!(self.tables);
+            if let Some(query) = get_mut_unchecked(&mut face)
+                .pending_queries
+                .remove(&self.qid)
+            {
+                log::warn!(
+                    "Didn't receive final reply {}:{} from {}: Timeout!",
+                    query.src_face,
+                    self.qid,
+                    face
+                );
+                finalize_pending_query(&mut _tables, &query);
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(
-    tables: &mut Tables,
+    tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
     expr: &KeyExpr,
     value_selector: &str,
@@ -1333,6 +1366,7 @@ pub fn route_query(
     consolidation: QueryConsolidation,
     routing_context: Option<RoutingContext>,
 ) {
+    let tables = zwrite!(tables_ref);
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
             log::debug!(
@@ -1354,7 +1388,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1371,7 +1405,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1384,7 +1418,7 @@ pub fn route_query(
                         .flatten()
                         .unwrap_or_else(|| {
                             compute_query_route(
-                                tables,
+                                &tables,
                                 prefix,
                                 expr.suffix.as_ref(),
                                 None,
@@ -1402,7 +1436,7 @@ pub fn route_query(
                             .flatten()
                             .unwrap_or_else(|| {
                                 compute_query_route(
-                                    tables,
+                                    &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
                                     Some(local_context),
@@ -1415,7 +1449,7 @@ pub fn route_query(
                         .flatten()
                         .unwrap_or_else(|| {
                             compute_query_route(
-                                tables,
+                                &tables,
                                 prefix,
                                 expr.suffix.as_ref(),
                                 None,
@@ -1428,7 +1462,7 @@ pub fn route_query(
                     .flatten()
                     .unwrap_or_else(|| {
                         compute_query_route(
-                            tables,
+                            &tables,
                             prefix,
                             expr.suffix.as_ref(),
                             None,
@@ -1448,6 +1482,9 @@ pub fn route_query(
                     src_qid: qid,
                 });
 
+                // let timer = tables.timer.clone();
+                // let timeout = tables.queries_default_timeout;
+                // drop(tables);
                 #[cfg(feature = "complete_n")]
                 for ((outface, key_expr, context), t) in route.values() {
                     let mut outface = outface.clone();
@@ -1455,6 +1492,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
@@ -1478,6 +1523,14 @@ pub fn route_query(
                     outface_mut.next_qid += 1;
                     let qid = outface_mut.next_qid;
                     outface_mut.pending_queries.insert(qid, query.clone());
+                    // timer.add(TimedEvent::once(
+                    //     Instant::now() + timeout,
+                    //     QueryCleanup {
+                    //         tables: tables_ref.clone(),
+                    //         face: Arc::downgrade(&outface),
+                    //         qid,
+                    //     },
+                    // ));
 
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
@@ -1524,12 +1577,17 @@ pub(crate) fn route_send_reply_data(
                 payload,
             );
         }
-        None => log::error!("Route reply for unknown query!"),
+        None => log::warn!(
+            "Route reply {}:{} from {}: Query nof found!",
+            face,
+            qid,
+            face
+        ),
     }
 }
 
 pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
-    match face.pending_queries.get(&qid) {
+    match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             log::debug!(
                 "Received final reply {}:{} from {}",
@@ -1537,17 +1595,14 @@ pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceSt
                 qid,
                 face
             );
-            if Arc::strong_count(query) == 1 {
-                log::debug!("Propagate final reply {}:{}", query.src_face, qid);
-                query
-                    .src_face
-                    .primitives
-                    .clone()
-                    .send_reply_final(query.src_qid);
-            }
-            get_mut_unchecked(face).pending_queries.remove(&qid);
+            finalize_pending_query(_tables, &query);
         }
-        None => log::error!("Route reply for unknown query!"),
+        None => log::warn!(
+            "Route final reply {}:{} from {}: Query nof found!",
+            face,
+            qid,
+            face
+        ),
     }
 }
 
@@ -1559,14 +1614,18 @@ pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<Face
             query.src_qid,
             face
         );
-        if Arc::strong_count(query) == 1 {
-            log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
-            query
-                .src_face
-                .primitives
-                .clone()
-                .send_reply_final(query.src_qid);
-        }
+        finalize_pending_query(_tables, query);
     }
     get_mut_unchecked(face).pending_queries.clear();
+}
+
+pub(crate) fn finalize_pending_query(_tables: &mut Tables, query: &Arc<Query>) {
+    if Arc::strong_count(query) == 1 {
+        log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
+        query
+            .src_face
+            .primitives
+            .clone()
+            .send_reply_final(query.src_qid);
+    }
 }

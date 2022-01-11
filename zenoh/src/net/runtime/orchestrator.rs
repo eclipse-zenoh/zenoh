@@ -583,31 +583,39 @@ impl Runtime {
         async_std::prelude::FutureExt::race(send, recvs).await;
     }
 
-    async fn connect(&self, locators: &[Locator]) -> ZResult<TransportUnicast> {
+    async fn connect(&self, locators: &[Locator]) -> Option<TransportUnicast> {
         for locator in locators {
             let endpoint = EndPoint {
                 locator: locator.clone(),
                 config: None,
             };
-            let transport = self.manager().open_transport(endpoint).await;
-            if transport.is_ok() {
-                return transport;
+            match self.manager().open_transport(endpoint).await {
+                Ok(transport) => return Some(transport),
+                Err(e) => log::trace!("Failed to connect to {} : {}", locator, e),
             }
         }
-        bail!("Unable to connect any of {:?}", locators)
+        None
     }
 
     pub async fn connect_peer(&self, pid: &ZenohId, locators: &[Locator]) {
         if pid != &self.manager().pid() {
             if self.manager().get_transport(pid).is_none() {
-                let transport = self.connect(locators).await;
-                if transport.is_ok() {
-                    log::debug!("Successfully connected to newly scouted {}", pid);
+                log::debug!("Try to connect to peer {} via any of {:?}", pid, locators);
+                if let Some(transport) = self.connect(locators).await {
+                    log::debug!(
+                        "Successfully connected to newly scouted peer {} via {:?}",
+                        pid,
+                        transport
+                    );
                 } else {
-                    log::warn!("Unable to connect to scouted {}", pid);
+                    log::warn!(
+                        "Unable to connect any locator of scouted peer {} : {:?}",
+                        pid,
+                        locators
+                    );
                 }
             } else {
-                log::trace!("Scouted already connected peer : {}", pid);
+                log::trace!("Already connected scouted peer : {}", pid);
             }
         }
     }
@@ -623,8 +631,12 @@ impl Runtime {
             Runtime::scout(sockets, what.into(), addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
-                    if self.connect(hello.locators.as_slice()).await.is_ok() {
-                        log::debug!("Successfully connected to newly scouted {:?}", hello);
+                    if let Some(transport) = self.connect(&hello.locators).await {
+                        log::debug!(
+                            "Successfully connected to newly scouted {:?} via {:?}",
+                            hello,
+                            transport
+                        );
                         return Loop::Break;
                     }
                     log::warn!("Unable to connect to scouted {:?}", hello);
@@ -669,22 +681,19 @@ impl Runtime {
                     IpAddr::V6(addr) => addr.octets().to_vec(),
                 }
             }
+            fn matching_octets(addr: &IpAddr, sock: &UdpSocket) -> usize {
+                octets(addr)
+                    .iter()
+                    .zip(octets(&sock.local_addr().unwrap().ip()))
+                    .map(|(x, y)| x.cmp(&y))
+                    .position(|ord| ord != std::cmp::Ordering::Equal)
+                    .unwrap_or_else(|| octets(addr).len())
+            }
             sockets
                 .iter()
                 .filter(|sock| sock.local_addr().is_ok())
                 .max_by(|sock1, sock2| {
-                    octets(addr)
-                        .iter()
-                        .zip(octets(&sock1.local_addr().unwrap().ip()))
-                        .map(|(x, y)| x.cmp(&y))
-                        .position(|ord| ord != std::cmp::Ordering::Equal)
-                        .cmp(
-                            &octets(addr)
-                                .iter()
-                                .zip(octets(&sock2.local_addr().unwrap().ip()))
-                                .map(|(x, y)| x.cmp(&y))
-                                .position(|ord| ord != std::cmp::Ordering::Equal),
-                        )
+                    matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2))
                 })
         }
 

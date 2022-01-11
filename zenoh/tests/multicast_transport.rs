@@ -30,7 +30,7 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::message::ZenohMessage;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig, TransportMulticast,
+        TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_util::core::Result as ZResult;
@@ -43,6 +43,12 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
+
+    macro_rules! ztimeout {
+        ($f:expr) => {
+            $f.timeout(TIMEOUT).await.unwrap()
+        };
+    }
 
     // Transport Handler for the peer02
     struct SHPeer {
@@ -137,43 +143,31 @@ mod tests {
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
-        let config = TransportManagerConfig::builder()
+        let peer01_manager = TransportManager::builder()
             .pid(peer01_id)
             .whatami(WhatAmI::Peer)
             .build(peer01_handler.clone())
             .unwrap();
-        let peer01_manager = TransportManager::new(config);
 
         // Create the peer02 transport manager
         let peer02_handler = Arc::new(SHPeer::default());
-        let config = TransportManagerConfig::builder()
+        let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer02_id)
             .build(peer02_handler.clone())
             .unwrap();
-        let peer02_manager = TransportManager::new(config);
 
         // Create an empty transport with the peer01
         // Open transport -> This should be accepted
         println!("Opening transport with {}", endpoint);
-        let _ = peer01_manager
-            .open_transport_multicast(endpoint.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer01_manager
             .get_transport_multicast(&endpoint.locator)
             .is_some());
         println!("\t{:?}", peer01_manager.get_transports_multicast());
 
         println!("Opening transport with {}", endpoint);
-        let _ = peer02_manager
-            .open_transport_multicast(endpoint.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer02_manager
             .get_transport_multicast(&endpoint.locator)
             .is_some());
@@ -183,22 +177,20 @@ mod tests {
         let peer01_transport = peer01_manager
             .get_transport_multicast(&endpoint.locator)
             .unwrap();
-        let count = async {
+        ztimeout!(async {
             while peer01_transport.get_peers().unwrap().is_empty() {
                 task::sleep(SLEEP_COUNT).await;
             }
-        };
-        let _ = count.timeout(TIMEOUT).await.unwrap();
+        });
 
         let peer02_transport = peer02_manager
             .get_transport_multicast(&endpoint.locator)
             .unwrap();
-        let count = async {
+        ztimeout!(async {
             while peer02_transport.get_peers().unwrap().is_empty() {
                 task::sleep(SLEEP_COUNT).await;
             }
-        };
-        let _ = count.timeout(TIMEOUT).await.unwrap();
+        });
 
         (
             TransportMulticastPeer {
@@ -221,25 +213,13 @@ mod tests {
     ) {
         // Close the peer01 transport
         println!("Closing transport with {}", endpoint);
-        let _ = peer01
-            .transport
-            .close()
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer01.transport.close()).unwrap();
         assert!(peer01.manager.get_transports_multicast().is_empty());
         assert!(peer02.transport.get_peers().unwrap().is_empty());
 
         // Close the peer02 transport
         println!("Closing transport with {}", endpoint);
-        let _ = peer02
-            .transport
-            .close()
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(peer02.transport.close()).unwrap();
         assert!(peer02.manager.get_transports_multicast().is_empty());
 
         // Wait a little bit
@@ -280,20 +260,18 @@ mod tests {
 
         match channel.reliability {
             Reliability::Reliable => {
-                let count = async {
+                ztimeout!(async {
                     while peer02.handler.get_count() != MSG_COUNT {
                         task::sleep(SLEEP_COUNT).await;
                     }
-                };
-                let _ = count.timeout(TIMEOUT).await.unwrap();
+                });
             }
             Reliability::BestEffort => {
-                let count = async {
+                ztimeout!(async {
                     while peer02.handler.get_count() == 0 {
                         task::sleep(SLEEP_COUNT).await;
                     }
-                };
-                let _ = count.timeout(TIMEOUT).await.unwrap();
+                });
             }
         };
 

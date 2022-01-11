@@ -196,7 +196,7 @@ impl PubKeyAuthenticator {
         }
     }
 
-    pub fn init() -> ZResult<PubKeyAuthenticator> {
+    pub fn make() -> ZResult<PubKeyAuthenticator> {
         let mut prng = PseudoRng::from_entropy();
         let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT)?;
         let pri_key = RsaPrivateKey::new(&mut prng, bits)?;
@@ -288,6 +288,10 @@ impl PubKeyAuthenticator {
 impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     fn id(&self) -> PeerAuthenticatorId {
         PeerAuthenticatorId::PublicKey
+    }
+
+    async fn close(&self) {
+        // No cleanup needed
     }
 
     async fn get_init_syn_properties(
@@ -407,7 +411,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             None => {
                 let guard = zasynclock!(self.state);
                 if guard.authenticated.get(&cookie.pid).is_some() {
-                    println!("\nERROR: {:?}\n", guard.authenticated);
                     // The peer is already present but no multilink intereset is declared.
                     // Rejecting for inconsistent declaration.
                     bail!("No multilink supported on link: {}", link);
@@ -524,7 +527,6 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             (None, None) => {
                 // No multilink
                 let mut guard = zasynclock!(self.state);
-                println!("\nINSERTING: {} {:?}\n", cookie.pid, guard.authenticated);
                 if guard.authenticated.get(&cookie.pid).is_some() {
                     // The peer did not previously express interest in multilink
                     bail!("Invalid multilink pub key on link: {}", link);

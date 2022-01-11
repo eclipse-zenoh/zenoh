@@ -276,7 +276,7 @@ impl SerializationBatch {
                 }
             } else {
                 // Restore the sequence number
-                sn_gen.set(sn);
+                sn_gen.set(sn).unwrap();
             }
 
             #[cfg(feature = "stats")]
@@ -359,7 +359,7 @@ impl SerializationBatch {
                 return written;
             } else {
                 // Revert the buffer and the SN
-                sn_gen.set(sn);
+                sn_gen.set(sn).unwrap();
                 self.buffer.revert();
                 return 0;
             }
@@ -396,7 +396,7 @@ mod tests {
 
             // Create the serialization batch
             let priority = Priority::default();
-            let mut sn_gen = SeqNumGenerator::new(0, SEQ_NUM_RES);
+            let mut sn_gen = SeqNumGenerator::make(0, SEQ_NUM_RES).unwrap();
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
@@ -498,7 +498,7 @@ mod tests {
     fn serialize_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {
             // Create the sequence number generators
-            let mut sn_gen = SeqNumGenerator::new(0, SEQ_NUM_RES);
+            let mut sn_gen = SeqNumGenerator::make(0, SEQ_NUM_RES).unwrap();
 
             for reliability in [Reliability::BestEffort, Reliability::Reliable].iter() {
                 let channel = Channel {

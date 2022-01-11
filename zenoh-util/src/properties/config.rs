@@ -279,13 +279,13 @@ mod consts {
     pub const ZN_MAX_SESSIONS_UNICAST_STR: &str = "max_sessions_unicast";
     pub const ZN_MAX_SESSIONS_UNICAST_DEFAULT: &str = "1024";
 
-    /// Configures the maximum number of links per open session.
+    /// Configures the maximum number of inbound links per open session.
     /// String key : `"max_links"`.
     /// Accepted values : `<unsigned integer>`.
-    /// Default value : `2`.
+    /// Default value : `1`.
     pub const ZN_MAX_LINKS_KEY: u64 = 0x71;
     pub const ZN_MAX_LINKS_STR: &str = "max_links";
-    pub const ZN_MAX_LINKS_DEFAULT: &str = "2";
+    pub const ZN_MAX_LINKS_DEFAULT: &str = "1";
 
     /// Configures the zenoh version.
     /// String key : `"version"`.
@@ -401,6 +401,14 @@ mod consts {
     pub const ZN_TLS_CLIENT_AUTH_KEY: u64 = 0x87;
     pub const ZN_TLS_CLIENT_AUTH_STR: &str = "tls_client_auth";
     pub const ZN_TLS_CLIENT_AUTH_DEFAULT: &str = ZN_FALSE;
+
+    /// The default timeout to apply to queries in milliseconds.
+    /// String key : `"queries_default_timeout"`.
+    /// Accepted values : `<unsigned integer>`.
+    /// Default value : `10000`.
+    pub const ZN_QUERIES_DEFAULT_TIMEOUT_KEY: u64 = 0x88;
+    pub const ZN_QUERIES_DEFAULT_TIMEOUT_STR: &str = "local_routing";
+    pub const ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT: &str = "10000";
 }
 
 pub use consts::*;

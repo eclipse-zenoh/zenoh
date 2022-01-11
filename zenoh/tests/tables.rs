@@ -13,7 +13,9 @@
 //
 use async_std::sync::Arc;
 use std::convert::TryInto;
+use std::time::Duration;
 use uhlc::HLC;
+use zenoh::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh::net::protocol::core::key_expr::intersect;
 use zenoh::net::protocol::core::{
     Channel, CongestionControl, KeyExpr, ZenohId, QueryConsolidation, QueryTarget, QueryableInfo,
@@ -31,6 +33,7 @@ fn base_test() {
         ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
@@ -123,6 +126,7 @@ fn match_test() {
         ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
@@ -157,6 +161,7 @@ fn clean_test() {
         ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
@@ -496,6 +501,7 @@ fn client_test() {
         ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,

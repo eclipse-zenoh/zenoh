@@ -41,11 +41,11 @@
 //!
 //! #[async_trait]
 //! impl Backend for MyBackend {
-//!     async fn get_admin_status(&self) -> Value {
+//!     fn get_admin_status(&self) -> serde_json::Value {
 //!         // This operation is called on GET operation on the admin space for the Backend
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Backend monitoring.
-//!         self.config.to_json_value().into()
+//!         self.config.to_json_value()
 //!     }
 //!
 //!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
@@ -77,11 +77,11 @@
 //!
 //! #[async_trait]
 //! impl Storage for MyStorage {
-//!     async fn get_admin_status(&self) -> Value {
+//!     fn get_admin_status(&self) -> serde_json::Value {
 //!         // This operation is called on GET operation on the admin space for the Storage
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Storage monitoring.
-//!         self.config.to_json_value().into()
+//!         self.config.to_json_value()
 //!     }
 //!
 //!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
@@ -128,7 +128,7 @@
 
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh::prelude::{KeyExpr, Sample, Selector, Value};
+use zenoh::prelude::{KeyExpr, Sample, Selector};
 use zenoh::Result as ZResult;
 
 pub mod config;
@@ -145,7 +145,7 @@ pub type CreateBackend = fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
 pub trait Backend: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this backend.
-    async fn get_admin_status(&self) -> Value;
+    fn get_admin_status(&self) -> serde_json::Value;
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
@@ -164,7 +164,7 @@ pub trait Backend: Send + Sync {
 pub trait Storage: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this storage.
-    async fn get_admin_status(&self) -> Value;
+    fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
     async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;

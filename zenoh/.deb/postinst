@@ -20,12 +20,12 @@ set -e
 
 case "$1" in
     configure)
-        id -u zenoh  >/dev/null 2>&1 ||  sudo useradd -r -s /bin/false zenoh
-        mkdir -p /etc/zenoh
-        chown zenoh:zenoh -R /etc/zenoh
-        chmod 0644 /etc/zenoh -R
+        id -u zenohd  >/dev/null 2>&1 ||  sudo useradd -r -s /bin/false zenohd
+        mkdir -p /etc/zenohd
+        chown zenohd:zenohd -R /etc/zenohd
+        chmod 0644 /etc/zenohd -R
         systemctl daemon-reload
-        systemctl disable zenoh
+        systemctl disable zenohd
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

@@ -47,19 +47,24 @@ impl SeqNum {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn new(value: ZInt, resolution: ZInt) -> SeqNum {
+    pub(crate) fn make(value: ZInt, resolution: ZInt) -> ZResult<SeqNum> {
         let mut sn = SeqNum {
             value: 0,
             semi_int: resolution >> 1,
             resolution,
         };
-        sn.set(value).unwrap();
-        sn
+        sn.set(value)?;
+        Ok(sn)
     }
 
     #[inline(always)]
     pub(crate) fn get(&self) -> ZInt {
         self.value
+    }
+
+    #[inline(always)]
+    pub(crate) fn resolution(&self) -> ZInt {
+        self.resolution
     }
 
     #[inline(always)]
@@ -161,8 +166,9 @@ impl SeqNumGenerator {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn new(initial_sn: ZInt, sn_resolution: ZInt) -> SeqNumGenerator {
-        SeqNumGenerator(SeqNum::new(initial_sn, sn_resolution))
+    pub(crate) fn make(initial_sn: ZInt, sn_resolution: ZInt) -> ZResult<SeqNumGenerator> {
+        let sn = SeqNum::make(initial_sn, sn_resolution)?;
+        Ok(SeqNumGenerator(sn))
     }
 
     #[inline(always)]
@@ -179,8 +185,8 @@ impl SeqNumGenerator {
     }
 
     #[inline(always)]
-    pub(crate) fn set(&mut self, sn: ZInt) {
-        self.0.set(sn).unwrap();
+    pub(crate) fn set(&mut self, sn: ZInt) -> ZResult<()> {
+        self.0.set(sn)
     }
 }
 
@@ -190,7 +196,7 @@ mod tests {
 
     #[test]
     fn sn_set() {
-        let mut sn0a = SeqNum::new(0, 14);
+        let mut sn0a = SeqNum::make(0, 14).unwrap();
         assert_eq!(sn0a.get(), 0);
         assert_eq!(sn0a.resolution, 14);
 
@@ -211,7 +217,7 @@ mod tests {
 
     #[test]
     fn sn_gap() {
-        let mut sn0a = SeqNum::new(0, 14);
+        let mut sn0a = SeqNum::make(0, 14).unwrap();
         let sn1a: ZInt = 0;
         let res = sn0a.gap(sn1a);
         assert_eq!(res.unwrap(), 0);
@@ -242,7 +248,7 @@ mod tests {
 
     #[test]
     fn sn_precedence() {
-        let mut sn0a = SeqNum::new(0, 14);
+        let mut sn0a = SeqNum::make(0, 14).unwrap();
         let sn1a: ZInt = 1;
         let res = sn0a.precedes(sn1a);
         assert!(res.unwrap());
@@ -277,8 +283,8 @@ mod tests {
 
     #[test]
     fn sn_generation() {
-        let mut sn0 = SeqNumGenerator::new(13, 14);
-        let mut sn1 = SeqNumGenerator::new(5, 14);
+        let mut sn0 = SeqNumGenerator::make(13, 14).unwrap();
+        let mut sn1 = SeqNumGenerator::make(5, 14).unwrap();
 
         assert_eq!(sn0.get(), 13);
         assert_eq!(sn1.get(), 5);

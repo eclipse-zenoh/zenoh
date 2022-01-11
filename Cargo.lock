@@ -1441,6 +1441,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
+
+[[package]]
 name = "lock_api"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2432,6 +2438,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml"
+version = "0.8.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a521f2940385c165a24ee286aa8599633d162077a54bdcae2a6fd5a7bfa7a0"
+dependencies = [
+ "indexmap",
+ "ryu",
+ "serde",
+ "yaml-rust",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3177,6 +3195,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
+name = "yaml-rust"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
+dependencies = [
+ "linked-hash-map",
+]
+
+[[package]]
 name = "yasna"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3187,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-global-executor",
  "async-rustls",
@@ -3222,6 +3249,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "serde",
  "serde_json",
+ "serde_yaml",
  "shared_memory",
  "socket2 0.4.2",
  "uhlc",
@@ -3235,7 +3263,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-ext"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "bincode",
@@ -3252,17 +3280,18 @@ dependencies = [
 
 [[package]]
 name = "zenoh-macros"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "rustc_version 0.4.0",
  "syn",
  "unzip-n",
 ]
 
 [[package]]
 name = "zenoh-plugin-rest"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "base64 0.13.0",
@@ -3270,8 +3299,10 @@ dependencies = [
  "env_logger",
  "flume",
  "futures",
+ "git-version",
  "http-types",
  "log",
+ "serde",
  "serde_json",
  "tide",
  "zenoh",
@@ -3281,13 +3312,14 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-storages"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
  "clap",
  "env_logger",
  "futures",
+ "git-version",
  "lazy_static",
  "libloading",
  "log",
@@ -3300,17 +3332,18 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-trait"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "libloading",
  "log",
  "serde_json",
+ "zenoh-macros",
  "zenoh-util",
 ]
 
 [[package]]
 name = "zenoh-util"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "aes 0.7.5",
  "anyhow",
@@ -3340,7 +3373,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3373,7 +3406,7 @@ dependencies = [
 
 [[package]]
 name = "zplugin-example"
-version = "0.6.0-dev"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "clap",

@@ -16,6 +16,7 @@ use super::transport::TransportMulticastInner;
 use super::*;
 use crate::config::Config;
 use crate::net::link::*;
+use crate::net::protocol::message::Close;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -31,19 +32,7 @@ pub struct TransportManagerConfigMulticast {
     pub is_qos: bool,
 }
 
-impl Default for TransportManagerConfigMulticast {
-    fn default() -> Self {
-        Self::builder().build().unwrap()
-    }
-}
-
-impl TransportManagerConfigMulticast {
-    pub fn builder() -> TransportManagerConfigBuilderMulticast {
-        TransportManagerConfigBuilderMulticast::default()
-    }
-}
-
-pub struct TransportManagerConfigBuilderMulticast {
+pub struct TransportManagerBuilderMulticast {
     lease: Duration,
     keep_alive: Duration,
     join_interval: Duration,
@@ -51,19 +40,19 @@ pub struct TransportManagerConfigBuilderMulticast {
     is_qos: bool,
 }
 
-impl Default for TransportManagerConfigBuilderMulticast {
-    fn default() -> TransportManagerConfigBuilderMulticast {
-        TransportManagerConfigBuilderMulticast {
-            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
-            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
-            join_interval: Duration::from_millis(zparse!(ZN_JOIN_INTERVAL_DEFAULT).unwrap()),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_MULTICAST_DEFAULT).unwrap(),
-            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
-        }
-    }
+pub struct TransportManagerStateMulticast {
+    // Established listeners
+    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerMulticast>>>,
+    // Established transports
+    pub(super) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
 }
 
-impl TransportManagerConfigBuilderMulticast {
+pub struct TransportManagerParamsMulticast {
+    pub config: TransportManagerConfigMulticast,
+    pub state: TransportManagerStateMulticast,
+}
+
+impl TransportManagerBuilderMulticast {
     pub fn lease(mut self, lease: Duration) -> Self {
         self.lease = lease;
         self
@@ -92,7 +81,7 @@ impl TransportManagerConfigBuilderMulticast {
     pub async fn from_config(
         mut self,
         properties: &Config,
-    ) -> ZResult<TransportManagerConfigBuilderMulticast> {
+    ) -> ZResult<TransportManagerBuilderMulticast> {
         if let Some(v) = properties.transport().link().lease() {
             self = self.lease(Duration::from_millis(*v));
         }
@@ -112,35 +101,57 @@ impl TransportManagerConfigBuilderMulticast {
         Ok(self)
     }
 
-    pub fn build(self) -> ZResult<TransportManagerConfigMulticast> {
-        let tmcm = TransportManagerConfigMulticast {
+    pub fn build(self) -> ZResult<TransportManagerParamsMulticast> {
+        let config = TransportManagerConfigMulticast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
         };
-        Ok(tmcm)
+
+        let state = TransportManagerStateMulticast {
+            protocols: Arc::new(Mutex::new(HashMap::new())),
+            transports: Arc::new(Mutex::new(HashMap::new())),
+        };
+
+        let params = TransportManagerParamsMulticast { config, state };
+
+        Ok(params)
     }
 }
 
-pub struct TransportManagerStateMulticast {
-    // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerMulticast>>>,
-    // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
-}
-
-impl Default for TransportManagerStateMulticast {
-    fn default() -> TransportManagerStateMulticast {
-        TransportManagerStateMulticast {
-            protocols: Arc::new(Mutex::new(HashMap::new())),
-            transports: Arc::new(Mutex::new(HashMap::new())),
+impl Default for TransportManagerBuilderMulticast {
+    fn default() -> TransportManagerBuilderMulticast {
+        TransportManagerBuilderMulticast {
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            join_interval: Duration::from_millis(zparse!(ZN_JOIN_INTERVAL_DEFAULT).unwrap()),
+            max_sessions: zparse!(ZN_MAX_SESSIONS_MULTICAST_DEFAULT).unwrap(),
+            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
         }
     }
 }
 
 impl TransportManager {
+    pub fn config_multicast() -> TransportManagerBuilderMulticast {
+        TransportManagerBuilderMulticast::default()
+    }
+
+    pub async fn close_multicast(&self) {
+        log::trace!("TransportManagerMulticast::clear())");
+
+        zlock!(self.state.multicast.protocols).clear();
+
+        let mut tm_guard = zlock!(self.state.multicast.transports)
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<Arc<TransportMulticastInner>>>();
+        for tm in tm_guard.drain(..) {
+            let _ = tm.close(Close::GENERIC).await;
+        }
+    }
+
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/

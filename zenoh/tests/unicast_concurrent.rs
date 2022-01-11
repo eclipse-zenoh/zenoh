@@ -26,9 +26,8 @@ mod tests {
     use zenoh::net::protocol::io::ZBuf;
     use zenoh::net::protocol::message::ZenohMessage;
     use zenoh::net::transport::{
-        TransportEventHandler, TransportManager, TransportManagerConfig,
-        TransportManagerConfigUnicast, TransportMulticast, TransportMulticastEventHandler,
-        TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_util::core::Result as ZResult;
     use zenoh_util::zasync_executor_init;
@@ -37,6 +36,12 @@ mod tests {
     const MSG_SIZE: usize = 1_024;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_millis(100);
+
+    macro_rules! ztimeout {
+        ($f:expr) => {
+            $f.timeout(TIMEOUT).await.unwrap()
+        };
+    }
 
     // Transport Handler for the router
     struct SHPeer {
@@ -106,27 +111,23 @@ mod tests {
 
         // Create the peer01 transport manager
         let peer_sh01 = Arc::new(SHPeer::new());
-        let unicast =
-            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
-        let config = TransportManagerConfig::builder()
+        let unicast01 = TransportManager::config_unicast().max_links(endpoint02.len());
+        let peer01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id01)
-            .unicast(unicast)
+            .unicast(unicast01)
             .build(peer_sh01.clone())
             .unwrap();
-        let peer01_manager = TransportManager::new(config);
 
         // Create the peer01 transport manager
         let peer_sh02 = Arc::new(SHPeer::new());
-        let unicast =
-            TransportManagerConfigUnicast::builder().max_links(endpoint01.len() + endpoint02.len());
-        let config = TransportManagerConfig::builder()
+        let unicast02 = TransportManager::config_unicast().max_links(endpoint01.len());
+        let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .pid(peer_id02)
-            .unicast(unicast)
+            .unicast(unicast02)
             .build(peer_sh02.clone())
             .unwrap();
-        let peer02_manager = TransportManager::new(config);
 
         // Barrier to synchronize the two tasks
         let barrier_peer = Arc::new(Barrier::new(2));
@@ -143,7 +144,7 @@ mod tests {
         let peer01_task = task::spawn(async move {
             // Add the endpoints on the first peer
             for e in c_end01.iter() {
-                let res = peer01_manager.add_listener(e.clone()).await;
+                let res = ztimeout!(peer01_manager.add_listener(e.clone()));
                 println!("[Transport Peer 01a] => Adding endpoint {:?}: {:?}", e, res);
                 assert!(res.is_ok());
             }
@@ -163,8 +164,8 @@ mod tests {
                 task::spawn(async move {
                     println!("[Transport Peer 01c] => Waiting for opening transport");
                     // Syncrhonize before opening the transports
-                    cc_barow.wait().timeout(TIMEOUT).await.unwrap();
-                    let res = c_p01m.open_transport(c_end.clone()).await;
+                    ztimeout!(cc_barow.wait());
+                    let res = ztimeout!(c_p01m.open_transport(c_end.clone()));
                     println!(
                         "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
                         c_end, res
@@ -172,12 +173,12 @@ mod tests {
                     assert!(res.is_ok());
 
                     // Syncrhonize after opening the transports
-                    cc_barod.wait().timeout(TIMEOUT).await.unwrap();
+                    ztimeout!(cc_barod.wait());
                 });
             }
 
             // Syncrhonize after opening the transports
-            c_barod.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barod.wait());
             println!("[Transport Peer 01e] => Waiting... OK");
 
             // Verify that the transport has been correctly open
@@ -213,7 +214,7 @@ mod tests {
             );
 
             // Synchronize wit the peer
-            c_barp.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barp.wait());
             println!("[Transport Peer 01f] => Waiting... OK");
 
             for i in 0..MSG_COUNT {
@@ -223,20 +224,22 @@ mod tests {
             println!("[Transport Peer 01g] => Scheduling OK");
 
             // Wait for the messages to arrive to the other side
-            let count = async {
+            ztimeout!(async {
                 while peer_sh02.get_count() != MSG_COUNT {
                     task::sleep(SLEEP).await;
                 }
-            };
-            count.timeout(TIMEOUT).await.unwrap();
+            });
 
             // Synchronize wit the peer
-            c_barp.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barp.wait());
 
             println!("[Transport Peer 01h] => Closing {:?}...", s02);
-            let res = s02.close().timeout(TIMEOUT).await.unwrap();
+            let res = ztimeout!(s02.close());
             println!("[Transport Peer 01l] => Closing {:?}: {:?}", s02, res);
             assert!(res.is_ok());
+
+            // Close the transport
+            ztimeout!(peer01_manager.close());
         });
 
         // Peer02
@@ -249,7 +252,7 @@ mod tests {
         let peer02_task = task::spawn(async move {
             // Add the endpoints on the first peer
             for e in c_end02.iter() {
-                let res = peer02_manager.add_listener(e.clone()).await;
+                let res = ztimeout!(peer02_manager.add_listener(e.clone()));
                 println!("[Transport Peer 02a] => Adding endpoint {:?}: {:?}", e, res);
                 assert!(res.is_ok());
             }
@@ -269,9 +272,9 @@ mod tests {
                 task::spawn(async move {
                     println!("[Transport Peer 02c] => Waiting for opening transport");
                     // Syncrhonize before opening the transports
-                    cc_barow.wait().timeout(TIMEOUT).await.unwrap();
+                    ztimeout!(cc_barow.wait());
 
-                    let res = c_p02m.open_transport(c_end.clone()).await;
+                    let res = ztimeout!(c_p02m.open_transport(c_end.clone()));
                     println!(
                         "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
                         c_end, res
@@ -279,12 +282,12 @@ mod tests {
                     assert!(res.is_ok());
 
                     // Syncrhonize after opening the transports
-                    cc_barod.wait().timeout(TIMEOUT).await.unwrap();
+                    ztimeout!(cc_barod.wait());
                 });
             }
 
             // Syncrhonize after opening the transports
-            c_barod.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barod.wait());
 
             // Verify that the transport has been correctly open
             println!(
@@ -323,7 +326,7 @@ mod tests {
             );
 
             // Synchronize wit the peer
-            c_barp.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barp.wait());
             println!("[Transport Peer 02f] => Waiting... OK");
 
             for i in 0..MSG_COUNT {
@@ -333,27 +336,29 @@ mod tests {
             println!("[Transport Peer 02g] => Scheduling OK");
 
             // Wait for the messages to arrive to the other side
-            let count = async {
+            ztimeout!(async {
                 while peer_sh01.get_count() != MSG_COUNT {
                     task::sleep(SLEEP).await;
                 }
-            };
-            let res = count.timeout(TIMEOUT).await;
-            assert!(res.is_ok());
+            });
 
             // Synchronize wit the peer
-            c_barp.wait().timeout(TIMEOUT).await.unwrap();
+            ztimeout!(c_barp.wait());
 
             println!("[Transport Peer 02h] => Closing {:?}...", s01);
-            let res = s01.close().timeout(TIMEOUT).await.unwrap();
+            let res = ztimeout!(s01.close());
             println!("[Transport Peer 02l] => Closing {:?}: {:?}", s01, res);
             assert!(res.is_ok());
+
+            // Close the transport
+            ztimeout!(peer02_manager.close());
         });
 
         println!("[Transport Current 01] => Starting...");
         peer01_task.join(peer02_task).await;
         println!("[Transport Current 02] => ...Stopped");
 
+        // Wait a little bit
         task::sleep(SLEEP).await;
     }
 

@@ -24,9 +24,8 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
-    TransportEventHandler, TransportManager, TransportManagerConfig, TransportManagerConfigUnicast,
-    TransportMulticast, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::Properties;
@@ -39,6 +38,12 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
+
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 
 // Transport Handler for the router
 struct SHRouter {
@@ -159,55 +164,43 @@ async fn open_transport(
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManagerConfigUnicast::builder();
+    let mut unicast = TransportManager::config_unicast();
     #[cfg(feature = "transport_multilink")]
     {
         unicast = unicast.max_links(endpoints.len());
     }
-    let config = TransportManagerConfig::builder()
+    let router_manager = TransportManager::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
-    let router_manager = TransportManager::new(config);
 
     // Create the client transport manager
     #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManagerConfigUnicast::builder();
+    let mut unicast = TransportManager::config_unicast();
     #[cfg(feature = "transport_multilink")]
     {
         unicast = unicast.max_links(endpoints.len());
     }
-    let config = TransportManagerConfig::builder()
+    let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClient::default()))
         .unwrap();
-    let client_manager = TransportManager::new(config);
 
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Add endpoint: {}", e);
-        let _ = router_manager
-            .add_listener(e.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = client_manager
-            .open_transport(e.clone())
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
@@ -223,6 +216,7 @@ async fn open_transport(
 
 async fn close_transport(
     router_manager: TransportManager,
+    client_manager: TransportManager,
     client_transport: TransportUnicast,
     endpoints: &[EndPoint],
 ) {
@@ -232,12 +226,7 @@ async fn close_transport(
         ee.push_str(&format!("{} ", e));
     }
     println!("Closing transport with {}", ee);
-    let _ = client_transport
-        .close()
-        .timeout(TIMEOUT)
-        .await
-        .unwrap()
-        .unwrap();
+    let _ = ztimeout!(client_transport.close()).unwrap();
 
     // Wait a little bit
     task::sleep(SLEEP).await;
@@ -245,13 +234,14 @@ async fn close_transport(
     // Stop the locators on the manager
     for e in endpoints.iter() {
         println!("Del locator: {}", e);
-        let _ = router_manager
-            .del_listener(e)
-            .timeout(TIMEOUT)
-            .await
-            .unwrap()
-            .unwrap();
+        let _ = ztimeout!(router_manager.del_listener(e)).unwrap();
     }
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
 
     // Wait a little bit
     task::sleep(SLEEP).await;
@@ -291,20 +281,18 @@ async fn test_transport(
 
     match channel.reliability {
         Reliability::Reliable => {
-            let count = async {
+            ztimeout!(async {
                 while router_handler.get_count() != MSG_COUNT {
                     task::sleep(SLEEP_COUNT).await;
                 }
-            };
-            let _ = count.timeout(TIMEOUT).await.unwrap();
+            });
         }
         Reliability::BestEffort => {
-            let count = async {
+            ztimeout!(async {
                 while router_handler.get_count() == 0 {
                     task::sleep(SLEEP_COUNT).await;
                 }
-            };
-            let _ = count.timeout(TIMEOUT).await.unwrap();
+            });
         }
     };
 
@@ -337,7 +325,7 @@ async fn run_single(endpoints: &[EndPoint], channel: Channel, msg_size: usize) {
         println!("\tRouter: {:?}", r_stats);
     }
 
-    close_transport(router_manager, client_transport, endpoints).await;
+    close_transport(router_manager, client_manager, client_transport, endpoints).await;
 }
 
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {

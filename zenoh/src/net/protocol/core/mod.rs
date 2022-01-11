@@ -803,12 +803,20 @@ impl FromStr for ZenohId {
     type Err = zenoh_util::core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id = s.parse::<Uuid>().map_err(|e| zerror!(e))?;
-        let pid = ZenohId {
-            size: 16,
-            id: *id.as_bytes(),
-        };
-        Ok(pid)
+        // filter-out '-' characters (in case s has UUID format)
+        let s = s.replace('-', "");
+        let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
+        let size = vec.len();
+        if size > ZenohId::MAX_SIZE {
+            bail!(
+                "Invalid id size: {} ({} bytes max)",
+                size,
+                ZenohId::MAX_SIZE
+            )
+        }
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
+        id[..size].copy_from_slice(vec.as_slice());
+        Ok(ZenohId::new(size, id))
     }
 }
 
