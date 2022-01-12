@@ -87,12 +87,9 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(1);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(2);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
@@ -105,12 +102,9 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(1);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(2);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
@@ -119,12 +113,9 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .unwrap();
 
     // Create the transport transport manager for the second client
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(1);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(1);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
@@ -186,26 +177,23 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [2] */
     // Open a second transport from the client to the router
     // -> This should be accepted
-    #[cfg(feature = "transport_multilink")]
-    {
-        links_num = 2;
+    links_num = 2;
 
-        println!("\nTransport Open Close [2a1]");
-        let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-        println!("Transport Open Close [2a2]: {:?}", res);
-        assert!(res.is_ok());
-        let c_ses2 = res.unwrap();
-        println!("Transport Open Close [2b1]");
-        let transports = client01_manager.get_transports();
-        println!("Transport Open Close [2b2]: {:?}", transports);
-        assert_eq!(transports.len(), 1);
-        assert_eq!(c_ses2.get_pid().unwrap(), router_id);
-        println!("Transport Open Close [2c1]");
-        let links = c_ses2.get_links().unwrap();
-        println!("Transport Open Close [2c2]: {:?}", links);
-        assert_eq!(links.len(), links_num);
-        assert_eq!(c_ses2, c_ses1);
-    }
+    println!("\nTransport Open Close [2a1]");
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    println!("Transport Open Close [2a2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
+    println!("Transport Open Close [2b1]");
+    let transports = client01_manager.get_transports();
+    println!("Transport Open Close [2b2]: {:?}", transports);
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses2.get_pid().unwrap(), router_id);
+    println!("Transport Open Close [2c1]");
+    let links = c_ses2.get_links().unwrap();
+    println!("Transport Open Close [2c2]: {:?}", links);
+    assert_eq!(links.len(), links_num);
+    assert_eq!(c_ses2, c_ses1);
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [2d1]");
