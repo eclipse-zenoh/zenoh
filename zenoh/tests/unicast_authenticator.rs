@@ -410,7 +410,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Close the session
     println!("Transport Authenticator PubKey [3d1]");
     let res = ztimeout!(c_ses2.close());
-    println!("Transport Authenticator PubKey [7d2]: {:?}", res);
+    println!("Transport Authenticator PubKey [3d2]: {:?}", res);
     assert!(res.is_ok());
 
     task::sleep(SLEEP).await;

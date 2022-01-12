@@ -19,7 +19,7 @@ pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use async_std::fs;
-use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
@@ -220,6 +220,7 @@ impl fmt::Debug for LinkUnicastTls {
 /*************************************/
 struct ListenerUnicastTls {
     endpoint: EndPoint,
+    locator: Locator,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -228,12 +229,14 @@ struct ListenerUnicastTls {
 impl ListenerUnicastTls {
     fn new(
         endpoint: EndPoint,
+        locator: Locator,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
     ) -> ListenerUnicastTls {
         ListenerUnicastTls {
             endpoint,
+            locator,
             active,
             signal,
             handle,
@@ -312,8 +315,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let addr = get_tls_addr(&endpoint.locator.address).await?;
+        let host = get_tls_host(&endpoint.locator.address)?;
 
         // Verify there is a valid ServerConfig
         let config = endpoint.config.as_ref().ok_or_else(|| {
@@ -387,9 +391,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let local_addr = socket
             .local_addr()
             .map_err(|e| zerror!("Can not create a new TLS listener on {}: {}", addr, e))?;
-
-        // Update the endpoint locator address
-        endpoint.locator.address = LocatorAddress::Tls(LocatorTls::SocketAddr(local_addr));
+        let local_port = local_addr.port();
 
         // Initialize the TlsAcceptor
         let acceptor = TlsAcceptor::from(Arc::new(sc));
@@ -409,8 +411,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             res
         });
 
-        let locator = endpoint.locator.clone();
-        let listener = ListenerUnicastTls::new(endpoint, active, signal, handle);
+        // Update the endpoint locator address
+        let locator = Locator {
+            address: LocatorAddress::Tls(LocatorTls::DnsName(format!("{}:{}", host, local_port))),
+            metadata: endpoint.locator.metadata.clone(),
+        };
+
+        let listener = ListenerUnicastTls::new(endpoint, locator.clone(), active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
 
@@ -444,50 +451,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
-        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
-
-        for (key, value) in zread!(self.listeners).iter() {
-            if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                locators.push((
-                                    SocketAddr::new(ipaddr, key.port()),
-                                    value.endpoint.locator.metadata.clone(),
-                                ));
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                locators.push((
-                                    SocketAddr::new(ipaddr, key.port()),
-                                    value.endpoint.locator.metadata.clone(),
-                                ));
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else {
-                locators.push((*key, value.endpoint.locator.metadata.clone()));
-            }
-        }
-
-        locators
-            .into_iter()
-            .map(|(addr, metadata)| Locator {
-                address: LocatorAddress::Tls(LocatorTls::SocketAddr(addr)),
-                metadata,
-            })
+        zread!(self.listeners)
+            .values()
+            .map(|x| x.locator.clone())
             .collect()
     }
 }
