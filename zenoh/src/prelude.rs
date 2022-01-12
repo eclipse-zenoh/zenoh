@@ -271,6 +271,12 @@ impl From<f64> for Value {
     }
 }
 
+impl From<Sample> for Value {
+    fn from(s: Sample) -> Self {
+        s.value
+    }
+}
+
 /// Informations on the source of a zenoh [`Sample`].
 #[derive(Debug, Clone)]
 pub struct SourceInfo {

@@ -1066,6 +1066,30 @@ impl Session {
         }
     }
 
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    pub async fn publish<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> ZResult<Publisher<'a>>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        Ok(Publisher {
+            session: self,
+            key_expr: key_expr.into(),
+            value: None,
+            kind: None,
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+        })
+    }
+
     /// Delete data.
     ///
     /// # Arguments

@@ -92,18 +92,13 @@ impl<'a> Writer<'a> {
         self.priority = priority;
         self
     }
-}
 
-impl Runnable for Writer<'_> {
-    type Output = zenoh_util::core::Result<()>;
-
-    fn run(&mut self) -> Self::Output {
+    fn write(&self, value: Value) -> zenoh_util::core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
 
-        let value = self.value.take().unwrap();
         let mut info = DataInfo::new();
         info.kind = match self.kind {
             Some(data_kind::DEFAULT) => None,
@@ -131,5 +126,99 @@ impl Runnable for Writer<'_> {
         self.session
             .handle_data(true, &self.key_expr, data_info, value.payload);
         Ok(())
+    }
+}
+
+impl Runnable for Writer<'_> {
+    type Output = zenoh_util::core::Result<()>;
+
+    #[inline]
+    fn run(&mut self) -> Self::Output {
+        let value = self.value.take().unwrap();
+        self.write(value)
+    }
+}
+
+use futures::Sink;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use zenoh_util::core::zresult::BoxedStdErr;
+
+/// A publisher that allows to send data through a stream.
+///
+/// Publishers are automatically undeclared when dropped.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap().arc();
+/// let publisher = session.publish("/key/expression").await.unwrap();
+/// publisher.send("value").unwrap();
+/// # })
+/// ```
+///
+///
+/// `Publisher` implements the `Sink` trait which is useful to forward
+/// streams to zenoh.
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap().arc();
+/// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+/// let publisher = session.publish("/another/key/expression").await.unwrap();
+/// subscriber.receiver().forward(publisher).await.unwrap();
+/// # })
+/// ```
+pub type Publisher<'a> = Writer<'a>;
+
+impl Publisher<'_> {
+    /// Send a value.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_util::core::Result<()>
+    where
+        IntoValue: Into<Value>,
+    {
+        self.write(value.into())
+    }
+}
+
+impl<'a, IntoValue> Sink<IntoValue> for Publisher<'a>
+where
+    IntoValue: Into<Value>,
+{
+    type Error = BoxedStdErr;
+
+    #[inline]
+    fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
+        self.write(item.into())
+    }
+
+    #[inline]
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 }
