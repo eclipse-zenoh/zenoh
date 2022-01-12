@@ -115,11 +115,11 @@ macro_rules! zreceiver{
                 }
             }
 
-            pub fn as_trystream<'a, E:'a>(&'a mut self) -> impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'a {
+            pub fn as_trystream<'selflifetime, E:'selflifetime>(&'selflifetime mut self) -> impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime {
                 futures::StreamExt::map(self.receiver.stream(), Ok)
             }
 
-            pub fn forward<'a, E:'a, S>(&'a mut self, sink: S) -> futures::stream::Forward<impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'a, S>
+            pub fn forward<'selflifetime, E:'selflifetime, S>(&'selflifetime mut self, sink: S) -> futures::stream::Forward<impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime, S>
             where
                 S: futures::sink::Sink<$recv_type, Error = E>,
             {
@@ -166,7 +166,7 @@ macro_rules! zreceiver{
             }
         }
 
-        impl $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
             pub fn iter(&self) -> Iter<'_, $recv_type> {
                 self.receiver.iter()
