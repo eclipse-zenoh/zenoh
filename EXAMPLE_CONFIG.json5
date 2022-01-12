@@ -96,11 +96,13 @@
       address: "0.0.0.0:7447",
       /// The network interface which should be used for multicast scouting
       interface: null,
-      autoconnect: false,
+      /// An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
+      /// If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
+      autoconnect: "peer|client",
     },
     gossip: {
       enabled: true,
-      autoconnect: "peer|client",
+      autoconnect: "",
     },
   },
   /// Whether data messages should be timestamped
