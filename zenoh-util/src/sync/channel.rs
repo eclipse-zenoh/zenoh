@@ -114,6 +114,17 @@ macro_rules! zreceiver{
                     stream: receiver.into_stream(),
                 }
             }
+
+            pub fn as_trystream<'a, E:'a>(&'a mut self) -> impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'a {
+                futures::StreamExt::map(self.receiver.stream(), Ok)
+            }
+
+            pub fn forward<'a, E:'a, S>(&'a mut self, sink: S) -> futures::stream::Forward<impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'a, S>
+            where
+                S: futures::sink::Sink<$recv_type, Error = E>,
+            {
+                futures::StreamExt::forward(self.as_trystream(), sink)
+            }
         }
 
         impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
