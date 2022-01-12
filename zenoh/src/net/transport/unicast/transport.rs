@@ -230,6 +230,7 @@ impl TransportUnicastInner {
         if let LinkUnicastDirection::Inbound = direction {
             let count = guard.iter().filter(|l| l.direction == direction).count();
             let limit = self.config.manager.config.unicast.max_links;
+
             if count >= limit {
                 let e = zerror!(
                     "Can not add Link {} with peer {}: max num of links reached {}/{}",

@@ -40,7 +40,6 @@ auth_usrpwd = []
 complete_n = []
 shared-memory = ["bincode", "shared_memory"]
 stats = []
-transport_multilink = ["auth_pubkey"]
 transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_tcp = []
 transport_tls = ["async-rustls"]
@@ -50,7 +49,6 @@ default = [
     "auth_pubkey",
     "auth_usrpwd",
     "shared-memory",
-    "transport_multilink",
     "transport_quic",
     "transport_tcp",
     "transport_tls",

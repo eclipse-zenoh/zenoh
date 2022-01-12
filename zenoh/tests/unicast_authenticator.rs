@@ -117,7 +117,7 @@ impl TransportEventHandler for SHClientAuthenticator {
     }
 }
 
-#[cfg(feature = "transport_multilink")]
+#[cfg(feature = "auth_pubkey")]
 async fn authenticator_multilink(endpoint: &EndPoint) {
     // Create the router transport manager
     let router_id = PeerId::new(1, [0u8; PeerId::MAX_SIZE]);
@@ -742,7 +742,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
 }
 
 async fn run(endpoint: &EndPoint) {
-    #[cfg(feature = "transport_multilink")]
+    #[cfg(feature = "auth_pubkey")]
     authenticator_multilink(endpoint).await;
     #[cfg(feature = "auth_usrpwd")]
     authenticator_user_password(endpoint).await;

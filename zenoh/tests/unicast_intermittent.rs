@@ -146,12 +146,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(3);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(1);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(3);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .pid(router_id)
@@ -166,12 +163,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(3);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(1);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(3);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client01_id)
@@ -180,12 +174,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     // Create the transport transport manager for the second client
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(1);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(1);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client02_id)
@@ -194,12 +185,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     // Create the transport transport manager for the third client
-    #[allow(unused_mut)]
-    let mut unicast = TransportManager::config_unicast().max_sessions(1);
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(1);
-    }
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(1);
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client03_id)
