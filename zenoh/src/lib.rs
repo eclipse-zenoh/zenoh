@@ -232,6 +232,7 @@ pub mod sync {
         pub use zenoh_util::sync::channel::Iter;
         pub use zenoh_util::sync::channel::Receiver;
         pub use zenoh_util::sync::channel::RecvError;
+        pub use zenoh_util::sync::channel::RecvFut;
         pub use zenoh_util::sync::channel::RecvTimeoutError;
         pub use zenoh_util::sync::channel::TryIter;
         pub use zenoh_util::sync::channel::TryRecvError;
@@ -241,7 +242,7 @@ pub mod sync {
 /// Scouting primitives.
 pub mod scouting {
     use crate::sync::channel::{
-        Iter, Receiver, RecvError, RecvTimeoutError, TryIter, TryRecvError,
+        Iter, Receiver, RecvError, RecvFut, RecvTimeoutError, TryIter, TryRecvError,
     };
     use flume::Sender;
     use std::pin::Pin;

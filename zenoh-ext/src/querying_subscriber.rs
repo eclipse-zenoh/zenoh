@@ -317,6 +317,13 @@ impl futures::stream::FusedStream for QueryingSubscriberReceiver {
 }
 
 impl Receiver<Sample> for QueryingSubscriberReceiver {
+    fn recv_async(&self) -> flume::r#async::RecvFut<'_, Sample> {
+        // TODO find a better way to forge a RecvFut
+        let (sender, receiver) = flume::bounded(1);
+        let _ = sender.send(self.recv().unwrap());
+        receiver.into_recv_async()
+    }
+
     fn recv(&self) -> Result<Sample, RecvError> {
         let state = &mut zwrite!(self.state);
         state.recv()

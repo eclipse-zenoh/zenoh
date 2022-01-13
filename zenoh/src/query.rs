@@ -19,6 +19,7 @@ use crate::prelude::*;
 use crate::sync::channel::Receiver;
 use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
+use flume::r#async::RecvFut;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
 use std::collections::HashMap;
 use std::pin::Pin;

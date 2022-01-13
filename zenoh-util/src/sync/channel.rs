@@ -13,6 +13,7 @@
 //
 use std::time::{Duration, Instant};
 
+pub use flume::r#async::RecvFut;
 pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 
 /// A trait that mimics the [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver).
@@ -20,6 +21,11 @@ pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 /// Most structs implementing this trait in zenoh also implement the [`Stream`](async_std::stream::Stream)
 /// trait so that values can be accessed synchronously or asynchronously.
 pub trait Receiver<T> {
+    /// Asynchronously receive a value on this receiver, returning an error if all
+    /// senders have been dropped. If the channel is empty, the returned future will
+    /// yield to the async runtime.
+    fn recv_async(&self) -> RecvFut<'_, T>;
+
     /// Attempts to wait for a value on this receiver, returning an error if the
     /// corresponding channel has hung up.
     ///
@@ -138,6 +144,11 @@ macro_rules! zreceiver{
         }
 
         impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
+            #[inline(always)]
+            fn recv_async(&self) -> RecvFut<'_, $recv_type> {
+                self.receiver.recv_async()
+            }
+
             #[inline(always)]
             fn recv(&self) -> core::result::Result<$recv_type, RecvError> {
                 self.receiver.recv()

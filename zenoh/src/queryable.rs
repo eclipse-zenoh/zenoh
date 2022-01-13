@@ -23,6 +23,7 @@ use crate::Session;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use async_std::sync::Arc;
+use flume::r#async::RecvFut;
 use flume::{
     bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError, TrySendError,
 };
