@@ -429,6 +429,12 @@ async fn openclose_transport(endpoint: &EndPoint) {
     println!("Transport Open Close [10a2]: {:?}", res);
     assert!(res.is_ok());
 
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
+
     // Wait a little bit
     task::sleep(SLEEP).await;
 

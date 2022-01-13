@@ -111,6 +111,12 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let _ = ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
+
     task::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());

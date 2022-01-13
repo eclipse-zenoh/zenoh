@@ -262,6 +262,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
             assert!(res.is_err());
         }
 
+        // Wait a little bit
         task::sleep(SLEEP).await;
 
         let tp01 = ztimeout!(async {
@@ -303,6 +304,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     peer01_task.join(peer02_task).await;
     println!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
 
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 
