@@ -376,7 +376,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     println!("Transport Authenticator PubKey [2d2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [3a] */
     // Open a first transport from client02 to the router
@@ -413,7 +417,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     println!("Transport Authenticator PubKey [3d2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [4a] */
     // Open a first transport from client01_spoof to the router
@@ -450,7 +458,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     println!("Transport Authenticator PubKey [4d2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [5a] */
     // Open a first transport from client01 to the router
@@ -487,7 +499,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     println!("Transport Authenticator PubKey [5d2]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [6] */
     // Perform clean up of the open locators
@@ -496,8 +512,11 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     println!("Transport Authenticator UserPassword [6a2]: {:?}", res);
     assert!(res.is_ok());
 
-    // Wait a little bit
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
@@ -611,6 +630,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     println!("Transport Authenticator UserPassword [3a1]: {:?}", res);
     assert!(res.is_ok());
 
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
+
     /* [4] */
     // Open a second transport from the client to the router
     // -> This should be rejected
@@ -658,8 +683,11 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     println!("Transport Authenticator UserPassword [8a2]: {:?}", res);
     assert!(res.is_ok());
 
-    // Wait a little bit
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [9] */
     // Perform clean up of the open locators
@@ -667,6 +695,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     let res = ztimeout!(router_manager.del_listener(endpoint));
     println!("Transport Authenticator UserPassword [9a2]: {:?}", res);
     assert!(res.is_ok());
+
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     // Wait a little bit
     task::sleep(SLEEP).await;
@@ -729,7 +763,11 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     println!("Transport Authenticator SharedMemory [3a1]: {:?}", res);
     assert!(res.is_ok());
 
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     /* [4] */
     // Perform clean up of the open locators
@@ -737,6 +775,12 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     let res = ztimeout!(router_manager.del_listener(endpoint));
     println!("Transport Authenticator SharedMemory [4a2]: {:?}", res);
     assert!(res.is_ok());
+
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     task::sleep(SLEEP).await;
 }

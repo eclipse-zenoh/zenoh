@@ -311,14 +311,22 @@ mod tests {
         println!("Transport SHM [5b]");
         let _ = ztimeout!(peer_net01_transport.close()).unwrap();
 
-        // Wait a little bit
-        task::sleep(SLEEP).await;
+        ztimeout!(async {
+            while !peer_shm01_manager.get_transports().is_empty() {
+                task::sleep(SLEEP).await;
+            }
+        });
 
         // Delete the listener
         println!("Transport SHM [6a]");
         let _ = ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
 
         // Wait a little bit
+        ztimeout!(async {
+            while !peer_shm01_manager.get_listeners().is_empty() {
+                task::sleep(SLEEP).await;
+            }
+        });
         task::sleep(SLEEP).await;
 
         ztimeout!(peer_net01_manager.close());
