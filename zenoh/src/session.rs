@@ -314,8 +314,9 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
+    /// use zenoh::Session;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().leak();
+    /// let session = Session::leak(zenoh::open(config::peer()).await.unwrap());
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(sample) = subscriber.receiver().next().await {
@@ -324,8 +325,8 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
-    pub fn leak(self) -> &'static mut Self {
-        Box::leak(Box::new(self))
+    pub fn leak(s: Self) -> &'static mut Self {
+        Box::leak(Box::new(s))
     }
 
     /// Returns the identifier for this session.
