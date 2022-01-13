@@ -284,7 +284,7 @@ impl Session {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(sample) = subscriber.receiver().next().await {
@@ -293,7 +293,7 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
-    pub fn arc(self) -> Arc<Self> {
+    pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
     }
 
@@ -307,7 +307,7 @@ impl Session {
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
     /// termination the zenoh session will terminate abruptly. If possible prefer
-    /// using [`Session::arc()`](Session::arc).
+    /// using [`Session::into_arc()`](Session::into_arc).
     ///
     /// # Examples
     /// ```no_run
@@ -1071,7 +1071,7 @@ impl Session {
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let publisher = session.publish("/key/expression").await.unwrap();
     /// publisher.send("value").unwrap();
     /// # })
@@ -1384,7 +1384,7 @@ impl EntityFactory for Arc<Session> {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(sample) = subscriber.receiver().next().await {
@@ -1420,7 +1420,7 @@ impl EntityFactory for Arc<Session> {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(query) = queryable.receiver().next().await {

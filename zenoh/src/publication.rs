@@ -153,7 +153,7 @@ use zenoh_util::core::zresult::BoxedStdErr;
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().arc();
+/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let publisher = session.publish("/key/expression").await.unwrap();
 /// publisher.send("value").unwrap();
 /// # })
@@ -166,7 +166,7 @@ use zenoh_util::core::zresult::BoxedStdErr;
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().arc();
+/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
 /// let publisher = session.publish("/another/key/expression").await.unwrap();
 /// subscriber.receiver().forward(publisher).await.unwrap();
@@ -182,7 +182,7 @@ impl Publisher<'_> {
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().arc();
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let publisher = session.publish("/key/expression").await.unwrap();
     /// publisher.send("value").unwrap();
     /// # })
