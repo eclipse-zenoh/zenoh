@@ -115,10 +115,20 @@ macro_rules! zreceiver{
                 }
             }
 
+            /// Returns this `Receiver<T>` as a `TryStream<Ok = T, Error = E>` i.e: a `Stream<Result<T, E>>`.
             pub fn as_trystream<'selflifetime, E:'selflifetime>(&'selflifetime mut self) -> impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime {
                 futures::StreamExt::map(self.receiver.stream(), Ok)
             }
 
+            /// A future that completes after the given `Receiver` has been fully processed
+            /// into the sink and the sink has been flushed and closed.
+            ///
+            /// This future will drive the `Receiver` to keep producing items until it is exhausted,
+            /// sending each item to the sink. It will complete once the `Receiver` is exhausted,
+            /// the sink has received and flushed all items, and the sink is closed.
+            /// Note that neither the original stream nor provided sink will be output by this future.
+            /// Pass the sink by Pin<&mut S> (for example, via forward(&mut sink) inside an async fn/block)
+            /// in order to preserve access to the Sink.
             pub fn forward<'selflifetime, E:'selflifetime, S>(&'selflifetime mut self, sink: S) -> futures::stream::Forward<impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime, S>
             where
                 S: futures::sink::Sink<$recv_type, Error = E>,
