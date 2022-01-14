@@ -126,14 +126,66 @@ impl fmt::Debug for QueryableState {
 }
 
 zreceiver! {
-    /// A [`Receiver`] of [`Query`].
+    /// A [`Receiver`] of [`Query`] returned by
+    /// [`Queryable::receiver()`](Queryable::receiver).
     ///
-    /// Returned by [`Queryable`](crate::Queryable).[`receiver`](crate::Queryable::receiver)(), it must be used
-    /// to wait for queries mathing the [`Queryable`](crate::Queryable).
-    ///
-    /// The queries of this receiver can be accessed:
+    /// `QueryReceiver` implements the `Stream` trait as well as the
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    /// `QueryReceiver` also provides a [`recv_async()`](QueryReceiver::recv_async) function which allows
+    /// to access queries asynchronously without needing a mutable reference to the `QueryReceiver`.
+    ///
+    /// `QueryReceiver` implements `Clonable` and it's lifetime is not bound to it's associated
+    /// [`Queryable`]. This is useful to move multiple instances to multiple threads/tasks and perform
+    /// job stealing. When the associated [`QueryReceiver`] is closed or dropped and all queries
+    /// have been received [`Receiver::recv()`](Receiver::recv) will return  `Error` and
+    /// `Receiver::next()` will return `None`.
+    ///
+    /// Examples:
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    ///
+    /// let mut queryable = session.queryable("/key/expression").wait().unwrap();
+    /// let task1 = async_std::task::spawn({
+    ///     let mut receiver = queryable.receiver().clone();
+    ///     async move {
+    ///         while let Some(query) = receiver.next().await {
+    ///             println!(">> Task1 handling query '{}'", query.selector());
+    ///         }
+    ///     }
+    /// });
+    /// let task2 = async_std::task::spawn({
+    ///     let mut receiver = queryable.receiver().clone();
+    ///     async move {
+    ///         while let Some(query) = receiver.next().await {
+    ///             println!(">> Task2 handling query '{}'", query.selector());
+    ///         }
+    ///     }
+    /// });
+    ///
+    /// async_std::task::sleep(std::time::Duration::from_secs(1)).await;
+    /// queryable.close().await.unwrap();
+    /// futures::join!(task1, task2);
+    /// # })
+    #[derive(Clone)]
+    pub struct QueryReceiver : Receiver<Query> {}
+}
+
+zreceiver! {
+    /// An entity able to reply to queries.
+    ///
+    /// `Queryable` implements the `Stream` trait as well as the
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries
+    ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
+    ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    /// `Queryable` also provides a [`recv_async()`](Queryable::recv_async) function which allows
+    /// to access queries asynchronously without needing a mutable reference to the `Queryable`.
+    ///
+    /// Queryables are automatically undeclared when dropped.
     ///
     /// # Examples
     ///
@@ -143,7 +195,7 @@ zreceiver! {
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
     /// let mut queryable = session.queryable("/key/expression").wait().unwrap();
-    /// while let Ok(query) = queryable.receiver().recv() {
+    /// while let Ok(query) = queryable.recv() {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
     /// ```
@@ -156,46 +208,24 @@ zreceiver! {
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-    /// while let Some(query) = queryable.receiver().next().await {
+    /// while let Some(query) = queryable.next().await {
     ///      println!(">> Handling query '{}'", query.selector());
     /// }
     /// # })
     /// ```
-    #[derive(Clone)]
-    pub struct QueryReceiver : Receiver<Query> {}
-}
-
-/// An entity able to reply to queries.
-///
-/// Queryables are automatically undeclared when dropped.
-pub struct Queryable<'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
-    pub(crate) receiver: QueryReceiver,
+    pub struct Queryable<'a> : Receiver<Query> {
+        pub(crate) session: SessionRef<'a>,
+        pub(crate) state: Arc<QueryableState>,
+        pub(crate) alive: bool,
+        pub(crate) query_receiver: QueryReceiver,
+    }
 }
 
 impl Queryable<'_> {
-    /// Gets the [`QueryReceiver`](crate::queryable::QueryReceiver) of this `Queryable`.
-    ///
-    /// This receiver must be used to listen for incomming queries.
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-    /// while let Some(query) = queryable.receiver().next().await {
-    ///      println!(">> Handling query '{}'", query.selector());
-    ///      query.reply(Sample::new("/key/expression".to_string(), "some value"));
-    /// }
-    /// # })
-    /// ```
+    /// Returns a `Clonable` [`QueryReceiver`] which lifetime is not bound to
+    /// the associated `Queryable` lifetime.
     pub fn receiver(&mut self) -> &mut QueryReceiver {
-        &mut self.receiver
+        &mut self.query_receiver
     }
 
     /// Close a [`Queryable`](Queryable) previously created with [`queryable`](Session::queryable).
@@ -401,11 +431,12 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
             }
         }
 
-        Ok(Queryable {
-            session: self.session.clone(),
-            state: qable_state,
-            alive: true,
-            receiver: QueryReceiver::new(receiver),
-        })
+        Ok(Queryable::new(
+            self.session.clone(),
+            qable_state,
+            true,
+            QueryReceiver::new(receiver.clone()),
+            receiver,
+        ))
     }
 }

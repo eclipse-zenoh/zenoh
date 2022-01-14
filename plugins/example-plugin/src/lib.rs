@@ -144,7 +144,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 stored.insert(sample.key_expr.to_string(), sample);
             },
 
-            query = queryable.receiver().next() => {
+            query = queryable.next() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {

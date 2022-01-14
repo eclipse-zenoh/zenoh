@@ -949,7 +949,7 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-    /// while let Some(query) = queryable.receiver().next().await {
+    /// while let Some(query) = queryable.next().await {
     ///     query.reply_async(Sample::new(
     ///         "/key/expression".to_string(),
     ///         "value",
@@ -1424,7 +1424,7 @@ impl EntityFactory for Arc<Session> {
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(query) = queryable.receiver().next().await {
+    ///     while let Some(query) = queryable.next().await {
     ///         query.reply_async(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",

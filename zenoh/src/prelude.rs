@@ -653,7 +653,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// use std::convert::TryInto;
 ///
 /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-/// while let Some(query) = queryable.receiver().next().await {
+/// while let Some(query) = queryable.next().await {
 ///     let value_selector = query.selector().parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
@@ -852,7 +852,7 @@ pub trait EntityFactory {
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(query) = queryable.receiver().next().await {
+    ///     while let Some(query) = queryable.next().await {
     ///         query.reply_async(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",

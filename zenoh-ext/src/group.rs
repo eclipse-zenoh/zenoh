@@ -184,7 +184,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let buf = bincode::serialize(&state.local_member).unwrap();
     let mut queryable = z.queryable(&qres).kind(EVAL).await.unwrap();
 
-    while let Some(query) = queryable.receiver().next().await {
+    while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);
         query.reply(Sample::new(qres.clone(), buf.clone()))
     }

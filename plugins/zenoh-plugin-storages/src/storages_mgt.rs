@@ -112,7 +112,7 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on query on key_expr
-                query = storage_queryable.receiver().next() => {
+                query = storage_queryable.next() => {
                     let q = query.unwrap();
                     // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor

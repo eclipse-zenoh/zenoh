@@ -58,7 +58,7 @@ async fn main() {
                 }
             },
 
-            query = queryable.receiver().next() => {
+            query = queryable.next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
