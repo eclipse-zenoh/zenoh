@@ -804,7 +804,7 @@ impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
 /// async_std::task::spawn(async move {
-///     while let Some(sample) = subscriber.receiver().next().await {
+///     while let Some(sample) = subscriber.next().await {
 ///         println!("Received : {:?}", sample);
 ///     }
 /// }).await;
@@ -826,7 +826,7 @@ pub trait EntityFactory {
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///     while let Some(sample) = subscriber.next().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;

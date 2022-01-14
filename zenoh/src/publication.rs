@@ -169,7 +169,7 @@ use zenoh_util::core::zresult::BoxedStdErr;
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
 /// let publisher = session.publish("/another/key/expression").await.unwrap();
-/// subscriber.receiver().forward(publisher).await.unwrap();
+/// subscriber.forward(publisher).await.unwrap();
 /// # })
 /// ```
 pub type Publisher<'a> = Writer<'a>;

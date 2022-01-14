@@ -99,7 +99,7 @@ pub(crate) async fn start_storage(
         loop {
             select!(
                 // on sample for key_expr
-                sample = storage_sub.receiver().next() => {
+                sample = storage_sub.next() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
                         interceptor(sample.unwrap())

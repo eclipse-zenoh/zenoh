@@ -29,7 +29,7 @@ async fn main() {
     println!("Creating Publisher on '{}'...", forward);
     let publisher = session.publish(&forward).await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
-    subscriber.receiver().forward(publisher).await.unwrap();
+    subscriber.forward(publisher).await.unwrap();
 }
 
 fn parse_args() -> (Config, String, String) {

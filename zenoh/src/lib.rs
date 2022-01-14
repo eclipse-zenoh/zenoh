@@ -51,7 +51,7 @@
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-//!     while let Some(sample) = subscriber.receiver().next().await {
+//!     while let Some(sample) = subscriber.next().await {
 //!         println!("Received : {}", sample);
 //!     };
 //! }

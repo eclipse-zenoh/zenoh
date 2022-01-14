@@ -37,7 +37,7 @@ async fn main() {
     let mut input = [0_u8];
     loop {
         select!(
-            sample = subscriber.receiver().next() => {
+            sample = subscriber.next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));

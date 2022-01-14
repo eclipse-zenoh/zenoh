@@ -62,14 +62,67 @@ impl fmt::Debug for SubscriberState {
 }
 
 zreceiver! {
-    /// A [`Receiver`] of [`Sample`].
+    /// A [`Receiver`] of [`Sample`](crate::prelude::Sample) returned by
+    /// [`Subscriber::receiver()`](Subscriber::receiver).
     ///
-    /// Returned by [`Subscriber`](crate::Subscriber).[`receiver`](crate::Subscriber::receiver)(), it must be used
-    /// to wait for queries mathing the [`Subscriber`](crate::Subscriber).
-    ///
-    /// The samples of this receiver can be accessed:
+    /// `SampleReceiver` implements the `Stream` trait as well as the
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    /// `SampleReceiver` also provides a [`recv_async()`](SampleReceiver::recv_async) function which allows
+    /// to access samples asynchronously without needing a mutable reference to the `SampleReceiver`.
+    ///
+    /// `SampleReceiver` implements `Clonable` and it's lifetime is not bound to it's associated
+    /// [`Subscriber`]. This is useful to move multiple instances to multiple threads/tasks and perform
+    /// job stealing. When the associated [`Subscriber`] is closed or dropped and all samples
+    /// have been received [`Receiver::recv()`](Receiver::recv) will return  `Error` and
+    /// `Receiver::next()` will return `None`.
+    ///
+    /// Examples:
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    ///
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// let task1 = async_std::task::spawn({
+    ///     let mut receiver = subscriber.receiver().clone();
+    ///     async move {
+    ///         while let Some(sample) = receiver.next().await {
+    ///             println!(">> Task1 received sample '{}'", sample);
+    ///         }
+    ///     }
+    /// });
+    /// let task2 = async_std::task::spawn({
+    ///     let mut receiver = subscriber.receiver().clone();
+    ///     async move {
+    ///         while let Some(sample) = receiver.next().await {
+    ///             println!(">> Task2 received sample '{}'", sample);
+    ///         }
+    ///     }
+    /// });
+    ///
+    /// async_std::task::sleep(std::time::Duration::from_secs(1)).await;
+    /// subscriber.close().await.unwrap();
+    /// futures::join!(task1, task2);
+    /// # })
+    /// ```
+    #[derive(Clone)]
+    pub struct SampleReceiver : Receiver<Sample> {}
+}
+
+zreceiver! {
+    /// A subscriber that provides data through a stream.
+    ///
+    /// `Subscriber` implements the `Stream` trait as well as the
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples
+    ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
+    ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    /// `Subscriber` also provides a [`recv_async()`](Subscriber::recv_async) function which allows
+    /// to access samples asynchronously without needing a mutable reference to the `Subscriber`.
+    ///
+    /// Subscribers are automatically undeclared when dropped.
     ///
     /// # Examples
     ///
@@ -79,7 +132,7 @@ zreceiver! {
     /// # let session = zenoh::open(config::peer()).wait().unwrap();
     ///
     /// let mut subscriber = session.subscribe("/key/expression").wait().unwrap();
-    /// while let Ok(sample) = subscriber.receiver().recv() {
+    /// while let Ok(sample) = subscriber.recv() {
     ///      println!(">> Received sample '{}'", sample);
     /// }
     /// ```
@@ -92,28 +145,24 @@ zreceiver! {
     /// # let session = zenoh::open(config::peer()).await.unwrap();
     ///
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// while let Some(sample) = subscriber.receiver().next().await {
+    /// while let Some(sample) = subscriber.next().await {
     ///      println!(">> Received sample '{}'", sample);
     /// }
     /// # })
     /// ```
-    #[derive(Clone)]
-    pub struct SampleReceiver : Receiver<Sample> {}
-}
-
-/// A subscriber that provides data through a stream.
-///
-/// Subscribers are automatically undeclared when dropped.
-pub struct Subscriber<'a> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
-    pub(crate) receiver: SampleReceiver,
+    pub struct Subscriber<'a> : Receiver<Sample> {
+        pub(crate) session: SessionRef<'a>,
+        pub(crate) state: Arc<SubscriberState>,
+        pub(crate) alive: bool,
+        pub(crate) sample_receiver: SampleReceiver,
+    }
 }
 
 impl Subscriber<'_> {
+    /// Returns a `Clonable` [`SampleReceiver`] which lifetime is not bound to
+    /// the associated `Subscriber` lifetime.
     pub fn receiver(&mut self) -> &mut SampleReceiver {
-        &mut self.receiver
+        &mut self.sample_receiver
     }
 
     /// Pull available data for a pull-mode [`Subscriber`](Subscriber).
@@ -362,11 +411,14 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
         if self.local {
             self.session
                 .declare_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
-                .map(|sub_state| Subscriber {
-                    session: self.session.clone(),
-                    state: sub_state,
-                    alive: true,
-                    receiver: SampleReceiver::new(receiver),
+                .map(|sub_state| {
+                    Subscriber::new(
+                        self.session.clone(),
+                        sub_state,
+                        true,
+                        SampleReceiver::new(receiver.clone()),
+                        receiver,
+                    )
                 })
         } else {
             self.session
@@ -379,11 +431,14 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                         period: self.period,
                     },
                 )
-                .map(|sub_state| Subscriber {
-                    session: self.session.clone(),
-                    state: sub_state,
-                    alive: true,
-                    receiver: SampleReceiver::new(receiver),
+                .map(|sub_state| {
+                    Subscriber::new(
+                        self.session.clone(),
+                        sub_state,
+                        true,
+                        SampleReceiver::new(receiver.clone()),
+                        receiver,
+                    )
                 })
         }
     }

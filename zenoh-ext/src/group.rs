@@ -192,8 +192,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let mut sub = z.subscribe(&state.event_expr).await.unwrap();
-    let stream = sub.receiver();
-    while let Some(s) = stream.next().await {
+    while let Some(s) = sub.next().await {
         log::debug!("Handling Network Event...");
         match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.to_vec())) {
             Ok(evt) => match evt {

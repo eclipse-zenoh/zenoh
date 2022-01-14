@@ -30,9 +30,9 @@ fn main() {
     // The key expression to echo the data back
     let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
 
-    let mut sub = session.subscribe(&key_expr_ping).wait().unwrap();
+    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
 
-    while let Ok(sample) = sub.receiver().recv() {
+    while let Ok(sample) = sub.recv() {
         session
             .put(&key_expr_pong, sample.value)
             // Make sure to not drop messages because of congestion control

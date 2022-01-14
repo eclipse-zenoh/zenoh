@@ -287,7 +287,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///     while let Some(sample) = subscriber.next().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
@@ -319,7 +319,7 @@ impl Session {
     /// let session = Session::leak(zenoh::open(config::peer()).await.unwrap());
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///     while let Some(sample) = subscriber.next().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
@@ -820,7 +820,7 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// while let Some(sample) = subscriber.receiver().next().await {
+    /// while let Some(sample) = subscriber.next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
@@ -845,7 +845,7 @@ impl Session {
     pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
-            trace!("unsubscribe({:?})", sub_state);
+            println!("unsubscribe({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
@@ -1388,7 +1388,7 @@ impl EntityFactory for Arc<Session> {
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.receiver().next().await {
+    ///     while let Some(sample) = subscriber.next().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
