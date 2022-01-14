@@ -18,21 +18,38 @@ use super::transport::TransportMulticastInner;
 use zenoh_util::zread;
 
 impl TransportMulticastInner {
-    #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) {
+    fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
                 // the link could be congested and this operation could
                 // block for fairly long time
                 drop($guard);
-                $pipeline.push_zenoh_message($msg);
-                return;
+                return $pipeline.push_zenoh_message($msg);
             };
         }
 
-        #[cfg(feature = "stats")]
-        self.stats.inc_tx_z_msgs(1);
+        let guard = zread!(self.link);
+        match guard.as_ref() {
+            Some(l) => {
+                if let Some(pipeline) = l.get_pipeline() {
+                    zpush!(guard, pipeline, msg);
+                }
+            }
+            None => {
+                log::trace!(
+                    "Message dropped because the transport has no links: {}",
+                    msg
+                );
+            }
+        }
+
+        false
+    }
+
+    #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
+    #[inline(always)]
+    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
         #[cfg(feature = "stats")]
         match &msg.body {
             ZenohBody::Data(data) => match data.reply_context {
@@ -57,19 +74,15 @@ impl TransportMulticastInner {
             ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
-        let guard = zread!(self.link);
-        match guard.as_ref() {
-            Some(l) => {
-                if let Some(pipeline) = l.get_pipeline() {
-                    zpush!(guard, pipeline, msg);
-                }
-            }
-            None => {
-                log::trace!(
-                    "Message dropped because the transport has no links: {}",
-                    msg
-                );
-            }
+        let res = self.schedule_on_link(msg);
+
+        #[cfg(feature = "stats")]
+        if res {
+            self.stats.inc_tx_z_msgs(1);
+        } else {
+            self.stats.inc_tx_z_dropped(1);
         }
+
+        res
     }
 }

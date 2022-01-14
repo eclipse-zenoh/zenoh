@@ -459,7 +459,7 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
+    pub(crate) fn schedule(&self, mut message: ZenohMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {
@@ -469,11 +469,11 @@ impl TransportUnicastInner {
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
-                return;
+                return false;
             }
         }
 
-        self.schedule_first_fit(message);
+        self.schedule_first_fit(message)
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {
