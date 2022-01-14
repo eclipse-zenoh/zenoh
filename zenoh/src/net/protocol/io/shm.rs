@@ -204,6 +204,7 @@ impl Clone for SharedMemoryBuf {
 /*************************************/
 /*       SHARED MEMORY READER        */
 /*************************************/
+#[allow(clippy::non_send_fields_in_send_ty)] // TODO: fix #185
 pub struct SharedMemoryReader {
     segments: HashMap<String, Shmem>,
 }
@@ -287,6 +288,7 @@ impl fmt::Debug for SharedMemoryReader {
 /// A shared memory segment manager.
 ///
 /// Allows to access a shared memory segment and reserve some parts of this segment for writting.
+#[allow(clippy::non_send_fields_in_send_ty)] // TODO: fix #185
 pub struct SharedMemoryManager {
     segment_path: String,
     size: usize,

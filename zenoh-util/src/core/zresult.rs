@@ -57,7 +57,7 @@ impl fmt::Display for ZError {
         write!(
             f,
             "{} at {}:{}.",
-            self.error.to_string(),
+            self.error,
             self.file,
             self.line
         )?;
