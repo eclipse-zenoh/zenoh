@@ -24,15 +24,16 @@ impl TransportMulticastInner {
                 // Drop the guard before the push_zenoh_message since
                 // the link could be congested and this operation could
                 // block for fairly long time
+                let pl = $pipeline.clone();
                 drop($guard);
-                return $pipeline.push_zenoh_message($msg);
+                return pl.push_zenoh_message($msg);
             };
         }
 
         let guard = zread!(self.link);
         match guard.as_ref() {
             Some(l) => {
-                if let Some(pipeline) = l.get_pipeline() {
+                if let Some(pipeline) = l.pipeline.as_ref() {
                     zpush!(guard, pipeline, msg);
                 }
             }
