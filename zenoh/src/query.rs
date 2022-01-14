@@ -62,9 +62,13 @@ pub(crate) struct QueryState {
 zreceiver! {
     /// A [`Receiver`] of [`Reply`], result of a [`get`](crate::Session::get) operation.
     ///
-    /// The replies of this receiver can be accessed:
+    /// `ReplyReceiver` implements the `Stream` trait as well as the
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries:
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
+    /// `ReplyReceiver` also provides a [`recv_async()`](ReplyReceiver::recv_async) function which allows
+    /// to access replies asynchronously without needing a mutable reference to the `ReplyReceiver`.
+    ///
     ///
     /// # Examples
     ///

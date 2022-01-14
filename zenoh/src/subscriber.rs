@@ -66,7 +66,7 @@ zreceiver! {
     /// [`Subscriber::receiver()`](Subscriber::receiver).
     ///
     /// `SampleReceiver` implements the `Stream` trait as well as the
-    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples:
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
     /// `SampleReceiver` also provides a [`recv_async()`](SampleReceiver::recv_async) function which allows
@@ -116,7 +116,7 @@ zreceiver! {
     /// A subscriber that provides data through a stream.
     ///
     /// `Subscriber` implements the `Stream` trait as well as the
-    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the samples:
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
     /// `Subscriber` also provides a [`recv_async()`](Subscriber::recv_async) function which allows

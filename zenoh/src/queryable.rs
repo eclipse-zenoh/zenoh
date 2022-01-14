@@ -130,7 +130,7 @@ zreceiver! {
     /// [`Queryable::receiver()`](Queryable::receiver).
     ///
     /// `QueryReceiver` implements the `Stream` trait as well as the
-    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries:
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
     /// `QueryReceiver` also provides a [`recv_async()`](QueryReceiver::recv_async) function which allows
@@ -179,7 +179,7 @@ zreceiver! {
     /// An entity able to reply to queries.
     ///
     /// `Queryable` implements the `Stream` trait as well as the
-    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries
+    /// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries:
     ///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
     ///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
     /// `Queryable` also provides a [`recv_async()`](Queryable::recv_async) function which allows
