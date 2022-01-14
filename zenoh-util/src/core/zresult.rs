@@ -54,13 +54,7 @@ impl std::error::Error for ZError {
 
 impl fmt::Display for ZError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} at {}:{}.",
-            self.error,
-            self.file,
-            self.line
-        )?;
+        write!(f, "{} at {}:{}.", self.error, self.file, self.line)?;
         if let Some(s) = &self.source {
             write!(f, " - Caused by {}", *s)?;
         }
