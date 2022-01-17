@@ -40,7 +40,7 @@ pub trait SessionExt {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut subscriber = session.subscribe_with_query("/key/expr").await.unwrap();
-    /// while let Some(sample) = subscriber.receiver().next().await {
+    /// while let Some(sample) = subscriber.next().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })

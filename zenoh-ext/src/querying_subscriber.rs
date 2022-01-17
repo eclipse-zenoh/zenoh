@@ -281,6 +281,49 @@ impl<'a> QueryingSubscriber<'a> {
     }
 }
 
+impl Stream for QueryingSubscriber<'_> {
+    type Item = Sample;
+
+    #[inline(always)]
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.receiver.poll_next(cx)
+    }
+}
+
+impl futures::stream::FusedStream for QueryingSubscriber<'_> {
+    #[inline(always)]
+    fn is_terminated(&self) -> bool {
+        self.receiver.is_terminated()
+    }
+}
+
+impl Receiver<Sample> for QueryingSubscriber<'_> {
+    #[inline(always)]
+    fn recv_async(&self) -> flume::r#async::RecvFut<'_, Sample> {
+        self.receiver.recv_async()
+    }
+
+    #[inline(always)]
+    fn recv(&self) -> Result<Sample, RecvError> {
+        self.receiver.recv()
+    }
+
+    #[inline(always)]
+    fn try_recv(&self) -> Result<Sample, TryRecvError> {
+        self.receiver.try_recv()
+    }
+
+    #[inline(always)]
+    fn recv_timeout(&self, timeout: Duration) -> Result<Sample, RecvTimeoutError> {
+        self.receiver.recv_timeout(timeout)
+    }
+
+    #[inline(always)]
+    fn recv_deadline(&self, deadline: Instant) -> Result<Sample, RecvTimeoutError> {
+        self.receiver.recv_deadline(deadline)
+    }
+}
+
 #[derive(Clone)]
 pub struct QueryingSubscriberReceiver {
     state: Arc<RwLock<InnerState>>,
