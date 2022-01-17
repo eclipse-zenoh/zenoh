@@ -29,7 +29,6 @@ pub use reader::*;
 pub use scouting::*;
 pub use shm::*;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
 pub use transport::*;
 pub use writer::*;
 
@@ -95,82 +94,47 @@ pub use writer::*;
 
 /// # Zenoh options
 ///
-/// A zenoh option represents an array of bytes that may contain bitflags or embedded values.
-/// Each byte option provides 7 bits for encoding bitflags or embedded values as follow:
+/// A zenoh option is encoded as TLV as follows:
 ///
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|X|X|X|X|X|X|X| -- Opt0
-/// +-+-+-+-+-+-+-+-+
-/// ```
-///
-/// As a result, the option bits are defined as:
-///
-/// ```text
-///  - 0 X: Free to use
-///  - 1 X: Free to use
-///  - 2 X: Free to use
-///  - 3 X: Free to use
-///  - 4 X: Free to use
-///  - 5 X: Free to use
-///  - 6 X: Free to use
-///  - 7 O: Additional options      If O==1 then another option will follow
-/// ```
-///
-/// An example of 2 bytes option is illustrated below.
-///
-/// ```text
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |1|X|X|X|X|X|X|X| -- Opt0. Bit 7 is set to 1. An additional option byte will follow.
-/// +-+-+-+-+-+-+-+-+
-/// |0|X|X|X|X|X|X|X| -- Opt1. Bit 7 is set to 0. This is the last option byte.
-/// +-+-+-+-+-+-+-+-+
-/// ```
-///
-/// Any information MAY be interleaved between options, e.g.:
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |1|X|X|X|X|X|X|A| -- Opt0. Bit 7 is set to 1. An additional option byte will follow.
-/// +-+-+-+-+-+-+-+-+
-/// ~    <uint8>    ~ if Opt0(A)==1
+/// |O|X|X|   ID    |
+/// +-+-+-+---------+
+/// ~    length     ~
 /// +---------------+
-/// |0|X|X|X|X|X|X|B| -- Opt1. Bit 7 is set to 0. This is the last option byte.
-/// +-+-+-+-+-+-+-+-+
-/// ~    <uint8>    ~ if Opt1(B)==1
+/// ~     [u8]      ~
 /// +---------------+
+/// ```
 ///
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ZOpts<const NUM: usize> {
-    inner: [u8; NUM],
+/// The option header bit 7 is reserved and indicates wether another
+/// zenoh option will follow. Zenoh options with unknown IDs can be
+/// skipped by reading the length and not decoding the body.
+///
+pub trait ZOpt: Clone + PartialEq + Eq + std::fmt::Debug {
+    fn header(&self) -> u8;
+    fn length(&self) -> usize;
+    fn write_body(&self, wbuf: &mut WBuf) -> bool;
 }
 
-impl From<u8> for ZOpts<1> {
-    fn from(obj: u8) -> ZOpts<1> {
-        ZOpts { inner: [obj] }
+impl WBuf {
+    fn write_option<T: ZOpt>(&mut self, opt: &T, more: bool) -> bool {
+        const FLAG_O: u8 = 1 << 7;
+
+        let mut header = opt.header();
+        if more {
+            header |= FLAG_O;
+        }
+
+        self.write(header) && self.write_usize_as_zint(opt.length()) && opt.write_body(self)
     }
 }
 
-impl ZOpts<1> {
-    pub const fn default() -> ZOpts<1> {
-        ZOpts { inner: [0] }
-    }
-}
-
-impl Deref for ZOpts<1> {
-    type Target = [u8; 1];
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ZOpts<1> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
+/// # Wire options
+///
+/// Unknown options can be stored into a wire options structure
+///
+pub type WireOptions = HashMap<u8, Vec<u8>>;
 
 /// # Wire properties
 ///

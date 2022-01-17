@@ -36,31 +36,6 @@ pub type AtomicZInt = AtomicU64;
 pub type NonZeroZInt = NonZeroU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
-// Size in bits of a zenoh integer
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ZIntSize {
-    U8 = 8,
-    U16 = 16,
-    U32 = 32,
-    U64 = 64,
-}
-
-impl ZIntSize {
-    pub fn get() -> ZIntSize {
-        match ZInt::BITS {
-            8 => ZIntSize::U8,
-            16 => ZIntSize::U16,
-            32 => ZIntSize::U32,
-            64 => ZIntSize::U64,
-            unknown => unreachable!(
-                "Unsupported zint size: {}. Admitted values are: 8, 16, 32, 64.",
-                unknown
-            ),
-        }
-    }
-}
-
 /// The zenoh version
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Version {

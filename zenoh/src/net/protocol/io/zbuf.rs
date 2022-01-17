@@ -379,6 +379,16 @@ impl ZBuf {
     }
 
     #[inline(always)]
+    pub fn skip_bytes(&mut self, len: usize) -> bool {
+        if self.readable() >= len {
+            self.skip_bytes_no_check(len);
+            true
+        } else {
+            false
+        }
+    }
+
+    #[inline(always)]
     pub fn read_vec(&mut self) -> Vec<u8> {
         let mut vec = vec![0_u8; self.readable()];
         self.read_bytes(&mut vec);

@@ -14,11 +14,58 @@
 use super::core::whatami::WhatAmIMatcher;
 use super::core::*;
 use super::io::{WBuf, ZBuf};
-use super::{WireProperties, ZOpts};
+use super::{WireProperties, ZOpt};
 use crate::net::link::Locator;
 use std::fmt;
 #[cfg(feature = "stats")]
 use std::num::NonZeroUsize;
+
+// One trillion iterations:
+// One 2164.382053981s 5965369712512
+// Two 791.343083805s 5965369712512
+
+// fn zint_len(mut v: usize) -> usize {
+//     let mut n = 1;
+//     while v > 0x7F {
+//         v >>= 7;
+//         n += 1;
+//     }
+//     n
+// }
+
+fn zint_len(v: ZInt) -> usize {
+    const MASK_1: ZInt = ZInt::MAX << 7;
+    const MASK_2: ZInt = ZInt::MAX << (7 * 2);
+    const MASK_3: ZInt = ZInt::MAX << (7 * 3);
+    const MASK_4: ZInt = ZInt::MAX << (7 * 4);
+    const MASK_5: ZInt = ZInt::MAX << (7 * 5);
+    const MASK_6: ZInt = ZInt::MAX << (7 * 6);
+    const MASK_7: ZInt = ZInt::MAX << (7 * 7);
+    const MASK_8: ZInt = ZInt::MAX << (7 * 8);
+    const MASK_9: ZInt = ZInt::MAX << (7 * 9);
+
+    if (v & MASK_1) == 0 {
+        1
+    } else if (v & MASK_2) == 0 {
+        2
+    } else if (v & MASK_3) == 0 {
+        3
+    } else if (v & MASK_4) == 0 {
+        4
+    } else if (v & MASK_5) == 0 {
+        5
+    } else if (v & MASK_6) == 0 {
+        6
+    } else if (v & MASK_7) == 0 {
+        7
+    } else if (v & MASK_8) == 0 {
+        8
+    } else if (v & MASK_9) == 0 {
+        9
+    } else {
+        10
+    }
+}
 
 pub mod id {
     // 0x00: Reserved
@@ -30,6 +77,190 @@ pub mod id {
     // 0x03: Reserved
     // ..  : Reserved
     // 0x1f: Reserved
+}
+
+pub mod opt {
+    // 0x00: Reserved
+
+    // Scouting options
+    pub const EXPERIMENTAL: u8 = 0x01;
+    pub const ZENOH: u8 = 0x02;
+    pub const USER: u8 = 0x03;
+
+    // 0x04: Reserved
+    // ..  : Reserved
+    // 0x1f: Reserved
+}
+
+/// # Experimental option
+///
+/// It indicates the experimental version of zenoh.
+///  
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| EXP_VER |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~    version    ~
+/// +---------------+
+///
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ZOptExp {
+    pub version: ZInt,
+    pub len: usize,
+}
+
+impl ZOptExp {
+    fn new(version: ZInt) -> Self {
+        Self {
+            version,
+            len: zint_len(version),
+        }
+    }
+
+    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
+        let start = zbuf.readable();
+        let version = zbuf.read_zint()?;
+        let len = start - zbuf.readable();
+        Some(Self { version, len })
+    }
+}
+
+impl ZOpt for ZOptExp {
+    fn header(&self) -> u8 {
+        opt::EXPERIMENTAL
+    }
+
+    fn length(&self) -> usize {
+        self.len
+    }
+
+    fn write_body(&self, wbuf: &mut WBuf) -> bool {
+        wbuf.write_zint(self.version)
+    }
+}
+
+/// # Routing ID
+///
+/// It includes the zenoh properties.
+///  
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| RID     |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~      rid      ~
+/// +---------------+
+///
+
+/// # Zenoh option
+///
+/// It includes the zenoh properties.
+///  
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| Z_PROPS |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~  <property>   ~
+/// +---------------+
+///
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ZOptZenoh {
+    pub inner: WireProperties,
+}
+
+impl ZOptZenoh {
+    pub fn new() -> Self {
+        Self {
+            inner: WireProperties::new(),
+        }
+    }
+
+    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
+        let inner = zbuf.read_wire_properties()?;
+        Some(Self { inner })
+    }
+}
+
+impl Default for ZOptZenoh {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ZOpt for ZOptZenoh {
+    fn header(&self) -> u8 {
+        opt::ZENOH
+    }
+
+    fn length(&self) -> usize {
+        let len = zint_len(self.inner.len() as ZInt);
+        self.inner
+            .iter()
+            .fold(len, |len, (k, v)| len + zint_len(*k) + v.len())
+    }
+
+    fn write_body(&self, wbuf: &mut WBuf) -> bool {
+        wbuf.write_wire_properties(&self.inner)
+    }
+}
+
+/// # User option
+///
+/// It includes the zenoh properties.
+///  
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| U_PROPS |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~  <property>   ~
+/// +---------------+
+///
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ZOptUser {
+    pub inner: WireProperties,
+}
+
+impl ZOptUser {
+    pub fn new() -> Self {
+        Self {
+            inner: WireProperties::new(),
+        }
+    }
+
+    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
+        let inner = zbuf.read_wire_properties()?;
+        Some(Self { inner })
+    }
+}
+
+impl Default for ZOptUser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ZOpt for ZOptUser {
+    fn header(&self) -> u8 {
+        opt::USER
+    }
+
+    fn length(&self) -> usize {
+        let len = zint_len(self.inner.len() as ZInt);
+        self.inner
+            .iter()
+            .fold(len, |len, (k, v)| len + zint_len(*k) + v.len())
+    }
+
+    fn write_body(&self, wbuf: &mut WBuf) -> bool {
+        wbuf.write_wire_properties(&self.inner)
+    }
 }
 
 /// # Scout message
@@ -77,44 +308,45 @@ pub mod id {
 /// +-+-+-+-+-+-+-+-+
 /// |O|X|I|  SCOUT  |
 /// +-+-+-+---------+
-/// | vmaj  | vmin  |
+/// |    version    |
 /// +---------------+
-/// |X|X|X| what|zis| (*)(#)
-/// +---+---+-------+
+/// |X|X|X|X|X| what| (*)
+/// +---+-------+---+
 /// ~   zenoh_id    ~ if Flag(I)==1 -- ZenohID
 /// +---------------+
-/// |O|X|X|X|X|E|U|Z| if Flag(O)==1 -- Opt0
-/// +-+-+-+-+-+-+-+-+
-/// ~  exp_version  ~ if Opt0(E)==1 -- ZInt
-/// +---------------+
-/// ~  scout_props  ~ if Opt0(Z)==1 -- Properties
-/// +---------------+
-/// ~ u_properties  ~ if Opt0(U)==1 -- Properties
-/// +---------------+
-///
-/// (#) ZInt size. It indicates the supported ZInt size by the sender of the message.
-///    The ZInt size represents the maximum size in memory of the ZInt and not the encoded
-///    size on the wire. The valid ZInt size values in binary representation are:
-///    - 0b00: 8 bits
-///    - 0b01: 16 bits
-///    - 0b10: 32 bits
-///    - 0b11: 64 bits
-///    That is, the valid ZInt size values are calculated as log_2(size in bits / 8).
 ///
 /// (*) What. It indicates a bitmap of WhatAmI interests.
 ///    The valid bitflags are:
 ///    - 0b001: Router
 ///    - 0b010: Peer
 ///    - 0b100: Client
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| Z_PROPS |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~  scout_props  ~
+/// +---------------+
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |O|X|X| U_PROPS |
+/// +-+-+-+---------+
+/// ~    length     ~
+/// +---------------+
+/// ~  user_props   ~
+/// +---------------+
+///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scout {
     pub version: Version,
-    pub zsize: ZIntSize,
     pub what: WhatAmIMatcher,
     pub zid: Option<ZenohId>,
-    pub s_ps: WireProperties,
-    pub u_ps: WireProperties,
+    pub z_ps: ZOptZenoh,
+    pub u_ps: ZOptUser,
 }
 
 impl Scout {
@@ -123,37 +355,52 @@ impl Scout {
     // pub const FLAG_X: u8 = 1 << 6; // Reserved for future use
     pub const FLAG_O: u8 = 1 << 7;
 
-    // Opt0 flags
-    pub const OPT0_Z: u8 = 1 << 0;
-    pub const OPT0_U: u8 = 1 << 1;
-    pub const OPT0_E: u8 = 1 << 2;
-    // pub const OPT0_X: u8 = 1 << 3; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 4; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 5; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 6; // Reserved for future use
-    // pub const OPT0_0: u8 = 1 << 7; // Reserved for future use
+    fn opt_len(&self) -> usize {
+        let mut opts = 0;
+        if self.version.experimental.is_some() {
+            opts += 1;
+        }
+        if !self.z_ps.inner.is_empty() {
+            opts += 1;
+        }
+        if !self.u_ps.inner.is_empty() {
+            opts += 1;
+        }
+        opts
+    }
 }
 
 impl WBuf {
+    fn write_scout_opts(&mut self, scout: &Scout, mut opts: usize) -> bool {
+        if let Some(exp) = scout.version.experimental {
+            opts -= 1;
+            let exp = ZOptExp::new(exp.get());
+            zcheck!(self.write_option(&exp, opts != 0));
+        }
+
+        if !scout.z_ps.inner.is_empty() {
+            opts -= 1;
+            zcheck!(self.write_option(&scout.z_ps, opts != 0));
+        }
+
+        if !scout.u_ps.inner.is_empty() {
+            opts -= 1;
+            zcheck!(self.write_option(&scout.u_ps, opts != 0));
+        }
+
+        opts == 0
+    }
+
     pub fn write_scout(&mut self, scout: &Scout) -> bool {
-        // Build options
-        let mut opt = ZOpts::<1>::default();
-        if !scout.s_ps.is_empty() {
-            opt[0] |= Scout::OPT0_Z;
-        }
-        if !scout.u_ps.is_empty() {
-            opt[0] |= Scout::OPT0_U;
-        }
-        if scout.version.experimental.is_some() {
-            opt[0] |= Scout::OPT0_E;
-        }
+        // Compute options
+        let opts = scout.opt_len();
 
         // Build header
         let mut header = id::SCOUT;
         if scout.zid.is_some() {
             header |= Scout::FLAG_I;
         }
-        if opt[0] != 0 {
+        if opts != 0 {
             header |= Scout::FLAG_O;
         }
 
@@ -163,32 +410,16 @@ impl WBuf {
         // Write body
         zcheck!(self.write(scout.version.stable));
 
-        let zis: u8 = match scout.zsize {
-            ZIntSize::U8 => 0b00,
-            ZIntSize::U16 => 0b01,
-            ZIntSize::U32 => 0b10,
-            ZIntSize::U64 => 0b11,
-        };
         let what: u8 = scout.what.into();
-        zcheck!(self.write(what << 2 | zis));
+        zcheck!(self.write(what));
 
         if let Some(zid) = scout.zid.as_ref() {
             zcheck!(self.write_zenohid(zid));
         }
 
         // Write options
-        if opt[0] != 0 {
-            zcheck!(self.write(opt[0]));
-
-            if let Some(exp) = scout.version.experimental {
-                zcheck!(self.write_zint(exp.get()));
-            }
-            if !scout.s_ps.is_empty() {
-                zcheck!(self.write_wire_properties(&scout.s_ps));
-            }
-            if !scout.u_ps.is_empty() {
-                zcheck!(self.write_wire_properties(&scout.u_ps));
-            }
+        if opts != 0 {
+            zcheck!(self.write_scout_opts(scout, opts));
         }
 
         true
@@ -196,21 +427,41 @@ impl WBuf {
 }
 
 impl ZBuf {
+    fn read_scout_opts(&mut self, scout: &mut Scout) -> Option<()> {
+        loop {
+            let opt = self.read()?;
+            let len = self.read_zint_as_usize()?;
+
+            match super::mid(opt) {
+                opt::EXPERIMENTAL => {
+                    let exp = ZOptExp::read_body(self, opt)?;
+                    scout.version.experimental = NonZeroZInt::new(exp.version);
+                }
+                opt::ZENOH => scout.z_ps = ZOptZenoh::read_body(self, opt)?,
+                opt::USER => scout.u_ps = ZOptUser::read_body(self, opt)?,
+                _ => {
+                    if !self.skip_bytes(len) {
+                        return None;
+                    }
+                }
+            }
+
+            if !super::has_flag(opt, Scout::FLAG_O) {
+                break;
+            }
+        }
+
+        Some(())
+    }
+
     pub fn read_scout(&mut self, header: u8) -> Option<Scout> {
-        let mut version = Version {
+        let version = Version {
             stable: self.read()?,
             experimental: None,
         };
 
         let tmp = self.read()?;
-        let zsize = match tmp & 0b11 {
-            0b00 => ZIntSize::U8,
-            0b01 => ZIntSize::U16,
-            0b10 => ZIntSize::U32,
-            0b11 => ZIntSize::U64,
-            _ => return None,
-        };
-        let what = WhatAmIMatcher::try_from((tmp >> 2) & 0b111)?;
+        let what = WhatAmIMatcher::try_from(tmp & 0b111)?;
 
         let zid = if super::has_flag(header, Scout::FLAG_I) {
             Some(self.read_zenohid()?)
@@ -218,30 +469,18 @@ impl ZBuf {
             None
         };
 
-        let mut s_ps = WireProperties::new();
-        let mut u_ps = WireProperties::new();
-        if super::has_flag(header, Scout::FLAG_O) {
-            let opt0 = self.read()?;
-
-            if super::has_flag(opt0, Scout::OPT0_E) {
-                version.experimental = NonZeroZInt::new(self.read_zint()?);
-            }
-            if super::has_flag(opt0, Scout::OPT0_Z) {
-                s_ps = self.read_wire_properties()?;
-            }
-            if super::has_flag(opt0, Scout::OPT0_U) {
-                u_ps = self.read_wire_properties()?;
-            }
-        }
-
-        let msg = Scout {
+        let mut msg = Scout {
             version,
-            zsize,
             what,
             zid,
-            s_ps,
-            u_ps,
+            z_ps: ZOptZenoh::new(),
+            u_ps: ZOptUser::new(),
         };
+
+        if super::has_flag(header, Scout::FLAG_O) {
+            self.read_scout_opts(&mut msg)?;
+        }
+
         Some(msg)
     }
 }
@@ -316,31 +555,14 @@ impl ZBuf {
 /// +-+-+-+-+-+-+-+-+
 /// |O|X|L|  HELLO  |
 /// +-+-+-+---------+
-/// | vmaj  | vmin  |
+/// |    version    |
 /// +---------------+
-/// |X|X|X|X|wai|zis| (*)(#)
+/// |X|X|X|X|X|X|wai| (*)
 /// +---+---+-------+
 /// ~   zenoh_id    ~ -- ZenohID
 /// +---------------+
 /// ~   <locator>   ~ if Flag(L)==1 -- List of locators
 /// +---------------+
-/// |O|X|X|X|X|E|U|Z| if Flag(O)==1 -- Opt0
-/// +-+-+-+-+-+-+-+-+
-/// ~  exp_version  ~ if Opt0(E)==1 -- ZInt
-/// +---------------+
-/// ~  hello_props  ~ if Opt0(Z)==1 -- Properties
-/// +---------------+
-/// ~ u_properties  ~ if Opt0(U)==1 -- Properties
-/// +---------------+
-///
-/// (#) ZInt size. It indicates the supported ZInt size by the sender of the message.
-///    The ZInt size represents the maximum size in memory of the ZInt and not the encoded
-///    size on the wire. The valid ZInt size values in binary representation are:
-///    - 0b00: 8 bits
-///    - 0b01: 16 bits
-///    - 0b10: 32 bits
-///    - 0b11: 64 bits
-///    That is, the valid ZInt size values are calculated as log_2(size in bits / 8).
 ///
 /// (*) WhatAmI. It indicates the role of the zenoh node sending the HELLO message.
 ///    The valid WhatAmI values are:
@@ -348,16 +570,16 @@ impl ZBuf {
 ///    - 0b01: Peer
 ///    - 0b10: Client
 ///    - 0b11: Reserved
+///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hello {
     pub version: Version,
-    pub zsize: ZIntSize,
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub locators: Vec<Locator>,
-    pub h_ps: WireProperties,
-    pub u_ps: WireProperties,
+    pub z_ps: ZOptZenoh,
+    pub u_ps: ZOptUser,
 }
 
 impl Hello {
@@ -366,37 +588,52 @@ impl Hello {
     // pub const FLAG_X: u8 = 1 << 6; // Reserved for future use
     pub const FLAG_O: u8 = 1 << 7;
 
-    // Opt0 flags
-    pub const OPT0_Z: u8 = 1 << 0;
-    pub const OPT0_U: u8 = 1 << 1;
-    pub const OPT0_E: u8 = 1 << 2;
-    // pub const OPT0_X: u8 = 1 << 3; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 4; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 5; // Reserved for future use
-    // pub const OPT0_X: u8 = 1 << 6; // Reserved for future use
-    // pub const OPT0_0: u8 = 1 << 7; // Reserved for future use
+    fn opt_len(&self) -> usize {
+        let mut opts = 0;
+        if self.version.experimental.is_some() {
+            opts += 1;
+        }
+        if !self.z_ps.inner.is_empty() {
+            opts += 1;
+        }
+        if !self.u_ps.inner.is_empty() {
+            opts += 1;
+        }
+        opts
+    }
 }
 
 impl WBuf {
+    fn write_hello_opts(&mut self, hello: &Hello, mut opts: usize) -> bool {
+        if let Some(exp) = hello.version.experimental {
+            opts -= 1;
+            let exp = ZOptExp::new(exp.get());
+            zcheck!(self.write_option(&exp, opts != 0));
+        }
+
+        if !hello.z_ps.inner.is_empty() {
+            opts -= 1;
+            zcheck!(self.write_option(&hello.z_ps, opts != 0));
+        }
+
+        if !hello.u_ps.inner.is_empty() {
+            opts -= 1;
+            zcheck!(self.write_option(&hello.u_ps, opts != 0));
+        }
+
+        opts == 0
+    }
+
     pub fn write_hello(&mut self, hello: &Hello) -> bool {
-        // Build options
-        let mut opt = ZOpts::<1>::default();
-        if !hello.h_ps.is_empty() {
-            opt[0] |= Hello::OPT0_Z;
-        }
-        if !hello.u_ps.is_empty() {
-            opt[0] |= Hello::OPT0_U;
-        }
-        if hello.version.experimental.is_some() {
-            opt[0] |= Hello::OPT0_E;
-        }
+        // Compute options
+        let opts = hello.opt_len();
 
         // Build header
         let mut header = id::HELLO;
         if !hello.locators.is_empty() {
             header |= Hello::FLAG_L;
         }
-        if opt[0] != 0 {
+        if opts != 0 {
             header |= Hello::FLAG_O;
         }
 
@@ -411,13 +648,7 @@ impl WBuf {
             whatami::WhatAmI::Peer => 0b01,
             whatami::WhatAmI::Client => 0b10,
         };
-        let zis: u8 = match hello.zsize {
-            ZIntSize::U8 => 0b00,
-            ZIntSize::U16 => 0b01,
-            ZIntSize::U32 => 0b10,
-            ZIntSize::U64 => 0b11,
-        };
-        zcheck!(self.write(wai << 2 | zis));
+        zcheck!(self.write(wai));
 
         zcheck!(self.write_zenohid(&hello.zid));
 
@@ -426,18 +657,8 @@ impl WBuf {
         }
 
         // Write options
-        if opt[0] != 0 {
-            zcheck!(self.write(opt[0]));
-
-            if let Some(exp) = hello.version.experimental {
-                zcheck!(self.write_zint(exp.get()));
-            }
-            if !hello.h_ps.is_empty() {
-                zcheck!(self.write_wire_properties(&hello.h_ps));
-            }
-            if !hello.u_ps.is_empty() {
-                zcheck!(self.write_wire_properties(&hello.u_ps));
-            }
+        if opts != 0 {
+            zcheck!(self.write_hello_opts(hello, opts));
         }
 
         true
@@ -445,22 +666,41 @@ impl WBuf {
 }
 
 impl ZBuf {
+    fn read_hello_opts(&mut self, hello: &mut Hello) -> Option<()> {
+        loop {
+            let opt = self.read()?;
+            let len = self.read_zint_as_usize()?;
+
+            match super::mid(opt) {
+                opt::EXPERIMENTAL => {
+                    let exp = ZOptExp::read_body(self, opt)?;
+                    hello.version.experimental = NonZeroZInt::new(exp.version);
+                }
+                opt::ZENOH => hello.z_ps = ZOptZenoh::read_body(self, opt)?,
+                opt::USER => hello.u_ps = ZOptUser::read_body(self, opt)?,
+                _ => {
+                    if !self.skip_bytes(len) {
+                        return None;
+                    }
+                }
+            }
+
+            if !super::has_flag(opt, Scout::FLAG_O) {
+                break;
+            }
+        }
+
+        Some(())
+    }
+
     pub fn read_hello(&mut self, header: u8) -> Option<Hello> {
-        let mut version = Version {
+        let version = Version {
             stable: self.read()?,
             experimental: None,
         };
 
         let tmp = self.read()?;
-
-        let zsize = match tmp & 0b11 {
-            0b00 => ZIntSize::U8,
-            0b01 => ZIntSize::U16,
-            0b10 => ZIntSize::U32,
-            0b11 => ZIntSize::U64,
-            _ => return None,
-        };
-        let whatami = match (tmp >> 2) & 0b11 {
+        let whatami = match tmp & 0b11 {
             0b00 => whatami::WhatAmI::Router,
             0b01 => whatami::WhatAmI::Peer,
             0b10 => whatami::WhatAmI::Client,
@@ -475,31 +715,19 @@ impl ZBuf {
             vec![]
         };
 
-        let mut h_ps = WireProperties::new();
-        let mut u_ps = WireProperties::new();
-        if super::has_flag(header, Hello::FLAG_O) {
-            let opt0 = self.read()?;
-
-            if super::has_flag(opt0, Hello::OPT0_E) {
-                version.experimental = NonZeroZInt::new(self.read_zint()?);
-            }
-            if super::has_flag(opt0, Hello::OPT0_Z) {
-                h_ps = self.read_wire_properties()?;
-            }
-            if super::has_flag(opt0, Hello::OPT0_U) {
-                u_ps = self.read_wire_properties()?;
-            }
-        }
-
-        let msg = Hello {
+        let mut msg = Hello {
             version,
-            zsize,
             whatami,
             zid,
             locators,
-            h_ps,
-            u_ps,
+            z_ps: ZOptZenoh::new(),
+            u_ps: ZOptUser::new(),
         };
+
+        if super::has_flag(header, Scout::FLAG_O) {
+            self.read_hello_opts(&mut msg)?;
+        }
+
         Some(msg)
     }
 }
@@ -538,17 +766,16 @@ impl ScoutingMessage {
         version: Version,
         what: WhatAmIMatcher,
         zid: Option<ZenohId>,
-        s_ps: WireProperties,
+        z_ps: WireProperties,
         u_ps: WireProperties,
     ) -> ScoutingMessage {
         ScoutingMessage {
             body: ScoutingBody::Scout(Scout {
                 version,
-                zsize: ZIntSize::get(),
                 what,
                 zid,
-                s_ps,
-                u_ps,
+                z_ps: ZOptZenoh { inner: z_ps },
+                u_ps: ZOptUser { inner: u_ps },
             }),
             #[cfg(feature = "stats")]
             size: None,
@@ -560,18 +787,17 @@ impl ScoutingMessage {
         whatami: WhatAmI,
         zid: ZenohId,
         locators: Vec<Locator>,
-        h_ps: WireProperties,
+        z_ps: WireProperties,
         u_ps: WireProperties,
     ) -> ScoutingMessage {
         ScoutingMessage {
             body: ScoutingBody::Hello(Hello {
                 version,
-                zsize: ZIntSize::get(),
                 whatami,
                 zid,
                 locators,
-                h_ps,
-                u_ps,
+                z_ps: ZOptZenoh { inner: z_ps },
+                u_ps: ZOptUser { inner: u_ps },
             }),
             #[cfg(feature = "stats")]
             size: None,
