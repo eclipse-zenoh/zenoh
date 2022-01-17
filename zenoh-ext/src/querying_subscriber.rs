@@ -26,8 +26,9 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh::Session;
 use zenoh_util::{zread, zwrite};
+
+use crate::session_ext::SessionRef;
 
 use super::PublicationCache;
 
@@ -37,7 +38,7 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
-    session: &'a Session,
+    session: SessionRef<'a>,
     sub_key_expr: KeyExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
@@ -50,7 +51,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
-        session: &'a Session,
+        session: SessionRef<'a>,
         sub_key_expr: KeyExpr<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
@@ -193,14 +194,22 @@ pub struct QueryingSubscriber<'a> {
 
 impl<'a> QueryingSubscriber<'a> {
     fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
+        use zenoh::prelude::EntityFactory;
         // declare subscriber at first
-        let mut subscriber = conf
-            .session
-            .subscribe(&conf.sub_key_expr)
-            .reliability(conf.reliability)
-            .mode(conf.mode)
-            .period(conf.period)
-            .wait()?;
+        let mut subscriber = match conf.session.clone() {
+            SessionRef::Borrow(session) => session
+                .subscribe(&conf.sub_key_expr)
+                .reliability(conf.reliability)
+                .mode(conf.mode)
+                .period(conf.period)
+                .wait()?,
+            SessionRef::Shared(session) => session
+                .subscribe(&conf.sub_key_expr)
+                .reliability(conf.reliability)
+                .mode(conf.mode)
+                .period(conf.period)
+                .wait()?,
+        };
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
 

@@ -12,8 +12,37 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
+use std::fmt;
+use std::ops::Deref;
+use std::sync::Arc;
 use zenoh::prelude::KeyExpr;
 use zenoh::Session;
+
+#[derive(Clone)]
+pub(crate) enum SessionRef<'a> {
+    Borrow(&'a Session),
+    Shared(Arc<Session>),
+}
+
+impl Deref for SessionRef<'_> {
+    type Target = Session;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            SessionRef::Borrow(b) => b,
+            SessionRef::Shared(s) => &*s,
+        }
+    }
+}
+
+impl fmt::Debug for SessionRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SessionRef::Borrow(b) => Session::fmt(b, f),
+            SessionRef::Shared(s) => Session::fmt(&*s, f),
+        }
+    }
+}
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
@@ -68,7 +97,29 @@ impl SessionExt for Session {
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        QueryingSubscriberBuilder::new(self, sub_key_expr.into())
+        QueryingSubscriberBuilder::new(SessionRef::Borrow(self), sub_key_expr.into())
+    }
+
+    fn publication_cache<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        pub_key_expr: IntoKeyExpr,
+    ) -> PublicationCacheBuilder<'a, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        PublicationCacheBuilder::new(self, pub_key_expr.into())
+    }
+}
+
+impl SessionExt for Arc<Session> {
+    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        sub_key_expr: IntoKeyExpr,
+    ) -> QueryingSubscriberBuilder<'a, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        QueryingSubscriberBuilder::new(SessionRef::Shared(self.clone()), sub_key_expr.into())
     }
 
     fn publication_cache<'a, 'b, IntoKeyExpr>(
