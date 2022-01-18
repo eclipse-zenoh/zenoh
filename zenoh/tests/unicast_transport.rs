@@ -163,12 +163,8 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
-    #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManager::config_unicast();
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(endpoints.len());
-    }
+    let unicast = TransportManager::config_unicast().max_links(endpoints.len());
+
     let router_manager = TransportManager::builder()
         .pid(router_id)
         .whatami(WhatAmI::Router)
@@ -177,12 +173,7 @@ async fn open_transport(
         .unwrap();
 
     // Create the client transport manager
-    #[allow(unused_mut)] // transport_multilink-memory feature requires mut
-    let mut unicast = TransportManager::config_unicast();
-    #[cfg(feature = "transport_multilink")]
-    {
-        unicast = unicast.max_links(endpoints.len());
-    }
+    let unicast = TransportManager::config_unicast().max_links(endpoints.len());
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .pid(client_id)
@@ -228,14 +219,23 @@ async fn close_transport(
     println!("Closing transport with {}", ee);
     let _ = ztimeout!(client_transport.close()).unwrap();
 
-    // Wait a little bit
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
         println!("Del locator: {}", e);
         let _ = ztimeout!(router_manager.del_listener(e)).unwrap();
     }
+
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     // Wait a little bit
     task::sleep(SLEEP).await;
@@ -329,18 +329,9 @@ async fn run_single(endpoints: &[EndPoint], channel: Channel, msg_size: usize) {
 }
 
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
-    #[cfg(feature = "transport_multilink")]
     for ch in channel.iter() {
         for ms in msg_size.iter() {
             run_single(endpoints, *ch, *ms).await;
-        }
-    }
-    #[cfg(not(feature = "transport_multilink"))]
-    for ch in channel.iter() {
-        for ms in msg_size.iter() {
-            for i in 0..endpoints.len() {
-                run_single(&endpoints[i..i + 1], *ch, *ms).await;
-            }
         }
     }
 }
@@ -436,11 +427,7 @@ fn transport_unicast_unix_only() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
 
-#[cfg(all(
-    feature = "transport_multilink",
-    feature = "transport_tcp",
-    feature = "transport_udp"
-))]
+#[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_unicast_tcp_udp() {
     task::block_on(async {
@@ -470,7 +457,6 @@ fn transport_unicast_tcp_udp() {
 }
 
 #[cfg(all(
-    feature = "transport_multilink",
     feature = "transport_tcp",
     feature = "transport_unixsock-stream",
     target_family = "unix"
@@ -508,7 +494,6 @@ fn transport_unicast_tcp_unix() {
 }
 
 #[cfg(all(
-    feature = "transport_multilink",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",
     target_family = "unix"
@@ -546,7 +531,6 @@ fn transport_unicast_udp_unix() {
 }
 
 #[cfg(all(
-    feature = "transport_multilink",
     feature = "transport_tcp",
     feature = "transport_udp",
     feature = "transport_unixsock-stream",

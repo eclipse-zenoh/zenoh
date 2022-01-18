@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use rand::SeedableRng;
 use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
@@ -173,7 +173,7 @@ impl ZBuf {
 /*************************************/
 struct InnerState {
     prng: PseudoRng,
-    known_keys: Option<HashSet<RsaPublicKey>>,
+    known_keys: Option<Vec<RsaPublicKey>>,
     authenticated: HashMap<ZenohId, Option<RsaPublicKey>>,
 }
 
@@ -218,11 +218,12 @@ impl PubKeyAuthenticator {
         let mut guard = zasynclock!(self.state);
         match guard.known_keys.as_mut() {
             Some(kk) => {
-                kk.insert(key);
+                if !kk.iter().any(|x| x == &key) {
+                    kk.push(key);
+                }
             }
             None => {
-                let mut hs = HashSet::new();
-                hs.insert(key);
+                let hs = vec![key];
                 guard.known_keys = Some(hs);
             }
         }
@@ -232,7 +233,9 @@ impl PubKeyAuthenticator {
     pub async fn del_key(&self, key: &RsaPublicKey) -> ZResult<()> {
         let mut guard = zasynclock!(self.state);
         if let Some(kk) = guard.known_keys.as_mut() {
-            kk.remove(key);
+            if let Some(i) = kk.iter().position(|x| x == key) {
+                kk.remove(i);
+            }
         }
         Ok(())
     }
@@ -357,7 +360,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     None => {
                         // It's the first time we see this peer, check if it is authorized it
                         if let Some(kk) = guard.known_keys.as_ref() {
-                            if kk.get(&init_syn_property.alice_pubkey).is_none() {
+                            if !kk.iter().any(|x| x == &init_syn_property.alice_pubkey) {
                                 // The peer is already present but no previous multilink intereset
                                 // was declared. Rejecting for inconsistent declaration.
                                 bail!("Unauthorized multilink pub key on link: {}", link);

@@ -76,9 +76,8 @@ use zenoh_util::zparse;
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(Duration::from_millis(100))
 ///         .open_timeout(Duration::from_secs(1))
-///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports
-///         // #[cfg(feature = "transport_multilink")]
-///         // .max_links(2)    // Allow max 2 links per transport
+///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports        
+///         .max_links(1)    // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
 ///         .pid(ZenohId::rand())

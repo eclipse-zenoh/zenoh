@@ -46,11 +46,11 @@ pub(super) struct TransportLinkMulticastConfig {
 #[derive(Clone)]
 pub(super) struct TransportLinkMulticast {
     // The underlying link
-    pub(super) inner: LinkMulticast,
+    pub(super) link: LinkMulticast,
+    // The transmission pipeline
+    pub(super) pipeline: Option<Arc<TransmissionPipeline>>,
     // The transport this link is associated to
     transport: TransportMulticastInner,
-    // The transmission pipeline
-    pipeline: Option<Arc<TransmissionPipeline>>,
     // The signals to stop TX/RX tasks
     handle_tx: Option<Arc<JoinHandle<()>>>,
     active_rx: Arc<AtomicBool>,
@@ -65,7 +65,7 @@ impl TransportLinkMulticast {
     ) -> TransportLinkMulticast {
         TransportLinkMulticast {
             transport,
-            inner: link,
+            link,
             pipeline: None,
             handle_tx: None,
             active_rx: Arc::new(AtomicBool::new(false)),
@@ -76,16 +76,6 @@ impl TransportLinkMulticast {
 }
 
 impl TransportLinkMulticast {
-    #[inline]
-    pub(super) fn get_link(&self) -> &LinkMulticast {
-        &self.inner
-    }
-
-    #[inline]
-    pub(super) fn get_pipeline(&self) -> Option<Arc<TransmissionPipeline>> {
-        self.pipeline.clone()
-    }
-
     pub(super) fn start_tx(
         &mut self,
         config: TransportLinkMulticastConfig,
@@ -102,14 +92,14 @@ impl TransportLinkMulticast {
         if self.handle_tx.is_none() {
             // The pipeline
             let pipeline = Arc::new(TransmissionPipeline::new(
-                config.batch_size.min(self.inner.get_mtu()),
+                config.batch_size.min(self.link.get_mtu()),
                 false,
                 conduit_tx,
             ));
             self.pipeline = Some(pipeline.clone());
 
             // Spawn the TX task
-            let c_link = self.inner.clone();
+            let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let handle = task::spawn(async move {
                 let res = tx_task(
@@ -143,7 +133,7 @@ impl TransportLinkMulticast {
         if self.handle_rx.is_none() {
             self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
-            let c_link = self.inner.clone();
+            let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_active = self.active_rx.clone();
@@ -177,7 +167,7 @@ impl TransportLinkMulticast {
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
-        log::trace!("{}: closing", self.inner);
+        log::trace!("{}: closing", self.link);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
@@ -192,7 +182,7 @@ impl TransportLinkMulticast {
             handle_tx.await;
         }
 
-        self.inner.close().await
+        self.link.close().await
     }
 }
 

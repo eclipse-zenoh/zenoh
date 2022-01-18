@@ -170,7 +170,7 @@ impl TransportMulticastInner {
     }
 
     pub(crate) fn get_link(&self) -> LinkMulticast {
-        zread!(self.link).as_ref().unwrap().get_link().clone()
+        zread!(self.link).as_ref().unwrap().link.clone()
     }
 
     /*************************************/
@@ -209,7 +209,13 @@ impl TransportMulticastInner {
             self.locator
         );
 
-        let pipeline = zread!(self.link).as_ref().unwrap().get_pipeline().unwrap();
+        let pipeline = zread!(self.link)
+            .as_ref()
+            .unwrap()
+            .pipeline
+            .as_ref()
+            .unwrap()
+            .clone();
 
         // Close message to be sent on all the links
         let peer_id = Some(self.manager.pid());

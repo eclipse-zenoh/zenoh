@@ -40,7 +40,6 @@ auth_usrpwd = []
 complete_n = []
 shared-memory = ["bincode", "shared_memory"]
 stats = []
-transport_multilink = ["auth_pubkey"]
 transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
 transport_tcp = []
 transport_tls = ["async-rustls"]
@@ -50,7 +49,6 @@ default = [
     "auth_pubkey",
     "auth_usrpwd",
     "shared-memory",
-    "transport_multilink",
     "transport_quic",
     "transport_tcp",
     "transport_tls",
@@ -92,7 +90,7 @@ quinn = { version = "0.7.2", optional = true }
 rand = "0.8.3"
 rcgen = { version = "0.8.9", optional = true }
 regex = "1"
-rsa = { git = "https://github.com/RustCrypto/RSA.git", optional = true }
+rsa = { version = "0.5.0", optional = true }
 serde_json = "1.0"
 serde_yaml = "0.8"
 serde = "1.0.123"

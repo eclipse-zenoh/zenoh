@@ -31,6 +31,40 @@ mod zslice {
     }
 }
 
+pub fn zint_len(v: ZInt) -> usize {
+    const MASK_1: ZInt = ZInt::MAX << 7;
+    const MASK_2: ZInt = ZInt::MAX << (7 * 2);
+    const MASK_3: ZInt = ZInt::MAX << (7 * 3);
+    const MASK_4: ZInt = ZInt::MAX << (7 * 4);
+    const MASK_5: ZInt = ZInt::MAX << (7 * 5);
+    const MASK_6: ZInt = ZInt::MAX << (7 * 6);
+    const MASK_7: ZInt = ZInt::MAX << (7 * 7);
+    const MASK_8: ZInt = ZInt::MAX << (7 * 8);
+    const MASK_9: ZInt = ZInt::MAX << (7 * 9);
+
+    if (v & MASK_1) == 0 {
+        1
+    } else if (v & MASK_2) == 0 {
+        2
+    } else if (v & MASK_3) == 0 {
+        3
+    } else if (v & MASK_4) == 0 {
+        4
+    } else if (v & MASK_5) == 0 {
+        5
+    } else if (v & MASK_6) == 0 {
+        6
+    } else if (v & MASK_7) == 0 {
+        7
+    } else if (v & MASK_8) == 0 {
+        8
+    } else if (v & MASK_9) == 0 {
+        9
+    } else {
+        10
+    }
+}
+
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
         let mut v: $res = 0;

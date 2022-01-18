@@ -236,8 +236,11 @@ async fn close_transport(
     println!("Closing transport with {}", ee);
     let _ = ztimeout!(client_transport.close()).unwrap();
 
-    // Wait a little bit
-    task::sleep(SLEEP).await;
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
     // Stop the locators on the manager
     for e in endpoints.iter() {

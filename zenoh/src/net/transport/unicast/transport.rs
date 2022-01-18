@@ -230,6 +230,7 @@ impl TransportUnicastInner {
         if let LinkUnicastDirection::Inbound = direction {
             let count = guard.iter().filter(|l| l.direction == direction).count();
             let limit = self.config.manager.config.unicast.max_links;
+
             if count >= limit {
                 let e = zerror!(
                     "Can not add Link {} with peer {}: max num of links reached {}/{}",
@@ -458,7 +459,7 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
+    pub(crate) fn schedule(&self, mut message: ZenohMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {
@@ -468,11 +469,11 @@ impl TransportUnicastInner {
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
-                return;
+                return false;
             }
         }
 
-        self.schedule_first_fit(message);
+        self.schedule_first_fit(message)
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {

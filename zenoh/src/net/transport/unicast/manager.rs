@@ -36,7 +36,6 @@ pub struct TransportManagerConfigUnicast {
     pub open_timeout: Duration,
     pub open_pending: usize,
     pub max_sessions: usize,
-    #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     pub is_qos: bool,
     #[cfg(feature = "shared-memory")]
@@ -72,7 +71,6 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) open_timeout: Duration,
     pub(super) open_pending: usize,
     pub(super) max_sessions: usize,
-    #[cfg(feature = "transport_multilink")]
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
     #[cfg(feature = "shared-memory")]
@@ -107,7 +105,6 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    #[cfg(feature = "transport_multilink")]
     pub fn max_links(mut self, max_links: usize) -> Self {
         self.max_links = max_links;
         self
@@ -153,7 +150,6 @@ impl TransportManagerBuilderUnicast {
         if let Some(v) = properties.transport().unicast().max_sessions() {
             self = self.max_sessions(*v);
         }
-        #[cfg(feature = "transport_multilink")]
         if let Some(v) = properties.transport().unicast().max_links() {
             self = self.max_links(*v);
         }
@@ -180,13 +176,13 @@ impl TransportManagerBuilderUnicast {
             open_timeout: self.open_timeout,
             open_pending: self.open_pending,
             max_sessions: self.max_sessions,
-            #[cfg(feature = "transport_multilink")]
             max_links: self.max_links,
             is_qos: self.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
         };
 
+        // Enable pubkey authentication by default to avoid PeerId spoofing
         #[cfg(feature = "auth_pubkey")]
         if !self
             .peer_authenticator
@@ -230,7 +226,6 @@ impl Default for TransportManagerBuilderUnicast {
             open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
             max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
-            #[cfg(feature = "transport_multilink")]
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
             #[cfg(feature = "shared-memory")]

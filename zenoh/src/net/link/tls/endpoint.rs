@@ -49,32 +49,29 @@ pub(super) async fn get_tls_addr(address: &LocatorAddress) -> ZResult<SocketAddr
     }
 }
 
-#[allow(unreachable_patterns)]
-pub(super) async fn get_tls_dns(address: &LocatorAddress) -> ZResult<DNSName> {
-    match &address {
+pub(super) fn get_tls_host(address: &LocatorAddress) -> ZResult<String> {
+    match address {
         LocatorAddress::Tls(addr) => match addr {
             LocatorTls::SocketAddr(addr) => {
-                bail!("Couldn't get domain from SocketAddr: {}", addr);
+                bail!("Couldn't get host from SocketAddr: {}", addr)
             }
             LocatorTls::DnsName(addr) => {
-                // Separate the domain from the port.
-                // E.g. zenoh.io:7447 returns (zenoh.io, 7447).
-                let split: Vec<&str> = addr.split(':').collect();
-                match split.get(0) {
-                    Some(dom) => {
-                        let domain = DNSNameRef::try_from_ascii_str(dom).map_err(|e| zerror!(e))?;
-                        Ok(domain.to_owned())
-                    }
-                    None => {
-                        bail!("Couldn't get domain for: {}", addr);
-                    }
+                let mut split = addr.split(':');
+                match split.next() {
+                    Some(domain) => Ok(domain.into()),
+                    None => bail!("Couldn't get host for: {}", addr),
                 }
             }
         },
-        _ => {
-            bail!("Not a TLS locator address: {}", address);
-        }
+        _ => bail!("Not a TLS locator address: {}", address),
     }
+}
+
+#[allow(unreachable_patterns)]
+pub(super) async fn get_tls_dns(address: &LocatorAddress) -> ZResult<DNSName> {
+    let domain = get_tls_host(address)?;
+    let domain = DNSNameRef::try_from_ascii_str(domain.as_str()).map_err(|e| zerror!(e))?;
+    Ok(domain.to_owned())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

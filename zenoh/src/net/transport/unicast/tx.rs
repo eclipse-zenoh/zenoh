@@ -18,8 +18,7 @@ use super::transport::TransportUnicastInner;
 use zenoh_util::zread;
 
 impl TransportUnicastInner {
-    #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) {
+    fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
@@ -27,36 +26,8 @@ impl TransportUnicastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                pl.push_zenoh_message($msg);
-
-                return;
+                return pl.push_zenoh_message($msg);
             };
-        }
-
-        #[cfg(feature = "stats")]
-        self.stats.inc_tx_z_msgs(1);
-        #[cfg(feature = "stats")]
-        match &msg.body {
-            ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => {
-                    self.stats.inc_tx_z_data_reply_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.readable());
-                }
-                None => {
-                    self.stats.inc_tx_z_data_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_payload_bytes(data.payload.readable());
-                }
-            },
-            ZenohBody::Unit(unit) => match unit.reply_context {
-                Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
-                None => self.stats.inc_tx_z_unit_msgs(1),
-            },
-            ZenohBody::Pull(_) => self.stats.inc_tx_z_pull_msgs(1),
-            ZenohBody::Query(_) => self.stats.inc_tx_z_query_msgs(1),
-            ZenohBody::Declare(_) => self.stats.inc_tx_z_declare_msgs(1),
-            ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
         let guard = zread!(self.links);
@@ -84,5 +55,46 @@ impl TransportUnicastInner {
             "Message dropped because the transport has no links: {}",
             msg
         );
+
+        false
+    }
+
+    #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
+    #[inline(always)]
+    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
+        #[cfg(feature = "stats")]
+        match &msg.body {
+            ZenohBody::Data(data) => match data.reply_context {
+                Some(_) => {
+                    self.stats.inc_tx_z_data_reply_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.readable());
+                }
+                None => {
+                    self.stats.inc_tx_z_data_msgs(1);
+                    self.stats
+                        .inc_tx_z_data_payload_bytes(data.payload.readable());
+                }
+            },
+            ZenohBody::Unit(unit) => match unit.reply_context {
+                Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
+                None => self.stats.inc_tx_z_unit_msgs(1),
+            },
+            ZenohBody::Pull(_) => self.stats.inc_tx_z_pull_msgs(1),
+            ZenohBody::Query(_) => self.stats.inc_tx_z_query_msgs(1),
+            ZenohBody::Declare(_) => self.stats.inc_tx_z_declare_msgs(1),
+            ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
+        }
+
+        let res = self.schedule_on_link(msg);
+
+        #[cfg(feature = "stats")]
+        if res {
+            self.stats.inc_tx_z_msgs(1);
+        } else {
+            self.stats.inc_tx_z_dropped(1);
+        }
+
+        res
     }
 }

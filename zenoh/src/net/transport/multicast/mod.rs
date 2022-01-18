@@ -46,6 +46,7 @@ stats_struct! {
     pub struct TransportMulticastStats {
         pub tx_t_msgs,
         pub tx_z_msgs,
+        pub tx_z_dropped,
         pub tx_z_data_msgs,
         pub tx_z_data_payload_bytes,
         pub tx_z_data_reply_msgs,
