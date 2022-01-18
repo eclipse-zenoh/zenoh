@@ -21,10 +21,10 @@ use std::thread;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -142,7 +142,7 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
@@ -157,9 +157,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
-    let client03_id = PeerId::new(1, [3_u8; PeerId::MAX_SIZE]);
+    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
+    let client03_id = ZenohId::new(1, [3_u8; ZenohId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));

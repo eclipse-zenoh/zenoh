@@ -15,7 +15,7 @@ use super::super::authenticator::AuthenticatedPeerLink;
 use super::{properties_from_attachment, OResult};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::proto::{tmsg, Close, TransportBody};
+use crate::net::protocol::message::{Close, TransportBody};
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
 use std::time::Duration;
@@ -42,7 +42,7 @@ pub(super) async fn recv(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -68,15 +68,13 @@ pub(super) async fn recv(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
 
     let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
@@ -86,7 +84,7 @@ pub(super) async fn recv(
                 opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(Close::INVALID)))?;
     }
 
     let output = Output {

@@ -11,14 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{
-    attachment_from_properties, init_syn, AResult, AuthenticatedPeerLink, Cookie,
-    EstablishmentProperties,
-};
+use super::authenticator::AuthenticatedPeerLink;
+use super::{attachment_from_properties, init_syn, AResult, Cookie, EstablishmentProperties};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::Property;
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{tmsg, TransportMessage};
+use crate::net::protocol::message::{Close, TransportMessage};
 use crate::net::transport::TransportManager;
 use rand::Rng;
 use zenoh_util::crypto::hmac;
@@ -70,7 +68,7 @@ pub(super) async fn send(
                     .map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(Close::INVALID)))?;
         // Add attachment property if available
         if let Some(att) = att.take() {
             ps_attachment
@@ -94,7 +92,7 @@ pub(super) async fn send(
 
     let encrypted = cookie
         .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng), ps_cookie)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Compute the cookie hash
     let cookie_hash = hmac::digest(&encrypted);

@@ -77,8 +77,6 @@ validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
     Config {
-        #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
-        version: Option<u8>,
         #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
         id: Option<String>,
         /// The node's mode (router, peer or client)
@@ -671,14 +669,6 @@ fn u64_to_cowstr(s: &Option<u64>) -> Option<Cow<str>> {
 }
 
 fn u64_from_str(s: &str) -> Option<Option<u64>> {
-    s.parse().ok().map(Some)
-}
-
-fn u8_to_cowstr(s: &Option<u8>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn u8_from_str(s: &str) -> Option<Option<u8>> {
     s.parse().ok().map(Some)
 }
 

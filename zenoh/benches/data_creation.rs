@@ -18,9 +18,9 @@ use async_std::sync::Arc;
 use criterion::Criterion;
 
 use zenoh::net::protocol::core::Encoding;
-use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, PeerId};
+use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, ZenohId};
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
+use zenoh::net::protocol::message::{DataInfo, ZenohMessage};
 
 fn consume_message(msg: ZenohMessage) {
     drop(msg);
@@ -48,9 +48,9 @@ fn criterion_benchmark(c: &mut Criterion) {
                         Default::default(),
                         uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
                     )),
-                    source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
+                    source_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
                     source_sn: Some(12345),
-                    first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
+                    first_router_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
                     first_router_sn: Some(12345),
                 });
 
@@ -101,9 +101,9 @@ fn criterion_benchmark(c: &mut Criterion) {
             Default::default(),
             uhlc::ID::new(16, [0_u8; uhlc::ID::MAX_SIZE]),
         )),
-        source_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
+        source_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
         source_sn: Some(12345),
-        first_router_id: Some(PeerId::new(16, [0_u8; PeerId::MAX_SIZE])),
+        first_router_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
         first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);

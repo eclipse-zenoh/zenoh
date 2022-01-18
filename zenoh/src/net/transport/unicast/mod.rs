@@ -22,8 +22,8 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{tmsg, ZenohMessage};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
+use super::protocol::message::{Close, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 use crate::net::link::Link;
 pub use manager::*;
@@ -79,7 +79,7 @@ stats_struct! {
 /*************************************/
 #[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) peer: PeerId,
+    pub(crate) peer: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
@@ -101,7 +101,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_pid(&self) -> ZResult<PeerId> {
+    pub fn get_pid(&self) -> ZResult<ZenohId> {
         let transport = self.get_inner()?;
         Ok(transport.get_pid())
     }
@@ -177,9 +177,7 @@ impl TransportUnicast {
             .into_iter()
             .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
-        transport
-            .close_link(&link, tmsg::close_reason::GENERIC)
-            .await?;
+        transport.close_link(&link, Close::GENERIC).await?;
         Ok(())
     }
 
@@ -187,7 +185,7 @@ impl TransportUnicast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_inner() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(Close::GENERIC).await,
             Err(_) => Ok(()),
         }
     }

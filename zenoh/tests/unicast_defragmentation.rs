@@ -17,10 +17,10 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{DummyTransportEventHandler, TransportManager};
 use zenoh_util::zasync_executor_init;
 
@@ -38,8 +38,8 @@ macro_rules! ztimeout {
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()

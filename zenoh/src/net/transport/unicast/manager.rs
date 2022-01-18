@@ -13,7 +13,7 @@
 //
 use super::super::TransportManager;
 use super::establishment::authenticator::*;
-use super::protocol::core::PeerId;
+use super::protocol::core::ZenohId;
 use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
 use crate::config::Config;
@@ -52,7 +52,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -274,7 +274,7 @@ impl TransportManager {
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportUnicastInner>>>();
         for tu in tu_guard.drain(..) {
-            let _ = tu.close(tmsg::close_reason::GENERIC).await;
+            let _ = tu.close(Close::GENERIC).await;
         }
     }
 
@@ -508,7 +508,7 @@ impl TransportManager {
         super::establishment::open::open_link(&link, self, &mut auth_link).await
     }
 
-    pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
+    pub fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         zlock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| t.into())
@@ -521,7 +521,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &PeerId) -> ZResult<()> {
+    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
         let _ = zlock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
@@ -555,17 +555,17 @@ impl TransportManager {
         *guard += 1;
         drop(guard);
 
-        let mut peer_id: Option<PeerId> = None;
+        let mut peer_id: Option<ZenohId> = None;
         let peer_link = Link::from(&link);
         for la in zasyncread!(self.state.unicast.link_authenticator).iter() {
             let res = la.handle_new_link(&peer_link).await;
             match res {
                 Ok(pid) => {
-                    // Check that all the peer authenticators, eventually return the same PeerId
+                    // Check that all the peer authenticators, eventually return the same ZenohId
                     if let Some(pid1) = peer_id.as_ref() {
                         if let Some(pid2) = pid.as_ref() {
                             if pid1 != pid2 {
-                                log::debug!("Ambigous PeerID identification for link: {}", link);
+                                log::debug!("Ambigous ZenohId identification for link: {}", link);
                                 let _ = link.close().await;
                                 let mut guard = zasynclock!(self.state.unicast.incoming);
                                 *guard -= 1;

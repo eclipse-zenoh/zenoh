@@ -16,9 +16,9 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use super::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::proto::{Attachment, TransportMessage};
+use super::protocol::message::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
 use authenticator::AuthenticatedPeerLink;
@@ -96,7 +96,7 @@ pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<Establi
 /*************************************/
 pub struct Cookie {
     whatami: WhatAmI,
-    pid: PeerId,
+    pid: ZenohId,
     sn_resolution: ZInt,
     is_qos: bool,
     nonce: ZInt,
@@ -120,8 +120,8 @@ impl Cookie {
 
         let mut wbuf = WBuf::new(64, false);
 
-        zwrite!(wbuf.write_zint(self.whatami.into()));
-        zwrite!(wbuf.write_peeexpr_id(&self.pid));
+        zwrite!(wbuf.write(self.whatami.into()));
+        zwrite!(wbuf.write_zenohid(&self.pid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
         zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
         zwrite!(wbuf.write_zint(self.nonce));
@@ -147,8 +147,8 @@ impl Cookie {
         let mut zbuf = ZBuf::from(decrypted);
 
         let whatami =
-            WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| zerror!("Invalid Cookie"))?;
-        let pid = zread!(zbuf.read_peeexpr_id());
+            WhatAmI::try_from(zread!(zbuf.read())).ok_or_else(|| zerror!("Invalid Cookie"))?;
+        let pid = zread!(zbuf.read_zenohid());
         let sn_resolution = zread!(zbuf.read_zint());
         let is_qos = zread!(zbuf.read()) == 1;
         let nonce = zread!(zbuf.read_zint());
@@ -198,7 +198,7 @@ pub(super) async fn close_link(
 /*            TRANSPORT              */
 /*************************************/
 pub(super) struct InputInit {
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_shm: bool,

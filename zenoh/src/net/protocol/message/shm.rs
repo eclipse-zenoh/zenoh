@@ -14,7 +14,11 @@
 #[cfg(feature = "shared-memory")]
 use super::io::SharedMemoryReader;
 #[cfg(feature = "shared-memory")]
-use super::msg::*;
+use super::transport::*;
+#[cfg(feature = "shared-memory")]
+use super::zenoh::*;
+#[cfg(feature = "shared-memory")]
+use super::Options;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
 #[cfg(feature = "shared-memory")]

@@ -19,10 +19,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI,
+    Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -104,8 +104,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-    let peer_id02 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let peer_id01 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let peer_id02 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());

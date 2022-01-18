@@ -16,7 +16,7 @@ use async_std::sync::Arc;
 use async_std::task;
 use std::time::Duration;
 use zenoh::net::link::EndPoint;
-use zenoh::net::protocol::core::{PeerId, WhatAmI};
+use zenoh::net::protocol::core::{WhatAmI, ZenohId};
 use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -83,7 +83,7 @@ impl TransportEventHandler for SHClientOpenClose {
 
 async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
 
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
@@ -98,8 +98,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
     // Create the transport transport manager for the first client
     let unicast = TransportManager::config_unicast()

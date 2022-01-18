@@ -16,7 +16,7 @@ use super::{attachment_from_properties, properties_from_attachment, AResult};
 use super::{Cookie, EstablishmentProperties};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{Property, ZInt};
-use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
+use crate::net::protocol::message::{Attachment, Close, TransportBody};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
 use zenoh_util::crypto::hmac;
@@ -48,7 +48,7 @@ pub(super) async fn recv(
             link,
             messages
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(Close::INVALID)));
     }
 
     let mut msg = messages.remove(0);
@@ -68,7 +68,7 @@ pub(super) async fn recv(
                 link,
                 msg.body
             );
-            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+            return Err((e.into(), Some(Close::INVALID)));
         }
     };
     let encrypted = open_syn.cookie.to_vec();
@@ -76,18 +76,16 @@ pub(super) async fn recv(
     // Verify that the cookie is the one we sent
     if input.cookie_hash != hmac::digest(&encrypted) {
         let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(Close::INVALID)));
     }
 
     // Decrypt the cookie with the cyper
-    let (cookie, mut ps_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+    let (cookie, mut ps_cookie) =
+        Cookie::decrypt(encrypted, &manager.cipher).map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Validate with the peer authenticators
     let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -124,7 +122,7 @@ pub(super) async fn recv(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {

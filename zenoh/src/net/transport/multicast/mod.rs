@@ -23,7 +23,7 @@ use super::common;
 use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::ZInt;
-use super::protocol::proto::{tmsg, ZenohMessage};
+use super::protocol::message::{Close, ZenohMessage};
 use crate::net::link::Link;
 use crate::net::transport::{TransportMulticastEventHandler, TransportPeer};
 pub use manager::*;
@@ -128,7 +128,7 @@ impl TransportMulticast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_transport() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(Close::GENERIC).await,
             Err(_) => Ok(()),
         }
     }

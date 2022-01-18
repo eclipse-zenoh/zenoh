@@ -1,5 +1,3 @@
-use crate::net::protocol::core::whatami::WhatAmIMatcher;
-
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -13,11 +11,12 @@ use crate::net::protocol::core::whatami::WhatAmIMatcher;
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
 use super::io::ZBuf;
-use super::msg::*;
+use super::transport::*;
+use super::zenoh::*;
+use super::{transport as tmsg, zenoh as zmsg, Attachment, HEADER_BITS};
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -27,7 +26,7 @@ impl ZBuf {
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
         #[cfg(feature = "shared-memory")]
         {
-            let buffer = self.read_zbuf(imsg::has_flag(header, tmsg::flag::Z))?;
+            let buffer = self.read_zbuf(super::has_flag(header, tmsg::flag::Z))?;
             Some(Attachment { buffer })
         }
 
@@ -40,7 +39,7 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_deco_priority(&mut self, header: u8) -> Option<Priority> {
-        let priority: Priority = (imsg::flags(header) >> imsg::HEADER_BITS).try_into().ok()?;
+        let priority: Priority = (super::flags(header) >> HEADER_BITS).try_into().ok()?;
         Some(priority)
     }
 
@@ -48,7 +47,7 @@ impl ZBuf {
     /*            TRANSPORT              */
     /*************************************/
     pub fn read_transport_message(&mut self) -> Option<TransportMessage> {
-        use super::tmsg::id::*;
+        use tmsg::id::*;
 
         let mut attachment = None;
         let mut priority = Priority::default();
@@ -62,7 +61,7 @@ impl ZBuf {
             let header = self.read()?;
 
             // Read the body
-            match imsg::mid(header) {
+            match super::mid(header) {
                 FRAME => break self.read_frame(header, priority)?,
                 PRIORITY => {
                     priority = self.read_deco_priority(header)?;
@@ -72,17 +71,15 @@ impl ZBuf {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
-                SCOUT => break self.read_scout(header)?,
-                HELLO => break self.read_hello(header)?,
                 INIT => {
-                    if imsg::has_flag(header, tmsg::flag::A) {
+                    if super::has_flag(header, tmsg::flag::A) {
                         break self.read_init_ack(header)?;
                     } else {
                         break self.read_init_syn(header)?;
                     }
                 }
                 OPEN => {
-                    if imsg::has_flag(header, tmsg::flag::A) {
+                    if super::has_flag(header, tmsg::flag::A) {
                         break self.read_open_ack(header)?;
                     } else {
                         break self.read_open_syn(header)?;
@@ -94,7 +91,7 @@ impl ZBuf {
                 ACK_NACK => break self.read_ack_nack(header)?,
                 KEEP_ALIVE => break self.read_keep_alive(header)?,
                 PING_PONG => {
-                    if imsg::has_flag(header, tmsg::flag::P) {
+                    if super::has_flag(header, tmsg::flag::P) {
                         break self.read_ping(header)?;
                     } else {
                         break self.read_pong(header)?;
@@ -120,7 +117,7 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_frame(&mut self, header: u8, priority: Priority) -> Option<TransportBody> {
-        let reliability = match imsg::has_flag(header, tmsg::flag::R) {
+        let reliability = match super::has_flag(header, tmsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
@@ -130,11 +127,11 @@ impl ZBuf {
         };
         let sn = self.read_zint()?;
 
-        let payload = if imsg::has_flag(header, tmsg::flag::F) {
+        let payload = if super::has_flag(header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by
             // any other frame in the same batch. Read all the bytes.
             let buffer = self.read_zslice(self.readable())?;
-            let is_final = imsg::has_flag(header, tmsg::flag::E);
+            let is_final = super::has_flag(header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {
             let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
@@ -159,55 +156,21 @@ impl ZBuf {
         }))
     }
 
-    fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let pid_request = imsg::has_flag(header, tmsg::flag::I);
-        let what = if imsg::has_flag(header, tmsg::flag::W) {
-            WhatAmIMatcher::try_from(self.read_zint()?)
-        } else {
-            None
-        };
-        Some(TransportBody::Scout(Scout { what, pid_request }))
-    }
-
-    fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
-        } else {
-            None
-        };
-        let whatami = if imsg::has_flag(header, tmsg::flag::W) {
-            WhatAmI::try_from(self.read_zint()?)
-        } else {
-            None
-        };
-        let locators = if imsg::has_flag(header, tmsg::flag::L) {
-            Some(self.read_locators()?)
-        } else {
-            None
-        };
-
-        Some(TransportBody::Hello(Hello {
-            pid,
-            whatami,
-            locators,
-        }))
-    }
-
     fn read_init_syn(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if imsg::has_flag(header, tmsg::flag::O) {
+        let options = if super::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
         } else {
             0
         };
         let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
-        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
+        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
             SEQ_NUM_RES
         };
-        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
+        let is_qos = super::has_option(options, InitSyn::OPT_QOS);
 
         Some(TransportBody::InitSyn(InitSyn {
             version,
@@ -219,19 +182,19 @@ impl ZBuf {
     }
 
     fn read_init_ack(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if imsg::has_flag(header, tmsg::flag::O) {
+        let options = if super::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
         } else {
             0
         };
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
-        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
+        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
+        let is_qos = super::has_option(options, InitAck::OPT_QOS);
         let cookie = self.read_zslice_array()?;
 
         Some(TransportBody::InitAck(InitAck {
@@ -245,7 +208,7 @@ impl ZBuf {
 
     fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::T2) {
+        let lease = if super::has_flag(header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
@@ -262,7 +225,7 @@ impl ZBuf {
 
     fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::T2) {
+        let lease = if super::has_flag(header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
@@ -273,26 +236,26 @@ impl ZBuf {
     }
 
     fn read_join(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if imsg::has_flag(header, tmsg::flag::O) {
+        let options = if super::has_flag(header, tmsg::flag::O) {
             self.read_zint()?
         } else {
             0
         };
         let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let whatami = WhatAmI::try_from(self.read()?)?;
+        let pid = self.read_zenohid()?;
         let lease = self.read_zint()?;
-        let lease = if imsg::has_flag(header, tmsg::flag::T1) {
+        let lease = if super::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
-        let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
+        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
             SEQ_NUM_RES
         };
-        let is_qos = imsg::has_option(options, tmsg::join_options::QOS);
+        let is_qos = super::has_option(options, Join::OPT_QOS);
         let next_sns = if is_qos {
             let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {
@@ -318,9 +281,9 @@ impl ZBuf {
     }
 
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
-        let link_only = imsg::has_flag(header, tmsg::flag::K);
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let link_only = super::has_flag(header, tmsg::flag::K);
+        let pid = if super::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zenohid()?)
         } else {
             None
         };
@@ -334,12 +297,12 @@ impl ZBuf {
     }
 
     fn read_sync(&mut self, header: u8) -> Option<TransportBody> {
-        let reliability = match imsg::has_flag(header, tmsg::flag::R) {
+        let reliability = match super::has_flag(header, tmsg::flag::R) {
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
         let sn = self.read_zint()?;
-        let count = if imsg::has_flag(header, tmsg::flag::C) {
+        let count = if super::has_flag(header, tmsg::flag::C) {
             Some(self.read_zint()?)
         } else {
             None
@@ -354,7 +317,7 @@ impl ZBuf {
 
     fn read_ack_nack(&mut self, header: u8) -> Option<TransportBody> {
         let sn = self.read_zint()?;
-        let mask = if imsg::has_flag(header, tmsg::flag::M) {
+        let mask = if super::has_flag(header, tmsg::flag::M) {
             Some(self.read_zint()?)
         } else {
             None
@@ -364,8 +327,8 @@ impl ZBuf {
     }
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let pid = if super::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zenohid()?)
         } else {
             None
         };
@@ -396,12 +359,12 @@ impl ZBuf {
     #[inline(always)]
     fn read_deco_reply_context(&mut self, header: u8) -> Option<ReplyContext> {
         let qid = self.read_zint()?;
-        let replier = if imsg::has_flag(header, zmsg::flag::F) {
+        let replier = if super::has_flag(header, zmsg::flag::F) {
             None
         } else {
             Some(ReplierInfo {
                 kind: self.read_zint()?,
-                id: self.read_peeexpr_id()?,
+                id: self.read_zenohid()?,
             })
         };
 
@@ -409,7 +372,7 @@ impl ZBuf {
     }
 
     pub fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage> {
-        use super::zmsg::id::*;
+        use self::zmsg::id::*;
 
         #[cfg(feature = "stats")]
         let start_readable = self.readable();
@@ -426,7 +389,7 @@ impl ZBuf {
             let header = self.read()?;
 
             // Read the body
-            match imsg::mid(header) {
+            match super::mid(header) {
                 DATA => break self.read_data(header, reply_context)?,
                 PRIORITY => {
                     priority = self.read_deco_priority(header)?;
@@ -474,18 +437,18 @@ impl ZBuf {
 
     #[inline(always)]
     fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
-        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
+        let congestion_control = if super::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
             CongestionControl::Block
         };
 
-        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
 
         #[cfg(feature = "shared-memory")]
         let mut sliced = false;
 
-        let data_info = if imsg::has_flag(header, zmsg::flag::I) {
+        let data_info = if super::has_flag(header, zmsg::flag::I) {
             let di = self.read_data_info()?;
             #[cfg(feature = "shared-memory")]
             {
@@ -535,30 +498,30 @@ impl ZBuf {
         let options = self.read_zint()?;
         #[cfg(feature = "shared-memory")]
         {
-            info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+            info.sliced = super::has_option(options, DataInfo::OPT_SLICED);
         }
-        if imsg::has_option(options, zmsg::data::info::KIND) {
+        if super::has_option(options, DataInfo::OPT_KIND) {
             info.kind = Some(self.read_zint()?);
         }
-        if imsg::has_option(options, zmsg::data::info::ENCODING) {
+        if super::has_option(options, DataInfo::OPT_ENCODING) {
             info.encoding = Some(Encoding {
                 prefix: self.read_zint()?,
                 suffix: self.read_string()?.into(),
             });
         }
-        if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
+        if super::has_option(options, DataInfo::OPT_TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id = Some(self.read_peeexpr_id()?);
+        if super::has_option(options, DataInfo::OPT_SRCID) {
+            info.source_id = Some(self.read_zenohid()?);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCSN) {
+        if super::has_option(options, DataInfo::OPT_SRCSN) {
             info.source_sn = Some(self.read_zint()?);
         }
-        if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id = Some(self.read_peeexpr_id()?);
+        if super::has_option(options, DataInfo::OPT_RTRID) {
+            info.first_router_id = Some(self.read_zenohid()?);
         }
-        if imsg::has_option(options, zmsg::data::info::RTRSN) {
+        if super::has_option(options, DataInfo::OPT_RTRSN) {
             info.first_router_sn = Some(self.read_zint()?);
         }
 
@@ -573,7 +536,7 @@ impl ZBuf {
     }
 
     fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody> {
-        let congestion_control = if imsg::has_flag(header, zmsg::flag::D) {
+        let congestion_control = if super::has_flag(header, zmsg::flag::D) {
             CongestionControl::Drop
         } else {
             CongestionControl::Block
@@ -585,14 +548,14 @@ impl ZBuf {
     }
 
     fn read_pull(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
         let pull_id = self.read_zint()?;
-        let max_samples = if imsg::has_flag(header, zmsg::flag::N) {
+        let max_samples = if super::has_flag(header, zmsg::flag::N) {
             Some(self.read_zint()?)
         } else {
             None
         };
-        let is_final = imsg::has_flag(header, zmsg::flag::F);
+        let is_final = super::has_flag(header, zmsg::flag::F);
 
         Some(ZenohBody::Pull(Pull {
             key,
@@ -617,13 +580,13 @@ impl ZBuf {
     }
 
     fn read_declaration(&mut self) -> Option<Declaration> {
-        use super::zmsg::declaration::id::*;
+        use zmsg::declaration::id::*;
 
         let header = self.read()?;
-        match imsg::mid(header) {
+        match super::mid(header) {
             RESOURCE => {
                 let expr_id = self.read_zint()?;
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Resource(Resource { expr_id, key }))
             }
             FORGET_RESOURCE => {
@@ -631,13 +594,13 @@ impl ZBuf {
                 Some(Declaration::ForgetResource(ForgetResource { expr_id }))
             }
             SUBSCRIBER => {
-                let reliability = if imsg::has_flag(header, zmsg::flag::R) {
+                let reliability = if super::has_flag(header, zmsg::flag::R) {
                     Reliability::Reliable
                 } else {
                     Reliability::BestEffort
                 };
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let (mode, period) = if imsg::has_flag(header, zmsg::flag::S) {
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
+                let (mode, period) = if super::has_flag(header, zmsg::flag::S) {
                     self.read_submode()?
                 } else {
                     (SubMode::Push, None)
@@ -652,21 +615,21 @@ impl ZBuf {
                 }))
             }
             FORGET_SUBSCRIBER => {
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetSubscriber(ForgetSubscriber { key }))
             }
             PUBLISHER => {
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::Publisher(Publisher { key }))
             }
             FORGET_PUBLISHER => {
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 Some(Declaration::ForgetPublisher(ForgetPublisher { key }))
             }
             QUERYABLE => {
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
-                let info = if imsg::has_flag(header, zmsg::flag::Q) {
+                let info = if super::has_flag(header, zmsg::flag::Q) {
                     self.read_queryable_info()?
                 } else {
                     QueryableInfo::default()
@@ -674,7 +637,7 @@ impl ZBuf {
                 Some(Declaration::Queryable(Queryable { key, kind, info }))
             }
             FORGET_QUERYABLE => {
-                let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+                let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
                 let kind = self.read_zint()?;
                 Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
             }
@@ -686,10 +649,10 @@ impl ZBuf {
     }
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
-        let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
+        let key = self.read_key_expr(super::has_flag(header, zmsg::flag::K))?;
         let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
-        let target = if imsg::has_flag(header, zmsg::flag::T) {
+        let target = if super::has_flag(header, zmsg::flag::T) {
             Some(self.read_query_target()?)
         } else {
             None
@@ -718,17 +681,17 @@ impl ZBuf {
         let options = self.read_zint()?;
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
-        let pid = if imsg::has_option(options, zmsg::link_state::PID) {
-            Some(self.read_peeexpr_id()?)
+        let pid = if super::has_option(options, LinkState::OPT_PID) {
+            Some(self.read_zenohid()?)
         } else {
             None
         };
-        let whatami = if imsg::has_option(options, zmsg::link_state::WAI) {
-            WhatAmI::try_from(self.read_zint()?)
+        let whatami = if super::has_option(options, LinkState::OPT_WAI) {
+            WhatAmI::try_from(self.read()?)
         } else {
             None
         };
-        let locators = if imsg::has_option(options, zmsg::link_state::LOC) {
+        let locators = if super::has_option(options, LinkState::OPT_LOC) {
             Some(self.read_locators()?)
         } else {
             None
@@ -750,19 +713,15 @@ impl ZBuf {
     }
 
     fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)> {
-        use super::zmsg::declaration::flag::*;
-        use super::zmsg::declaration::id::*;
-
         let mode_flag = self.read()?;
-        let mode = match mode_flag & !PERIOD {
-            MODE_PUSH => SubMode::Push,
-            MODE_PULL => SubMode::Pull,
-            id => {
-                log::trace!("UNEXPECTED ID FOR SubMode: {}", id);
-                return None;
-            }
-        };
-        let period = if imsg::has_flag(mode_flag, PERIOD) {
+        let mode: SubMode = (mode_flag & !Subscriber::PERIOD)
+            .try_into()
+            .map_err(|e| {
+                log::trace!("{}", e);
+                e
+            })
+            .ok()?;
+        let period = if super::has_flag(mode_flag, Subscriber::PERIOD) {
             Some(Period {
                 origin: self.read_zint()?,
                 period: self.read_zint()?,

@@ -21,7 +21,7 @@ use zenoh::net::protocol::core::{
     Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt,
 };
 use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
-use zenoh::net::protocol::proto::{
+use zenoh::net::protocol::message::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
 };
 

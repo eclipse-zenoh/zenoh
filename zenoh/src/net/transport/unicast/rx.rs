@@ -12,10 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{PeerId, Priority, Reliability, ZInt};
+use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
 #[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::{
+use super::protocol::message::ZenohBody;
+use super::protocol::message::{
     Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;
@@ -79,7 +79,7 @@ impl TransportUnicastInner {
     fn handle_close(
         &self,
         link: &LinkUnicast,
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
     ) -> ZResult<()> {

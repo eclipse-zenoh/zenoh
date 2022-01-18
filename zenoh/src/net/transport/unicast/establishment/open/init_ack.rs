@@ -14,9 +14,9 @@
 use super::super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, properties_from_attachment, OResult};
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use crate::net::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
+use crate::net::protocol::message::{Attachment, Close, TransportBody};
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
@@ -26,7 +26,7 @@ use zenoh_util::zerror;
 /*              OPEN                 */
 /*************************************/
 pub(super) struct Output {
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
@@ -50,7 +50,7 @@ pub(super) async fn recv(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(Close::INVALID),
         ));
     }
 
@@ -76,7 +76,7 @@ pub(super) async fn recv(
                     msg.body
                 )
                 .into(),
-                Some(tmsg::close_reason::INVALID),
+                Some(Close::INVALID),
             ));
         }
     };
@@ -91,7 +91,7 @@ pub(super) async fn recv(
                         sn_resolution
                     )
                     .into(),
-                    Some(tmsg::close_reason::INVALID),
+                    Some(Close::INVALID),
                 ));
             }
             sn_resolution
@@ -103,9 +103,7 @@ pub(super) async fn recv(
     auth_link.peer_id = Some(init_ack.pid);
 
     let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -140,7 +138,7 @@ pub(super) async fn recv(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {

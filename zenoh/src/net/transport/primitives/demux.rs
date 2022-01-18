@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::proto::{
+use super::protocol::message::{
     Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
 use super::Primitives;

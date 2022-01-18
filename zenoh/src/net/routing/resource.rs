@@ -13,9 +13,9 @@
 //
 use super::face::FaceState;
 use super::protocol::core::key_expr;
-use super::protocol::core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
+use super::protocol::core::{KeyExpr, QueryableInfo, SubInfo, ZInt, ZenohId};
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
+use super::protocol::message::{DataInfo, RoutingContext};
 use super::router::Tables;
 use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;
@@ -48,10 +48,10 @@ pub(super) struct SessionContext {
 }
 
 pub(super) struct ResourceContext {
-    pub(super) router_subs: HashSet<PeerId>,
-    pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
-    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
+    pub(super) router_subs: HashSet<ZenohId>,
+    pub(super) peer_subs: HashSet<ZenohId>,
+    pub(super) router_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
+    pub(super) peer_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -604,7 +604,7 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
 // }
 
 #[inline]
-pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [PeerId]) -> &'a PeerId {
+pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {
     if routers.len() == 1 {
         &routers[0]
     } else {

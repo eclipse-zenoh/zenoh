@@ -22,9 +22,9 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh::net::link::{EndPoint, Link};
-    use zenoh::net::protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
+    use zenoh::net::protocol::core::{Channel, Priority, Reliability, WhatAmI, ZenohId};
     use zenoh::net::protocol::io::{SharedMemoryManager, ZBuf};
-    use zenoh::net::protocol::proto::{Data, ZenohBody, ZenohMessage};
+    use zenoh::net::protocol::message::{Data, ZenohBody, ZenohMessage};
     use zenoh::net::transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
     use zenoh::net::transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
@@ -131,9 +131,9 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+        let peer_shm02 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+        let peer_net01 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();

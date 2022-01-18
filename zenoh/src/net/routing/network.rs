@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::link::Locator;
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{LinkState, ZenohMessage};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
+use super::protocol::message::{LinkState, ZenohMessage};
 use super::runtime::Runtime;
 use super::transport::TransportUnicast;
 use petgraph::graph::NodeIndex;
@@ -22,11 +22,11 @@ use std::convert::TryInto;
 use vec_map::VecMap;
 
 pub(crate) struct Node {
-    pub(crate) pid: PeerId,
+    pub(crate) pid: ZenohId,
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: ZInt,
-    pub(crate) links: Vec<PeerId>,
+    pub(crate) links: Vec<ZenohId>,
 }
 
 impl std::fmt::Debug for Node {
@@ -37,8 +37,8 @@ impl std::fmt::Debug for Node {
 
 pub(crate) struct Link {
     pub(crate) transport: TransportUnicast,
-    pid: PeerId,
-    mappings: VecMap<PeerId>,
+    pid: ZenohId,
+    mappings: VecMap<ZenohId>,
     local_mappings: VecMap<ZInt>,
 }
 
@@ -54,12 +54,12 @@ impl Link {
     }
 
     #[inline]
-    pub(crate) fn set_pid_mapping(&mut self, psid: ZInt, pid: PeerId) {
+    pub(crate) fn set_pid_mapping(&mut self, psid: ZInt, pid: ZenohId) {
         self.mappings.insert(psid.try_into().unwrap(), pid);
     }
 
     #[inline]
-    pub(crate) fn get_pid(&self, psid: &ZInt) -> Option<&PeerId> {
+    pub(crate) fn get_pid(&self, psid: &ZInt) -> Option<&ZenohId> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
@@ -97,7 +97,7 @@ pub(crate) struct Network {
 impl Network {
     pub(crate) fn new(
         name: String,
-        pid: PeerId,
+        pid: ZenohId,
         runtime: Runtime,
         peers_autoconnect: bool,
         routers_autoconnect_gossip: bool,
@@ -136,7 +136,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_idx(&self, pid: &PeerId) -> Option<NodeIndex> {
+    pub(crate) fn get_idx(&self, pid: &ZenohId) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].pid == *pid)
@@ -148,7 +148,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_link_from_pid(&self, pid: &PeerId) -> Option<&Link> {
+    pub(crate) fn get_link_from_pid(&self, pid: &ZenohId) -> Option<&Link> {
         self.links.values().find(|link| link.pid == *pid)
     }
 
@@ -273,7 +273,7 @@ impl Network {
     pub(crate) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
-        src: PeerId,
+        src: ZenohId,
     ) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
@@ -336,7 +336,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .map(|(pid, wai, locs, sn, links)| {
-                let links: Vec<PeerId> = links
+                let links: Vec<ZenohId> = links
                     .iter()
                     .filter_map(|l| {
                         if let Some(pid) = src_link.get_pid(l) {
@@ -408,7 +408,7 @@ impl Network {
                     }
                 },
             )
-            .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohId>, NodeIndex, bool)>>();
 
         // Add/remove edges from graph
         let mut reintroduced_nodes = vec![];
@@ -456,7 +456,7 @@ impl Network {
         let link_states = link_states
             .into_iter()
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
-            .collect::<Vec<(Vec<PeerId>, NodeIndex, bool)>>();
+            .collect::<Vec<(Vec<ZenohId>, NodeIndex, bool)>>();
 
         if (self.peers_autoconnect && self.runtime.whatami == WhatAmI::Peer)
             || (self.routers_autoconnect_gossip && self.runtime.whatami == WhatAmI::Router)
@@ -493,8 +493,8 @@ impl Network {
         #[allow(clippy::type_complexity)]
         if !link_states.is_empty() {
             let (new_idxs, updated_idxs): (
-                Vec<(Vec<PeerId>, NodeIndex, bool)>,
-                Vec<(Vec<PeerId>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohId>, NodeIndex, bool)>,
+                Vec<(Vec<ZenohId>, NodeIndex, bool)>,
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             let new_idxs = new_idxs
                 .into_iter()
@@ -573,7 +573,7 @@ impl Network {
         free_index
     }
 
-    pub(crate) fn remove_link(&mut self, pid: &PeerId) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn remove_link(&mut self, pid: &ZenohId) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} remove_link {}", self.name, pid);
         self.links.retain(|_, link| link.pid != *pid);
         self.graph[self.idx].links.retain(|link| *link != *pid);
@@ -743,7 +743,7 @@ impl Network {
 }
 
 #[inline]
-pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
+pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
     net1.graph
         .node_references()
         .filter_map(|(_, node1)| {

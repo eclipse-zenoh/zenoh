@@ -20,8 +20,8 @@ pub mod unicast;
 
 use super::link::Link;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::proto::ZenohMessage;
+use super::protocol::core::{WhatAmI, ZenohId};
+use super::protocol::message::ZenohMessage;
 pub use manager::*;
 pub use multicast::*;
 pub use primitives::*;
@@ -96,7 +96,7 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 #[derive(Clone)]
 pub struct TransportPeer {
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
     pub is_shm: bool,

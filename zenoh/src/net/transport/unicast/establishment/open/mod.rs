@@ -19,7 +19,7 @@ mod open_syn;
 use super::authenticator::AuthenticatedPeerLink;
 use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::proto::tmsg;
+use crate::net::protocol::message::Close;
 use crate::net::transport::TransportManager;
 use zenoh_util::core::Result as ZResult;
 
@@ -53,7 +53,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
+                    close_link(link, manager, auth_link, Some(Close::INVALID)).await;
                     return Err(e);
                 }
             }
@@ -88,11 +88,9 @@ pub(crate) async fn open_link(
         };
     }
 
-    let initial_sn = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
-    .config
-    .initial_sn_tx;
+    let initial_sn = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
+        .config
+        .initial_sn_tx;
     let input = open_syn::Input {
         cookie: output.cookie,
         initial_sn,
@@ -103,18 +101,16 @@ pub(crate) async fn open_link(
 
     // Finalize the transport
     // Add the link to the transport
-    let _ = step!(step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
-    .add_link(link.clone(), LinkUnicastDirection::Outbound)
-    .map_err(|e| (e, Some(tmsg::close_reason::MAX_LINKS))));
+    let _ = step!(
+        step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
+            .add_link(link.clone(), LinkUnicastDirection::Outbound)
+            .map_err(|e| (e, Some(Close::MAX_LINKS)))
+    );
 
     // Sync the RX sequence number
-    let _ = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
-    .sync(output.initial_sn)
-    .await;
+    let _ = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
+        .sync(output.initial_sn)
+        .await;
 
     log::debug!("New transport link established with {}: {}", pid, link);
 

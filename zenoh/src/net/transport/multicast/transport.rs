@@ -13,8 +13,8 @@
 //
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
-use super::protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
-use super::protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
+use super::protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
+use super::protocol::message::{Close, Join, TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};
@@ -37,7 +37,7 @@ use zenoh_util::core::Result as ZResult;
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) lease: Duration,
@@ -69,9 +69,7 @@ impl Timed for TransportMulticastPeerLeaseTimer {
     async fn run(&mut self) {
         let is_active = self.whatchdog.swap(false, Ordering::AcqRel);
         if !is_active {
-            let _ = self
-                .transport
-                .del_peer(&self.locator, tmsg::close_reason::EXPIRED);
+            let _ = self.transport.del_peer(&self.locator, Close::EXPIRED);
         }
     }
 }
@@ -264,7 +262,7 @@ impl TransportMulticastInner {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
                 let config = TransportLinkMulticastConfig {
-                    version: self.manager.config.version,
+                    version: self.manager.config.version.stable, // @TODO: handle experimental versions
                     pid: self.manager.config.pid,
                     whatami: self.manager.config.whatami,
                     lease: self.manager.config.multicast.lease,

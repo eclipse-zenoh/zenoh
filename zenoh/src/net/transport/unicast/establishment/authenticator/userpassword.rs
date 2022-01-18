@@ -14,7 +14,7 @@
 use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
-use super::{Locator, PeerId, WBuf, ZBuf, ZInt};
+use super::{Locator, WBuf, ZBuf, ZInt, ZenohId};
 use crate::config::Config;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::fs;
@@ -147,7 +147,7 @@ struct Authenticated {
 pub struct UserPasswordAuthenticator {
     lookup: RwLock<HashMap<Vec<u8>, Vec<u8>>>,
     credentials: Option<Credentials>,
-    authenticated: Mutex<HashMap<PeerId, Authenticated>>,
+    authenticated: Mutex<HashMap<ZenohId, Authenticated>>,
 }
 
 impl UserPasswordAuthenticator {
@@ -224,7 +224,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         // If credentials are not configured, don't initiate the USRPWD authentication
         if self.credentials.is_none() {
@@ -275,7 +275,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -374,7 +374,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
         // Need to check if it authenticated and remove it if this is the last link
         let mut guard = zasynclock!(self.authenticated);
-        let mut to_del: Option<PeerId> = None;
+        let mut to_del: Option<ZenohId> = None;
         for (peer_id, auth) in guard.iter_mut() {
             auth.links.remove(&(link.src.clone(), link.dst.clone()));
             if auth.links.is_empty() {
@@ -387,7 +387,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         }
     }
 
-    async fn handle_close(&self, peer_id: &PeerId) {
+    async fn handle_close(&self, peer_id: &ZenohId) {
         zasynclock!(self.authenticated).remove(peer_id);
     }
 }

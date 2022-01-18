@@ -17,8 +17,8 @@ pub mod orchestrator;
 use super::link;
 use super::link::{Link, Locator};
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
+use super::protocol::core::{WhatAmI, ZenohId};
+use super::protocol::message::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
@@ -34,12 +34,12 @@ use async_std::sync::Arc;
 use std::any::Any;
 use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
+use zenoh_util::bail;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{bail, zerror};
 
 pub struct RuntimeState {
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
@@ -61,18 +61,14 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config) -> ZResult<Runtime> {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
-
-        config
-            .set_version(Some(version))
-            .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
         let pid = if let Some(s) = config.id() {
             s.parse()?
         } else {
-            PeerId::from(uuid::Uuid::new_v4())
+            ZenohId::from(uuid::Uuid::new_v4())
         };
 
         log::info!("Using PID: {}", pid);
@@ -114,7 +110,6 @@ impl Runtime {
         let transport_manager = TransportManager::builder()
             .from_config(&config)
             .await?
-            .version(version)
             .whatami(whatami)
             .pid(pid)
             .build(handler.clone())?;

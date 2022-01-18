@@ -13,7 +13,7 @@
 //
 use super::protocol::core::{Reliability, ZInt};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::ZenohMessage;
+use super::protocol::message::ZenohMessage;
 use super::seq_num::SeqNum;
 
 use zenoh_util::core::Result as ZResult;

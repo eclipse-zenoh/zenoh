@@ -17,8 +17,8 @@ use async_std::task;
 use std::any::Any;
 use std::time::Duration;
 use zenoh::net::link::{EndPoint, Link};
-use zenoh::net::protocol::core::{PeerId, WhatAmI};
-use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh::net::protocol::core::{WhatAmI, ZenohId};
+use zenoh::net::protocol::message::ZenohMessage;
 use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -82,7 +82,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .pid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
         .build(Arc::new(SH::default()))
         .unwrap();
 

@@ -1,4 +1,4 @@
-use crate::{net::protocol::proto::data_kind, prelude::Selector};
+use crate::{net::protocol::message::data_kind, prelude::Selector};
 
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
@@ -14,11 +14,11 @@ use crate::{net::protocol::proto::data_kind, prelude::Selector};
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 use super::protocol::{
     core::{
-        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
     io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    message::{DataInfo, RoutingContext},
 };
 use super::routing::face::Face;
 use super::transport::{Primitives, TransportUnicast};
@@ -46,7 +46,7 @@ type Handler = Box<
 >;
 
 pub struct AdminSpace {
-    pid: PeerId,
+    pid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<String, Arc<Handler>>,
@@ -433,7 +433,7 @@ impl Primitives for AdminSpace {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,

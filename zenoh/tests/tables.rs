@@ -18,11 +18,11 @@ use uhlc::HLC;
 use zenoh::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh::net::protocol::core::key_expr::intersect;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
+    Channel, CongestionControl, KeyExpr, QueryConsolidation, QueryTarget, QueryableInfo,
+    Reliability, SubInfo, SubMode, WhatAmI, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
+use zenoh::net::protocol::message::{DataInfo, RoutingContext};
 use zenoh::net::routing::router::*;
 use zenoh::net::transport::{DummyPrimitives, Primitives};
 use zenoh_util::zlock;
@@ -30,13 +30,13 @@ use zenoh_util::zlock;
 #[test]
 fn base_test() {
     let mut tables = Tables::new(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
     register_expr(
         &mut tables,
         &mut face.upgrade().unwrap(),
@@ -123,13 +123,13 @@ fn match_test() {
     ];
 
     let mut tables = Tables::new(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &mut tables,
@@ -158,14 +158,14 @@ fn match_test() {
 #[test]
 fn clean_test() {
     let mut tables = Tables::new(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face0 = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
     assert!(face0.upgrade().is_some());
 
     // --------------
@@ -475,7 +475,7 @@ impl Primitives for ClientPrimitives {
         &self,
         _qid: ZInt,
         _replier_kind: ZInt,
-        _replier_id: PeerId,
+        _replier_id: ZenohId,
         _key_expr: KeyExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
@@ -498,7 +498,7 @@ impl Primitives for ClientPrimitives {
 #[test]
 fn client_test() {
     let mut tables = Tables::new(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
@@ -511,7 +511,7 @@ fn client_test() {
 
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = tables.open_face(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         primitives0.clone(),
     );
@@ -538,7 +538,7 @@ fn client_test() {
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         primitives1.clone(),
     );
@@ -565,7 +565,7 @@ fn client_test() {
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Client,
         primitives2.clone(),
     );

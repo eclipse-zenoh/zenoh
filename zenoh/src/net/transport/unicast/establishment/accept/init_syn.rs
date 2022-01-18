@@ -14,8 +14,8 @@
 use super::super::{properties_from_attachment, AuthenticatedPeerLink, EstablishmentProperties};
 use super::AResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
-use crate::net::protocol::proto::{tmsg, TransportBody};
+use crate::net::protocol::core::{WhatAmI, ZInt, ZenohId};
+use crate::net::protocol::message::{Close, TransportBody};
 use crate::net::transport::TransportManager;
 use zenoh_util::zerror;
 
@@ -26,7 +26,7 @@ use zenoh_util::zerror;
 // Read and eventually accept an InitSyn
 pub(super) struct Output {
     pub(super) whatami: WhatAmI,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
     pub(super) init_syn_properties: EstablishmentProperties,
@@ -44,7 +44,7 @@ pub(super) async fn recv(
             link,
             messages,
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(Close::INVALID)));
     }
 
     let mut msg = messages.remove(0);
@@ -56,7 +56,7 @@ pub(super) async fn recv(
                 link,
                 msg.body
             );
-            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+            return Err((e.into(), Some(Close::INVALID)));
         }
     };
 
@@ -70,27 +70,26 @@ pub(super) async fn recv(
                     pid,
                     init_syn.pid
                 );
-                return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+                return Err((e.into(), Some(Close::INVALID)));
             }
         }
         None => auth_link.peer_id = Some(init_syn.pid),
     }
 
     // Check if the version is supported
-    if init_syn.version != manager.config.version {
+    // @TODO: handle experimental version
+    if init_syn.version != manager.config.version.stable {
         let e = zerror!(
             "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
             link,
             init_syn.pid
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(Close::INVALID)));
     }
 
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 

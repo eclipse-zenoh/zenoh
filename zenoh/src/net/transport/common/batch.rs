@@ -13,7 +13,7 @@
 //
 use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::io::WBuf;
-use super::protocol::proto::{TransportMessage, ZenohMessage};
+use super::protocol::message::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
@@ -381,8 +381,8 @@ mod tests {
     use super::*;
     use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
     use crate::net::protocol::io::{WBuf, ZBuf};
-    use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
-    use crate::net::protocol::proto::{
+    use crate::net::protocol::message::defaults::SEQ_NUM_RES;
+    use crate::net::protocol::message::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
     use std::convert::TryFrom;
@@ -400,13 +400,13 @@ mod tests {
             let mut batch = SerializationBatch::new(batch_size, *is_streamed);
 
             // Serialize the messages until the batch is full
-            let mut tmsgs_in: Vec<TransportMessage> = vec![];
-            let mut zmsgs_in: Vec<ZenohMessage> = vec![];
+            let mut transports_in: Vec<TransportMessage> = vec![];
+            let mut zenohs_in: Vec<ZenohMessage> = vec![];
             let mut reliable = true;
             let mut dropping = true;
             loop {
                 // Insert a transport message every 3 ZenohMessage
-                if zmsgs_in.len() % 3 == 0 {
+                if zenohs_in.len() % 3 == 0 {
                     // Create a TransportMessage
                     let pid = None;
                     let attachment = None;
@@ -415,22 +415,22 @@ mod tests {
                     // Serialize the TransportMessage
                     let res = batch.serialize_transport_message(&mut msg);
                     if !res {
-                        assert!(!zmsgs_in.is_empty());
+                        assert!(!zenohs_in.is_empty());
                         break;
                     }
-                    tmsgs_in.push(msg);
+                    transports_in.push(msg);
                 }
 
                 // Create a ZenohMessage
-                if zmsgs_in.len() % 4 == 0 {
+                if zenohs_in.len() % 4 == 0 {
                     // Change reliability every four messages
                     reliable = !reliable;
                 }
-                if zmsgs_in.len() % 3 == 0 {
+                if zenohs_in.len() % 3 == 0 {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key: crate::KeyExpr = format!("test{}", zmsgs_in.len()).into();
+                let key: crate::KeyExpr = format!("test{}", zenohs_in.len()).into();
                 let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,
@@ -460,10 +460,10 @@ mod tests {
                 let res = batch.serialize_zenoh_message(&mut msg, channel.priority, &mut sn_gen);
                 if !res {
                     batch.write_len();
-                    assert!(!zmsgs_in.is_empty());
+                    assert!(!zenohs_in.is_empty());
                     break;
                 }
-                zmsgs_in.push(msg);
+                zenohs_in.push(msg);
             }
 
             // Verify that we deserialize the same messages we have serialized
@@ -476,22 +476,22 @@ mod tests {
             }
             assert!(!deserialized.is_empty());
 
-            let mut tmsgs_out: Vec<TransportMessage> = vec![];
-            let mut zmsgs_out: Vec<ZenohMessage> = vec![];
+            let mut transports_out: Vec<TransportMessage> = vec![];
+            let mut zenohs_out: Vec<ZenohMessage> = vec![];
             for msg in deserialized.drain(..) {
                 match msg.body {
                     TransportBody::Frame(Frame { payload, .. }) => match payload {
-                        FramePayload::Messages { mut messages } => zmsgs_out.append(&mut messages),
+                        FramePayload::Messages { mut messages } => zenohs_out.append(&mut messages),
                         _ => panic!(),
                     },
-                    _ => tmsgs_out.push(msg),
+                    _ => transports_out.push(msg),
                 }
             }
 
-            assert_eq!(tmsgs_in, tmsgs_out);
-            assert_eq!(zmsgs_in, zmsgs_out);
+            assert_eq!(transports_in, transports_out);
+            assert_eq!(zenohs_in, zenohs_out);
 
-            println!("\t\tMessages: {}", zmsgs_out.len());
+            println!("\t\tMessages: {}", zenohs_out.len());
         }
     }
 

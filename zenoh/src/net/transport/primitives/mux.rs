@@ -13,14 +13,14 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    SubInfo, ZInt,
+    Channel, CongestionControl, KeyExpr, QueryConsolidation, QueryTarget, QueryableInfo, SubInfo,
+    ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
-use super::protocol::proto::{
-    zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-    ForgetSubscriber, Publisher, Queryable, ReplierInfo, ReplyContext, Resource, RoutingContext,
-    Subscriber, ZenohMessage,
+use super::protocol::message::{
+    default_channel, default_congestion_control, DataInfo, Declaration, ForgetPublisher,
+    ForgetQueryable, ForgetResource, ForgetSubscriber, Publisher, Queryable, ReplierInfo,
+    ReplyContext, Resource, RoutingContext, Subscriber, ZenohMessage,
 };
 use super::Primitives;
 
@@ -184,7 +184,7 @@ impl Primitives for Mux {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
@@ -192,8 +192,8 @@ impl Primitives for Mux {
         let _ = self.handler.handle_message(ZenohMessage::make_data(
             key_expr.to_owned(),
             payload,
-            zmsg::default_channel::REPLY,
-            zmsg::default_congestion_control::REPLY,
+            default_channel::REPLY,
+            default_congestion_control::REPLY,
             data_info,
             None,
             Some(ReplyContext::new(
@@ -209,8 +209,8 @@ impl Primitives for Mux {
 
     fn send_reply_final(&self, qid: ZInt) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
-            zmsg::default_channel::REPLY,
-            zmsg::default_congestion_control::REPLY,
+            default_channel::REPLY,
+            default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),
             None,
         ));

@@ -121,7 +121,7 @@ r#"--rest-http-port=[PORT | IP:PORT | none] \
             }
         }
 
-        let runtime = match Runtime::new(0, config).await {
+        let runtime = match Runtime::new(config).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);

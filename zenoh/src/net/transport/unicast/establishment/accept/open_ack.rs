@@ -15,7 +15,7 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::proto::{Attachment, TransportMessage};
+use crate::net::protocol::message::{Attachment, TransportMessage};
 use crate::net::transport::TransportManager;
 
 /*************************************/

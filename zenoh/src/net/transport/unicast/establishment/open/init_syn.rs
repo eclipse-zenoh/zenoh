@@ -15,7 +15,7 @@ use super::super::authenticator::AuthenticatedPeerLink;
 use super::{attachment_from_properties, OResult};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::Property;
-use crate::net::protocol::proto::TransportMessage;
+use crate::net::protocol::message::TransportMessage;
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
 
@@ -47,7 +47,7 @@ pub(super) async fn send(
 
     // Build and send the InitSyn message
     let mut message = TransportMessage::make_init_syn(
-        manager.config.version,
+        manager.config.version.stable, // @TODO: handle experimental version
         manager.config.whatami,
         manager.config.pid,
         manager.config.sn_resolution,

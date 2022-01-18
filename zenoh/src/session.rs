@@ -29,7 +29,7 @@ use net::protocol::{
         QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
     },
     io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    message::{DataInfo, RoutingContext},
 };
 use net::routing::face::Face;
 use net::runtime::Runtime;
@@ -222,7 +222,7 @@ impl Session {
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(0, config).await {
+            match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
@@ -1395,7 +1395,7 @@ impl Primitives for Session {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
