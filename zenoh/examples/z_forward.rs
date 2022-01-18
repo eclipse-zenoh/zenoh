@@ -13,37 +13,27 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::*;
-use zenoh::publication::CongestionControl;
 
-fn main() {
-    // initiate logging
+#[async_std::main]
+async fn main() {
+    // Initiate logging
     env_logger::init();
 
-    let config = parse_args();
+    let (config, key_expr, forward) = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    println!("Openning session...");
+    let session = zenoh::open(config).await.unwrap();
 
-    // The key expression to read the data from
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
-
-    // The key expression to echo the data back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
-
-    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
-
-    while let Ok(sample) = sub.recv() {
-        session
-            .put(&key_expr_pong, sample.value)
-            // Make sure to not drop messages because of congestion control
-            .congestion_control(CongestionControl::Block)
-            .wait()
-            .unwrap();
-    }
+    println!("Creating Subscriber on '{}'...", key_expr);
+    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
+    println!("Creating Publisher on '{}'...", forward);
+    let publisher = session.publish(&forward).await.unwrap();
+    println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
+    subscriber.forward(publisher).await.unwrap();
 }
 
-fn parse_args() -> Config {
-    let args = App::new("zenoh roundtrip pong example")
+fn parse_args() -> (Config, String, String) {
+    let args = App::new("zenoh sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
@@ -54,8 +44,16 @@ fn parse_args() -> Config {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
+        .arg(
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
+                .default_value("/demo/example/**"),
+        )
+        .arg(
+            Arg::from_usage("-f, --forward=[KEYEXPR] 'The key expression to forward to.'")
+                .default_value("/demo/forward"),
+        )
         .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .get_matches();
 
@@ -77,12 +75,16 @@ fn parse_args() -> Config {
     if let Some(values) = args.values_of("peer") {
         config.peers.extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listener") {
+    if let Some(values) = args.values_of("listeners") {
         config.listeners.extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    config
+    let key_expr = args.value_of("key").unwrap().to_string();
+
+    let forward = args.value_of("forward").unwrap().to_string();
+
+    (config, key_expr, forward)
 }

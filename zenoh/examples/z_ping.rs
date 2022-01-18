@@ -30,7 +30,7 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
 
-    let mut sub = session.subscribe(&key_expr_pong).wait().unwrap();
+    let sub = session.subscribe(&key_expr_pong).wait().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -41,7 +41,6 @@ fn main() {
 
     // -- warmup --
     let wun = 1000;
-    let stream = sub.receiver();
     for _ in 0..wun {
         let data = data.clone();
         session
@@ -51,7 +50,7 @@ fn main() {
             .wait()
             .unwrap();
 
-        let _ = stream.recv();
+        let _ = sub.recv();
     }
 
     for _ in 0..n {
@@ -64,7 +63,7 @@ fn main() {
             .wait()
             .unwrap();
 
-        let _ = stream.recv();
+        let _ = sub.recv();
         let ts = write_time.elapsed().as_micros();
         samples.push(ts);
     }

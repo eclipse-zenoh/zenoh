@@ -239,7 +239,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                     let sender = &sender;
                     let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
                     loop {
-                        let sample = sub.receiver().next().await.unwrap();
+                        let sample = sub.next().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
                                 .send(&sample.kind.to_string(), sample_to_json(sample), None)

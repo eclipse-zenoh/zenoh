@@ -47,7 +47,7 @@ async fn main() {
     let mut input = [0u8];
     loop {
         select!(
-            sample = subscriber.receiver().next() => {
+            sample = subscriber.next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
@@ -58,7 +58,7 @@ async fn main() {
                 }
             },
 
-            query = queryable.receiver().next() => {
+            query = queryable.next() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {

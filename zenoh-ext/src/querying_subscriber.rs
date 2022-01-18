@@ -26,8 +26,9 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh::Session;
 use zenoh_util::{zread, zwrite};
+
+use crate::session_ext::SessionRef;
 
 use super::PublicationCache;
 
@@ -37,7 +38,7 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
-    session: &'a Session,
+    session: SessionRef<'a>,
     sub_key_expr: KeyExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
@@ -50,7 +51,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
-        session: &'a Session,
+        session: SessionRef<'a>,
         sub_key_expr: KeyExpr<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
@@ -193,14 +194,22 @@ pub struct QueryingSubscriber<'a> {
 
 impl<'a> QueryingSubscriber<'a> {
     fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
+        use zenoh::prelude::EntityFactory;
         // declare subscriber at first
-        let mut subscriber = conf
-            .session
-            .subscribe(&conf.sub_key_expr)
-            .reliability(conf.reliability)
-            .mode(conf.mode)
-            .period(conf.period)
-            .wait()?;
+        let mut subscriber = match conf.session.clone() {
+            SessionRef::Borrow(session) => session
+                .subscribe(&conf.sub_key_expr)
+                .reliability(conf.reliability)
+                .mode(conf.mode)
+                .period(conf.period)
+                .wait()?,
+            SessionRef::Shared(session) => session
+                .subscribe(&conf.sub_key_expr)
+                .reliability(conf.reliability)
+                .mode(conf.mode)
+                .period(conf.period)
+                .wait()?,
+        };
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
 
@@ -281,6 +290,49 @@ impl<'a> QueryingSubscriber<'a> {
     }
 }
 
+impl Stream for QueryingSubscriber<'_> {
+    type Item = Sample;
+
+    #[inline(always)]
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        self.receiver.poll_next(cx)
+    }
+}
+
+impl futures::stream::FusedStream for QueryingSubscriber<'_> {
+    #[inline(always)]
+    fn is_terminated(&self) -> bool {
+        self.receiver.is_terminated()
+    }
+}
+
+impl Receiver<Sample> for QueryingSubscriber<'_> {
+    #[inline(always)]
+    fn recv_async(&self) -> flume::r#async::RecvFut<'_, Sample> {
+        self.receiver.recv_async()
+    }
+
+    #[inline(always)]
+    fn recv(&self) -> Result<Sample, RecvError> {
+        self.receiver.recv()
+    }
+
+    #[inline(always)]
+    fn try_recv(&self) -> Result<Sample, TryRecvError> {
+        self.receiver.try_recv()
+    }
+
+    #[inline(always)]
+    fn recv_timeout(&self, timeout: Duration) -> Result<Sample, RecvTimeoutError> {
+        self.receiver.recv_timeout(timeout)
+    }
+
+    #[inline(always)]
+    fn recv_deadline(&self, deadline: Instant) -> Result<Sample, RecvTimeoutError> {
+        self.receiver.recv_deadline(deadline)
+    }
+}
+
 #[derive(Clone)]
 pub struct QueryingSubscriberReceiver {
     state: Arc<RwLock<InnerState>>,
@@ -317,6 +369,13 @@ impl futures::stream::FusedStream for QueryingSubscriberReceiver {
 }
 
 impl Receiver<Sample> for QueryingSubscriberReceiver {
+    fn recv_async(&self) -> flume::r#async::RecvFut<'_, Sample> {
+        // TODO find a better way to forge a RecvFut
+        let (sender, receiver) = flume::bounded(1);
+        let _ = sender.send(self.recv().unwrap());
+        receiver.into_recv_async()
+    }
+
     fn recv(&self) -> Result<Sample, RecvError> {
         let state = &mut zwrite!(self.state);
         state.recv()

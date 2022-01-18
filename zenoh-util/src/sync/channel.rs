@@ -13,6 +13,7 @@
 //
 use std::time::{Duration, Instant};
 
+pub use flume::r#async::RecvFut;
 pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 
 /// A trait that mimics the [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver).
@@ -20,6 +21,11 @@ pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 /// Most structs implementing this trait in zenoh also implement the [`Stream`](async_std::stream::Stream)
 /// trait so that values can be accessed synchronously or asynchronously.
 pub trait Receiver<T> {
+    /// Asynchronously receive a value on this receiver, returning an error if all
+    /// senders have been dropped. If the channel is empty, the returned future will
+    /// yield to the async runtime.
+    fn recv_async(&self) -> RecvFut<'_, T>;
+
     /// Attempts to wait for a value on this receiver, returning an error if the
     /// corresponding channel has hung up.
     ///
@@ -114,9 +120,35 @@ macro_rules! zreceiver{
                     stream: receiver.into_stream(),
                 }
             }
+
+            /// Returns this `Receiver<T>` as a `TryStream<Ok = T, Error = E>` i.e: a `Stream<Result<T, E>>`.
+            pub fn as_trystream<'selflifetime, E:'selflifetime>(&'selflifetime mut self) -> impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime {
+                futures::StreamExt::map(self.receiver.stream(), Ok)
+            }
+
+            /// A future that completes after the given `Receiver` has been fully processed
+            /// into the sink and the sink has been flushed and closed.
+            ///
+            /// This future will drive the `Receiver` to keep producing items until it is exhausted,
+            /// sending each item to the sink. It will complete once the `Receiver` is exhausted,
+            /// the sink has received and flushed all items, and the sink is closed.
+            /// Note that neither the original stream nor provided sink will be output by this future.
+            /// Pass the sink by Pin<&mut S> (for example, via forward(&mut sink) inside an async fn/block)
+            /// in order to preserve access to the Sink.
+            pub fn forward<'selflifetime, E:'selflifetime, S>(&'selflifetime mut self, sink: S) -> futures::stream::Forward<impl futures::TryStream<Ok = $recv_type, Error = E, Item = Result<$recv_type, E>> + 'selflifetime, S>
+            where
+                S: futures::sink::Sink<$recv_type, Error = E>,
+            {
+                futures::StreamExt::forward(self.as_trystream(), sink)
+            }
         }
 
         impl$(<$( $lt ),+>)? Receiver<$recv_type> for $struct_name$(<$( $lt ),+>)? {
+            #[inline(always)]
+            fn recv_async(&self) -> RecvFut<'_, $recv_type> {
+                self.receiver.recv_async()
+            }
+
             #[inline(always)]
             fn recv(&self) -> core::result::Result<$recv_type, RecvError> {
                 self.receiver.recv()
@@ -155,7 +187,7 @@ macro_rules! zreceiver{
             }
         }
 
-        impl $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? $struct_name$(<$( $lt ),+>)? {
             #[inline(always)]
             pub fn iter(&self) -> Iter<'_, $recv_type> {
                 self.receiver.iter()

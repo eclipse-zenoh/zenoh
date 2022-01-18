@@ -27,7 +27,8 @@ use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
 use crate::net::protocol::proto::DataInfo;
-use crate::queryable::Query;
+use crate::queryable::{Query, QueryableBuilder};
+use crate::subscriber::SubscriberBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[cfg(feature = "shared-memory")]
 use async_std::sync::Arc;
@@ -267,6 +268,12 @@ impl From<f64> for Value {
             payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
             encoding: Encoding::APP_FLOAT,
         }
+    }
+}
+
+impl From<Sample> for Value {
+    fn from(s: Sample) -> Self {
+        s.value
     }
 }
 
@@ -646,7 +653,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// use std::convert::TryInto;
 ///
 /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-/// while let Some(query) = queryable.receiver().next().await {
+/// while let Some(query) = queryable.next().await {
 ///     let value_selector = query.selector().parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
@@ -777,4 +784,84 @@ impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
     fn try_from(s: &'a String) -> crate::Result<Self> {
         ValueSelector::try_from(s.as_str())
     }
+}
+
+/// Functions to create zenoh entities with `'static` lifetime.
+///
+/// This trait contains functions to create zenoh entities like
+/// [`Subscriber`](crate::subscriber::Subscriber), and
+/// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
+/// This is useful to move zenoh entities to several threads and tasks.
+///
+/// This trait is implemented for `Arc<Session>`.
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+/// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+/// async_std::task::spawn(async move {
+///     while let Some(sample) = subscriber.next().await {
+///         println!("Received : {:?}", sample);
+///     }
+/// }).await;
+/// # })
+/// ```
+pub trait EntityFactory {
+    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(sample) = subscriber.next().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>;
+
+    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use futures::prelude::*;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Some(query) = queryable.next().await {
+    ///         query.reply_async(Sample::new(
+    ///             "/key/expression".to_string(),
+    ///             "value",
+    ///         )).await;
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn queryable<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>;
 }
