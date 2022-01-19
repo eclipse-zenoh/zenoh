@@ -16,8 +16,7 @@ name = "zenoh-ext"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Julien Enoch <julien@enoch.fr>"]
+authors = ["kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>"]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
@@ -27,7 +26,10 @@ description = "Zenoh: extensions to the client API."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = { version = "=1.9.0", default-features = false, features = ["attributes", "unstable"] }
+async-std = { version = "=1.9.0", default-features = false, features = [
+    "attributes",
+    "unstable",
+] }
 bincode = "1.3.3"
 env_logger = "0.9.0"
 flume = "0.10.7"
@@ -37,6 +39,7 @@ log = "0.4"
 serde = "1.0.126"
 zenoh = { path = "../zenoh" }
 zenoh-util = { path = "../zenoh-util" }
+zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
 clap = "2.33.3"

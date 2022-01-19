@@ -28,9 +28,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{zerror, zread, zwrite};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zerror, zread, zwrite};
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library

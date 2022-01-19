@@ -23,9 +23,9 @@ use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::zasync_executor_init;
+use zenoh_core::Result as ZResult;
 use zenoh_util::properties::Properties;
-use zenoh_util::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);

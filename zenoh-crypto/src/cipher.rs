@@ -12,12 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::PseudoRng;
-use crate::bail;
-use crate::core::Result as ZResult;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::NewBlockCipher;
 use aes::{Aes128, BlockDecrypt, BlockEncrypt};
 use rand::Rng;
+use zenoh_core::{bail, Result as ZResult};
 
 pub struct BlockCipher {
     inner: Aes128,

@@ -1,0 +1,13 @@
+[package]
+name = "zenoh-sync"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+zenoh-core = { path = "../zenoh-core/" }
+async-std = { version = "=1.9.0", features = ["unstable"] }
+event-listener = "2.5.1"
+flume = "0.10.5"
+futures-lite = "1.11.3"

@@ -17,7 +17,7 @@ use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
 use crate::net::protocol::proto::{tmsg, TransportBody};
 use crate::net::transport::TransportManager;
-use zenoh_util::zerror;
+use zenoh_core::zerror;
 
 /*************************************/
 /*             ACCEPT                */

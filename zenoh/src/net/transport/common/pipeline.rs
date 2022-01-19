@@ -36,8 +36,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_core::zlock;
 use zenoh_util::sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
-use zenoh_util::zlock;
 
 macro_rules! zgetbatch {
     ($self:expr, $priority:expr, $stage_in:expr, $is_droppable:expr) => {

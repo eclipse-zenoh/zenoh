@@ -353,6 +353,11 @@ jobs:
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
           cd zenoh-macros && cargo publish && cd - && sleep 30
+          cd zenoh-core && cargo publish && cd - && sleep 30
+          cd zenoh-cfg-properties && cargo publish && cd - && sleep 30
+          cd zenoh-crypto && cargo publish && cd - && sleep 30
+          cd zenoh-sync && cargo publish && cd - && sleep 30
+          cd zenoh-collections && cargo publish && cd - && sleep 30
           cd zenoh-util && cargo publish && cd - && sleep 30
           cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
           cd zenoh && cargo publish && cd - && sleep 30

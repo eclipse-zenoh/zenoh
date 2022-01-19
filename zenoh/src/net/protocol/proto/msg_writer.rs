@@ -14,7 +14,7 @@
 use super::core::*;
 use super::io::WBuf;
 use super::msg::*;
-use zenoh_util::zcheck;
+use zenoh_core::zcheck;
 
 impl WBuf {
     #[inline(always)]

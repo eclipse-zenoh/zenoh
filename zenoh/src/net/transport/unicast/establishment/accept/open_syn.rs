@@ -19,8 +19,8 @@ use crate::net::protocol::core::{Property, ZInt};
 use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
+use zenoh_core::zerror;
 use zenoh_util::crypto::hmac;
-use zenoh_util::zerror;
 
 /*************************************/
 /*             ACCEPT                */

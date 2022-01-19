@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
-use zenoh_util::sync::Runnable;
+use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use super::net::protocol::core::Target;

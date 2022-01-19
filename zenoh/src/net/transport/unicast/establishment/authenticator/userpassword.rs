@@ -21,10 +21,10 @@ use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::hmac;
 use zenoh_util::properties::Properties;
-use zenoh_util::{zasynclock, zasyncread, zasyncwrite};
 
 const WBUF_SIZE: usize = 64;
 const USRPWD_VERSION: ZInt = 1;

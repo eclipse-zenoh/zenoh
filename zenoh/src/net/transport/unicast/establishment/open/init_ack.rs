@@ -20,7 +20,7 @@ use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
-use zenoh_util::zerror;
+use zenoh_core::zerror;
 
 /*************************************/
 /*              OPEN                 */

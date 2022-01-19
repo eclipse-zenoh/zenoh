@@ -17,6 +17,7 @@ mod unicast;
 use super::*;
 pub use endpoint::*;
 pub use unicast::*;
+use zenoh_core::zconfigurable;
 
 // Default MTU (UnixSocketStream PDU) in bytes.
 // NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has

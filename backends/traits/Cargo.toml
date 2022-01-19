@@ -36,4 +36,5 @@ async-trait = "0.1.51"
 derive_more = "0.99"
 serde_json = "1.0"
 zenoh = { path = "../../zenoh/" }
+zenoh-core = { path = "../../zenoh-core/" }
 zenoh-util = { path = "../../zenoh-util/" }

@@ -16,8 +16,8 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
+use zenoh_core::zread;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::zread;
 
 use super::protocol::core::{
     Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI,

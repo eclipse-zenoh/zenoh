@@ -292,7 +292,7 @@ impl From<&[(&str, &str)]> for Properties {
 }
 
 impl TryFrom<&std::path::Path> for Properties {
-    type Error = crate::core::Error;
+    type Error = zenoh_core::Error;
     fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
         Ok(Self::from(std::fs::read_to_string(p)?))
     }

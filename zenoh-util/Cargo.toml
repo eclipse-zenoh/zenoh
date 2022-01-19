@@ -31,26 +31,20 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-zenoh-macros = { path = "../zenoh-macros" }
-aes = "0.7.4"
-anyhow = "1.0.48"
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties" }
+zenoh-core = { path = "../zenoh-core" }
+zenoh-crypto = { path = "../zenoh-crypto/" }
+zenoh-sync = { path = "../zenoh-sync/" }
+zenoh-collections = { path = "../zenoh-collections/" }
 async-std = { version = "=1.9.0", features = ["unstable"] }
-async-trait = "0.1.42"
 clap = "2.33.3"
-event-listener = "2.5.1"
-flume = "0.10.5"
 futures = "0.3.12"
-futures-lite = "1.11.3"
 hex = "0.4.2"
-hmac = { version = "0.11.0", features = ["std"] }
 home = "0.5.3"
 humantime = "2.1.0"
 lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4.14"
-rand = "0.8.3"
-rand_chacha = "0.3.0"
-sha3 = "0.9.1"
 shellexpand = "2.1.0"
 
 [target.'cfg(windows)'.dependencies]

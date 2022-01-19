@@ -22,7 +22,7 @@ use zenoh::net::protocol::core::{
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh::net::transport::{DummyTransportEventHandler, TransportManager};
-use zenoh_util::zasync_executor_init;
+use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

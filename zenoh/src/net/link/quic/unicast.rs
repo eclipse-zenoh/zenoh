@@ -29,9 +29,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_util::sync::Signal;
-use zenoh_util::{zasynclock, zerror, zread, zwrite};
 
 pub struct LinkUnicastQuic {
     connection: NewConnection,

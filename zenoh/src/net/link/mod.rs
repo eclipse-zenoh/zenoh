@@ -34,7 +34,7 @@ use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{bail, Result as ZResult};
 
 const WBUF_SIZE: usize = 64;
 

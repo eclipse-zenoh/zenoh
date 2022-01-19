@@ -27,10 +27,10 @@ use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zenoh_core::zerror;
 use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
-use zenoh_util::zerror;
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) version: u8,

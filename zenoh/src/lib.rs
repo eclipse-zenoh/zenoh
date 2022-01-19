@@ -75,10 +75,7 @@
 //! ```
 
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
-extern crate zenoh_util;
+extern crate zenoh_core;
 
 use async_std::net::UdpSocket;
 use flume::bounded;
@@ -92,7 +89,7 @@ use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{bail, zerror, zwrite, Result as ZResult};
 use zenoh_util::properties::config::*;
 use zenoh_util::sync::zpinbox;
 
@@ -247,6 +244,7 @@ pub mod scouting {
     use flume::Sender;
     use std::pin::Pin;
     use std::task::{Context, Poll};
+    use zenoh_sync::zreceiver;
 
     /// Constants and helpers for zenoh `whatami` flags.
     pub use super::net::protocol::core::WhatAmI;

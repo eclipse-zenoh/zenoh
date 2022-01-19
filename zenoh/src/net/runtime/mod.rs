@@ -34,9 +34,9 @@ use async_std::sync::Arc;
 use std::any::Any;
 use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
+use zenoh_core::{bail, zerror};
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::{bail, zerror};
 
 pub struct RuntimeState {
     pub pid: PeerId,

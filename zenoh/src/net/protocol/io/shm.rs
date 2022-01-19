@@ -20,9 +20,9 @@ use std::fmt;
 use std::mem::align_of;
 use std::sync::atomic;
 use std::sync::atomic::{AtomicPtr, AtomicUsize};
+use zenoh_core::zerror;
+use zenoh_core::Result as ZResult;
 use zenoh_util::core::zresult::ShmError;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::zerror;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;

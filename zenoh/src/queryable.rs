@@ -31,7 +31,7 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
-use zenoh_util::sync::Runnable;
+use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 pub use super::net::protocol::core::queryable::*;
 

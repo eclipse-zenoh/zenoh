@@ -50,6 +50,7 @@ serde_json = "1.0"
 zenoh = { path = "../../zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../zenoh-util" }
+zenoh-core = { path = "../../zenoh-core/" }
 zenoh_backend_traits = { path = "../../backends/traits" }
 
 [package.metadata.deb]

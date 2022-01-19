@@ -19,9 +19,9 @@ use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use crate::net::link::Locator;
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::zerror;
 #[cfg(feature = "shared-memory")]
-use zenoh_util::zerror;
+use zenoh_core::Result as ZResult;
 
 #[cfg(feature = "shared-memory")]
 mod zslice {

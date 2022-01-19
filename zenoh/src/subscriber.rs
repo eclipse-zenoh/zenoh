@@ -13,7 +13,6 @@
 //
 
 //! Subscribing primitives.
-
 use super::net::protocol::core::SubInfo;
 use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
@@ -28,7 +27,7 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
-use zenoh_util::sync::Runnable;
+use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The subscription mode.
 pub use super::net::protocol::core::SubMode;

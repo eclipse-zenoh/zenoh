@@ -23,8 +23,8 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
-use zenoh_util::bail;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zerror};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;

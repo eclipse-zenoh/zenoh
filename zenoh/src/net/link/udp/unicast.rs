@@ -24,10 +24,10 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{zasynclock, zerror, zlock, zread, zwrite};
 use zenoh_util::collections::{RecyclingObject, RecyclingObjectPool};
-use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::{Mvar, Signal};
-use zenoh_util::{zasynclock, zerror};
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (RecyclingObject<Box<[u8]>>, usize);

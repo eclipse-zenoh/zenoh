@@ -36,6 +36,7 @@ no_mangle = []
 default = ["no_mangle"]
 
 [dependencies]
+zenoh-core = { path = "../../zenoh-core/" }
 zenoh-util = { path = "../../zenoh-util" }
 zenoh-macros = { path = "../../zenoh-macros/" }
 libloading = "0.7.0"

@@ -35,6 +35,7 @@ use async_std::sync::Arc;
 use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
+use zenoh_core::bail;
 
 pub(crate) type Id = usize;
 

@@ -28,7 +28,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
-use zenoh_util::core::{zresult::BoxedStdErr as ZError, Result as ZResult};
+use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
 use zenoh_util::properties::Properties;
 
 /*************************************/

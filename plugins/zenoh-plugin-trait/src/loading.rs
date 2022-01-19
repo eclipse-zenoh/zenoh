@@ -4,8 +4,8 @@ use libloading::Library;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::{bail, zerror, LibLoader};
+use zenoh_core::{bail, zerror, Result as ZResult};
+use zenoh_util::LibLoader;
 
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].

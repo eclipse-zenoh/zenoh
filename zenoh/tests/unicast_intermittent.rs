@@ -29,8 +29,8 @@ use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::zasync_executor_init;
+use zenoh_core::zasync_executor_init;
+use zenoh_core::Result as ZResult;
 
 const MSG_SIZE: usize = 8;
 const MSG_COUNT: usize = 100_000;

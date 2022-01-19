@@ -19,7 +19,7 @@ use crate::net::protocol::proto::{tmsg, Close, TransportBody};
 use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
 use std::time::Duration;
-use zenoh_util::zerror;
+use zenoh_core::zerror;
 
 pub(super) struct Output {
     pub(super) initial_sn: ZInt,

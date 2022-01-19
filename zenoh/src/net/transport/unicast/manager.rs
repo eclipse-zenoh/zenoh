@@ -24,8 +24,8 @@ use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh_core::{zasynclock, zerror, zlock, zparse};
 use zenoh_util::properties::config::*;
-use zenoh_util::{zasynclock, zerror, zlock, zparse};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */

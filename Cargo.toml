@@ -15,6 +15,11 @@
 
 members = [
   "zenoh",
+  "zenoh-cfg-properties",
+  "zenoh-collections",
+  "zenoh-core",
+  "zenoh-crypto",
+  "zenoh-sync",
   "zenoh-util",
   "zenoh-ext",
   "zenoh-macros",

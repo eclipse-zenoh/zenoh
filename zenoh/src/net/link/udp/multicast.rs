@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{zerror, Result as ZResult};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link

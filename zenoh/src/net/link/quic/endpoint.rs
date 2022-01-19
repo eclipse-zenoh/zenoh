@@ -17,7 +17,7 @@ use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
 use webpki::{DnsName, DnsNameRef};
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{zerror, Result as ZResult};
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]

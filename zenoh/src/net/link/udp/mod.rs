@@ -19,6 +19,7 @@ use super::*;
 pub use endpoint::*;
 pub use multicast::*;
 pub use unicast::*;
+use zenoh_core::zconfigurable;
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers

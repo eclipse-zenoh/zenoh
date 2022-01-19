@@ -11,26 +11,26 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use anyhow::Error;
+use anyhow::Error as AnyError;
 use std::fmt;
 
-pub type BoxedStdErr = Box<dyn std::error::Error + Send + Sync + 'static>;
+pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-pub type ZResult<T> = Result<T, BoxedStdErr>;
+pub type ZResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
 pub struct ZError {
-    error: Error,
+    error: AnyError,
     file: &'static str,
     line: u32,
-    source: Option<BoxedStdErr>,
+    source: Option<Error>,
 }
 
 unsafe impl Send for ZError {}
 unsafe impl Sync for ZError {}
 
 impl ZError {
-    pub fn new<E: Into<Error>>(error: E, file: &'static str, line: u32) -> ZError {
+    pub fn new<E: Into<AnyError>>(error: E, file: &'static str, line: u32) -> ZError {
         ZError {
             error: error.into(),
             file,
@@ -38,7 +38,7 @@ impl ZError {
             source: None,
         }
     }
-    pub fn set_source<S: Into<BoxedStdErr>>(mut self, source: S) -> Self {
+    pub fn set_source<S: Into<Error>>(mut self, source: S) -> Self {
         self.source = Some(source.into());
         self
     }

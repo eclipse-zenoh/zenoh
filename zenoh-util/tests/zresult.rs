@@ -11,8 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::zerror;
+use zenoh_core::{zerror, Result as ZResult};
 
 #[test]
 fn error_simple() {
