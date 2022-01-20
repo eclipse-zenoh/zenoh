@@ -12,33 +12,25 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-plugin-trait"
+name = "zenoh-sync"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@adlinktech.com>",
-    "Luca Cominardi <luca.cominardi@adlinktech.com>",
-    "Pierre Avital <pierre.avital@adlinktech.com>",
+	"kydos <angelo@icorsaro.net>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
-[lib]
-name = "zenoh_plugin_trait"
-
-[features]
-no_mangle = []
-default = ["no_mangle"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
-zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
-zenoh-macros = { path = "../../zenoh-macros/" }
-libloading = "0.7.0"
-log = "0.4"
-serde_json = "1.0"
+zenoh-core = { path = "../zenoh-core/" }
+async-std = { version = "=1.9.0", features = ["unstable"] }
+event-listener = "2.5.1"
+flume = "0.10.5"
+futures-lite = "1.11.3"

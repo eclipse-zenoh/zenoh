@@ -57,10 +57,10 @@ default = [
 ]
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core/" }
-zenoh-collections = { path = "../zenoh-collections/" }
-zenoh-sync = { path = "../zenoh-sync/" }
-zenoh-util = { path = "../zenoh-util" }
+zenoh-core = { path = "../zenoh-utils/zenoh-core/" }
+zenoh-collections = { path = "../zenoh-utils/zenoh-collections/" }
+zenoh-sync = { path = "../zenoh-utils/zenoh-sync/" }
+zenoh-util = { path = "../zenoh-utils/zenoh-util" }
 zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
 async-global-executor = "2.0.2"
 async-rustls = { version = "=0.2.0", optional = true }

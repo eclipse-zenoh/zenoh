@@ -11,18 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[allow(unused_imports)] // This should re-export macros to not break API
-#[macro_use]
-pub extern crate zenoh_core;
-#[allow(unused_imports)] // This should re-export macros to not break API
-#[macro_use]
-pub extern crate zenoh_sync;
+
 #[macro_use]
 extern crate lazy_static;
 use std::path::{Path, PathBuf};
 pub use zenoh_collections as collections;
 pub use zenoh_core as core;
-pub use zenoh_core::macros::*;
 pub use zenoh_crypto as crypto;
 pub mod ffi;
 mod lib_loader;

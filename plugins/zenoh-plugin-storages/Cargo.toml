@@ -49,9 +49,9 @@ log = "0.4.14"
 serde_json = "1.0"
 zenoh = { path = "../../zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { path = "../../zenoh-util" }
-zenoh-core = { path = "../../zenoh-core/" }
-zenoh-collections = { path = "../../zenoh-collections/" }
+zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
+zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
+zenoh-collections = { path = "../../zenoh-utils/zenoh-collections/" }
 zenoh_backend_traits = { path = "../../backends/traits" }
 
 [package.metadata.deb]

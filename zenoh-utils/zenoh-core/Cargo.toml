@@ -12,13 +12,14 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-util"
+name = "zenoh-core"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"kydos <angelo@icorsaro.net>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
@@ -27,29 +28,6 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[badges]
-maintenance = { status = "actively-developed" }
-
 [dependencies]
-zenoh-cfg-properties = { path = "../zenoh-cfg-properties" }
-zenoh-core = { path = "../zenoh-core" }
-zenoh-crypto = { path = "../zenoh-crypto/" }
-zenoh-sync = { path = "../zenoh-sync/" }
-zenoh-collections = { path = "../zenoh-collections/" }
-async-std = { version = "=1.9.0", features = ["unstable"] }
-clap = "2.33.3"
-futures = "0.3.12"
-hex = "0.4.2"
-home = "0.5.3"
-humantime = "2.1.0"
-lazy_static = "1.4.0"
-libloading = "0.7.0"
-log = "0.4.14"
-shellexpand = "2.1.0"
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3.9", features = ["iphlpapi"] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2.85"
-pnet = "0.28.0"
+anyhow = "1.0.48"
+lazy_static = "1.4"
