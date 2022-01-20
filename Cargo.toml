@@ -14,14 +14,16 @@
 [workspace]
 
 members = [
-  "zenoh",
+  "zenoh/zenoh",
+  "zenoh/zenoh-config",
+  "zenoh/zenoh-protocol-core",
+  "zenoh/zenoh-ext",
   "zenoh-utils/zenoh-cfg-properties",
   "zenoh-utils/zenoh-collections",
   "zenoh-utils/zenoh-core",
   "zenoh-utils/zenoh-crypto",
   "zenoh-utils/zenoh-sync",
   "zenoh-utils/zenoh-util",
-  "zenoh-ext",
   "zenoh-macros",
   "plugins/zenoh-plugin-trait",
   "plugins/example-plugin",

@@ -3259,8 +3259,10 @@ dependencies = [
  "vec_map",
  "webpki 0.22.0",
  "zenoh-collections",
+ "zenoh-config",
  "zenoh-core",
  "zenoh-plugin-trait",
+ "zenoh-protocol-core",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -3283,6 +3285,21 @@ dependencies = [
  "log",
  "zenoh-core",
  "zenoh-sync",
+]
+
+[[package]]
+name = "zenoh-config"
+version = "0.6.0-dev.0"
+dependencies = [
+ "flume",
+ "json5",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "validated_struct",
+ "zenoh-core",
+ "zenoh-protocol-core",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -3389,6 +3406,19 @@ dependencies = [
  "zenoh-core",
  "zenoh-macros",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-protocol-core"
+version = "0.6.0-dev.0"
+dependencies = [
+ "hex",
+ "http-types",
+ "lazy_static",
+ "serde",
+ "uhlc",
+ "uuid",
+ "zenoh-core",
 ]
 
 [[package]]

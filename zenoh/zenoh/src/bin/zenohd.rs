@@ -214,7 +214,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_peers(
                 peers
                     .map(|v| match v.parse::<Locator>() {
-                        Ok(v) => v,
+                        Ok(_) => v.into(),
                         Err(e) => {
                             panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
                         }
@@ -228,7 +228,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .set_listeners(
                 listeners
                     .map(|v| match v.parse::<Locator>() {
-                        Ok(v) => v,
+                        Ok(_) => v.into(),
                         Err(e) => {
                             panic!("Couldn't parse option --listener={} into Locator: {}", v, e);
                         }

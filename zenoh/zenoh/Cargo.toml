@@ -37,7 +37,7 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["rsa", "num-traits"]
 auth_usrpwd = []
-complete_n = []
+complete_n = ["zenoh-protocol-core/complete_n"]
 shared-memory = ["bincode", "shared_memory"]
 stats = []
 transport_quic = ["quinn", "rcgen", "webpki", "async-std/tokio1"]
@@ -57,11 +57,15 @@ default = [
 ]
 
 [dependencies]
-zenoh-core = { path = "../zenoh-utils/zenoh-core/" }
-zenoh-collections = { path = "../zenoh-utils/zenoh-collections/" }
-zenoh-sync = { path = "../zenoh-utils/zenoh-sync/" }
-zenoh-util = { path = "../zenoh-utils/zenoh-util" }
-zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
+zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
+zenoh-collections = { path = "../../zenoh-utils/zenoh-collections/" }
+zenoh-sync = { path = "../../zenoh-utils/zenoh-sync/" }
+zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
+zenoh-plugin-trait = { path = "../../plugins/zenoh-plugin-trait", default-features = false }
+
+zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
+zenoh-config = { path = "../zenoh-config/" }
+
 async-global-executor = "2.0.2"
 async-rustls = { version = "=0.2.0", optional = true }
 async-std = { version = "=1.9.0", default-features = false, features = [

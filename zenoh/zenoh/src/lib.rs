@@ -106,7 +106,7 @@ pub use session::*;
 #[doc(hidden)]
 pub mod net;
 
-pub mod config;
+pub use zenoh_config as config;
 pub mod info;
 pub mod prelude;
 pub mod publication;

@@ -15,9 +15,6 @@
 //! Properties to pass to [`open`](super::open) and [`scout`](super::scout) functions as configuration
 //! and associated constants.
 
-use crate::net::link::Locator;
-pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
-use crate::plugins::ValidationFunction;
 use serde_json::Value;
 use std::{
     any::Any,
@@ -30,8 +27,21 @@ use std::{
 };
 use validated_struct::{GetError, ValidatedMap};
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+pub use zenoh_protocol_core::{whatami, WhatAmI};
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
+
+pub type ValidationFunction = std::sync::Arc<
+    dyn Fn(
+            &str,
+            &serde_json::Map<String, serde_json::Value>,
+            &serde_json::Map<String, serde_json::Value>,
+        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
+        + Send
+        + Sync,
+>;
+type ZInt = u64;
+type Locator = String;
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).
@@ -320,7 +330,7 @@ impl Config {
         copy
     }
 
-    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> crate::Result<()> {
+    pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         let key = key.as_ref();
         let key = key.strip_prefix('/').unwrap_or(key);
         if !key.starts_with("plugins/") {
@@ -423,7 +433,7 @@ impl<T> Clone for Notifier<T> {
     }
 }
 impl Notifier<Config> {
-    pub fn remove<K: AsRef<str>>(&self, key: K) -> crate::Result<()> {
+    pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
         let key = key.as_ref();
         {
             let mut guard = zlock!(self.inner.inner);
@@ -709,7 +719,7 @@ fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, crate::plugins::ValidationFunction>,
+    validators: HashMap<String, ValidationFunction>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -751,7 +761,7 @@ impl PluginsConfig {
             }
         })
     }
-    pub fn remove(&mut self, key: &str) -> crate::Result<()> {
+    pub fn remove(&mut self, key: &str) -> ZResult<()> {
         let mut split = key.split('/');
         let plugin = split.next().unwrap();
         let mut current = match split.next() {

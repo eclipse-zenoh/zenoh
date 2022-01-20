@@ -476,9 +476,9 @@ impl RoutingContext {
 /// +-+-+-+---------+
 ///
 /// ```
-impl Priority {
-    pub fn header(self) -> u8 {
-        tmsg::id::PRIORITY | ((self as u8) << imsg::HEADER_BITS)
+impl Header for Priority {
+    fn header(&self) -> u8 {
+        tmsg::id::PRIORITY | ((*self as u8) << imsg::HEADER_BITS)
     }
 }
 

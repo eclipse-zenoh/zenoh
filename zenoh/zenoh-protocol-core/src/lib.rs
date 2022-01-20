@@ -326,8 +326,8 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct KeyExpr<'a> {
-    pub(crate) scope: ExprId, // 0 marks global scope
-    pub(crate) suffix: Cow<'a, str>,
+    pub scope: ExprId, // 0 marks global scope
+    pub suffix: Cow<'a, str>,
 }
 
 impl<'a> KeyExpr<'a> {
@@ -363,7 +363,7 @@ impl<'a> KeyExpr<'a> {
         (self.scope, self.suffix.as_ref())
     }
 
-    pub(crate) fn has_suffix(&self) -> bool {
+    pub fn has_suffix(&self) -> bool {
         !self.suffix.as_ref().is_empty()
     }
 
@@ -490,6 +490,7 @@ pub struct Encoding {
 }
 
 mod encoding {
+    use lazy_static::lazy_static;
     lazy_static! {
         pub(super) static ref MIMES: [&'static str; 21] = [
             /*  0 */ "",
@@ -829,7 +830,6 @@ impl Default for Priority {
         Priority::Data
     }
 }
-
 impl TryFrom<u8> for Priority {
     type Error = zenoh_core::Error;
 

@@ -47,7 +47,7 @@ lazy_static = "1.4.0"
 libloading = "0.7.0"
 log = "0.4.14"
 serde_json = "1.0"
-zenoh = { path = "../../zenoh" }
+zenoh = { path = "../../zenoh/zenoh" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
 zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }

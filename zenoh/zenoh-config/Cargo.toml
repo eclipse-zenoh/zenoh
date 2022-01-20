@@ -12,29 +12,30 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh_backend_traits"
+name = "zenoh-config"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@adlinktech.com>",
-    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"kydos <angelo@icorsaro.net>",
+	"Julien Enoch <julien@enoch.fr>",
+	"Olivier Hécart <olivier.hecart@adlinktech.com>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: traits to be implemented by backends libraries"
-
-[badges]
-maintenance = { status = "actively-developed" }
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
 [dependencies]
-async-std = "=1.9.0"
-async-trait = "0.1.51"
-derive_more = "0.99"
+zenoh-core = { path = "../../zenoh-utils/zenoh-core" }
+zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
+zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
+
+flume = "0.10.5"
+json5 = "0.4.1"
+serde = "1.0.123"
 serde_json = "1.0"
-zenoh = { path = "../../zenoh/zenoh" }
-zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
-zenoh-util = { path = "../../zenoh-utils/zenoh-util/" }
+serde_yaml = "0.8"
+validated_struct = { version = "0.1", features = ["json5", "serde_json"] }

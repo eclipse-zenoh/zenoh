@@ -100,7 +100,7 @@ impl Runtime {
             _ => {
                 for locator in &peers {
                     let endpoint = EndPoint {
-                        locator: locator.clone(),
+                        locator: locator.parse().unwrap(),
                         config: None,
                     };
                     match self.manager().open_transport(endpoint).await {
@@ -121,11 +121,20 @@ impl Runtime {
             let listeners = if guard.listeners().is_empty() {
                 vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.listeners().clone()
+                guard
+                    .listeners()
+                    .iter()
+                    .map(|l| l.parse().unwrap())
+                    .collect()
             };
+            let peers = guard
+                .peers()
+                .iter()
+                .map(|p| p.parse().unwrap())
+                .collect::<Vec<Locator>>();
             (
                 listeners,
-                guard.peers().clone(),
+                peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -195,11 +204,20 @@ impl Runtime {
             let listeners = if guard.listeners().is_empty() {
                 vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.listeners().clone()
+                guard
+                    .listeners()
+                    .iter()
+                    .map(|l| l.parse().unwrap())
+                    .collect()
             };
+            let peers = guard
+                .peers()
+                .iter()
+                .map(|p| p.parse().unwrap())
+                .collect::<Vec<Locator>>();
             (
                 listeners,
-                guard.peers().clone(),
+                peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -261,7 +279,14 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = self.config.lock().peers().clone();
+        let peers = {
+            self.config
+                .lock()
+                .peers()
+                .iter()
+                .map(|p| p.parse().unwrap())
+                .collect::<Vec<Locator>>()
+        };
         let tranports = self.manager().get_transports();
 
         if self.whatami == WhatAmI::Client {
@@ -771,7 +796,16 @@ impl Runtime {
             }
             _ => {
                 if let Some(locator) = &*zread!(session.locator) {
-                    let peers = session.runtime.config.lock().peers().clone();
+                    let peers = {
+                        session
+                            .runtime
+                            .config
+                            .lock()
+                            .peers()
+                            .iter()
+                            .map(|p| p.parse().unwrap())
+                            .collect::<Vec<Locator>>()
+                    };
                     if peers.contains(locator) {
                         let locator = locator.clone();
                         let runtime = session.runtime.clone();

@@ -12,6 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-pub mod core;
+pub use zenoh_protocol_core as core;
 pub mod io;
 pub mod proto;
