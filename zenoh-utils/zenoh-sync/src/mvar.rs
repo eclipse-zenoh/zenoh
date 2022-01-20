@@ -12,9 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::Condition;
-use crate::zasynclock;
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use zenoh_core::zasynclock;
 
 pub struct Mvar<T> {
     inner: Mutex<Option<T>>,

@@ -75,10 +75,7 @@
 //! ```
 
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
-extern crate zenoh_util;
+extern crate zenoh_core;
 
 use async_std::net::UdpSocket;
 use flume::bounded;
@@ -92,12 +89,12 @@ use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{bail, zerror, zwrite, Result as ZResult};
+use zenoh_sync::zpinbox;
 use zenoh_util::properties::config::*;
-use zenoh_util::sync::zpinbox;
 
 /// A zenoh result.
-pub use zenoh_util::core::Result;
+pub use zenoh_core::Result;
 
 pub use validated_struct;
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -222,20 +219,20 @@ pub mod properties {
 /// }
 /// ```
 pub mod sync {
-    pub use zenoh_util::sync::zready;
-    pub use zenoh_util::sync::ZFuture;
-    pub use zenoh_util::sync::ZPinBoxFuture;
-    pub use zenoh_util::sync::ZReady;
+    pub use zenoh_sync::zready;
+    pub use zenoh_sync::ZFuture;
+    pub use zenoh_sync::ZPinBoxFuture;
+    pub use zenoh_sync::ZReady;
 
     /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
     pub mod channel {
-        pub use zenoh_util::sync::channel::Iter;
-        pub use zenoh_util::sync::channel::Receiver;
-        pub use zenoh_util::sync::channel::RecvError;
-        pub use zenoh_util::sync::channel::RecvFut;
-        pub use zenoh_util::sync::channel::RecvTimeoutError;
-        pub use zenoh_util::sync::channel::TryIter;
-        pub use zenoh_util::sync::channel::TryRecvError;
+        pub use zenoh_sync::channel::Iter;
+        pub use zenoh_sync::channel::Receiver;
+        pub use zenoh_sync::channel::RecvError;
+        pub use zenoh_sync::channel::RecvFut;
+        pub use zenoh_sync::channel::RecvTimeoutError;
+        pub use zenoh_sync::channel::TryIter;
+        pub use zenoh_sync::channel::TryRecvError;
     }
 }
 
@@ -247,6 +244,7 @@ pub mod scouting {
     use flume::Sender;
     use std::pin::Pin;
     use std::task::{Context, Poll};
+    use zenoh_sync::zreceiver;
 
     /// Constants and helpers for zenoh `whatami` flags.
     pub use super::net::protocol::core::WhatAmI;

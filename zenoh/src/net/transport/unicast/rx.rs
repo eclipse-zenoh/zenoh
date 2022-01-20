@@ -22,8 +22,8 @@ use super::transport::TransportUnicastInner;
 use crate::net::link::LinkUnicast;
 use async_std::task;
 use std::sync::MutexGuard;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::{zerror, zread};
+use zenoh_core::Result as ZResult;
+use zenoh_core::{zerror, zread};
 
 /*************************************/
 /*            TRANSPORT RX           */

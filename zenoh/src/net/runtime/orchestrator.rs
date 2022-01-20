@@ -23,9 +23,9 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zerror};
 use zenoh_util::properties::config::*;
-use zenoh_util::{bail, zerror};
 
 const RCV_BUF_SIZE: usize = 65536;
 const SEND_BUF_INITIAL_SIZE: usize = 8;

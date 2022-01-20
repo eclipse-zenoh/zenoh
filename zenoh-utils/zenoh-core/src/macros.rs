@@ -137,21 +137,21 @@ macro_rules! zcheck {
 #[macro_export]
 macro_rules! zconfigurable {
     ($(#[$attr:meta])* static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
-        lazy_static!($(#[$attr])* static ref $N : $T = match option_env!(stringify!($N)) {
+        $crate::lazy_static!($(#[$attr])* static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
         zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
-        lazy_static!($(#[$attr])* pub static ref $N : $T = match option_env!(stringify!($N)) {
+        $crate::lazy_static!($(#[$attr])* pub static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
         zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub ($($vis:tt)+) static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
-        lazy_static!($(#[$attr])* pub ($($vis)+) static ref $N : $T = match option_env!(stringify!($N)) {
+        $crate::lazy_static!($(#[$attr])* pub ($($vis)+) static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
@@ -163,16 +163,16 @@ pub use anyhow::anyhow;
 #[macro_export]
 macro_rules! zerror {
     ($source: expr => $($t: tt)*) => {
-        $crate::core::zresult::ZError::new($crate::core::anyhow!($($t)*), file!(), line!()).set_source($source)
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!()).set_source($source)
     };
     ($t: literal) => {
-        $crate::core::zresult::ZError::new($crate::core::anyhow!($t), file!(), line!())
+        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!())
     };
     ($t: expr) => {
-        $crate::core::zresult::ZError::new($t, file!(), line!())
+        $crate::zresult::ZError::new($t, file!(), line!())
     };
     ($($t: tt)*) => {
-        $crate::core::zresult::ZError::new($crate::core::anyhow!($($t)*), file!(), line!())
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!())
     };
 }
 

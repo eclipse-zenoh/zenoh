@@ -18,7 +18,7 @@ use super::Primitives;
 use crate::net::link::Link;
 use crate::net::transport::TransportPeerEventHandler;
 use std::any::Any;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 pub struct DeMux<P: Primitives> {
     primitives: P,

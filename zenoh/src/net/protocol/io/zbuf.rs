@@ -22,7 +22,7 @@ use std::io::IoSlice;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*           ZBUF POSITION           */

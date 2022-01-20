@@ -16,13 +16,12 @@ use async_std::sync::{Arc, Mutex, Weak};
 use async_std::task;
 use async_trait::async_trait;
 use flume::{bounded, Receiver, RecvError, Sender};
+use zenoh_core::zconfigurable;
 
 use std::cmp::Ordering as ComparisonOrdering;
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
-
-use crate::zconfigurable;
 
 zconfigurable! {
     static ref TIMER_EVENTS_CHANNEL_SIZE: usize = 1;

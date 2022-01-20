@@ -11,16 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::Result as ZResult;
-use hmac::{Hmac, Mac, NewMac};
-use sha3::{Digest, Sha3_256};
+pub use lazy_static::lazy_static;
+pub mod macros;
+pub use macros::*;
 
-pub fn sign(key: &[u8], data: &[u8]) -> ZResult<Vec<u8>> {
-    let mut hmac = Hmac::<Sha3_256>::new_from_slice(key)?;
-    hmac.update(data);
-    Ok(hmac.finalize().into_bytes().as_slice().to_vec())
-}
-
-pub fn digest(data: &[u8]) -> Vec<u8> {
-    Sha3_256::digest(data).as_slice().to_vec()
-}
+pub mod zresult;
+pub use zresult::Error;
+pub use zresult::ZResult as Result;

@@ -11,9 +11,16 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod macros;
-pub use macros::*;
+use hmac::{Hmac, Mac, NewMac};
+use sha3::{Digest, Sha3_256};
+use zenoh_core::Result as ZResult;
 
-pub mod zresult;
-pub use zresult::BoxedStdErr as Error;
-pub use zresult::ZResult as Result;
+pub fn sign(key: &[u8], data: &[u8]) -> ZResult<Vec<u8>> {
+    let mut hmac = Hmac::<Sha3_256>::new_from_slice(key)?;
+    hmac.update(data);
+    Ok(hmac.finalize().into_bytes().as_slice().to_vec())
+}
+
+pub fn digest(data: &[u8]) -> Vec<u8> {
+    Sha3_256::digest(data).as_slice().to_vec()
+}

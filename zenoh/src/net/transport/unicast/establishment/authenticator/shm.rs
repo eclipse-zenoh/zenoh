@@ -24,10 +24,10 @@ use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
-use zenoh_util::core::zresult::ShmError;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::zcheck;
+use zenoh_core::zresult::ShmError;
+use zenoh_core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
-use zenoh_util::zcheck;
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;

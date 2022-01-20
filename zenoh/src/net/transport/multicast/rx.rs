@@ -21,8 +21,8 @@ use super::protocol::proto::{
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
 use std::sync::MutexGuard;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::zerror;
+use zenoh_core::zerror;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*            TRANSPORT RX           */

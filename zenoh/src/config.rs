@@ -18,7 +18,6 @@
 use crate::net::link::Locator;
 pub use crate::net::protocol::core::{whatami, WhatAmI, ZInt};
 use crate::plugins::ValidationFunction;
-use crate::Result as ZResult;
 use serde_json::Value;
 use std::{
     any::Any,
@@ -30,6 +29,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
+use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 

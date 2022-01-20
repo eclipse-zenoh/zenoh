@@ -11,11 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::Result as ZResult;
-use crate::{bail, zconfigurable};
 use async_std::net::TcpStream;
 use std::net::IpAddr;
 use std::time::Duration;
+use zenoh_core::{bail, zconfigurable, Result as ZResult};
 
 zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;

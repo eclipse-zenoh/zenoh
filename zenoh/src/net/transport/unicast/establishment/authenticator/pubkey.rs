@@ -24,10 +24,10 @@ use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::HashMap;
 use std::path::Path;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::zasynclock;
+use zenoh_core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
 use zenoh_util::properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
-use zenoh_util::zasynclock;
 
 const WBUF_SIZE: usize = 64;
 const MULTILINK_VERSION: ZInt = 1;

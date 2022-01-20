@@ -3258,8 +3258,51 @@ dependencies = [
  "validated_struct",
  "vec_map",
  "webpki 0.22.0",
+ "zenoh-collections",
+ "zenoh-core",
  "zenoh-plugin-trait",
+ "zenoh-sync",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-cfg-properties"
+version = "0.6.0-dev.0"
+dependencies = [
+ "zenoh-core",
+ "zenoh-macros",
+]
+
+[[package]]
+name = "zenoh-collections"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "flume",
+ "log",
+ "zenoh-core",
+ "zenoh-sync",
+]
+
+[[package]]
+name = "zenoh-core"
+version = "0.6.0-dev.0"
+dependencies = [
+ "anyhow",
+ "lazy_static",
+]
+
+[[package]]
+name = "zenoh-crypto"
+version = "0.6.0-dev.0"
+dependencies = [
+ "aes 0.7.5",
+ "hmac 0.11.0",
+ "rand 0.8.4",
+ "rand_chacha 0.3.1",
+ "sha3",
+ "zenoh-core",
 ]
 
 [[package]]
@@ -3276,6 +3319,8 @@ dependencies = [
  "log",
  "serde",
  "zenoh",
+ "zenoh-core",
+ "zenoh-sync",
  "zenoh-util",
 ]
 
@@ -3307,6 +3352,7 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
+ "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",
 ]
@@ -3326,6 +3372,8 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
+ "zenoh-collections",
+ "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",
  "zenoh_backend_traits",
@@ -3338,25 +3386,30 @@ dependencies = [
  "libloading",
  "log",
  "serde_json",
+ "zenoh-core",
  "zenoh-macros",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-sync"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "event-listener",
+ "flume",
+ "futures-lite",
+ "zenoh-core",
 ]
 
 [[package]]
 name = "zenoh-util"
 version = "0.6.0-dev.0"
 dependencies = [
- "aes 0.7.5",
- "anyhow",
  "async-std",
- "async-trait",
  "clap",
- "event-listener",
- "flume",
  "futures",
- "futures-lite",
  "hex",
- "hmac 0.11.0",
  "home",
  "humantime",
  "lazy_static",
@@ -3364,12 +3417,13 @@ dependencies = [
  "libloading",
  "log",
  "pnet",
- "rand 0.8.4",
- "rand_chacha 0.3.1",
- "sha3",
  "shellexpand",
  "winapi",
- "zenoh-macros",
+ "zenoh-cfg-properties",
+ "zenoh-collections",
+ "zenoh-core",
+ "zenoh-crypto",
+ "zenoh-sync",
 ]
 
 [[package]]
@@ -3381,6 +3435,7 @@ dependencies = [
  "derive_more",
  "serde_json",
  "zenoh",
+ "zenoh-core",
  "zenoh-util",
 ]
 
@@ -3416,6 +3471,7 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
+ "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",
 ]

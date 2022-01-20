@@ -74,7 +74,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use zenoh_util::sync::zready;
+/// use zenoh_sync::zready;
 ///
 /// # async fn run() {
 /// let a = zready(1);
@@ -89,7 +89,7 @@ pub fn zready<T>(t: T) -> ZReady<T> {
 #[macro_export]
 macro_rules! zready_try {
     ($val:expr) => {
-        zenoh_util::sync::zready({
+        zenoh_sync::zready({
             let f = || $val;
             f()
         })
@@ -156,7 +156,7 @@ macro_rules! derive_zfuture{
             }
         }
 
-        impl$(<$( $lt ),+>)? zenoh_util::sync::ZFuture for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? zenoh_sync::ZFuture for $struct_name$(<$( $lt ),+>)? {
             #[inline]
             fn wait(mut self) -> Self::Output {
                 self.run()

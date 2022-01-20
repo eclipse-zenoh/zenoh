@@ -24,7 +24,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
-use zenoh_util::{core::Result as ZResult, zerror};
+use zenoh_core::{zerror, Result as ZResult};
 
 mod config;
 pub use config::Config;

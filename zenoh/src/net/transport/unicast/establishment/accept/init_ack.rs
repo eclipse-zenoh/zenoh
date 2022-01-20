@@ -21,8 +21,8 @@ use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{tmsg, TransportMessage};
 use crate::net::transport::TransportManager;
 use rand::Rng;
+use zenoh_core::zasynclock;
 use zenoh_util::crypto::hmac;
-use zenoh_util::zasynclock;
 
 // Send an InitAck
 pub(super) struct Output {

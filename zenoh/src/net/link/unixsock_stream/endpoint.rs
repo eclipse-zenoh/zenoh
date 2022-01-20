@@ -15,7 +15,7 @@ use super::*;
 use async_std::path::PathBuf;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{zerror, Result as ZResult};
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
@@ -61,7 +61,7 @@ impl LocatorUnixSocketStream {
 }
 
 impl FromStr for LocatorUnixSocketStream {
-    type Err = zenoh_util::core::Error;
+    type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let addr = match PathBuf::from(s).to_str() {

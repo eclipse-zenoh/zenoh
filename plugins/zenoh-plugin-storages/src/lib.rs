@@ -32,9 +32,9 @@ use zenoh::Session;
 use zenoh_backend_traits::CreateBackend;
 use zenoh_backend_traits::CREATE_BACKEND_FN_NAME;
 use zenoh_backend_traits::{config::*, Backend};
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zlock};
 use zenoh_util::LibLoader;
-use zenoh_util::{bail, zlock};
 
 mod backends_mgt;
 use backends_mgt::*;

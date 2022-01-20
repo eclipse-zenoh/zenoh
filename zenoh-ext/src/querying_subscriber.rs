@@ -26,7 +26,7 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_util::{zread, zwrite};
+use zenoh_core::{zread, zwrite};
 
 use crate::session_ext::SessionRef;
 

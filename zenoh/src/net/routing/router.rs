@@ -28,10 +28,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
-// use zenoh_util::collections::Timer;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::sync::get_mut_unchecked;
-use zenoh_util::zconfigurable;
+// use zenoh_collections::Timer;
+use zenoh_core::zconfigurable;
+use zenoh_core::Result as ZResult;
+use zenoh_sync::get_mut_unchecked;
 
 zconfigurable! {
     static ref LINK_CLOSURE_DELAY: u64 = 200;

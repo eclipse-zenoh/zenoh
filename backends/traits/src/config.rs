@@ -2,7 +2,7 @@ use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use zenoh::Result as ZResult;
-use zenoh_util::{bail, core::Error, zerror};
+use zenoh_core::{bail, zerror, Error};
 
 #[derive(Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {

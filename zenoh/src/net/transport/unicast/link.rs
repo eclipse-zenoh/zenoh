@@ -25,10 +25,10 @@ use async_std::task::JoinHandle;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_util::collections::RecyclingObjectPool;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::sync::Signal;
-use zenoh_util::zerror;
+use zenoh_collections::RecyclingObjectPool;
+use zenoh_core::zerror;
+use zenoh_core::Result as ZResult;
+use zenoh_sync::Signal;
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {

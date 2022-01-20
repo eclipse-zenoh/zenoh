@@ -16,7 +16,7 @@ use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
 
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {

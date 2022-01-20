@@ -35,6 +35,7 @@ use async_std::sync::Arc;
 use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
+use zenoh_core::bail;
 
 pub(crate) type Id = usize;
 
@@ -748,7 +749,7 @@ impl fmt::Display for ValueSelector<'_> {
 }
 
 impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
-    type Error = zenoh_util::core::Error;
+    type Error = zenoh_core::Error;
 
     fn try_from(s: &'a str) -> crate::Result<Self> {
         const REGEX_PROJECTION: &str = r"[^\[\]\(\)\[\]]+";
@@ -779,7 +780,7 @@ impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
 }
 
 impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
-    type Error = zenoh_util::core::Error;
+    type Error = zenoh_core::Error;
 
     fn try_from(s: &'a String) -> crate::Result<Self> {
         ValueSelector::try_from(s.as_str())

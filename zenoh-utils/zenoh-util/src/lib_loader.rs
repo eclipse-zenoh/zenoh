@@ -11,14 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::core::Result as ZResult;
-use crate::{bail, zconfigurable};
 use libloading::Library;
 use log::{debug, warn};
 use std::env::consts::{DLL_PREFIX, DLL_SUFFIX};
 use std::ffi::OsString;
 use std::ops::Deref;
 use std::path::PathBuf;
+use zenoh_core::{bail, zconfigurable, Result as ZResult};
 
 zconfigurable! {
     /// The libraries prefix for the current platform (usually: `"lib"`)

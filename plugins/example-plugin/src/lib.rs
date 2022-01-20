@@ -26,8 +26,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
-use zenoh_util::bail;
-use zenoh_util::{core::Result as ZResult, zlock};
+use zenoh_core::{bail, zlock, Result as ZResult};
 
 pub struct ExamplePlugin {}
 

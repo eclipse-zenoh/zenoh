@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::collections::StackBuffer;
-use crate::sync::Condition;
-use crate::zasynclock;
+use crate::StackBuffer;
 use async_std::sync::Mutex;
+use zenoh_core::zasynclock;
+use zenoh_sync::Condition;
 
 pub struct LifoQueue<T> {
     not_empty: Condition,

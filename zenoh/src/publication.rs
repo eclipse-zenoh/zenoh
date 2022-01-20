@@ -16,12 +16,13 @@
 
 use super::net::protocol::core::Channel;
 use super::net::protocol::proto::{data_kind, DataInfo, Options};
-use super::net::transport::Primitives;
+use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::Session;
-use zenoh_util::sync::Runnable;
+use zenoh_core::zread;
+use zenoh_sync::{derive_zfuture, Runnable};
 
 /// The kind of congestion control.
 pub use super::net::protocol::core::CongestionControl;
@@ -93,7 +94,7 @@ impl<'a> Writer<'a> {
         self
     }
 
-    fn write(&self, value: Value) -> zenoh_util::core::Result<()> {
+    fn write(&self, value: Value) -> zenoh_core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -130,7 +131,7 @@ impl<'a> Writer<'a> {
 }
 
 impl Runnable for Writer<'_> {
-    type Output = zenoh_util::core::Result<()>;
+    type Output = zenoh_core::Result<()>;
 
     #[inline]
     fn run(&mut self) -> Self::Output {
@@ -142,7 +143,7 @@ impl Runnable for Writer<'_> {
 use futures::Sink;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use zenoh_util::core::zresult::BoxedStdErr;
+use zenoh_core::zresult::Error;
 
 /// A publisher that allows to send data through a stream.
 ///
@@ -188,7 +189,7 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_util::core::Result<()>
+    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_core::Result<()>
     where
         IntoValue: Into<Value>,
     {
@@ -200,7 +201,7 @@ impl<'a, IntoValue> Sink<IntoValue> for Publisher<'a>
 where
     IntoValue: Into<Value>,
 {
-    type Error = BoxedStdErr;
+    type Error = Error;
 
     #[inline]
     fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {

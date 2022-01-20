@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
-use zenoh_util::sync::Runnable;
+use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use super::net::protocol::core::Target;
@@ -150,7 +150,7 @@ impl<'a, 'b> Getter<'a, 'b> {
 }
 
 impl Runnable for Getter<'_, '_> {
-    type Output = zenoh_util::core::Result<ReplyReceiver>;
+    type Output = zenoh_core::Result<ReplyReceiver>;
 
     fn run(&mut self) -> Self::Output {
         log::trace!(

@@ -21,9 +21,9 @@ use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
 use crate::net::protocol::proto::tmsg;
 use crate::net::transport::TransportManager;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
-type OError = (zenoh_util::core::Error, Option<u8>);
+type OError = (zenoh_core::Error, Option<u8>);
 type OResult<T> = Result<T, OError>;
 
 pub(crate) async fn open_link(

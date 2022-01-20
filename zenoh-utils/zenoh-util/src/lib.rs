@@ -11,19 +11,19 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+
 #[macro_use]
 extern crate lazy_static;
 use std::path::{Path, PathBuf};
-pub mod collections;
-pub mod core;
-pub mod crypto;
+pub use zenoh_collections as collections;
+pub use zenoh_core as core;
+pub use zenoh_crypto as crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;
-pub mod properties;
-pub mod sync;
-pub use crate::core::macros::*;
 pub use lib_loader::*;
+pub use zenoh_cfg_properties as properties;
+pub use zenoh_sync as sync;
 
 /// the "ZENOH_HOME" environement variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";

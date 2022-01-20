@@ -13,7 +13,7 @@
 //
 use crate::prelude::Selector;
 use crate::Result as ZResult;
-use zenoh_util::zconfigurable;
+use zenoh_core::zconfigurable;
 
 use crate::net::runtime::Runtime;
 zconfigurable! {

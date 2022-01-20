@@ -17,6 +17,7 @@ mod unicast;
 use super::*;
 pub use endpoint::*;
 pub use unicast::*;
+use zenoh_core::zconfigurable;
 
 // Default MTU (TLS PDU) in bytes.
 // NOTE: Since TLS is a byte-stream oriented transport, theoretically it has

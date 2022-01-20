@@ -30,8 +30,8 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::zerror;
+use zenoh_core::zerror;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*              STATS                */

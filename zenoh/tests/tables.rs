@@ -25,7 +25,7 @@ use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
 use zenoh::net::routing::router::*;
 use zenoh::net::transport::{DummyPrimitives, Primitives};
-use zenoh_util::zlock;
+use zenoh_core::zlock;
 
 #[test]
 fn base_test() {

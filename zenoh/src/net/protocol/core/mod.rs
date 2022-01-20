@@ -23,8 +23,8 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
-use zenoh_util::bail;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zerror};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -385,7 +385,7 @@ impl<'a> KeyExpr<'a> {
 }
 
 impl TryInto<String> for KeyExpr<'_> {
-    type Error = zenoh_util::core::Error;
+    type Error = zenoh_core::Error;
     fn try_into(self) -> Result<String, Self::Error> {
         if self.scope == 0 {
             Ok(self.suffix.into_owned())
@@ -396,7 +396,7 @@ impl TryInto<String> for KeyExpr<'_> {
 }
 
 impl TryInto<ExprId> for KeyExpr<'_> {
-    type Error = zenoh_util::core::Error;
+    type Error = zenoh_core::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
     }
@@ -759,7 +759,7 @@ impl From<uuid::Uuid> for PeerId {
 }
 
 impl FromStr for PeerId {
-    type Err = zenoh_util::core::Error;
+    type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // filter-out '-' characters (in case s has UUID format)
@@ -831,7 +831,7 @@ impl Default for Priority {
 }
 
 impl TryFrom<u8> for Priority {
-    type Error = zenoh_util::core::Error;
+    type Error = zenoh_core::Error;
 
     fn try_from(conduit: u8) -> Result<Self, Self::Error> {
         match conduit {

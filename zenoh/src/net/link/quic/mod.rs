@@ -17,6 +17,7 @@ mod unicast;
 use super::*;
 pub use endpoint::*;
 pub use unicast::*;
+use zenoh_core::zconfigurable;
 
 // Default ALPN protocol
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];

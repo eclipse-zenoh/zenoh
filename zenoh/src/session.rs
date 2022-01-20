@@ -41,8 +41,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_util::core::Result as ZResult;
-use zenoh_util::sync::zpinbox;
+use zenoh_core::{zconfigurable, zread, Result as ZResult};
+use zenoh_sync::zpinbox;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

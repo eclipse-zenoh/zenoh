@@ -15,7 +15,7 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
-use zenoh_util::zread;
+use zenoh_core::zread;
 
 impl TransportMulticastInner {
     fn schedule_on_link(&self, msg: ZenohMessage) -> bool {

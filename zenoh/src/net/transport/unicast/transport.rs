@@ -26,7 +26,7 @@ use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncM
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {

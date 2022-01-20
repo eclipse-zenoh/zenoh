@@ -18,7 +18,7 @@ use log::trace;
 use zenoh::prelude::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 pub(crate) async fn create_and_start_storage(
     admin_key: String,

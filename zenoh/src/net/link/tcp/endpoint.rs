@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::*;
+use crate::net::link::endpoint::LocatorAddress;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{bail, Result as ZResult};
 use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]

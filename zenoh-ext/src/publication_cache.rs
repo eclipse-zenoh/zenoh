@@ -26,8 +26,8 @@ use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
-use zenoh_util::bail;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::bail;
+use zenoh_core::Result as ZResult;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]

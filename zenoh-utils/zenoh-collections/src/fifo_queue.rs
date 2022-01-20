@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::collections::RingBuffer;
-use crate::sync::Condition;
-use crate::zasynclock;
+use crate::RingBuffer;
 use async_std::sync::Mutex;
+use zenoh_core::zasynclock;
+use zenoh_sync::Condition;
 
 pub struct FifoQueue<T> {
     not_empty: Condition,

@@ -17,7 +17,7 @@ use std::fmt;
 use super::common::seq_num::SeqNum;
 use super::core::ZInt;
 
-use zenoh_util::core::{ZError, ZErrorKind, ZResult};
+use zenoh_core::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
 
 pub(super) struct ReliabilityQueue<T> {

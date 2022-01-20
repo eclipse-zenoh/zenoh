@@ -25,8 +25,7 @@ use super::{EndPoint, LinkMulticast, LinkUnicast, Locator, LocatorProtocol};
 use crate::net::transport::TransportManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh_util::bail;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::{bail, Result as ZResult};
 
 /*************************************/
 /*             UNICAST               */
