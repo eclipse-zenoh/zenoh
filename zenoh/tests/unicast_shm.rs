@@ -32,7 +32,7 @@ mod tests {
     };
     use zenoh::publication::CongestionControl;
     use zenoh_core::zasync_executor_init;
-    use zenoh_util::core::Result as ZResult;
+    use zenoh_core::Result as ZResult;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

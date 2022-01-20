@@ -130,7 +130,7 @@ pub(super) async fn recv(
                     Ok(att)
                 }
                 Err(e) => {
-                    if e.is::<zenoh_util::core::zresult::ShmError>() {
+                    if e.is::<zenoh_core::zresult::ShmError>() {
                         is_shm = false;
                         Ok(None)
                     } else {

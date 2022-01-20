@@ -23,7 +23,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget, Target};
 use zenoh::queryable;
 use zenoh::Session;
 use zenoh_backend_traits::Query;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 pub(crate) enum StorageMessage {
     Stop,

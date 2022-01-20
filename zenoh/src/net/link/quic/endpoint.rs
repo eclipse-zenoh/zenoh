@@ -88,7 +88,7 @@ impl LocatorQuic {
 }
 
 impl FromStr for LocatorQuic {
-    type Err = zenoh_util::core::Error;
+    type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.parse() {

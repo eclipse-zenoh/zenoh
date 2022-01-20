@@ -36,7 +36,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 #[cfg(feature = "auth_usrpwd")]
 pub use userpassword::*;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*              LINK                 */

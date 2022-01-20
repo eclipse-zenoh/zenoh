@@ -58,6 +58,7 @@ default = [
 
 [dependencies]
 zenoh-core = { path = "../zenoh-core/" }
+zenoh-collections = { path = "../zenoh-collections/" }
 zenoh-sync = { path = "../zenoh-sync/" }
 zenoh-util = { path = "../zenoh-util" }
 zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }

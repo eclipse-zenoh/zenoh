@@ -61,7 +61,7 @@ impl LocatorUnixSocketStream {
 }
 
 impl FromStr for LocatorUnixSocketStream {
-    type Err = zenoh_util::core::Error;
+    type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let addr = match PathBuf::from(s).to_str() {

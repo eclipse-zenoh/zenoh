@@ -30,7 +30,7 @@ use std::time::Duration;
 use uuid::Uuid;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread, zwrite};
-use zenoh_util::sync::Signal;
+use zenoh_sync::Signal;
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library

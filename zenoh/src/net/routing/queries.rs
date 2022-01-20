@@ -19,9 +19,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{RwLock, Weak};
 // use std::time::Instant;
-// use zenoh_util::collections::{Timed, TimedEvent};
-use zenoh_util::collections::Timed;
-use zenoh_util::sync::get_mut_unchecked;
+// use zenoh_collections::{Timed, TimedEvent};
+use zenoh_collections::Timed;
+use zenoh_sync::get_mut_unchecked;
 
 use super::protocol::core::{
     key_expr, queryable, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Target,

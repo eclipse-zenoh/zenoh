@@ -22,7 +22,7 @@ use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 use zenoh_util::crypto::hmac;
 use zenoh_util::properties::Properties;
 

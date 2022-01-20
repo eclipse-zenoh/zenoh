@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::ZInt;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 /// Sequence Number
 ///

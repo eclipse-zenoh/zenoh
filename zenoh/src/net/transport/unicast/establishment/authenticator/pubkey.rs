@@ -25,7 +25,7 @@ use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaP
 use std::collections::HashMap;
 use std::path::Path;
 use zenoh_core::zasynclock;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 use zenoh_util::crypto::PseudoRng;
 use zenoh_util::properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 

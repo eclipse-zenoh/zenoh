@@ -3258,6 +3258,7 @@ dependencies = [
  "validated_struct",
  "vec_map",
  "webpki 0.22.0",
+ "zenoh-collections",
  "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-sync",
@@ -3319,6 +3320,7 @@ dependencies = [
  "serde",
  "zenoh",
  "zenoh-core",
+ "zenoh-sync",
  "zenoh-util",
 ]
 
@@ -3370,6 +3372,7 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
+ "zenoh-collections",
  "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",

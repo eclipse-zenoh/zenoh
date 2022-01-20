@@ -34,7 +34,7 @@ mod tests {
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
     use zenoh_core::zasync_executor_init;
-    use zenoh_util::core::Result as ZResult;
+    use zenoh_core::Result as ZResult;
     use zenoh_util::properties::config::*;
 
     const TIMEOUT: Duration = Duration::from_secs(60);

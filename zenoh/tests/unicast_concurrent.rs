@@ -28,7 +28,7 @@ use zenoh::net::transport::{
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 use zenoh_core::zasync_executor_init;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: usize = 1_024;

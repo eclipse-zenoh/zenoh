@@ -21,7 +21,7 @@ use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use zenoh_util::sync::get_mut_unchecked;
+use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;

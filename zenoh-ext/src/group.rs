@@ -11,7 +11,7 @@ use zenoh::prelude::*;
 use zenoh::query::{ConsolidationMode, QueryConsolidation};
 use zenoh::queryable::EVAL;
 use zenoh::Session;
-use zenoh_util::sync::Condition;
+use zenoh_sync::Condition;
 
 const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";

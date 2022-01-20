@@ -20,8 +20,8 @@ use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
+use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
-use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::{ZN_FALSE, ZN_TRUE};
 use zenoh_util::properties::Properties;
 

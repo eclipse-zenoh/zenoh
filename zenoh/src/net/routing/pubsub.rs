@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
 use zenoh_core::zread;
-use zenoh_util::sync::get_mut_unchecked;
+use zenoh_sync::get_mut_unchecked;
 
 use super::protocol::core::{
     Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI,

@@ -33,7 +33,7 @@ use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use zenoh_core::zparse;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::properties::{config::*, Properties};
 

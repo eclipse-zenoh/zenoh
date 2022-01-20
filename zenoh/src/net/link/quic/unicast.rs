@@ -31,7 +31,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zerror, zread, zwrite};
-use zenoh_util::sync::Signal;
+use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
     connection: NewConnection,

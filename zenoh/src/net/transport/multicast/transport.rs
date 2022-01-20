@@ -27,8 +27,8 @@ use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_util::core::Result as ZResult;
+use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*             TRANSPORT             */

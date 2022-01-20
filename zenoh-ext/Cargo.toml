@@ -39,6 +39,7 @@ log = "0.4"
 serde = "1.0.126"
 zenoh = { path = "../zenoh" }
 zenoh-util = { path = "../zenoh-util" }
+zenoh-sync = { path = "../zenoh-sync" }
 zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]

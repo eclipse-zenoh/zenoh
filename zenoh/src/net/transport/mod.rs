@@ -28,7 +28,7 @@ pub use primitives::*;
 use std::any::Any;
 use std::sync::Arc;
 pub use unicast::*;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*            TRANSPORT              */

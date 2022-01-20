@@ -94,7 +94,7 @@ impl<'a> Writer<'a> {
         self
     }
 
-    fn write(&self, value: Value) -> zenoh_util::core::Result<()> {
+    fn write(&self, value: Value) -> zenoh_core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
         let state = zread!(self.session.state);
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -131,7 +131,7 @@ impl<'a> Writer<'a> {
 }
 
 impl Runnable for Writer<'_> {
-    type Output = zenoh_util::core::Result<()>;
+    type Output = zenoh_core::Result<()>;
 
     #[inline]
     fn run(&mut self) -> Self::Output {
@@ -143,7 +143,7 @@ impl Runnable for Writer<'_> {
 use futures::Sink;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use zenoh_util::core::zresult::Error;
+use zenoh_core::zresult::Error;
 
 /// A publisher that allows to send data through a stream.
 ///
@@ -189,7 +189,7 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_util::core::Result<()>
+    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_core::Result<()>
     where
         IntoValue: Into<Value>,
     {

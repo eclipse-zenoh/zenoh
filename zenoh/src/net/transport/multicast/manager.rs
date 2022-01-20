@@ -19,8 +19,8 @@ use crate::net::link::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zlock, zparse};
-use zenoh_util::core::Result as ZResult;
 use zenoh_util::properties::config::*;
 
 pub struct TransportManagerConfigMulticast {

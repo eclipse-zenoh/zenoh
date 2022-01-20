@@ -150,7 +150,7 @@ impl<'a, 'b> Getter<'a, 'b> {
 }
 
 impl Runnable for Getter<'_, '_> {
-    type Output = zenoh_util::core::Result<ReplyReceiver>;
+    type Output = zenoh_core::Result<ReplyReceiver>;
 
     fn run(&mut self) -> Self::Output {
         log::trace!(

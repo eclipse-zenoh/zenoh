@@ -18,7 +18,7 @@ use crate::net::link::LinkMulticast;
 use rand::Rng;
 use std::sync::Arc;
 use zenoh_core::zasynclock;
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 pub(crate) async fn open_link(
     manager: &TransportManager,

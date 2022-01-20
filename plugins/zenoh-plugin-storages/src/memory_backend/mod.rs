@@ -22,8 +22,8 @@ use zenoh::time::Timestamp;
 use zenoh::utils::key_expr;
 use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
 use zenoh_backend_traits::*;
-use zenoh_util::collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_util::core::Result as ZResult;
+use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
+use zenoh_core::Result as ZResult;
 
 pub fn create_memory_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
     Ok(Box::new(MemoryBackend { config }))

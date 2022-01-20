@@ -22,9 +22,9 @@ use std::ops::{
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
-use zenoh_util::collections::RecyclingObject;
+use zenoh_collections::RecyclingObject;
 #[cfg(feature = "shared-memory")]
-use zenoh_util::core::Result as ZResult;
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
