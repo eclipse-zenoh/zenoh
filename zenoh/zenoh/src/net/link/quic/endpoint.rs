@@ -11,14 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::config::*;
-use super::*;
+use crate::net::link::{quic::config::*, LocatorAddress};
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::fmt;
 use std::str::FromStr;
 use webpki::{DnsName, DnsNameRef};
+use zenoh_cfg_properties::Properties;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_quic_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {

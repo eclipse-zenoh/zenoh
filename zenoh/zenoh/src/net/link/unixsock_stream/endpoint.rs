@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::*;
+use crate::net::link::{Locator, LocatorAddress};
 use async_std::path::PathBuf;
 use std::fmt;
 use std::str::FromStr;
+use zenoh_cfg_properties::Properties;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
 pub(super) fn get_unix_path(locator: &Locator) -> ZResult<PathBuf> {

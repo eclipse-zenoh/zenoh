@@ -11,9 +11,17 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::config::*;
-use super::EndPoint as ZEndPoint;
-use super::*;
+
+use crate::net::link::quic::{
+    config::*, get_quic_addr, get_quic_dns, LocatorQuic, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
+    QUIC_DEFAULT_MTU,
+};
+use crate::net::link::EndPoint as ZEndPoint;
+use crate::net::link::LinkManagerUnicastTrait;
+use crate::net::link::LinkUnicast;
+use crate::net::link::LinkUnicastTrait;
+use crate::net::link::Locator;
+use crate::net::link::LocatorAddress;
 use crate::net::transport::TransportManager;
 use async_std::fs;
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -181,7 +189,7 @@ impl fmt::Debug for LinkUnicastQuic {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerUnicastQuic {
-    endpoint: EndPoint,
+    endpoint: ZEndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -189,7 +197,7 @@ struct ListenerUnicastQuic {
 
 impl ListenerUnicastQuic {
     fn new(
-        endpoint: EndPoint,
+        endpoint: ZEndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
@@ -285,7 +293,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+    async fn new_listener(&self, mut endpoint: ZEndPoint) -> ZResult<Locator> {
         let addr = get_quic_addr(&endpoint.locator.address).await?;
 
         // Verify there is a valid ServerConfig
@@ -384,7 +392,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+    async fn del_listener(&self, endpoint: &ZEndPoint) -> ZResult<()> {
         let addr = get_quic_addr(&endpoint.locator.address).await?;
 
         // Stop the listener
@@ -403,7 +411,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         listener.handle.await
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
+    fn get_listeners(&self) -> Vec<ZEndPoint> {
         zread!(self.listeners)
             .values()
             .map(|x| x.endpoint.clone())

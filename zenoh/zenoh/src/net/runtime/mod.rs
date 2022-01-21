@@ -95,7 +95,7 @@ impl Runtime {
             .unwrap_or(false);
         let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
-            zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
+            zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()
                 .unwrap()
         });

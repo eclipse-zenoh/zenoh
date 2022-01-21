@@ -28,8 +28,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
+use zenoh_cfg_properties::Properties;
 use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
-use zenoh_util::properties::Properties;
 
 /*************************************/
 /*             CONSTS                */

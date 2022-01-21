@@ -27,7 +27,7 @@ use std::sync::{Arc, RwLock};
 use zenoh_core::zcheck;
 use zenoh_core::zresult::ShmError;
 use zenoh_core::Result as ZResult;
-use zenoh_util::crypto::PseudoRng;
+use zenoh_crypto::PseudoRng;
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;

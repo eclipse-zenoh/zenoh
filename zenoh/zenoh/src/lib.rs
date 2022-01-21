@@ -81,17 +81,16 @@ use async_std::net::UdpSocket;
 use flume::bounded;
 use futures::prelude::*;
 use git_version::git_version;
-use log::{debug, trace};
-use net::protocol::core::WhatAmI;
+use log::trace;
 use net::protocol::proto::data_kind;
 use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
-use zenoh_core::{bail, zerror, zwrite, Result as ZResult};
+use zenoh_cfg_properties::config::*;
+use zenoh_core::{zerror, Result as ZResult};
 use zenoh_sync::zpinbox;
-use zenoh_util::properties::config::*;
 
 /// A zenoh result.
 pub use zenoh_core::Result;
@@ -121,28 +120,28 @@ pub mod plugins;
 /// reading and writing data.
 pub mod buf {
     /// A read-only bytes buffer.
-    pub use super::net::protocol::io::ZBuf;
+    pub use crate::net::protocol::io::ZBuf;
 
     /// A [`ZBuf`] slice.
-    pub use super::net::protocol::io::ZSlice;
+    pub use crate::net::protocol::io::ZSlice;
 
     /// A writable bytes buffer.
-    pub use super::net::protocol::io::WBuf;
+    pub use crate::net::protocol::io::WBuf;
 
     #[cfg(feature = "shared-memory")]
-    pub use super::net::protocol::io::SharedMemoryBuf;
+    pub use crate::net::protocol::io::SharedMemoryBuf;
     #[cfg(feature = "shared-memory")]
-    pub use super::net::protocol::io::SharedMemoryBufInfo;
+    pub use crate::net::protocol::io::SharedMemoryBufInfo;
     #[cfg(feature = "shared-memory")]
-    pub use super::net::protocol::io::SharedMemoryManager;
+    pub use crate::net::protocol::io::SharedMemoryManager;
 }
 
 /// Time related types and functions.
 pub mod time {
-    pub use super::net::protocol::core::{Timestamp, TimestampId, NTP64};
+    pub use crate::net::protocol::core::{Timestamp, TimestampId, NTP64};
 
     /// A time period.
-    pub use super::net::protocol::core::Period;
+    pub use crate::net::protocol::core::Period;
 
     /// Generates a reception [`Timestamp`] with id=0x00.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
@@ -161,7 +160,7 @@ pub mod time {
 /// A map of key/value (String,String) properties.
 pub mod properties {
     use super::prelude::Value;
-    pub use zenoh_util::properties::Properties;
+    pub use zenoh_cfg_properties::Properties;
 
     /// Convert a set of [`Properties`] into a [`Value`].  
     /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
@@ -247,10 +246,10 @@ pub mod scouting {
     use zenoh_sync::zreceiver;
 
     /// Constants and helpers for zenoh `whatami` flags.
-    pub use super::net::protocol::core::WhatAmI;
+    pub use crate::net::protocol::core::WhatAmI;
 
     /// A zenoh Hello message.
-    pub use super::net::protocol::proto::Hello;
+    pub use crate::net::protocol::proto::Hello;
 
     zreceiver! {
         /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.

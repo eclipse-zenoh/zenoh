@@ -30,6 +30,7 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
 [dependencies]
 zenoh-core = { path = "../../zenoh-utils/zenoh-core" }
+zenoh-cfg-properties = { path = "../../zenoh-utils/zenoh-cfg-properties" }
 zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 

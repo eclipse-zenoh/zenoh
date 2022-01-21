@@ -161,7 +161,7 @@ pub fn derive_intkey_maplike(tokens: TokenStream) -> TokenStream {
     let keys = keys.into_iter().flatten();
     (quote! {
         #[automatically_derived]
-        impl zenoh_util::properties::config::IntKeyMapLike for #ident {
+        impl zenoh_cfg_properties::config::IntKeyMapLike for #ident {
             fn iget(&self, key: u64) -> Option<std::borrow::Cow<'_, str>> {
                 match key {
                     #(#gets,)*

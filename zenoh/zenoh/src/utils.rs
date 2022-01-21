@@ -15,7 +15,4 @@
 //! Some useful operations for the zenoh API.
 
 /// Helpers to manipulate and compare key expressions.
-pub mod key_expr {
-    pub use super::super::net::protocol::core::key_expr::include;
-    pub use super::super::net::protocol::core::key_expr::intersect;
-}
+pub use zenoh_protocol_core::key_expr;

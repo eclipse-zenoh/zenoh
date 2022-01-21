@@ -32,11 +32,11 @@ description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-zenoh-cfg-properties = { path = "../zenoh-cfg-properties" }
 zenoh-core = { path = "../zenoh-core" }
-zenoh-crypto = { path = "../zenoh-crypto/" }
-zenoh-sync = { path = "../zenoh-sync/" }
-zenoh-collections = { path = "../zenoh-collections/" }
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties", optional = true }
+zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
+zenoh-sync = { path = "../zenoh-sync/", optional = true }
+zenoh-collections = { path = "../zenoh-collections/", optional = true }
 async-std = { version = "=1.9.0", features = ["unstable"] }
 clap = "2.33.3"
 futures = "0.3.12"

@@ -11,21 +11,24 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::TransportManager;
-use super::establishment::authenticator::*;
-use super::protocol::core::PeerId;
-use super::transport::{TransportUnicastConfig, TransportUnicastInner};
-use super::*;
 use crate::config::Config;
 use crate::net::link::*;
+use crate::net::protocol::proto::tmsg;
+use crate::net::transport::unicast::{
+    establishment::authenticator::*,
+    protocol::core::PeerId,
+    transport::{TransportUnicastConfig, TransportUnicastInner},
+    TransportConfigUnicast, TransportUnicast,
+};
+use crate::net::transport::TransportManager;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zerror, zlock, zparse};
-use zenoh_util::properties::config::*;
+use zenoh_cfg_properties::config::*;
+use zenoh_core::{zasynclock, zerror, zlock, zparse, Result as ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */

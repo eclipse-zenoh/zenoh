@@ -11,18 +11,20 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{
-    attachment_from_properties, init_syn, AResult, AuthenticatedPeerLink, Cookie,
-    EstablishmentProperties,
-};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::Property;
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{tmsg, TransportMessage};
+use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
+use crate::net::transport::unicast::establishment::{
+    attachment_from_properties, Cookie, EstablishmentProperties,
+};
 use crate::net::transport::TransportManager;
 use rand::Rng;
 use zenoh_core::zasynclock;
-use zenoh_util::crypto::hmac;
+use zenoh_crypto::hmac;
+
+use super::{init_syn, AResult};
 
 // Send an InitAck
 pub(super) struct Output {

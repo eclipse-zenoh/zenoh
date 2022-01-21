@@ -12,18 +12,18 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::config::*;
-use super::*;
 use crate::config::Config;
+use crate::net::link::LocatorAddress;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_std::net::{SocketAddr, ToSocketAddrs};
 use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
+use zenoh_cfg_properties::config::{ZN_FALSE, ZN_TRUE};
+use zenoh_cfg_properties::Properties;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
-use zenoh_util::properties::config::{ZN_FALSE, ZN_TRUE};
-use zenoh_util::properties::Properties;
 
 #[allow(unreachable_patterns)]
 pub(super) async fn get_tls_addr(address: &LocatorAddress) -> ZResult<SocketAddr> {

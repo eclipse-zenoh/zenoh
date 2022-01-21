@@ -15,7 +15,6 @@ mod endpoint;
 mod multicast;
 mod unicast;
 
-use super::*;
 pub use endpoint::*;
 pub use multicast::*;
 pub use unicast::*;

@@ -11,17 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::TransportManager;
-use super::transport::TransportMulticastInner;
-use super::*;
 use crate::config::Config;
 use crate::net::link::*;
+use crate::net::protocol::proto::tmsg;
+use crate::net::transport::multicast::transport::TransportMulticastInner;
+use crate::net::transport::multicast::TransportMulticast;
+use crate::net::transport::TransportManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zlock, zparse};
-use zenoh_util::properties::config::*;
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,

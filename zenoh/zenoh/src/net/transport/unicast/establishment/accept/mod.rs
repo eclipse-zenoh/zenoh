@@ -16,10 +16,12 @@ mod init_syn;
 mod open_ack;
 mod open_syn;
 
-use super::authenticator::AuthenticatedPeerLink;
-use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
 use crate::net::protocol::proto::tmsg;
+use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
+use crate::net::transport::unicast::establishment::{
+    close_link, transport_finalize, transport_init, InputFinalize,
+};
 use crate::net::transport::TransportManager;
 use zenoh_core::Result as ZResult;
 
@@ -69,7 +71,7 @@ pub(crate) async fn accept_link(
         is_shm: output.is_shm,
         is_qos: output.cookie.is_qos,
     };
-    let transport = step!(self::transport_init(manager, input).await);
+    let transport = step!(transport_init(manager, input).await);
 
     // OPEN handshake
     macro_rules! step {
@@ -117,7 +119,7 @@ pub(crate) async fn accept_link(
     let lease = output.lease;
     let _output = step!(open_ack::send(link, manager, auth_link, input).await);
 
-    let input = self::InputFinalize {
+    let input = InputFinalize {
         transport: transport.clone(),
         lease,
     };

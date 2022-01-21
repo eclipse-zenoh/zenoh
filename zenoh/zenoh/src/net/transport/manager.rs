@@ -32,10 +32,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
+use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_core::zparse;
 use zenoh_core::Result as ZResult;
-use zenoh_util::crypto::{BlockCipher, PseudoRng};
-use zenoh_util::properties::{config::*, Properties};
+use zenoh_crypto::{BlockCipher, PseudoRng};
 
 /// # Examples
 /// ```

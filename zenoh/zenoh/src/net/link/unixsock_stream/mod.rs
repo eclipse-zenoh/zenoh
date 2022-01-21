@@ -14,7 +14,6 @@
 mod endpoint;
 mod unicast;
 
-use super::*;
 pub use endpoint::*;
 pub use unicast::*;
 use zenoh_core::zconfigurable;

@@ -27,7 +27,7 @@ use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
-use zenoh_util::crypto::{BlockCipher, PseudoRng};
+use zenoh_crypto::{BlockCipher, PseudoRng};
 
 const WBUF_SIZE: usize = 64;
 

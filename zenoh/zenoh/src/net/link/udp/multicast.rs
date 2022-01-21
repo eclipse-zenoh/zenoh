@@ -11,8 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::config::*;
-use super::*;
+use super::{config::*, LocatorUdp, UDP_DEFAULT_MTU};
+use crate::net::link::{
+    udp::get_udp_addr, EndPoint, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
+    Locator, LocatorAddress,
+};
 use async_std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};

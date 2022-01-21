@@ -58,6 +58,8 @@ default = [
 
 [dependencies]
 zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
+zenoh-crypto = { path = "../../zenoh-utils/zenoh-crypto/" }
+zenoh-cfg-properties = { path = "../../zenoh-utils/zenoh-cfg-properties/" }
 zenoh-collections = { path = "../../zenoh-utils/zenoh-collections/" }
 zenoh-sync = { path = "../../zenoh-utils/zenoh-sync/" }
 zenoh-util = { path = "../../zenoh-utils/zenoh-util" }

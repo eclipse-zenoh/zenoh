@@ -26,9 +26,9 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 use validated_struct::{GetError, ValidatedMap};
+pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 pub use zenoh_protocol_core::{whatami, WhatAmI};
-pub use zenoh_util::properties::config::*;
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -48,7 +48,7 @@ type Locator = String;
 ///
 /// Multiple values are coma separated.
 ///
-/// The [`IntKeyProperties`](zenoh_util::properties::IntKeyProperties) can be built from (`String`/`String`)
+/// The [`IntKeyProperties`](zenoh_cfg_properties::IntKeyProperties) can be built from (`String`/`String`)
 /// [`Properties`](crate::properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.

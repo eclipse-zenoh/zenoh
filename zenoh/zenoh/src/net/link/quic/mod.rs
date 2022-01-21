@@ -14,7 +14,6 @@
 mod endpoint;
 mod unicast;
 
-use super::*;
 pub use endpoint::*;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
@@ -44,7 +43,7 @@ zconfigurable! {
 }
 
 pub mod config {
-    use zenoh_util::properties::config::*;
+    use zenoh_cfg_properties::config::*;
 
     pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = ZN_TLS_ROOT_CA_CERTIFICATE_STR;
     pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "tls_root_ca_certificate_raw";

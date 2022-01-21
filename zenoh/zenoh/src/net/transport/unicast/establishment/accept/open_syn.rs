@@ -12,15 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::authenticator::{AuthenticatedPeerLink, PeerAuthenticatorId};
-use super::{attachment_from_properties, properties_from_attachment, AResult};
-use super::{Cookie, EstablishmentProperties};
+use super::super::{attachment_from_properties, properties_from_attachment};
+use super::super::{Cookie, EstablishmentProperties};
+use super::AResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{Property, ZInt};
 use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
 use zenoh_core::zerror;
-use zenoh_util::crypto::hmac;
+use zenoh_crypto::hmac;
 
 /*************************************/
 /*             ACCEPT                */

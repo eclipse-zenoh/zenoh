@@ -11,7 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::*;
+use crate::net::link::{
+    udp::{UDP_ACCEPT_THROTTLE_TIME, UDP_MAX_MTU},
+    EndPoint, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, Locator, LocatorAddress,
+};
 use crate::net::transport::TransportManager;
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_std::prelude::*;
@@ -28,6 +31,8 @@ use zenoh_collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zerror, zlock, zread, zwrite};
 use zenoh_sync::{Mvar, Signal};
+
+use super::{get_udp_addr, LocatorUdp, UDP_DEFAULT_MTU};
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (RecyclingObject<Box<[u8]>>, usize);

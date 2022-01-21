@@ -11,14 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::authenticator::AuthenticatedPeerLink;
-use super::{attachment_from_properties, properties_from_attachment, OResult};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
 use crate::net::protocol::io::ZSlice;
 use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
-use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
+use crate::net::transport::unicast::establishment::open::OResult;
+use crate::net::transport::unicast::establishment::{
+    attachment_from_properties, properties_from_attachment,
+};
+use crate::net::transport::unicast::establishment::{
+    authenticator::{AuthenticatedPeerLink, PeerAuthenticatorId},
+    EstablishmentProperties,
+};
 use crate::net::transport::TransportManager;
 use zenoh_core::zerror;
 

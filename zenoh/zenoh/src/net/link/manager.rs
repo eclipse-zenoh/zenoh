@@ -12,16 +12,16 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[cfg(feature = "transport_quic")]
-use super::quic::LinkManagerUnicastQuic;
+use crate::net::link::quic::LinkManagerUnicastQuic;
 #[cfg(feature = "transport_tcp")]
-use super::tcp::LinkManagerUnicastTcp;
+use crate::net::link::tcp::LinkManagerUnicastTcp;
 #[cfg(feature = "transport_tls")]
-use super::tls::LinkManagerUnicastTls;
+use crate::net::link::tls::LinkManagerUnicastTls;
 #[cfg(feature = "transport_udp")]
-use super::udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp};
+use crate::net::link::udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp};
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-use super::unixsock_stream::LinkManagerUnicastUnixSocketStream;
-use super::{EndPoint, LinkMulticast, LinkUnicast, Locator, LocatorProtocol};
+use crate::net::link::unixsock_stream::LinkManagerUnicastUnixSocketStream;
+use crate::net::link::{EndPoint, LinkMulticast, LinkUnicast, Locator, LocatorProtocol};
 use crate::net::transport::TransportManager;
 use async_std::sync::Arc;
 use async_trait::async_trait;

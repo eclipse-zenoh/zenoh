@@ -17,10 +17,12 @@ mod open_ack;
 mod open_syn;
 
 use super::authenticator::AuthenticatedPeerLink;
-use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
 use crate::net::protocol::proto::tmsg;
-use crate::net::transport::TransportManager;
+use crate::net::transport::unicast::establishment::{
+    close_link, transport_finalize, InputFinalize, InputInit,
+};
+use crate::net::transport::{TransportManager, TransportUnicast};
 use zenoh_core::Result as ZResult;
 
 type OError = (zenoh_core::Error, Option<u8>);
@@ -61,7 +63,7 @@ pub(crate) async fn open_link(
     }
 
     let pid = output.pid;
-    let input = super::InputInit {
+    let input = InputInit {
         pid,
         whatami: output.whatami,
         sn_resolution: output.sn_resolution,
@@ -118,7 +120,7 @@ pub(crate) async fn open_link(
 
     log::debug!("New transport link established with {}: {}", pid, link);
 
-    let output = self::InputFinalize {
+    let output = InputFinalize {
         transport,
         lease: output.lease,
     };

@@ -48,19 +48,19 @@ pub use crate::sync::ZFuture;
 pub use crate::net::link::Locator;
 
 /// The encoding of a zenoh [`Value`].
-pub use super::net::protocol::core::Encoding;
+pub use crate::net::protocol::core::Encoding;
 
 /// The global unique id of a zenoh peer.
-pub use super::net::protocol::core::PeerId;
+pub use crate::net::protocol::core::PeerId;
 
 /// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
-pub use super::net::protocol::core::ExprId;
+pub use crate::net::protocol::core::ExprId;
 
 /// A key expression.
-pub use super::net::protocol::core::KeyExpr;
+pub use crate::net::protocol::core::KeyExpr;
 
 /// A zenoh integer.
-pub use super::net::protocol::core::ZInt;
+pub use crate::net::protocol::core::ZInt;
 
 /// A zenoh Value.
 #[derive(Clone)]
