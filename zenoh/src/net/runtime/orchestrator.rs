@@ -14,7 +14,7 @@
 use super::link::{EndPoint, Locator};
 use super::protocol::core::{WhatAmI, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::message::{Hello, Scout, ScoutingBody, ScoutingMessage, WireProperties};
+use super::protocol::message::{Hello, Scout, ScoutingBody, ScoutingMessage};
 use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
 use crate::net::protocol::core::whatami::WhatAmIMatcher;
@@ -515,13 +515,7 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let mut scout = ScoutingMessage::make_scout(
-                VERSION,
-                matcher,
-                None,
-                WireProperties::new(),
-                WireProperties::new(),
-            );
+            let mut scout: ScoutingMessage = Scout::new(VERSION, matcher, None).into();
             wbuf.write_scouting_message(&mut scout);
             let zbuf: ZBuf = wbuf.into();
             let zslice = zbuf.contiguous();
@@ -630,8 +624,14 @@ impl Runtime {
         let scout = async {
             Runtime::scout(sockets, what.into(), addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
+                let locs: Vec<Locator> = hello
+                    .locators
+                    .iter()
+                    .filter_map(|a| a.parse().ok())
+                    .collect();
+
                 if !hello.locators.is_empty() {
-                    if let Some(transport) = self.connect(&hello.locators).await {
+                    if let Some(transport) = self.connect(&locs).await {
                         log::debug!(
                             "Successfully connected to newly scouted {:?} via {:?}",
                             hello,
@@ -662,11 +662,16 @@ impl Runtime {
         addr: &SocketAddr,
     ) {
         Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
-            if !hello.locators.is_empty() {
-                self.connect_peer(&hello.zid, hello.locators.as_slice())
-                    .await
+            let locs: Vec<Locator> = hello
+                .locators
+                .iter()
+                .filter_map(|a| a.parse().ok())
+                .collect();
+
+            if !locs.is_empty() {
+                self.connect_peer(&hello.zid, locs.as_slice()).await
             } else {
-                log::warn!("Received Hello with no locators : {:?}", hello);
+                log::warn!("Received Hello with no locators: {:?}", hello);
             }
             Loop::Continue
         })
@@ -716,14 +721,17 @@ impl Runtime {
                 if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
                     if what.matches(self.whatami) {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-                        let mut hello = ScoutingMessage::make_hello(
+                        let mut hello: ScoutingMessage = Hello::new(
                             VERSION,
                             self.whatami,
                             self.manager().pid(),
-                            self.manager().get_locators().clone(),
-                            WireProperties::new(),
-                            WireProperties::new(),
-                        );
+                            self.manager()
+                                .get_locators()
+                                .iter()
+                                .map(|l| l.to_string())
+                                .collect(),
+                        )
+                        .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
                         log::trace!(
                             "Send {:?} to {} on interface {}",

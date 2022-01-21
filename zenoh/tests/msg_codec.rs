@@ -299,14 +299,15 @@ fn codec_scout() {
         println!("{}", tmp);
         let what = WhatAmIMatcher::try_from(tmp).unwrap();
         let zid = [None, Some(gen_zid())];
-        let s_ps = gen_wireproperties();
-        let u_ps = gen_wireproperties();
+        let u_ext = [None, Some(ZUser::new(gen_wireproperties()))];
 
         for v in version.iter() {
             for z in zid.iter() {
-                let msg =
-                    ScoutingMessage::make_scout(v.clone(), what, *z, s_ps.clone(), u_ps.clone());
-                test_write_read_scouting_message(msg);
+                for u in u_ext.iter() {
+                    let mut msg = Scout::new(v.clone(), what, *z);
+                    msg.exts.user = u.clone();
+                    test_write_read_scouting_message(msg.into());
+                }
             }
         }
     }
@@ -334,21 +335,16 @@ fn codec_hello() {
                 "tcp/5.6.7.8:5678".parse().unwrap(),
             ],
         ];
-        let h_ps = gen_wireproperties();
-        let u_ps = gen_wireproperties();
+        let u_ext = [None, Some(ZUser::new(gen_wireproperties()))];
 
         for v in version.iter() {
             for w in wami.iter() {
                 for l in locators.iter() {
-                    let msg = ScoutingMessage::make_hello(
-                        v.clone(),
-                        *w,
-                        zid,
-                        l.clone(),
-                        h_ps.clone(),
-                        u_ps.clone(),
-                    );
-                    test_write_read_scouting_message(msg);
+                    for u in u_ext.iter() {
+                        let mut msg = Hello::new(v.clone(), *w, zid, l.clone());
+                        msg.exts.user = u.clone();
+                        test_write_read_scouting_message(msg.into());
+                    }
                 }
             }
         }

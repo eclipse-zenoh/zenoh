@@ -163,6 +163,16 @@ impl ZBuf {
     }
 
     #[inline(always)]
+    pub fn read_string_array(&mut self) -> Option<Vec<String>> {
+        let len = self.read_zint_as_usize()?;
+        let mut vec: Vec<String> = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(self.read_string()?);
+        }
+        Some(vec)
+    }
+
+    #[inline(always)]
     pub fn read_zenohid(&mut self) -> Option<ZenohId> {
         let size = self.read_zint_as_usize()?;
         if size > ZenohId::MAX_SIZE {
@@ -184,8 +194,8 @@ impl ZBuf {
 
     #[inline(always)]
     pub fn read_locators(&mut self) -> Option<Vec<Locator>> {
-        let len = self.read_zint()?;
-        let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
+        let len = self.read_zint_as_usize()?;
+        let mut vec: Vec<Locator> = Vec::with_capacity(len);
         for _ in 0..len {
             vec.push(self.read_locator()?);
         }
@@ -333,8 +343,17 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_string(&mut self, s: &str) -> bool {
-        self.write_usize_as_zint(s.len()) && self.write_bytes(s.as_bytes())
+    pub fn write_string<T: AsRef<str>>(&mut self, s: T) -> bool {
+        self.write_usize_as_zint(s.as_ref().len()) && self.write_bytes(s.as_ref().as_bytes())
+    }
+
+    #[inline(always)]
+    pub fn write_string_array<T: AsRef<str>>(&mut self, s: &[T]) -> bool {
+        zcheck!(self.write_usize_as_zint(s.len()));
+        for i in s.iter() {
+            zcheck!(self.write_string(i));
+        }
+        true
     }
 
     #[inline(always)]

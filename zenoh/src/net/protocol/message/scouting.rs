@@ -13,206 +13,146 @@
 //
 use super::core::whatami::WhatAmIMatcher;
 use super::core::*;
-use super::io::{zint_len, WBuf, ZBuf};
-use super::{WireProperties, ZOpt};
-use crate::net::link::Locator;
+use super::extensions::{ZExperimental, ZUser};
+use super::io::{WBuf, ZBuf};
+use super::ZExt;
+use std::convert::TryFrom;
 use std::fmt;
 #[cfg(feature = "stats")]
 use std::num::NonZeroUsize;
 
-pub mod id {
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ScoutingId {
     // 0x00: Reserved
-
-    // Scouting Messages
-    pub const SCOUT: u8 = 0x01;
-    pub const HELLO: u8 = 0x02;
-
+    Scout = 0x01,
+    Hello = 0x02,
     // 0x03: Reserved
     // ..  : Reserved
     // 0x1f: Reserved
 }
 
-pub mod opt {
-    // 0x00: Reserved
+impl TryFrom<u8> for ScoutingId {
+    type Error = ();
 
-    // Scouting options
-    pub const EXPERIMENTAL: u8 = 0x01;
-    pub const ZENOH: u8 = 0x02;
-    pub const USER: u8 = 0x03;
+    fn try_from(id: u8) -> Result<Self, Self::Error> {
+        const SCT: u8 = ScoutingId::Scout.id();
+        const HEL: u8 = ScoutingId::Hello.id();
 
-    // 0x04: Reserved
-    // ..  : Reserved
-    // 0x1f: Reserved
-}
-
-/// # Experimental option
-///
-/// It indicates the experimental version of zenoh.
-///  
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| EXP_VER |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~    version    ~
-/// +---------------+
-///
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZOptExp {
-    pub version: ZInt,
-    pub len: usize,
-}
-
-impl ZOptExp {
-    fn new(version: ZInt) -> Self {
-        Self {
-            version,
-            len: zint_len(version),
+        match id {
+            SCT => Ok(ScoutingId::Scout),
+            HEL => Ok(ScoutingId::Hello),
+            _ => Err(()),
         }
     }
+}
 
-    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
-        let start = zbuf.readable();
-        let version = zbuf.read_zint()?;
-        let len = start - zbuf.readable();
-        Some(Self { version, len })
+impl ScoutingId {
+    const fn id(self) -> u8 {
+        self as u8
     }
 }
 
-impl ZOpt for ZOptExp {
-    fn header(&self) -> u8 {
-        opt::EXPERIMENTAL
-    }
-
-    fn length(&self) -> usize {
-        self.len
-    }
-
-    fn write_body(&self, wbuf: &mut WBuf) -> bool {
-        wbuf.write_zint(self.version)
-    }
+/// # Scouting protocol
+///
+/// In zenoh, scouting is used to discover any other zenoh node in the surroundings when
+/// operating in a LAN-like environment. This is achieved by exploiting multicast capabilities
+/// of the underlying network.
+///
+/// In case of operating on a multicast UDP/IP network, the scouting works as follows:
+/// - A zenoh node sends out a SCOUT message transported by a UDP datagram addressed to a given
+///   IP multicast group that reach any other zenoh node participating in the same group.
+/// - Upon receiving the SCOUT message, zenoh nodes reply back with an HELLO message carried by
+///   a second UDP datagram containing the information (i.e., the set of locators) that can be
+///   used to reach them (e.g., the TCP/IP address).
+/// - The zenoh node who initially sent the SCOUT message may use the information on the locators
+///   contained on the received HELLO messages to initiate a zenoh session with the discovered
+///   zenoh nodes.
+///
+/// It's worth remarking that scouting in zenoh is related to discovering where other zenoh nodes
+/// are (e.g. peers and/or routers) and not to the discovery of the resources actually being
+/// published or subscribed. In other words, the scouting mechanism in zenoh helps at answering
+/// the following questions:
+/// - What are the zenoh nodes that are around in the same LAN-like network?
+/// - What address I can use to reach them?
+///
+/// Finally, it is worth highlighting that in the case of operating o a network that does not
+/// support multicast communication, scouting could be achieved through a different mechanism
+/// like DNS, SDP, etc.
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScoutingBody {
+    Scout(Scout),
+    Hello(Hello),
 }
 
-/// # Routing ID
-///
-/// It includes the zenoh properties.
-///  
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| RID     |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~      rid      ~
-/// +---------------+
-///
-
-/// # Zenoh option
-///
-/// It includes the zenoh properties.
-///  
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| Z_PROPS |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~  <property>   ~
-/// +---------------+
-///
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZOptZenoh {
-    pub inner: WireProperties,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoutingMessage {
+    pub body: ScoutingBody,
+    #[cfg(feature = "stats")]
+    pub size: Option<NonZeroUsize>,
 }
 
-impl ZOptZenoh {
-    pub fn new() -> Self {
-        Self {
-            inner: WireProperties::new(),
+impl WBuf {
+    #[allow(clippy::let_and_return)] // Necessary when feature "stats" is disabled
+    pub fn write_scouting_message(&mut self, msg: &mut ScoutingMessage) -> bool {
+        #[cfg(feature = "stats")]
+        let start_written = self.len();
+
+        let res = match &mut msg.body {
+            ScoutingBody::Scout(scout) => self.write_scout(scout),
+            ScoutingBody::Hello(hello) => self.write_hello(hello),
+        };
+
+        #[cfg(feature = "stats")]
+        {
+            let stop_written = self.len();
+            msg.size = NonZeroUsize::new(stop_written - start_written);
         }
-    }
 
-    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
-        let inner = zbuf.read_wire_properties()?;
-        Some(Self { inner })
+        res
     }
 }
 
-impl Default for ZOptZenoh {
-    fn default() -> Self {
-        Self::new()
+impl ZBuf {
+    pub fn read_scouting_message(&mut self) -> Option<ScoutingMessage> {
+        #[cfg(feature = "stats")]
+        let start_readable = self.readable();
+
+        // Read the header
+        let header = self.read()?;
+
+        // Read the message
+        let mid = super::mid(header);
+        let body = match ScoutingId::try_from(mid) {
+            Ok(id) => match id {
+                ScoutingId::Scout => ScoutingBody::Scout(self.read_scout(header)?),
+                ScoutingId::Hello => ScoutingBody::Hello(self.read_hello(header)?),
+            },
+            Err(_) => {
+                log::trace!("Scouting message with unknown ID: {}", mid);
+                return None;
+            }
+        };
+
+        #[cfg(feature = "stats")]
+        let stop_readable = self.readable();
+
+        Some(ScoutingMessage {
+            body,
+            #[cfg(feature = "stats")]
+            size: NonZeroUsize::new(start_readable - stop_readable),
+        })
     }
 }
 
-impl ZOpt for ZOptZenoh {
-    fn header(&self) -> u8 {
-        opt::ZENOH
-    }
-
-    fn length(&self) -> usize {
-        let len = zint_len(self.inner.len() as ZInt);
-        self.inner
-            .iter()
-            .fold(len, |len, (k, v)| len + zint_len(*k) + v.len())
-    }
-
-    fn write_body(&self, wbuf: &mut WBuf) -> bool {
-        wbuf.write_wire_properties(&self.inner)
-    }
-}
-
-/// # User option
-///
-/// It includes the zenoh properties.
-///  
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| U_PROPS |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~  <property>   ~
-/// +---------------+
-///
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZOptUser {
-    pub inner: WireProperties,
-}
-
-impl ZOptUser {
-    pub fn new() -> Self {
+impl<T: Into<ScoutingBody>> From<T> for ScoutingMessage {
+    fn from(msg: T) -> Self {
         Self {
-            inner: WireProperties::new(),
+            body: msg.into(),
+            #[cfg(feature = "stats")]
+            size: None,
         }
-    }
-
-    pub fn read_body(zbuf: &mut ZBuf, _header: u8) -> Option<Self> {
-        let inner = zbuf.read_wire_properties()?;
-        Some(Self { inner })
-    }
-}
-
-impl Default for ZOptUser {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ZOpt for ZOptUser {
-    fn header(&self) -> u8 {
-        opt::USER
-    }
-
-    fn length(&self) -> usize {
-        let len = zint_len(self.inner.len() as ZInt);
-        self.inner
-            .iter()
-            .fold(len, |len, (k, v)| len + zint_len(*k) + v.len())
-    }
-
-    fn write_body(&self, wbuf: &mut WBuf) -> bool {
-        wbuf.write_wire_properties(&self.inner)
     }
 }
 
@@ -244,28 +184,17 @@ impl ZOpt for ZOptUser {
 /// Header flags:
 /// - I: ZenohID        If I==1 then the ZenohID of the scouter is present.
 /// - X: Reserved
-/// - O: Option zero    If O==1 then the Opt0 is included.
-///
-/// Options:
-/// - Byte 0 bits:
-///  - 0 Z: Scout properties    If Z==1 then scout properties are included.
-///  - 1 U: User properties     If U==1 then user properties are included.
-///  - 2 E: Experimental        If E==1 then the zenoh version is considered to be experimental.
-///  - 3 X: Reserved
-///  - 4 \
-///  - 5  : What(*)             The bitmap of WhatAmI interests.
-///  - 6 /
-///  - 7 O: Option one          If O==1 then the additional Opt1 is present. It always 0 for the time being.
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|X|I|  SCOUT  |
+/// |Z|X|I|  SCOUT  |
 /// +-+-+-+---------+
 /// |    version    |
 /// +---------------+
 /// |X|X|X|X|X| what| (*)
-/// +---+-------+---+
-/// ~   zenoh_id    ~ if Flag(I)==1 -- ZenohID
+/// +-+-+-+-+-+-+-+-+
+/// ~     <u8>      ~ if Flag(I)==1 -- ZenohID
 /// +---------------+
 ///
 /// (*) What. It indicates a bitmap of WhatAmI interests.
@@ -273,95 +202,147 @@ impl ZOpt for ZOptUser {
 ///    - 0b001: Router
 ///    - 0b010: Peer
 ///    - 0b100: Client
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| Z_PROPS |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~  scout_props  ~
-/// +---------------+
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|X|X| U_PROPS |
-/// +-+-+-+---------+
-/// ~    length     ~
-/// +---------------+
-/// ~  user_props   ~
-/// +---------------+
-///
 /// ```
+///
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scout {
-    pub version: Version,
+    version: u8,
     pub what: WhatAmIMatcher,
     pub zid: Option<ZenohId>,
-    pub z_ps: ZOptZenoh,
-    pub u_ps: ZOptUser,
+    pub exts: ScoutExts,
 }
 
 impl Scout {
     // Header flags
     pub const FLAG_I: u8 = 1 << 5;
     // pub const FLAG_X: u8 = 1 << 6; // Reserved for future use
-    pub const FLAG_O: u8 = 1 << 7;
+    pub const FLAG_Z: u8 = 1 << 7;
 
-    fn opt_len(&self) -> usize {
-        let mut opts = 0;
-        if self.version.experimental.is_some() {
-            opts += 1;
+    pub fn new(version: Version, what: WhatAmIMatcher, zid: Option<ZenohId>) -> Self {
+        let mut msg = Self {
+            version: version.stable,
+            what,
+            zid,
+            exts: ScoutExts::default(),
+        };
+        if let Some(exp) = version.experimental {
+            msg.exts.experimental = Some(ZExperimental::new(exp.get()));
         }
-        if !self.z_ps.inner.is_empty() {
-            opts += 1;
+        msg
+    }
+
+    pub fn version(&self) -> Version {
+        Version {
+            stable: self.version,
+            experimental: self
+                .exts
+                .experimental
+                .as_ref()
+                .and_then(|v| NonZeroZInt::new(v.version)),
         }
-        if !self.u_ps.inner.is_empty() {
-            opts += 1;
+    }
+}
+
+impl From<Scout> for ScoutingBody {
+    fn from(msg: Scout) -> Self {
+        Self::Scout(msg)
+    }
+}
+
+impl fmt::Display for Scout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut s = f.debug_struct("Scout");
+        s.field("version", &self.version);
+        s.field("what", &self.what);
+        if let Some(zid) = self.zid.as_ref() {
+            s.field("zid", zid);
         }
-        opts
+        if let Some(exp) = self.exts.experimental.as_ref() {
+            s.field("experimental", exp);
+        }
+        if let Some(usr) = self.exts.user.as_ref() {
+            s.field("user", usr);
+        }
+        s.finish()
+    }
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ScoutExtId {
+    // 0x00: Reserved
+    Experimental = 0x01,
+    User = 0x02,
+    // 0x03: Reserved
+    // ..  : Reserved
+    // 0x1f: Reserved
+}
+
+impl TryFrom<u8> for ScoutExtId {
+    type Error = ();
+
+    fn try_from(id: u8) -> Result<Self, Self::Error> {
+        const EXP: u8 = ScoutExtId::Experimental.id();
+        const USR: u8 = ScoutExtId::User.id();
+
+        match id {
+            EXP => Ok(ScoutExtId::Experimental),
+            USR => Ok(ScoutExtId::User),
+            _ => Err(()),
+        }
+    }
+}
+
+impl ScoutExtId {
+    const fn id(self) -> u8 {
+        self as u8
+    }
+}
+
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
+pub struct ScoutExts {
+    experimental: Option<ZExperimental<{ ScoutExtId::Experimental.id() }>>,
+    pub user: Option<ZUser<{ ScoutExtId::User.id() }>>,
+}
+
+impl ScoutExts {
+    fn is_empty(&self) -> bool {
+        self.experimental.is_none() && self.user.is_none()
     }
 }
 
 impl WBuf {
-    fn write_scout_opts(&mut self, scout: &Scout, mut opts: usize) -> bool {
-        if let Some(exp) = scout.version.experimental {
-            opts -= 1;
-            let exp = ZOptExp::new(exp.get());
-            zcheck!(self.write_option(&exp, opts != 0));
+    fn write_scout_exts(&mut self, exts: &ScoutExts) -> bool {
+        if let Some(exp) = exts.experimental.as_ref() {
+            zcheck!(self.write_extension(exp, false, exts.user.is_some()));
         }
 
-        if !scout.z_ps.inner.is_empty() {
-            opts -= 1;
-            zcheck!(self.write_option(&scout.z_ps, opts != 0));
+        if let Some(usr) = exts.user.as_ref() {
+            zcheck!(self.write_extension(usr, false, false));
         }
 
-        if !scout.u_ps.inner.is_empty() {
-            opts -= 1;
-            zcheck!(self.write_option(&scout.u_ps, opts != 0));
-        }
-
-        opts == 0
+        true
     }
 
     pub fn write_scout(&mut self, scout: &Scout) -> bool {
         // Compute options
-        let opts = scout.opt_len();
+        let has_exts = !scout.exts.is_empty();
 
         // Build header
-        let mut header = id::SCOUT;
+        let mut header = ScoutingId::Scout.id();
         if scout.zid.is_some() {
             header |= Scout::FLAG_I;
         }
-        if opts != 0 {
-            header |= Scout::FLAG_O;
+        if has_exts {
+            header |= Scout::FLAG_Z;
         }
 
         // Write header
         zcheck!(self.write(header));
 
         // Write body
-        zcheck!(self.write(scout.version.stable));
+        zcheck!(self.write(scout.version));
 
         let what: u8 = scout.what.into();
         zcheck!(self.write(what));
@@ -371,8 +352,8 @@ impl WBuf {
         }
 
         // Write options
-        if opts != 0 {
-            zcheck!(self.write_scout_opts(scout, opts));
+        if has_exts {
+            zcheck!(self.write_scout_exts(&scout.exts));
         }
 
         true
@@ -380,38 +361,42 @@ impl WBuf {
 }
 
 impl ZBuf {
-    fn read_scout_opts(&mut self, scout: &mut Scout) -> Option<()> {
+    fn read_scout_exts(&mut self) -> Option<ScoutExts> {
+        let mut exts = ScoutExts::default();
+
         loop {
-            let opt = self.read()?;
+            let header = self.read()?;
             let len = self.read_zint_as_usize()?;
 
-            match super::mid(opt) {
-                opt::EXPERIMENTAL => {
-                    let exp = ZOptExp::read_body(self, opt)?;
-                    scout.version.experimental = NonZeroZInt::new(exp.version);
-                }
-                opt::ZENOH => scout.z_ps = ZOptZenoh::read_body(self, opt)?,
-                opt::USER => scout.u_ps = ZOptUser::read_body(self, opt)?,
-                _ => {
+            match ScoutExtId::try_from(super::mid(header)) {
+                Ok(id) => match id {
+                    ScoutExtId::Experimental => {
+                        let body: ZExperimental<{ ScoutExtId::Experimental.id() }> =
+                            self.read_extension(len)?;
+                        exts.experimental = Some(body);
+                    }
+                    ScoutExtId::User => {
+                        let body: ZUser<{ ScoutExtId::User.id() }> = self.read_extension(len)?;
+                        exts.user = Some(body);
+                    }
+                },
+                Err(_) => {
                     if !self.skip_bytes(len) {
                         return None;
                     }
                 }
             }
 
-            if !super::has_flag(opt, Scout::FLAG_O) {
+            if !super::has_flag(header, ZExt::FLAG_Z) {
                 break;
             }
         }
 
-        Some(())
+        Some(exts)
     }
 
     pub fn read_scout(&mut self, header: u8) -> Option<Scout> {
-        let version = Version {
-            stable: self.read()?,
-            experimental: None,
-        };
+        let version = self.read()?;
 
         let tmp = self.read()?;
         let what = WhatAmIMatcher::try_from(tmp & 0b111)?;
@@ -422,18 +407,18 @@ impl ZBuf {
             None
         };
 
-        let mut msg = Scout {
+        let exts = if super::has_flag(header, Scout::FLAG_Z) {
+            self.read_scout_exts()?
+        } else {
+            ScoutExts::default()
+        };
+
+        let msg = Scout {
             version,
             what,
             zid,
-            z_ps: ZOptZenoh::new(),
-            u_ps: ZOptUser::new(),
+            exts,
         };
-
-        if super::has_flag(header, Scout::FLAG_O) {
-            self.read_scout_opts(&mut msg)?;
-        }
-
         Some(msg)
     }
 }
@@ -491,30 +476,19 @@ impl ZBuf {
 /// Header flags:
 /// - L: Locators       If L==1 then the list of locators is present, else the src address is the locator
 /// - X: Reserved
-/// - O: Option zero    If O==1 then the Opt0 is included.
-///
-/// Options:
-/// - Byte 0 bits:
-///  - 0 Z: Hello properties
-///  - 1 U: User properties
-///  - 2 X: Reserved
-///  - 3 X: Reserved
-///  - 4 X: Reserved
-///  - 5 X: Reserved
-///  - 6 X: Reserved
-///  - 7 O: Option one          If O==1 then the additional Opt1 is present. It always 0 for the time being.
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|X|L|  HELLO  |
+/// |Z|X|L|  HELLO  |
 /// +-+-+-+---------+
 /// |    version    |
 /// +---------------+
 /// |X|X|X|X|X|X|wai| (*)
-/// +---+---+-------+
-/// ~   zenoh_id    ~ -- ZenohID
+/// +-+-+-+-+-+-+-+-+
+/// ~     <u8>      ~ -- ZenohID
 /// +---------------+
-/// ~   <locator>   ~ if Flag(L)==1 -- List of locators
+/// ~   <<utf8>>    ~ if Flag(L)==1 -- List of locators
 /// +---------------+
 ///
 /// (*) WhatAmI. It indicates the role of the zenoh node sending the HELLO message.
@@ -523,78 +497,130 @@ impl ZBuf {
 ///    - 0b01: Peer
 ///    - 0b10: Client
 ///    - 0b11: Reserved
-///
 /// ```
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hello {
-    pub version: Version,
+    version: u8,
     pub whatami: WhatAmI,
     pub zid: ZenohId,
-    pub locators: Vec<Locator>,
-    pub z_ps: ZOptZenoh,
-    pub u_ps: ZOptUser,
+    pub locators: Vec<String>,
+    pub exts: HelloExts,
 }
 
 impl Hello {
     // Header flags
     pub const FLAG_L: u8 = 1 << 5;
     // pub const FLAG_X: u8 = 1 << 6; // Reserved for future use
-    pub const FLAG_O: u8 = 1 << 7;
+    pub const FLAG_Z: u8 = 1 << 7;
 
-    fn opt_len(&self) -> usize {
-        let mut opts = 0;
-        if self.version.experimental.is_some() {
-            opts += 1;
+    pub fn new(version: Version, whatami: WhatAmI, zid: ZenohId, locators: Vec<String>) -> Self {
+        let mut msg = Self {
+            version: version.stable,
+            whatami,
+            zid,
+            locators,
+            exts: HelloExts::default(),
+        };
+        if let Some(exp) = version.experimental {
+            msg.exts.experimental = Some(ZExperimental::new(exp.get()));
         }
-        if !self.z_ps.inner.is_empty() {
-            opts += 1;
+        msg
+    }
+
+    pub fn version(&self) -> Version {
+        Version {
+            stable: self.version,
+            experimental: self
+                .exts
+                .experimental
+                .as_ref()
+                .and_then(|v| NonZeroZInt::new(v.version)),
         }
-        if !self.u_ps.inner.is_empty() {
-            opts += 1;
+    }
+}
+
+impl From<Hello> for ScoutingBody {
+    fn from(msg: Hello) -> Self {
+        Self::Hello(msg)
+    }
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum HelloExtId {
+    // 0x00: Reserved
+    Experimental = 0x01,
+    User = 0x02,
+    // 0x03: Reserved
+    // ..  : Reserved
+    // 0x1f: Reserved
+}
+
+impl TryFrom<u8> for HelloExtId {
+    type Error = ();
+
+    fn try_from(id: u8) -> Result<Self, Self::Error> {
+        const EXP: u8 = HelloExtId::Experimental.id();
+        const USR: u8 = HelloExtId::User.id();
+
+        match id {
+            EXP => Ok(HelloExtId::Experimental),
+            USR => Ok(HelloExtId::User),
+            _ => Err(()),
         }
-        opts
+    }
+}
+
+impl HelloExtId {
+    const fn id(self) -> u8 {
+        self as u8
+    }
+}
+
+#[derive(Clone, Default, Debug, Eq, PartialEq)]
+pub struct HelloExts {
+    experimental: Option<ZExperimental<{ HelloExtId::Experimental.id() }>>,
+    pub user: Option<ZUser<{ HelloExtId::User.id() }>>,
+}
+
+impl HelloExts {
+    fn is_empty(&self) -> bool {
+        self.experimental.is_none() && self.user.is_none()
     }
 }
 
 impl WBuf {
-    fn write_hello_opts(&mut self, hello: &Hello, mut opts: usize) -> bool {
-        if let Some(exp) = hello.version.experimental {
-            opts -= 1;
-            let exp = ZOptExp::new(exp.get());
-            zcheck!(self.write_option(&exp, opts != 0));
+    fn write_hello_exts(&mut self, exts: &HelloExts) -> bool {
+        if let Some(exp) = exts.experimental.as_ref() {
+            zcheck!(self.write_extension(exp, false, exts.user.is_some()));
         }
 
-        if !hello.z_ps.inner.is_empty() {
-            opts -= 1;
-            zcheck!(self.write_option(&hello.z_ps, opts != 0));
+        if let Some(usr) = exts.user.as_ref() {
+            zcheck!(self.write_extension(usr, false, false));
         }
 
-        if !hello.u_ps.inner.is_empty() {
-            opts -= 1;
-            zcheck!(self.write_option(&hello.u_ps, opts != 0));
-        }
-
-        opts == 0
+        true
     }
 
     pub fn write_hello(&mut self, hello: &Hello) -> bool {
         // Compute options
-        let opts = hello.opt_len();
+        let has_exts = !hello.exts.is_empty();
 
         // Build header
-        let mut header = id::HELLO;
+        let mut header = ScoutingId::Hello.id();
         if !hello.locators.is_empty() {
             header |= Hello::FLAG_L;
         }
-        if opts != 0 {
-            header |= Hello::FLAG_O;
+        if has_exts {
+            header |= Hello::FLAG_Z;
         }
 
         // Write header
         zcheck!(self.write(header));
 
         // Write body
-        zcheck!(self.write(hello.version.stable));
+        zcheck!(self.write(hello.version));
 
         let wai: u8 = match hello.whatami {
             whatami::WhatAmI::Router => 0b00,
@@ -606,12 +632,12 @@ impl WBuf {
         zcheck!(self.write_zenohid(&hello.zid));
 
         if !hello.locators.is_empty() {
-            zcheck!(self.write_locators(hello.locators.as_slice()));
+            zcheck!(self.write_string_array(hello.locators.as_slice()));
         }
 
         // Write options
-        if opts != 0 {
-            zcheck!(self.write_hello_opts(hello, opts));
+        if has_exts {
+            zcheck!(self.write_hello_exts(&hello.exts));
         }
 
         true
@@ -619,38 +645,42 @@ impl WBuf {
 }
 
 impl ZBuf {
-    fn read_hello_opts(&mut self, hello: &mut Hello) -> Option<()> {
+    fn read_hello_exts(&mut self) -> Option<HelloExts> {
+        let mut exts = HelloExts::default();
+
         loop {
-            let opt = self.read()?;
+            let header = self.read()?;
             let len = self.read_zint_as_usize()?;
 
-            match super::mid(opt) {
-                opt::EXPERIMENTAL => {
-                    let exp = ZOptExp::read_body(self, opt)?;
-                    hello.version.experimental = NonZeroZInt::new(exp.version);
-                }
-                opt::ZENOH => hello.z_ps = ZOptZenoh::read_body(self, opt)?,
-                opt::USER => hello.u_ps = ZOptUser::read_body(self, opt)?,
-                _ => {
+            match HelloExtId::try_from(super::mid(header)) {
+                Ok(id) => match id {
+                    HelloExtId::Experimental => {
+                        let body: ZExperimental<{ HelloExtId::Experimental.id() }> =
+                            self.read_extension(len)?;
+                        exts.experimental = Some(body);
+                    }
+                    HelloExtId::User => {
+                        let body: ZUser<{ HelloExtId::User.id() }> = self.read_extension(len)?;
+                        exts.user = Some(body);
+                    }
+                },
+                Err(_) => {
                     if !self.skip_bytes(len) {
                         return None;
                     }
                 }
             }
 
-            if !super::has_flag(opt, Scout::FLAG_O) {
+            if !super::has_flag(header, ZExt::FLAG_Z) {
                 break;
             }
         }
 
-        Some(())
+        Some(exts)
     }
 
     pub fn read_hello(&mut self, header: u8) -> Option<Hello> {
-        let version = Version {
-            stable: self.read()?,
-            experimental: None,
-        };
+        let version = self.read()?;
 
         let tmp = self.read()?;
         let whatami = match tmp & 0b11 {
@@ -663,147 +693,41 @@ impl ZBuf {
         let zid = self.read_zenohid()?;
 
         let locators = if super::has_flag(header, Hello::FLAG_L) {
-            self.read_locators()?
+            self.read_string_array()?
         } else {
             vec![]
         };
 
-        let mut msg = Hello {
+        let exts = if super::has_flag(header, Hello::FLAG_Z) {
+            self.read_hello_exts()?
+        } else {
+            HelloExts::default()
+        };
+
+        let msg = Hello {
             version,
             whatami,
             zid,
             locators,
-            z_ps: ZOptZenoh::new(),
-            u_ps: ZOptUser::new(),
+            exts,
         };
-
-        if super::has_flag(header, Scout::FLAG_O) {
-            self.read_hello_opts(&mut msg)?;
-        }
-
         Some(msg)
     }
 }
 
 impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let locators = self
-            .locators
-            .iter()
-            .map(|locator| locator.to_string())
-            .collect::<Vec<String>>();
-        f.debug_struct("Hello")
-            .field("pid", &self.zid)
-            .field("whatami", &self.whatami)
-            .field("locators", &locators)
-            .finish()
-    }
-}
-
-/// # Scouting message
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ScoutingBody {
-    Scout(Scout),
-    Hello(Hello),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScoutingMessage {
-    pub body: ScoutingBody,
-    #[cfg(feature = "stats")]
-    pub size: Option<NonZeroUsize>,
-}
-
-impl ScoutingMessage {
-    pub fn make_scout(
-        version: Version,
-        what: WhatAmIMatcher,
-        zid: Option<ZenohId>,
-        z_ps: WireProperties,
-        u_ps: WireProperties,
-    ) -> ScoutingMessage {
-        ScoutingMessage {
-            body: ScoutingBody::Scout(Scout {
-                version,
-                what,
-                zid,
-                z_ps: ZOptZenoh { inner: z_ps },
-                u_ps: ZOptUser { inner: u_ps },
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
+        let mut s = f.debug_struct("Hello");
+        s.field("version", &self.version);
+        s.field("whatami", &self.whatami);
+        s.field("zid", &self.zid);
+        s.field("locators", &self.locators);
+        if let Some(exp) = self.exts.experimental.as_ref() {
+            s.field("experimental", exp);
         }
-    }
-
-    pub fn make_hello(
-        version: Version,
-        whatami: WhatAmI,
-        zid: ZenohId,
-        locators: Vec<Locator>,
-        z_ps: WireProperties,
-        u_ps: WireProperties,
-    ) -> ScoutingMessage {
-        ScoutingMessage {
-            body: ScoutingBody::Hello(Hello {
-                version,
-                whatami,
-                zid,
-                locators,
-                z_ps: ZOptZenoh { inner: z_ps },
-                u_ps: ZOptUser { inner: u_ps },
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
+        if let Some(usr) = self.exts.user.as_ref() {
+            s.field("user", usr);
         }
-    }
-}
-
-impl WBuf {
-    #[allow(clippy::let_and_return)] // Necessary when feature "stats" is disabled
-    pub fn write_scouting_message(&mut self, msg: &mut ScoutingMessage) -> bool {
-        #[cfg(feature = "stats")]
-        let start_written = self.len();
-
-        let res = match &mut msg.body {
-            ScoutingBody::Scout(scout) => self.write_scout(scout),
-            ScoutingBody::Hello(hello) => self.write_hello(hello),
-        };
-
-        #[cfg(feature = "stats")]
-        {
-            let stop_written = self.len();
-            msg.size = NonZeroUsize::new(stop_written - start_written);
-        }
-
-        res
-    }
-}
-
-impl ZBuf {
-    pub fn read_scouting_message(&mut self) -> Option<ScoutingMessage> {
-        #[cfg(feature = "stats")]
-        let start_readable = self.readable();
-
-        // Read the header
-        let header = self.read()?;
-
-        // Read the message
-        let body = match super::mid(header) {
-            id::SCOUT => ScoutingBody::Scout(self.read_scout(header)?),
-            id::HELLO => ScoutingBody::Hello(self.read_hello(header)?),
-            unknown => {
-                log::trace!("Scouting message with unknown ID: {}", unknown);
-                return None;
-            }
-        };
-
-        #[cfg(feature = "stats")]
-        let stop_readable = self.readable();
-
-        Some(ScoutingMessage {
-            body,
-            #[cfg(feature = "stats")]
-            size: std::num::NonZeroUsize::new(start_readable - stop_readable),
-        })
+        s.finish()
     }
 }
