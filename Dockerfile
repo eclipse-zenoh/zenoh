@@ -35,19 +35,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${TARGET} --defa
 
 ENV PATH /root/.cargo/bin:$PATH
 
-# if exists, copy .git directory to be used by git-version crate to determine the version
-COPY .gi? .git/
-
-COPY Cargo.toml .
-COPY Cargo.lock .
-COPY .cargo/config .cargo/config
-
-COPY zenoh zenoh
-COPY zenoh-ext zenoh-ext
-COPY zenoh-macros zenoh-macros
-COPY zenoh-util zenoh-util
-COPY backends backends
-COPY plugins plugins
+COPY . .
 
 RUN cargo build --release --target=${TARGET}
 
