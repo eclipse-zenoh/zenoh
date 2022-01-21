@@ -13,9 +13,9 @@
 //
 use super::core::whatami::WhatAmIMatcher;
 use super::core::*;
-use super::extensions::{ZExperimental, ZUser};
+use super::extensions::{ZExperimental, ZUnknown, ZUser};
 use super::io::{WBuf, ZBuf};
-use super::ZExt;
+use super::{zext, ZExt, ZExtPolicy};
 use std::convert::TryFrom;
 use std::fmt;
 #[cfg(feature = "stats")]
@@ -204,7 +204,6 @@ impl<T: Into<ScoutingBody>> From<T> for ScoutingMessage {
 ///    - 0b100: Client
 /// ```
 ///
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scout {
     version: u8,
@@ -227,7 +226,8 @@ impl Scout {
             exts: ScoutExts::default(),
         };
         if let Some(exp) = version.experimental {
-            msg.exts.experimental = Some(ZExperimental::new(exp.get()));
+            let ext = ZExt::new(ZExperimental::new(exp.get()), ZExtPolicy::Ignore);
+            msg.exts.experimental = Some(ext);
         }
         msg
     }
@@ -302,8 +302,8 @@ impl ScoutExtId {
 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct ScoutExts {
-    experimental: Option<ZExperimental<{ ScoutExtId::Experimental.id() }>>,
-    pub user: Option<ZUser<{ ScoutExtId::User.id() }>>,
+    experimental: Option<ZExt<ZExperimental<{ ScoutExtId::Experimental.id() }>>>,
+    pub user: Option<ZExt<ZUser<{ ScoutExtId::User.id() }>>>,
 }
 
 impl ScoutExts {
@@ -315,11 +315,11 @@ impl ScoutExts {
 impl WBuf {
     fn write_scout_exts(&mut self, exts: &ScoutExts) -> bool {
         if let Some(exp) = exts.experimental.as_ref() {
-            zcheck!(self.write_extension(exp, false, exts.user.is_some()));
+            zcheck!(self.write_extension(exp, exts.user.is_some()));
         }
 
         if let Some(usr) = exts.user.as_ref() {
-            zcheck!(self.write_extension(usr, false, false));
+            zcheck!(self.write_extension(usr, false));
         }
 
         true
@@ -366,28 +366,22 @@ impl ZBuf {
 
         loop {
             let header = self.read()?;
-            let len = self.read_zint_as_usize()?;
 
             match ScoutExtId::try_from(super::mid(header)) {
                 Ok(id) => match id {
                     ScoutExtId::Experimental => {
-                        let body: ZExperimental<{ ScoutExtId::Experimental.id() }> =
-                            self.read_extension(len)?;
-                        exts.experimental = Some(body);
+                        exts.experimental = Some(self.read_extension(header)?);
                     }
                     ScoutExtId::User => {
-                        let body: ZUser<{ ScoutExtId::User.id() }> = self.read_extension(len)?;
-                        exts.user = Some(body);
+                        exts.user = Some(self.read_extension(header)?);
                     }
                 },
                 Err(_) => {
-                    if !self.skip_bytes(len) {
-                        return None;
-                    }
+                    let _ = ZUnknown::read(self, header)?;
                 }
             }
 
-            if !super::has_flag(header, ZExt::FLAG_Z) {
+            if !zext::has_more(header) {
                 break;
             }
         }
@@ -523,7 +517,8 @@ impl Hello {
             exts: HelloExts::default(),
         };
         if let Some(exp) = version.experimental {
-            msg.exts.experimental = Some(ZExperimental::new(exp.get()));
+            let ext = ZExt::new(ZExperimental::new(exp.get()), ZExtPolicy::Ignore);
+            msg.exts.experimental = Some(ext);
         }
         msg
     }
@@ -580,8 +575,8 @@ impl HelloExtId {
 
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct HelloExts {
-    experimental: Option<ZExperimental<{ HelloExtId::Experimental.id() }>>,
-    pub user: Option<ZUser<{ HelloExtId::User.id() }>>,
+    experimental: Option<ZExt<ZExperimental<{ HelloExtId::Experimental.id() }>>>,
+    pub user: Option<ZExt<ZUser<{ HelloExtId::User.id() }>>>,
 }
 
 impl HelloExts {
@@ -593,11 +588,11 @@ impl HelloExts {
 impl WBuf {
     fn write_hello_exts(&mut self, exts: &HelloExts) -> bool {
         if let Some(exp) = exts.experimental.as_ref() {
-            zcheck!(self.write_extension(exp, false, exts.user.is_some()));
+            zcheck!(self.write_extension(exp, exts.user.is_some()));
         }
 
         if let Some(usr) = exts.user.as_ref() {
-            zcheck!(self.write_extension(usr, false, false));
+            zcheck!(self.write_extension(usr, false));
         }
 
         true
@@ -650,28 +645,22 @@ impl ZBuf {
 
         loop {
             let header = self.read()?;
-            let len = self.read_zint_as_usize()?;
 
             match HelloExtId::try_from(super::mid(header)) {
                 Ok(id) => match id {
                     HelloExtId::Experimental => {
-                        let body: ZExperimental<{ HelloExtId::Experimental.id() }> =
-                            self.read_extension(len)?;
-                        exts.experimental = Some(body);
+                        exts.experimental = Some(self.read_extension(header)?);
                     }
                     HelloExtId::User => {
-                        let body: ZUser<{ HelloExtId::User.id() }> = self.read_extension(len)?;
-                        exts.user = Some(body);
+                        exts.user = Some(self.read_extension(header)?);
                     }
                 },
                 Err(_) => {
-                    if !self.skip_bytes(len) {
-                        return None;
-                    }
+                    let _ = ZUnknown::read(self, header)?;
                 }
             }
 
-            if !super::has_flag(header, ZExt::FLAG_Z) {
+            if !zext::has_more(header) {
                 break;
             }
         }

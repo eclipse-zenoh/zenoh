@@ -299,7 +299,17 @@ fn codec_scout() {
         println!("{}", tmp);
         let what = WhatAmIMatcher::try_from(tmp).unwrap();
         let zid = [None, Some(gen_zid())];
-        let u_ext = [None, Some(ZUser::new(gen_wireproperties()))];
+        let u_ext = [
+            None,
+            Some(ZExt::new(
+                ZUser::new(gen_wireproperties()),
+                ZExtPolicy::Ignore,
+            )),
+            Some(ZExt::new(
+                ZUser::new(gen_wireproperties()),
+                ZExtPolicy::Forward,
+            )),
+        ];
 
         for v in version.iter() {
             for z in zid.iter() {
@@ -335,7 +345,17 @@ fn codec_hello() {
                 "tcp/5.6.7.8:5678".parse().unwrap(),
             ],
         ];
-        let u_ext = [None, Some(ZUser::new(gen_wireproperties()))];
+        let u_ext = [
+            None,
+            Some(ZExt::new(
+                ZUser::new(gen_wireproperties()),
+                ZExtPolicy::Ignore,
+            )),
+            Some(ZExt::new(
+                ZUser::new(gen_wireproperties()),
+                ZExtPolicy::Forward,
+            )),
+        ];
 
         for v in version.iter() {
             for w in wami.iter() {

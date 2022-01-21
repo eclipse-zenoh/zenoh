@@ -257,15 +257,56 @@ impl DerefMut for ZOpts<1> {
 /// (*) If the zenoh extension is not understood, then it SHOULD NOT be dropped and it
 ///     SHOULD be forwarded to the next hops.
 ///
-pub struct ZExt;
+pub mod zext {
+    // pub const FLAG_X: u8 = 1 << 5;
+    pub const FLAG_F: u8 = 1 << 6;
+    pub const FLAG_Z: u8 = 1 << 7;
 
-impl ZExt {
-    // const FLAG_X: u8 = 1 << 5;
-    const FLAG_F: u8 = 1 << 6;
-    const FLAG_Z: u8 = 1 << 7;
+    pub const fn is_forward(header: u8) -> bool {
+        super::has_flag(header, FLAG_F)
+    }
+
+    pub const fn has_more(header: u8) -> bool {
+        super::has_flag(header, FLAG_Z)
+    }
 }
 
-pub trait ZExtension: Clone + PartialEq + Eq + Debug {
+#[repr(u8)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ZExtPolicy {
+    Ignore,
+    Forward,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZExt<T>
+where
+    T: ZExtension,
+{
+    inner: T,
+    pub policy: ZExtPolicy,
+}
+
+impl<T: ZExtension> ZExt<T> {
+    pub fn new(inner: T, policy: ZExtPolicy) -> Self {
+        Self { inner, policy }
+    }
+}
+
+impl<T: ZExtension> Deref for ZExt<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T: ZExtension> DerefMut for ZExt<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+pub trait ZExtension: Clone + Debug + PartialEq + Eq {
     const ID: u8;
 
     fn length(&self) -> usize;
@@ -276,19 +317,26 @@ pub trait ZExtension: Clone + PartialEq + Eq + Debug {
 }
 
 impl ZBuf {
-    fn read_extension<T: ZExtension>(&mut self, length: usize) -> Option<T> {
-        T::read(self, length)
+    fn read_extension<T: ZExtension>(&mut self, header: u8) -> Option<ZExt<T>> {
+        let policy = if zext::is_forward(header) {
+            ZExtPolicy::Forward
+        } else {
+            ZExtPolicy::Ignore
+        };
+        let len = self.read_zint_as_usize()?;
+
+        Some(ZExt::new(T::read(self, len)?, policy))
     }
 }
 
 impl WBuf {
-    fn write_extension<T: ZExtension>(&mut self, ext: &T, forward: bool, more: bool) -> bool {
+    fn write_extension<T: ZExtension>(&mut self, ext: &ZExt<T>, more: bool) -> bool {
         let mut header = T::ID;
-        if forward {
-            header |= ZExt::FLAG_F;
+        if let ZExtPolicy::Forward = ext.policy {
+            header |= zext::FLAG_F;
         }
         if more {
-            header |= ZExt::FLAG_Z;
+            header |= zext::FLAG_Z;
         }
 
         self.write(header) && self.write_usize_as_zint(ext.length()) && ext.write(self)
