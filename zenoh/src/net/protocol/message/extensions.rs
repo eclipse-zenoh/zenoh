@@ -13,7 +13,7 @@
 //
 use super::core::ZInt;
 use super::io::{zint_len, WBuf, ZBuf};
-use super::{zext, WireProperties, ZExtension};
+use super::{zext, WireProperties, ZExtension, ZExtensionId};
 
 /// # Experimental extension
 ///
@@ -35,8 +35,14 @@ impl<const ID: u8> ZExperimental<{ ID }> {
     }
 }
 
-impl<const ID: u8> ZExtension for ZExperimental<{ ID }> {
+impl<const ID: u8> ZExtensionId for ZExperimental<{ ID }> {
     const ID: u8 = ID;
+}
+
+impl<const ID: u8> ZExtension for ZExperimental<{ ID }> {
+    fn id(&self) -> u8 {
+        ID
+    }
 
     fn length(&self) -> usize {
         zint_len(self.version)
@@ -46,7 +52,7 @@ impl<const ID: u8> ZExtension for ZExperimental<{ ID }> {
         wbuf.write_zint(self.version)
     }
 
-    fn read(zbuf: &mut ZBuf, _length: usize) -> Option<Self> {
+    fn read(zbuf: &mut ZBuf, _header: u8, _length: usize) -> Option<Self> {
         let version = zbuf.read_zint()?;
         Some(Self { version })
     }
@@ -78,8 +84,14 @@ impl<const ID: u8> Default for ZUser<{ ID }> {
     }
 }
 
-impl<const ID: u8> ZExtension for ZUser<{ ID }> {
+impl<const ID: u8> ZExtensionId for ZUser<{ ID }> {
     const ID: u8 = ID;
+}
+
+impl<const ID: u8> ZExtension for ZUser<{ ID }> {
+    fn id(&self) -> u8 {
+        ID
+    }
 
     fn length(&self) -> usize {
         self.properties
@@ -93,7 +105,7 @@ impl<const ID: u8> ZExtension for ZUser<{ ID }> {
         wbuf.write_wire_properties(&self.properties)
     }
 
-    fn read(zbuf: &mut ZBuf, _length: usize) -> Option<Self> {
+    fn read(zbuf: &mut ZBuf, _header: u8, _length: usize) -> Option<Self> {
         let properties = zbuf.read_wire_properties()?;
         Some(Self { properties })
     }
@@ -114,26 +126,27 @@ pub struct ZUnknown {
     pub body: ZBuf,
 }
 
-impl ZUnknown {
-    pub fn length(&self) -> usize {
+impl ZExtension for ZUnknown {
+    fn id(&self) -> u8 {
+        self.header
+    }
+
+    fn length(&self) -> usize {
         zint_len(self.body.len() as ZInt) + self.body.len()
     }
 
-    pub fn write(&self, wbuf: &mut WBuf) -> bool {
+    fn write(&self, wbuf: &mut WBuf) -> bool {
         wbuf.write(self.header)
             && wbuf.write_usize_as_zint(self.length())
             && wbuf.write_zbuf(&self.body, false)
     }
 
-    pub fn read(zbuf: &mut ZBuf, header: u8) -> Option<Option<Self>> {
-        let len = zbuf.read_zint_as_usize()?;
+    fn read(zbuf: &mut ZBuf, header: u8, length: usize) -> Option<Self> {
         if zext::is_forward(header) {
             let mut body = ZBuf::new();
-            if zbuf.read_into_zbuf(&mut body, len) {
-                return Some(Some(Self { header, body }));
+            if zbuf.read_into_zbuf(&mut body, length) {
+                return Some(Self { header, body });
             }
-        } else if zbuf.skip_bytes(len) {
-            return Some(None);
         }
         None
     }

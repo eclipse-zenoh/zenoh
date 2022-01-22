@@ -300,10 +300,13 @@ impl ScoutExtId {
     }
 }
 
+type ScoutExtExp = ZExt<ZExperimental<{ ScoutExtId::Experimental.id() }>>;
+type ScoutExtUsr = ZExt<ZUser<{ ScoutExtId::User.id() }>>;
+type ScoutExtUwn = ZExt<ZUnknown>;
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct ScoutExts {
-    experimental: Option<ZExt<ZExperimental<{ ScoutExtId::Experimental.id() }>>>,
-    pub user: Option<ZExt<ZUser<{ ScoutExtId::User.id() }>>>,
+    experimental: Option<ScoutExtExp>,
+    pub user: Option<ScoutExtUsr>,
 }
 
 impl ScoutExts {
@@ -370,14 +373,16 @@ impl ZBuf {
             match ScoutExtId::try_from(super::mid(header)) {
                 Ok(id) => match id {
                     ScoutExtId::Experimental => {
-                        exts.experimental = Some(self.read_extension(header)?);
+                        let e: ScoutExtExp = self.read_extension(header)?;
+                        exts.experimental = Some(e);
                     }
                     ScoutExtId::User => {
-                        exts.user = Some(self.read_extension(header)?);
+                        let e: ScoutExtUsr = self.read_extension(header)?;
+                        exts.user = Some(e);
                     }
                 },
                 Err(_) => {
-                    let _ = ZUnknown::read(self, header)?;
+                    let _e: ScoutExtUwn = self.read_extension(header)?;
                 }
             }
 
@@ -646,17 +651,19 @@ impl ZBuf {
         loop {
             let header = self.read()?;
 
-            match HelloExtId::try_from(super::mid(header)) {
+            match ScoutExtId::try_from(super::mid(header)) {
                 Ok(id) => match id {
-                    HelloExtId::Experimental => {
-                        exts.experimental = Some(self.read_extension(header)?);
+                    ScoutExtId::Experimental => {
+                        let e: ScoutExtExp = self.read_extension(header)?;
+                        exts.experimental = Some(e);
                     }
-                    HelloExtId::User => {
-                        exts.user = Some(self.read_extension(header)?);
+                    ScoutExtId::User => {
+                        let e: ScoutExtUsr = self.read_extension(header)?;
+                        exts.user = Some(e);
                     }
                 },
                 Err(_) => {
-                    let _ = ZUnknown::read(self, header)?;
+                    let _e: ScoutExtUwn = self.read_extension(header)?;
                 }
             }
 
