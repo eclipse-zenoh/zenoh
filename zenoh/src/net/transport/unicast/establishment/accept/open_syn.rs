@@ -59,7 +59,7 @@ pub(super) async fn recv(
         .exts
         .authentication
         .take()
-        .map_or_else(|| WireProperties::new(), |v| v.into_inner().into());
+        .map_or_else(WireProperties::new, |v| v.into_inner().into());
 
     let mut is_shm = false;
     let mut open_ack_auth_ext = WireProperties::new();

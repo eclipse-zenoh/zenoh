@@ -26,10 +26,10 @@ use std::convert::TryFrom;
 /// associated with that Locator. The initiator MUST send an INIT message with the A flag set to 0.
 /// If the corresponding zenohd node deems appropriate to accept the INIT message, the corresponding
 /// peer MUST reply with an INIT message with the A flag set to 1. Alternatively, it MAY reply with
-/// a CLOSE message. For convenience, we call [`InitSyn`] and [`InitAck`] an INIT message with the A flag
-/// is set to 0 and 1, respectively.
+/// a [`super::Close`] message. For convenience, we call [`InitSyn`] and [`InitAck`] an INIT message
+/// when the A flag is set to 0 and 1, respectively.
 ///
-/// The INIT message flow is the following:
+/// The [`InitSyn`]/[`InitAck`] message flow is the following:
 ///
 /// ```text
 ///     A                   B
@@ -69,12 +69,19 @@ use std::convert::TryFrom;
 ///    - 0b10: Client
 ///    - 0b11: Reserved
 ///
-/// (#) Sequence Number Bytes. Indicates the maximum number of bytes to be used when encoding
-///    a sequence number as ZInt on the wire. It inherently provides the sequence number resolution.
-///    NOTE: It is valid for the sequence number resolution to be smaller than the largest value representable
-///          by the ZInt size. The actual sequence number resolution (i.e. the amount of sequence numbers
-///          available before wrapping over in a modulo fahions) can be calculated as follows:
-///             Sequence Number Resolution := 1 + 2^(7 * #bytes)
+/// (#) Max Sequence Number Bytes. It indicates the maximum number of bytes to be used when
+///     encoding a sequence number as ZInt on the wire. The value encoded in (#) represents
+///     the maximum number of bytes minus one. I.e., the actual advertised maximum number of
+///     bytes is:
+///
+///         max_sn_bs := 1 + (sn_bs >> 2)
+///    
+///     Note that is valid for the largest sequence number to be smaller than the largest value
+///     representable by the ZInt. The actual sequence number resolution (i.e. the amount
+///     of sequence numbers available before wrapping over in a modulo operation) can be
+///     computed as follows:
+///
+///         sn_res := 2^(7 * max_sn_bs) + 1
 ///
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
@@ -149,7 +156,7 @@ impl ZMessage for InitSyn {
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let sn_bytes: u8 = self.sn_bytes.value() & 0b111;
+        let sn_bytes: u8 = (self.sn_bytes.value() - 1) & 0b111;
         zcheck!(wbuf.write((sn_bytes << 2) | whatami));
 
         zcheck!(wbuf.write_zenohid(&self.zid));
@@ -172,7 +179,7 @@ impl ZMessage for InitSyn {
             0b10 => WhatAmI::Client,
             _ => return None,
         };
-        let sn_bytes = SeqNumBytes::try_from((tmp >> 2) & 0b111).ok()?;
+        let sn_bytes = SeqNumBytes::try_from(1 + ((tmp >> 2) & 0b111)).ok()?;
 
         let zid = zbuf.read_zenohid()?;
 
@@ -255,7 +262,7 @@ impl ZMessage for InitAck {
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let sn_bytes: u8 = self.sn_bytes.value() & 0b111;
+        let sn_bytes: u8 = (self.sn_bytes.value() - 1) & 0b111;
         zcheck!(wbuf.write((sn_bytes << 2) | whatami));
 
         zcheck!(wbuf.write_zenohid(&self.zid));
@@ -283,10 +290,10 @@ impl ZMessage for InitAck {
             0b10 => WhatAmI::Client,
             _ => return None,
         };
-        let sn_bytes = SeqNumBytes::try_from((tmp >> 2) & 0b111).ok()?;
+        let sn_bytes = SeqNumBytes::try_from(1 + ((tmp >> 2) & 0b111)).ok()?;
 
         let zid = zbuf.read_zenohid()?;
-        let cookie = zbuf.read_zslice_array()?.into();
+        let cookie = zbuf.read_zslice_array()?;
 
         let exts = if has_flag(header, InitAck::FLAG_Z) {
             InitExts::read(zbuf)?

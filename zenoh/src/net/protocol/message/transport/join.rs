@@ -38,8 +38,28 @@ impl ConduitSn {
 
 /// # Join message
 ///
-/// The JOIN message is sent on a multicast locator to advertise the transport parameters.
+/// The [`Join`] message is sent periodically on a multicast locator to advertise
+/// the multicast transport parameters as shown below:
 ///
+///```text
+/// A                   B                   C
+/// |       JOIN        |                   |
+/// |------------------>|                   |
+/// |         \---------------------------->|
+/// |                   |                   |
+/// ~        ...        ~        ...        ~
+/// |                   |                   |
+/// |       JOIN        |                   |
+/// |------------------>|                   |
+/// |         \---------------------------->|
+/// |                   |                   |
+/// ~        ...        ~        ...        ~
+/// |                   |                   |
+/// ```
+///
+/// The [`Join`] message structure is defined as follows:
+///
+///```text
 /// Flags:
 /// - X: Reserved
 /// - T: Lease period   If T==1 then the lease period is in seconds else in milliseconds
@@ -60,6 +80,8 @@ impl ConduitSn {
 /// ~    next_sn    ~  -- Next conduit sequence number
 /// +---------------+
 /// ```
+///
+/// (#)(*) See [`super::InitSyn`]
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Join {
@@ -115,7 +137,7 @@ impl Join {
 
     pub fn next_sns(&self) -> ConduitSnList {
         match self.exts.qos.as_ref() {
-            Some(qos) => ConduitSnList::QoS(qos.array.clone()),
+            Some(qos) => ConduitSnList::QoS(qos.array),
             None => ConduitSnList::Plain(self.next_sns),
         }
     }
@@ -149,7 +171,7 @@ impl ZMessage for Join {
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let sn_bytes: u8 = self.sn_bytes.value() & 0b111;
+        let sn_bytes: u8 = (self.sn_bytes.value() - 1) & 0b111;
         zcheck!(wbuf.write((sn_bytes << 2) | whatami));
 
         zcheck!(wbuf.write_zenohid(&self.zid));
@@ -180,7 +202,7 @@ impl ZMessage for Join {
             0b10 => WhatAmI::Client,
             _ => return None,
         };
-        let sn_bytes = SeqNumBytes::try_from((tmp >> 2) & 0b111).ok()?;
+        let sn_bytes = SeqNumBytes::try_from(1 + ((tmp >> 2) & 0b111)).ok()?;
 
         let zid = zbuf.read_zenohid()?;
 
@@ -375,8 +397,8 @@ impl<const ID: u8, const NUM: usize> ZExtension for ZExtConduitSN<{ ID }, { NUM 
 
     fn read(zbuf: &mut ZBuf, _header: u8, _length: usize) -> Option<Self> {
         let mut array = [ConduitSn::default(); NUM];
-        for i in 0..NUM {
-            array[i] = ConduitSn::read(zbuf)?;
+        for i in array.iter_mut().take(NUM) {
+            *i = ConduitSn::read(zbuf)?;
         }
         Some(Self { array })
     }

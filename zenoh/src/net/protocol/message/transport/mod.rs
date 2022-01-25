@@ -83,14 +83,14 @@ pub mod flag {
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum SeqNumBytes {
-    One = 0,   // SeqNum max value: 2^7
-    Two = 1,   // SeqNum max value: 2^14
-    Three = 2, // SeqNum max value: 2^21
-    Four = 3,  // SeqNum max value: 2^28
-    Five = 4,  // SeqNum max value: 2^35
-    Six = 5,   // SeqNum max value: 2^42
-    Seven = 6, // SeqNum max value: 2^49
-    Eight = 7, // SeqNum max value: 2^56
+    One = 1,   // SeqNum max value: 2^7
+    Two = 2,   // SeqNum max value: 2^14
+    Three = 3, // SeqNum max value: 2^21
+    Four = 4,  // SeqNum max value: 2^28
+    Five = 5,  // SeqNum max value: 2^35
+    Six = 6,   // SeqNum max value: 2^42
+    Seven = 7, // SeqNum max value: 2^49
+    Eight = 8, // SeqNum max value: 2^56
 }
 
 impl SeqNumBytes {
@@ -102,7 +102,8 @@ impl SeqNumBytes {
     }
 
     pub const fn resolution(&self) -> ZInt {
-        (2 as ZInt).pow(7 * (1 + self.value() as u32))
+        const BASE: ZInt = 2;
+        BASE.pow(7 * self.value() as u32)
     }
 }
 
