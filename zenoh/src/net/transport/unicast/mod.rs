@@ -101,9 +101,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_pid(&self) -> ZResult<ZenohId> {
+    pub fn get_zid(&self) -> ZResult<ZenohId> {
         let transport = self.get_inner()?;
-        Ok(transport.get_pid())
+        Ok(transport.get_zid())
     }
 
     #[inline(always)]
@@ -139,7 +139,7 @@ impl TransportUnicast {
     pub fn get_peer(&self) -> ZResult<TransportPeer> {
         let transport = self.get_inner()?;
         let tp = TransportPeer {
-            pid: transport.get_pid(),
+            zid: transport.get_zid(),
             whatami: transport.get_whatami(),
             is_qos: transport.is_qos(),
             is_shm: transport.is_shm(),
@@ -220,7 +220,7 @@ impl fmt::Debug for TransportUnicast {
         match self.get_inner() {
             Ok(transport) => f
                 .debug_struct("Transport Unicast")
-                .field("pid", &transport.get_pid())
+                .field("pid", &transport.get_zid())
                 .field("whatami", &transport.get_whatami())
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .field("is_qos", &transport.is_qos())

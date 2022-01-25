@@ -145,7 +145,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     let unicast = TransportManager::config_unicast().max_links(endpoint01.len());
     let peer01_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id01)
+        .zid(peer_id01)
         .unicast(unicast)
         .build(peer_sh01.clone())
         .unwrap();
@@ -155,7 +155,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     let unicast = TransportManager::config_unicast().max_links(endpoint02.len());
     let peer02_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id02)
+        .zid(peer_id02)
         .unicast(unicast)
         .build(peer_sh02.clone())
         .unwrap();

@@ -273,7 +273,7 @@ impl Session {
     /// Returns the identifier for this session.
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn id(&self) -> impl ZFuture<Output = String> {
-        zready(self.runtime.get_pid_str())
+        zready(self.runtime.get_zid_str())
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -395,7 +395,7 @@ impl Session {
                     .unwrap_or(false)
             })
             .filter_map(|s| {
-                s.get_pid()
+                s.get_zid()
                     .ok()
                     .map(|pid| hex::encode_upper(pid.as_slice()))
             })
@@ -414,7 +414,7 @@ impl Session {
                         .unwrap_or(false)
                 })
                 .filter_map(|s| {
-                    s.get_pid()
+                    s.get_zid()
                         .ok()
                         .map(|pid| hex::encode_upper(pid.as_slice()))
                 })

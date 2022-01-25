@@ -61,7 +61,7 @@ enum PluginDiff {
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
-        let pid_str = runtime.get_pid_str();
+        let pid_str = runtime.get_zid_str();
         let root_key = format!("/@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
@@ -506,7 +506,7 @@ pub async fn router_data(
     let transport_to_json = |transport: &TransportUnicast| {
         #[allow(unused_mut)]
         let mut json = json!({
-            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),

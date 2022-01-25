@@ -151,7 +151,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .max_sessions(3);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
@@ -168,7 +168,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .max_sessions(3);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client01_id)
+        .zid(client01_id)
         .unicast(unicast)
         .build(Arc::new(SHClientStable::new(counter.clone())))
         .unwrap();
@@ -179,7 +179,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client02_id)
+        .zid(client02_id)
         .unicast(unicast)
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
@@ -190,7 +190,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .max_sessions(1);
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client03_id)
+        .zid(client03_id)
         .unicast(unicast)
         .build(Arc::new(SHClientIntermittent::default()))
         .unwrap();
@@ -208,7 +208,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
     assert_eq!(client01_manager.get_transports().len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
+    assert_eq!(c_ses1.get_zid().unwrap(), router_id);
 
     /* [3] */
     // Continously open and close transport from client02 and client03 to the router
@@ -223,7 +223,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             let c_ses2 = ztimeout!(c_client02_manager.open_transport(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
             assert_eq!(c_client02_manager.get_transports().len(), 1);
-            assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
+            assert_eq!(c_ses2.get_zid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
 
@@ -247,7 +247,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             let c_ses3 = ztimeout!(c_client03_manager.open_transport(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
             assert_eq!(c_client03_manager.get_transports().len(), 1);
-            assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);
+            assert_eq!(c_ses3.get_zid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
 

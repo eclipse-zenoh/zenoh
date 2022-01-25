@@ -11,12 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::authenticator::AuthenticatedPeerLink;
-use super::{attachment_from_properties, init_syn, AResult, Cookie, EstablishmentProperties};
+use super::{init_syn, AResult, Cookie};
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::Property;
+use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::{Close, TransportMessage};
+use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::{Close, InitAck, WireProperties};
+use crate::net::protocol::VERSION;
+use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::TransportManager;
 use rand::Rng;
 use zenoh_util::crypto::hmac;
@@ -34,85 +36,65 @@ pub(super) async fn send(
     mut input: init_syn::Output,
 ) -> AResult<Output> {
     // Compute the minimum SN Resolution
-    let agreed_sn_resolution = manager.config.sn_resolution.min(input.sn_resolution);
+    let agreed_sn_bytes = manager.config.sn_bytes.min(input.sn_bytes);
 
     // Build the fields for the InitAck message
     let whatami = manager.config.whatami;
-    let apid = manager.config.pid;
-    let sn_resolution = if agreed_sn_resolution == input.sn_resolution {
-        None
-    } else {
-        Some(agreed_sn_resolution)
-    };
+    let azid = manager.config.zid;
 
     // Create the cookie
     let cookie = Cookie {
         whatami: input.whatami,
-        pid: input.pid,
-        sn_resolution: agreed_sn_resolution,
+        zid: input.zid,
+        sn_bytes: agreed_sn_bytes,
         is_qos: input.is_qos,
-        nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
+        nonce: zasynclock!(manager.prng).gen_range(0..ZInt::MAX),
     };
 
     // Build the attachment from the authenticators
-    let mut ps_attachment = EstablishmentProperties::new();
-    let mut ps_cookie = EstablishmentProperties::new();
+    let mut init_ack_auth_ext = WireProperties::new();
+    let mut init_ack_ckie_ext = WireProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let (mut att, mut cke) = pa
+        let (mut ext, mut cke) = pa
             .handle_init_syn(
                 auth_link,
                 &cookie,
-                input
-                    .init_syn_properties
-                    .remove(pa.id().into())
-                    .map(|x| x.value),
+                input.init_syn_auth_ext.remove(&pa.id().into()),
             )
             .await
             .map_err(|e| (e, Some(Close::INVALID)))?;
         // Add attachment property if available
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
+        if let Some(ext) = ext.take() {
+            init_ack_auth_ext.insert(pa.id().into(), ext);
         }
         // Add state in the cookie if avaiable
         if let Some(cke) = cke.take() {
-            ps_cookie
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: cke,
-                })
-                .map_err(|e| (e, None))?;
+            init_ack_ckie_ext.insert(pa.id().into(), cke);
         }
     }
-    let attachment = attachment_from_properties(&ps_attachment).ok();
 
     let encrypted = cookie
-        .encrypt(&manager.cipher, &mut *zasynclock!(manager.prng), ps_cookie)
+        .encrypt(
+            &manager.cipher,
+            &mut *zasynclock!(manager.prng),
+            init_ack_ckie_ext,
+        )
         .map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Compute the cookie hash
     let cookie_hash = hmac::digest(&encrypted);
-
-    // Send the cookie
     let cookie: ZSlice = encrypted.into();
-    let mut message = TransportMessage::make_init_ack(
-        whatami,
-        apid,
-        sn_resolution,
-        input.is_qos,
-        cookie,
-        attachment,
-    );
+
+    let mut message = InitAck::new(VERSION, whatami, azid, agreed_sn_bytes, cookie);
+    if manager.config.unicast.is_qos {
+        message.exts.qos = Some(ZExt::new((), ZExtPolicy::Ignore));
+    }
+    if !init_ack_auth_ext.is_empty() {
+        message.exts.authentication = Some(ZExt::new(init_ack_auth_ext, ZExtPolicy::Ignore));
+    }
 
     // Send the message on the link
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
+    let _ = link.send(&mut message).await.map_err(|e| (e, None))?;
 
     let output = Output { cookie_hash };
     Ok(output)

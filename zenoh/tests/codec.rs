@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use zenoh::net::protocol::core::{ZInt, ZINT_MAX_BYTES};
-use zenoh::net::protocol::io::{WBuf, ZBuf};
+use zenoh::net::protocol::core::ZInt;
+use zenoh::net::protocol::io::{WBuf, ZBuf, ZINT_MAX_LEN};
 
 fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);
@@ -24,7 +24,7 @@ fn test_zint(v: ZInt) {
 fn test_zint_codec_limits() {
     test_zint(0);
     let one: ZInt = 1;
-    for i in 1..ZINT_MAX_BYTES {
+    for i in 1..ZINT_MAX_LEN {
         let res = one.checked_shl(7 * i as u32);
         if let Some(v) = res {
             test_zint(v - 1);

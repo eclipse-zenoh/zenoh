@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{Property, Timestamp, ZInt, ZenohId, ZINT_MAX_BYTES};
+use super::core::{Property, Timestamp, ZInt, ZenohId};
 #[cfg(feature = "shared-memory")]
 use super::SharedMemoryBufInfo;
 #[cfg(feature = "shared-memory")]
@@ -31,7 +31,7 @@ mod zslice {
     }
 }
 
-pub fn zint_len(v: ZInt) -> usize {
+pub const fn zint_len(v: ZInt) -> usize {
     const MASK_1: ZInt = ZInt::MAX << 7;
     const MASK_2: ZInt = ZInt::MAX << (7 * 2);
     const MASK_3: ZInt = ZInt::MAX << (7 * 3);
@@ -65,12 +65,14 @@ pub fn zint_len(v: ZInt) -> usize {
     }
 }
 
+pub const ZINT_MAX_LEN: usize = zint_len(ZInt::MAX);
+
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
         let mut v: $res = 0;
         let mut b = $buf.read()?;
         let mut i = 0;
-        let mut k = ZINT_MAX_BYTES;
+        let mut k = ZINT_MAX_LEN;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as $res) << i;
             i += 7;

@@ -16,6 +16,7 @@ use super::{
 };
 use super::{Locator, WBuf, ZBuf, ZInt, ZenohId};
 use crate::config::Config;
+use crate::net::protocol::message::SeqNumBytes;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
@@ -224,7 +225,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        _zid: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         // If credentials are not configured, don't initiate the USRPWD authentication
         if self.credentials.is_none() {
@@ -275,8 +276,8 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
-        _sn_resolution: ZInt,
+        _zid: &ZenohId,
+        _sn_bytes: SeqNumBytes,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
         // If credentials are not configured, don't continue the USRPWD authentication
@@ -337,9 +338,9 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             bail!("Received OpenSyn with invalid password on link: {}", link)
         }
 
-        // Check PID validity
+        // Check zid validity
         let mut guard = zasynclock!(self.authenticated);
-        match guard.get_mut(&cookie.pid) {
+        match guard.get_mut(&cookie.zid) {
             Some(auth) => {
                 if open_syn_property.user != auth.credentials.user
                     || password != auth.credentials.password
@@ -356,7 +357,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 let mut links = HashSet::new();
                 links.insert((link.src.clone(), link.dst.clone()));
                 let auth = Authenticated { credentials, links };
-                guard.insert(cookie.pid, auth);
+                guard.insert(cookie.zid, auth);
             }
         }
 
@@ -375,20 +376,20 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         // Need to check if it authenticated and remove it if this is the last link
         let mut guard = zasynclock!(self.authenticated);
         let mut to_del: Option<ZenohId> = None;
-        for (peer_id, auth) in guard.iter_mut() {
+        for (zid, auth) in guard.iter_mut() {
             auth.links.remove(&(link.src.clone(), link.dst.clone()));
             if auth.links.is_empty() {
-                to_del = Some(*peer_id);
+                to_del = Some(*zid);
                 break;
             }
         }
-        if let Some(peer_id) = to_del.take() {
-            guard.remove(&peer_id);
+        if let Some(zid) = to_del.take() {
+            guard.remove(&zid);
         }
     }
 
-    async fn handle_close(&self, peer_id: &ZenohId) {
-        zasynclock!(self.authenticated).remove(peer_id);
+    async fn handle_close(&self, zid: &ZenohId) {
+        zasynclock!(self.authenticated).remove(zid);
     }
 }
 

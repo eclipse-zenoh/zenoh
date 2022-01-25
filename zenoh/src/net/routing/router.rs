@@ -350,7 +350,7 @@ impl Router {
                 tables: self.tables.clone(),
                 state: tables
                     .open_net_face(
-                        transport.get_pid().unwrap(),
+                        transport.get_zid().unwrap(),
                         whatami,
                         Arc::new(Mux::new(transport)),
                         link_id,
@@ -398,7 +398,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
-                let pid = self.transport.get_pid().unwrap();
+                let pid = self.transport.get_zid().unwrap();
                 let mut tables = zwrite!(self.tables);
                 let whatami = self.transport.get_whatami()?;
                 match (tables.whatami, whatami) {
@@ -458,7 +458,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
     fn closing(&self) {
         self.demux.closing();
         let tables_ref = self.tables.clone();
-        let pid = self.transport.get_pid().unwrap();
+        let pid = self.transport.get_zid().unwrap();
         let whatami = self.transport.get_whatami();
         async_std::task::spawn(async move {
             async_std::task::sleep(std::time::Duration::from_millis(*LINK_CLOSURE_DELAY)).await;

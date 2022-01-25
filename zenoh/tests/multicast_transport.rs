@@ -144,7 +144,7 @@ mod tests {
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
         let peer01_manager = TransportManager::builder()
-            .pid(peer01_id)
+            .zid(peer01_id)
             .whatami(WhatAmI::Peer)
             .build(peer01_handler.clone())
             .unwrap();
@@ -153,7 +153,7 @@ mod tests {
         let peer02_handler = Arc::new(SHPeer::default());
         let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer02_id)
+            .zid(peer02_id)
             .build(peer02_handler.clone())
             .unwrap();
 

@@ -90,7 +90,7 @@ impl FaceState {
         match routing_context {
             Some(routing_context) => {
                 match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                    Some(link) => match link.get_zid(&routing_context.tree_id) {
                         Some(router) => Some(*router),
                         None => {
                             log::error!(
@@ -124,7 +124,7 @@ impl FaceState {
         match routing_context {
             Some(routing_context) => {
                 match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                    Some(link) => match link.get_zid(&routing_context.tree_id) {
                         Some(router) => Some(*router),
                         None => {
                             log::error!(

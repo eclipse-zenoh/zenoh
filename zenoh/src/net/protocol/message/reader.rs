@@ -12,13 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::*;
-use super::defaults::SEQ_NUM_RES;
 use super::io::ZBuf;
 use super::transport::*;
 use super::zenoh::*;
 use super::{transport as tmsg, zenoh as zmsg, Attachment, HEADER_BITS};
-use std::convert::TryInto;
-use std::time::Duration;
+use std::convert::{TryFrom, TryInto};
 
 impl ZBuf {
     #[allow(unused_variables)]
@@ -71,21 +69,6 @@ impl ZBuf {
                     attachment = Some(self.read_deco_attachment(header)?);
                     continue;
                 }
-                INIT => {
-                    if super::has_flag(header, tmsg::flag::A) {
-                        break self.read_init_ack(header)?;
-                    } else {
-                        break self.read_init_syn(header)?;
-                    }
-                }
-                OPEN => {
-                    if super::has_flag(header, tmsg::flag::A) {
-                        break self.read_open_ack(header)?;
-                    } else {
-                        break self.read_open_syn(header)?;
-                    }
-                }
-                JOIN => break self.read_join(header)?,
                 CLOSE => break self.read_close(header)?,
                 SYNC => break self.read_sync(header)?,
                 ACK_NACK => break self.read_ack_nack(header)?,
@@ -153,130 +136,6 @@ impl ZBuf {
             channel,
             sn,
             payload,
-        }))
-    }
-
-    fn read_init_syn(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if super::has_flag(header, tmsg::flag::O) {
-            self.read_zint()?
-        } else {
-            0
-        };
-        let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read()?)?;
-        let pid = self.read_zenohid()?;
-        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
-            self.read_zint()?
-        } else {
-            SEQ_NUM_RES
-        };
-        let is_qos = super::has_option(options, InitSyn::OPT_QOS);
-
-        Some(TransportBody::InitSyn(InitSyn {
-            version,
-            whatami,
-            pid,
-            sn_resolution,
-            is_qos,
-        }))
-    }
-
-    fn read_init_ack(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if super::has_flag(header, tmsg::flag::O) {
-            self.read_zint()?
-        } else {
-            0
-        };
-        let whatami = WhatAmI::try_from(self.read()?)?;
-        let pid = self.read_zenohid()?;
-        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
-            Some(self.read_zint()?)
-        } else {
-            None
-        };
-        let is_qos = super::has_option(options, InitAck::OPT_QOS);
-        let cookie = self.read_zslice_array()?;
-
-        Some(TransportBody::InitAck(InitAck {
-            whatami,
-            pid,
-            sn_resolution,
-            is_qos,
-            cookie,
-        }))
-    }
-
-    fn read_open_syn(&mut self, header: u8) -> Option<TransportBody> {
-        let lease = self.read_zint()?;
-        let lease = if super::has_flag(header, tmsg::flag::T2) {
-            Duration::from_secs(lease)
-        } else {
-            Duration::from_millis(lease)
-        };
-        let initial_sn = self.read_zint()?;
-
-        let cookie = self.read_zslice_array()?;
-        Some(TransportBody::OpenSyn(OpenSyn {
-            lease,
-            initial_sn,
-            cookie,
-        }))
-    }
-
-    fn read_open_ack(&mut self, header: u8) -> Option<TransportBody> {
-        let lease = self.read_zint()?;
-        let lease = if super::has_flag(header, tmsg::flag::T2) {
-            Duration::from_secs(lease)
-        } else {
-            Duration::from_millis(lease)
-        };
-        let initial_sn = self.read_zint()?;
-
-        Some(TransportBody::OpenAck(OpenAck { lease, initial_sn }))
-    }
-
-    fn read_join(&mut self, header: u8) -> Option<TransportBody> {
-        let options = if super::has_flag(header, tmsg::flag::O) {
-            self.read_zint()?
-        } else {
-            0
-        };
-        let version = self.read()?;
-        let whatami = WhatAmI::try_from(self.read()?)?;
-        let pid = self.read_zenohid()?;
-        let lease = self.read_zint()?;
-        let lease = if super::has_flag(header, tmsg::flag::T1) {
-            Duration::from_secs(lease)
-        } else {
-            Duration::from_millis(lease)
-        };
-        let sn_resolution = if super::has_flag(header, tmsg::flag::S) {
-            self.read_zint()?
-        } else {
-            SEQ_NUM_RES
-        };
-        let is_qos = super::has_option(options, Join::OPT_QOS);
-        let next_sns = if is_qos {
-            let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
-            for i in 0..Priority::NUM {
-                sns[i].reliable = self.read_zint()?;
-                sns[i].best_effort = self.read_zint()?;
-            }
-            ConduitSnList::QoS(sns)
-        } else {
-            ConduitSnList::Plain(ConduitSn {
-                reliable: self.read_zint()?,
-                best_effort: self.read_zint()?,
-            })
-        };
-
-        Some(TransportBody::Join(Join {
-            version,
-            whatami,
-            pid,
-            lease,
-            sn_resolution,
-            next_sns,
         }))
     }
 
@@ -687,7 +546,7 @@ impl ZBuf {
             None
         };
         let whatami = if super::has_option(options, LinkState::OPT_WAI) {
-            WhatAmI::try_from(self.read()?)
+            Some(WhatAmI::try_from(self.read()?).ok()?)
         } else {
             None
         };

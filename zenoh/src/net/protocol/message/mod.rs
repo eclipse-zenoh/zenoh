@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod constants;
-mod extensions;
+pub mod extension;
 mod reader;
 mod scouting;
 mod shm;
@@ -26,7 +26,6 @@ use super::core::{Priority, ZInt};
 use super::io;
 use super::io::{WBuf, ZBuf};
 pub use constants::*;
-pub use extensions::*;
 pub use reader::*;
 pub use scouting::*;
 pub use shm::*;
@@ -83,7 +82,7 @@ pub use writer::*;
 /// 2. If the unsigned integer can not be represented with 7 bits, then the 8th bit is set to 1
 ///    and a new byte is added. Step 1. is repeated with the following 7 bits of the unsigned integer.
 ///
-/// As an example, the unsigned integer 179317 in a 32-bit binary representation is:
+/// As an example, the unsigned integer 179317 in a 32-bit little-endian binary representation is:
 ///
 /// ```text
 /// 0000 0000 0000 0010 1011 1100 0111 0101
@@ -100,6 +99,29 @@ pub use writer::*;
 /// +-+-------------+
 /// |0|0|0|0|1|0|1|0| -- Byte2
 /// +-+-------------+
+/// ```
+///
+/// The maximum number of bytes required to encode a ZInt depends on its resolution
+/// in bits, as shown in the following table:
+///
+/// ```text
+/// +--------------+--------------+
+/// |   ZInt size  |   Max bytes  |
+/// +--------------+--------------+
+/// |    8 bits    |   2 bytes    |
+/// +--------------+--------------+
+/// |   16 bits    |   3 bytes    |
+/// +--------------+--------------+
+/// |   32 bits    |   5 bytes    |
+/// +--------------+--------------+
+/// |   64 bits    |   10 bytes   |
+/// +--------------+--------------+
+/// ```
+///
+/// Finally, provided a limit on the maximum number of bytes being used to encode a ZInt,
+/// the maximum representable ZInt value is given by the following formula:
+///
+///     Max ZInt Value := 2 ^ (7 * #max bytes)
 /// ```
 ///
 ///
@@ -182,11 +204,11 @@ pub use writer::*;
 /// +-+-+-+-+-+-+-+-+
 /// |1|X|X|X|X|X|X|A| -- Opt0. Bit 7 is set to 1. An additional option byte will follow.
 /// +-+-+-+-+-+-+-+-+
-/// ~    <uint8>    ~ if Opt0(A)==1
+/// ~      <u8>     ~ if Opt0(A)==1
 /// +---------------+
 /// |0|X|X|X|X|X|X|B| -- Opt1. Bit 7 is set to 0. This is the last option byte.
 /// +-+-+-+-+-+-+-+-+
-/// ~    <uint8>    ~ if Opt1(B)==1
+/// ~      <u8>     ~ if Opt1(B)==1
 /// +---------------+
 ///  ```
 ///
@@ -226,140 +248,6 @@ impl DerefMut for ZOpts<1> {
         &mut self.inner
     }
 }
-
-/// # Zenoh extensions
-///
-/// A zenoh extension is encoded as TLV (Type, Length, Value).
-/// Zenoh extensions with unknown IDs (i.e., type) can be skipped by reading the length and
-/// not decoding the body (i.e. value). In case the zenoh extension is unknown, it is
-/// still possible to forward it to the next hops, which in turn may be able to understand it.
-/// This results in the capability of introducing new extensions in an already running system
-/// without requiring the redeployment of the totatly of infrastructure nodes.
-///
-/// The zenoh extension wire format is the following:
-///
-/// ```text
-/// Header flags:
-/// - X: Reserved
-/// - F: Forward        If F==1 then the extension needs to be forwarded. (*)
-/// - Z: More           If Z==1 then another extension will follow.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|F|X|   ID    |
-/// +-+-+-+---------+
-/// %    length     %
-/// +---------------+
-/// ~     [u8]      ~
-/// +---------------+
-/// ```
-///
-/// (*) If the zenoh extension is not understood, then it SHOULD NOT be dropped and it
-///     SHOULD be forwarded to the next hops.
-///
-mod zext {
-    // pub const FLAG_X: u8 = 1 << 5;
-    pub const FLAG_F: u8 = 1 << 6;
-    pub const FLAG_Z: u8 = 1 << 7;
-
-    pub const fn is_forward(header: u8) -> bool {
-        super::has_flag(header, FLAG_F)
-    }
-
-    pub const fn has_more(header: u8) -> bool {
-        super::has_flag(header, FLAG_Z)
-    }
-}
-
-#[repr(u8)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ZExtPolicy {
-    Ignore,
-    Forward,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ZExt<T>
-where
-    T: ZExtension,
-{
-    inner: T,
-    policy: ZExtPolicy,
-}
-
-impl<T: ZExtension> ZExt<T> {
-    pub fn new(inner: T, policy: ZExtPolicy) -> Self {
-        Self { inner, policy }
-    }
-}
-
-impl<T: ZExtension> Deref for ZExt<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T: ZExtension> DerefMut for ZExt<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-pub trait ZExtensionId: ZExtension {
-    const ID: u8;
-}
-
-pub trait ZExtension: Clone + Debug + PartialEq {
-    fn id(&self) -> u8;
-    fn length(&self) -> usize;
-    fn write(&self, wbuf: &mut WBuf) -> bool;
-    fn read(zbuf: &mut ZBuf, header: u8, length: usize) -> Option<Self>
-    where
-        Self: Sized;
-}
-
-impl ZBuf {
-    fn read_extension<T: ZExtension>(&mut self, header: u8) -> Option<ZExt<T>> {
-        let length = self.read_zint_as_usize()?;
-        let pos = self.get_pos();
-        match T::read(self, header, length) {
-            Some(inner) => {
-                let policy = if zext::is_forward(header) {
-                    ZExtPolicy::Forward
-                } else {
-                    ZExtPolicy::Ignore
-                };
-                Some(ZExt { inner, policy })
-            }
-            None => {
-                self.set_pos(pos);
-                self.skip_bytes(length);
-                None
-            }
-        }
-    }
-}
-
-impl WBuf {
-    fn write_extension<T: ZExtension>(&mut self, ext: &ZExt<T>, more: bool) -> bool {
-        let mut header = ext.id();
-        if let ZExtPolicy::Forward = ext.policy {
-            header |= zext::FLAG_F;
-        }
-        if more {
-            header |= zext::FLAG_Z;
-        }
-        self.write(header) && self.write_usize_as_zint(ext.length()) && ext.write(self)
-    }
-}
-
-/// # Wire options
-///
-/// Unknown options can be stored into a wire options structure
-///
-pub type WireOptions = HashMap<u8, Vec<u8>>;
 
 /// # Wire properties
 ///
@@ -412,7 +300,9 @@ impl ZBuf {
         for _ in 0..len {
             let k = self.read_zint()?;
             let v = self.read_bytes_array()?;
-            wps.insert(k, v);
+            if wps.insert(k, v).is_some() {
+                return None;
+            }
         }
         Some(wps)
     }
@@ -485,6 +375,15 @@ pub(crate) trait Header {
 pub(crate) trait Options {
     fn options(&self) -> ZInt;
     fn has_options(&self) -> bool;
+}
+
+pub trait ZMessage {
+    const ID: u8;
+
+    fn write(&self, wbuf: &mut WBuf) -> bool;
+    fn read(zbuf: &mut ZBuf, header: u8) -> Option<Self>
+    where
+        Self: Sized;
 }
 
 /*************************************/

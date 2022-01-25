@@ -12,11 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::authenticator::{AuthenticatedPeerLink, PeerAuthenticatorId};
-use super::{attachment_from_properties, properties_from_attachment, AResult};
-use super::{Cookie, EstablishmentProperties};
+use super::AResult;
+use super::Cookie;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{Property, ZInt};
-use crate::net::protocol::message::{Attachment, Close, TransportBody};
+use crate::net::protocol::core::ZInt;
+use crate::net::protocol::message::{Close, OpenSyn, WireProperties};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
 use zenoh_util::crypto::hmac;
@@ -32,7 +32,7 @@ pub(super) struct Output {
     pub(super) initial_sn: ZInt,
     pub(super) lease: Duration,
     pub(super) is_shm: bool,
-    pub(super) open_ack_attachment: Option<Attachment>,
+    pub(super) open_ack_auth_ext: WireProperties,
 }
 pub(super) async fn recv(
     link: &LinkUnicast,
@@ -41,39 +41,10 @@ pub(super) async fn recv(
     input: super::init_ack::Output,
 ) -> AResult<Output> {
     // Wait to read an OpenSyn
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
-        let e = zerror!(
-            "Received multiple messages instead of a single OpenSyn on {}: {:?}",
-            link,
-            messages
-        );
-        return Err((e.into(), Some(Close::INVALID)));
-    }
-
-    let mut msg = messages.remove(0);
-    let open_syn = match msg.body {
-        TransportBody::OpenSyn(open_syn) => open_syn,
-        TransportBody::Close(Close { reason, .. }) => {
-            let e = zerror!(
-                "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
-                reason,
-                link,
-            );
-            return Err((e.into(), None));
-        }
-        _ => {
-            let e = zerror!(
-                "Received invalid message instead of an OpenSyn on {}: {:?}",
-                link,
-                msg.body
-            );
-            return Err((e.into(), Some(Close::INVALID)));
-        }
-    };
-    let encrypted = open_syn.cookie.to_vec();
+    let mut open_syn: OpenSyn = link.recv().await.map_err(|e| (e, None))?;
 
     // Verify that the cookie is the one we sent
+    let encrypted = open_syn.cookie.to_vec();
     if input.cookie_hash != hmac::digest(&encrypted) {
         let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
         return Err((e.into(), Some(Close::INVALID)));
@@ -84,21 +55,22 @@ pub(super) async fn recv(
         Cookie::decrypt(encrypted, &manager.cipher).map_err(|e| (e, Some(Close::INVALID)))?;
 
     // Validate with the peer authenticators
-    let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
-        None => EstablishmentProperties::new(),
-    };
+    let mut open_syn_auth: WireProperties = open_syn
+        .exts
+        .authentication
+        .take()
+        .map_or_else(|| WireProperties::new(), |v| v.into_inner().into());
 
     let mut is_shm = false;
-    let mut ps_attachment = EstablishmentProperties::new();
+    let mut open_ack_auth_ext = WireProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let mut att = pa
+        let mut ext = pa
             .handle_open_syn(
                 auth_link,
                 &cookie,
                 (
-                    open_syn_properties.remove(pa.id().into()).map(|x| x.value),
-                    ps_cookie.remove(pa.id().into()).map(|x| x.value),
+                    open_syn_auth.remove(&pa.id().into()),
+                    ps_cookie.remove(&pa.id().into()),
                 ),
             )
             .await;
@@ -106,7 +78,7 @@ pub(super) async fn recv(
         #[cfg(feature = "shared-memory")]
         if pa.id() == PeerAuthenticatorId::Shm {
             // Check if SHM has been validated from the other side
-            att = match att {
+            ext = match ext {
                 Ok(att) => {
                     is_shm = true;
                     Ok(att)
@@ -122,14 +94,9 @@ pub(super) async fn recv(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
+        let mut ext = ext.map_err(|e| (e, Some(Close::INVALID)))?;
+        if let Some(ext) = ext.take() {
+            open_ack_auth_ext.insert(pa.id().into(), ext);
         }
     }
 
@@ -138,7 +105,7 @@ pub(super) async fn recv(
         initial_sn: open_syn.initial_sn,
         lease: open_syn.lease,
         is_shm,
-        open_ack_attachment: attachment_from_properties(&ps_attachment).ok(),
+        open_ack_auth_ext,
     };
     Ok(output)
 }

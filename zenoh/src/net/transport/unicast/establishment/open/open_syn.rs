@@ -16,13 +16,14 @@ use super::OResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::{Attachment, TransportMessage};
+use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::{OpenSyn, WireProperties};
 use crate::net::transport::TransportManager;
 
 pub(super) struct Input {
     pub(super) cookie: ZSlice,
     pub(super) initial_sn: ZInt,
-    pub(super) attachment: Option<Attachment>,
+    pub(super) open_syn_auth_ext: WireProperties,
 }
 
 pub(super) struct Output;
@@ -34,13 +35,12 @@ pub(super) async fn send(
     input: Input,
 ) -> OResult<Output> {
     // Build and send an OpenSyn message
-    let lease = manager.config.unicast.lease;
-    let mut message =
-        TransportMessage::make_open_syn(lease, input.initial_sn, input.cookie, input.attachment);
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
+    let mut message = OpenSyn::new(manager.config.unicast.lease, input.initial_sn, input.cookie);
+    if !input.open_syn_auth_ext.is_empty() {
+        message.exts.authentication = Some(ZExt::new(input.open_syn_auth_ext, ZExtPolicy::Ignore));
+    }
+
+    let _ = link.send(&mut message).await.map_err(|e| (e, None))?;
 
     let output = Output;
     Ok(output)

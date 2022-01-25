@@ -27,11 +27,13 @@ pub(crate) async fn open_link(
     // Create and configure the multicast transport
     let mut prng = zasynclock!(manager.prng);
 
+    let sn_resolution = manager.config.sn_bytes.resolution();
+
     macro_rules! zgen_conduit_sn {
         () => {
             ConduitSn {
-                reliable: prng.gen_range(0..manager.config.sn_resolution),
-                best_effort: prng.gen_range(0..manager.config.sn_resolution),
+                reliable: prng.gen_range(0..sn_resolution),
+                best_effort: prng.gen_range(0..sn_resolution),
             }
         };
     }

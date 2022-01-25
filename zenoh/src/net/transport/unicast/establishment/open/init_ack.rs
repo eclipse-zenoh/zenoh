@@ -11,14 +11,13 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::authenticator::AuthenticatedPeerLink;
-use super::{attachment_from_properties, properties_from_attachment, OResult};
+use super::OResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
+use crate::net::protocol::core::{WhatAmI, ZenohId};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::{Attachment, Close, TransportBody};
+use crate::net::protocol::message::{Close, InitAck, SeqNumBytes, WireProperties};
+use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
 use crate::net::transport::TransportManager;
 use zenoh_util::zerror;
 
@@ -26,13 +25,13 @@ use zenoh_util::zerror;
 /*              OPEN                 */
 /*************************************/
 pub(super) struct Output {
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
+    pub(super) sn_bytes: SeqNumBytes,
     pub(super) is_qos: bool,
     pub(super) is_shm: bool,
     pub(super) cookie: ZSlice,
-    pub(super) open_syn_attachment: Option<Attachment>,
+    pub(super) open_syn_auth_ext: WireProperties,
 }
 pub(super) async fn recv(
     link: &LinkUnicast,
@@ -41,91 +40,47 @@ pub(super) async fn recv(
     _input: super::init_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an InitAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
+    let mut init_ack: InitAck = link.recv().await.map_err(|e| (e, None))?;
+
+    if init_ack.sn_bytes > manager.config.sn_bytes {
         return Err((
             zerror!(
-                "Received multiple messages in response to an InitSyn on {}: {:?}",
+                "Rejecting InitAck on {}. Invalid sn resolution: {}",
                 link,
-                messages,
+                init_ack.sn_bytes.value()
             )
             .into(),
             Some(Close::INVALID),
         ));
     }
 
-    let mut msg = messages.remove(0);
-    let init_ack = match msg.body {
-        TransportBody::InitAck(init_ack) => init_ack,
-        TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    reason,
-                    link,
-                )
-                .into(),
-                None,
-            ));
-        }
-        _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an InitSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(Close::INVALID),
-            ));
-        }
-    };
+    // Store the zenoh id associated to this link
+    auth_link.zid = Some(init_ack.zid);
 
-    let sn_resolution = match init_ack.sn_resolution {
-        Some(sn_resolution) => {
-            if sn_resolution > manager.config.sn_resolution {
-                return Err((
-                    zerror!(
-                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                        link,
-                        sn_resolution
-                    )
-                    .into(),
-                    Some(Close::INVALID),
-                ));
-            }
-            sn_resolution
-        }
-        None => manager.config.sn_resolution,
-    };
-
-    // Store the peer id associate do this link
-    auth_link.peer_id = Some(init_ack.pid);
-
-    let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
-        None => EstablishmentProperties::new(),
+    let mut init_ack_auth_ext: WireProperties = match init_ack.exts.authentication.take() {
+        Some(auth) => auth.into_inner().into(),
+        None => WireProperties::new(),
     };
 
     let mut is_shm = false;
-    let mut ps_attachment = EstablishmentProperties::new();
+    let mut open_syn_auth_ext = WireProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let mut att = pa
+        let mut ext = pa
             .handle_init_ack(
                 auth_link,
-                &init_ack.pid,
-                sn_resolution,
-                init_ack_properties.remove(pa.id().into()).map(|x| x.value),
+                &init_ack.zid,
+                init_ack.sn_bytes,
+                init_ack_auth_ext.remove(&pa.id().into()),
             )
             .await;
 
         #[cfg(feature = "shared-memory")]
         if pa.id() == PeerAuthenticatorId::Shm {
             // Check if SHM has been validated from the other side
-            att = match att {
-                Ok(att) => {
-                    is_shm = att.is_some();
-                    Ok(att)
+            ext = match ext {
+                Ok(shm) => {
+                    is_shm = shm.is_some();
+                    Ok(shm)
                 }
                 Err(e) => {
                     if e.is::<zenoh_util::core::zresult::ShmError>() {
@@ -138,25 +93,20 @@ pub(super) async fn recv(
             };
         }
 
-        let mut att = att.map_err(|e| (e, Some(Close::INVALID)))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
+        let mut ext = ext.map_err(|e| (e, Some(Close::INVALID)))?;
+        if let Some(ext) = ext.take() {
+            open_syn_auth_ext.insert(pa.id().into(), ext);
         }
     }
 
     let output = Output {
-        pid: init_ack.pid,
+        zid: init_ack.zid,
         whatami: init_ack.whatami,
-        sn_resolution,
-        is_qos: init_ack.is_qos,
+        sn_bytes: init_ack.sn_bytes,
+        is_qos: init_ack.exts.qos.is_some(),
         is_shm,
         cookie: init_ack.cookie,
-        open_syn_attachment: attachment_from_properties(&ps_attachment).ok(),
+        open_syn_auth_ext,
     };
     Ok(output)
 }

@@ -187,14 +187,14 @@ async fn open_transport(
     let router_handler = Arc::new(SHRouter::new(priority));
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .build(router_handler.clone())
         .unwrap();
 
     // Create the client transport manager
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .build(Arc::new(SHClient::default()))
         .unwrap();
 

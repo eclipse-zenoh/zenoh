@@ -43,7 +43,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()
-        .pid(router_id)
+        .zid(router_id)
         .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
@@ -52,7 +52,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Create the client transport manager
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
         .unwrap();
@@ -94,7 +94,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait that the client transport has been closed
     ztimeout!(async {
-        while client_transport.get_pid().is_ok() {
+        while client_transport.get_zid().is_ok() {
             task::sleep(SLEEP).await;
         }
     });

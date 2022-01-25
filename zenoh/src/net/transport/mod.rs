@@ -96,7 +96,7 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 #[derive(Clone)]
 pub struct TransportPeer {
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
     pub is_shm: bool,

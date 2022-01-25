@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::authenticator::AuthenticatedPeerLink;
-use super::{attachment_from_properties, OResult};
+use super::OResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::Property;
-use crate::net::protocol::message::TransportMessage;
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
+use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::{InitSyn, WireProperties};
+use crate::net::protocol::VERSION;
+use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::TransportManager;
 
 /*************************************/
@@ -29,35 +29,32 @@ pub(super) async fn send(
     manager: &TransportManager,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> OResult<Output> {
-    let mut ps_attachment = EstablishmentProperties::new();
+    let mut init_syn_auth_ext = WireProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let mut att = pa
-            .get_init_syn_properties(auth_link, &manager.config.pid)
+        let mut ext = pa
+            .get_init_syn_properties(auth_link, &manager.config.zid)
             .await
             .map_err(|e| (e, None))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, None))?;
+        if let Some(ext) = ext.take() {
+            init_syn_auth_ext.insert(pa.id().into(), ext);
         }
     }
 
     // Build and send the InitSyn message
-    let mut message = TransportMessage::make_init_syn(
-        manager.config.version.stable, // @TODO: handle experimental version
+    let mut message = InitSyn::new(
+        VERSION,
         manager.config.whatami,
-        manager.config.pid,
-        manager.config.sn_resolution,
-        manager.config.unicast.is_qos,
-        attachment_from_properties(&ps_attachment).ok(),
+        manager.config.zid,
+        manager.config.sn_bytes,
     );
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
+    if manager.config.unicast.is_qos {
+        message.exts.qos = Some(ZExt::new((), ZExtPolicy::Ignore));
+    }
+    if !init_syn_auth_ext.is_empty() {
+        message.exts.authentication = Some(ZExt::new(init_syn_auth_ext, ZExtPolicy::Ignore));
+    }
+
+    link.send(&mut message).await.map_err(|e| (e, None))?;
 
     let output = Output;
     Ok(output)

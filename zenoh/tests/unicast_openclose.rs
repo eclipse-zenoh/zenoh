@@ -92,7 +92,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .max_sessions(1);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
@@ -107,7 +107,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .max_sessions(1);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client01_id)
+        .zid(client01_id)
         .unicast(unicast)
         .build(Arc::new(SHClientOpenClose::new()))
         .unwrap();
@@ -118,7 +118,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client02_id)
+        .zid(client02_id)
         .unicast(unicast)
         .build(Arc::new(SHClientOpenClose::new()))
         .unwrap();
@@ -147,7 +147,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let transports = client01_manager.get_transports();
     println!("Transport Open Close [1d2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
+    assert_eq!(c_ses1.get_zid().unwrap(), router_id);
     println!("Transport Open Close [1e1]");
     let links = c_ses1.get_links().unwrap();
     println!("Transport Open Close [1e2]: {:?}", links);
@@ -160,7 +160,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             let transports = router_manager.get_transports();
             let s = transports
                 .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id);
+                .find(|s| s.get_zid().unwrap() == client01_id);
 
             match s {
                 Some(s) => {
@@ -188,7 +188,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let transports = client01_manager.get_transports();
     println!("Transport Open Close [2b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses2.get_pid().unwrap(), router_id);
+    assert_eq!(c_ses2.get_zid().unwrap(), router_id);
     println!("Transport Open Close [2c1]");
     let links = c_ses2.get_links().unwrap();
     println!("Transport Open Close [2c2]: {:?}", links);
@@ -202,7 +202,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             let transports = router_manager.get_transports();
             let s = transports
                 .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id)
+                .find(|s| s.get_zid().unwrap() == client01_id)
                 .unwrap();
 
             let links = s.get_links().unwrap();
@@ -225,7 +225,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let transports = client01_manager.get_transports();
     println!("Transport Open Close [3b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
+    assert_eq!(c_ses1.get_zid().unwrap(), router_id);
     println!("Transport Open Close [3c1]");
     let links = c_ses1.get_links().unwrap();
     println!("Transport Open Close [3c2]: {:?}", links);
@@ -239,7 +239,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(transports.len(), 1);
         let s = transports
             .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
+            .find(|s| s.get_zid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
@@ -264,7 +264,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             let transports = router_manager.get_transports();
             let index = transports
                 .iter()
-                .find(|s| s.get_pid().unwrap() == client01_id);
+                .find(|s| s.get_zid().unwrap() == client01_id);
             if index.is_none() {
                 break;
             }
@@ -287,7 +287,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     let transports = client01_manager.get_transports();
     println!("Transport Open Close [5b2]: {:?}", transports);
     assert_eq!(transports.len(), 1);
-    assert_eq!(c_ses3.get_pid().unwrap(), router_id);
+    assert_eq!(c_ses3.get_zid().unwrap(), router_id);
     println!("Transport Open Close [5c1]");
     let links = c_ses3.get_links().unwrap();
     println!("Transport Open Close [5c2]: {:?}", links);
@@ -301,7 +301,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(transports.len(), 1);
         let s = transports
             .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
+            .find(|s| s.get_zid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
@@ -328,7 +328,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(transports.len(), 1);
         let s = transports
             .iter()
-            .find(|s| s.get_pid().unwrap() == client01_id)
+            .find(|s| s.get_zid().unwrap() == client01_id)
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
@@ -385,7 +385,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             let transports = router_manager.get_transports();
             let s = transports
                 .iter()
-                .find(|s| s.get_pid().unwrap() == client02_id);
+                .find(|s| s.get_zid().unwrap() == client02_id);
             match s {
                 Some(s) => {
                     let links = s.get_links().unwrap();

@@ -77,7 +77,7 @@ impl TransportMulticastInner {
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.manager.config.pid,
+                self.manager.config.zid,
                 sn,
                 guard.sn.get()
             );
@@ -103,7 +103,7 @@ impl TransportMulticastInner {
                     let msg = guard.defrag.defragment().ok_or_else(|| {
                         zerror!(
                             "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.pid,
+                            self.manager.config.zid,
                             self.locator
                         )
                     })?;
@@ -127,16 +127,16 @@ impl TransportMulticastInner {
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
         // Check if parameters are ok
-        if join.version != peer.version
-            || join.pid != peer.pid
+        if join.version() != peer.version
+            || join.zid != peer.zid
             || join.whatami != peer.whatami
-            || join.sn_resolution != peer.sn_resolution
+            || join.sn_bytes != peer.sn_bytes
             || join.lease != peer.lease
-            || join.is_qos() != peer.is_qos()
+            || join.exts.qos.is_some() != peer.is_qos()
         {
             let e = format!(
                 "Ingoring Join on {} of peer: {}. Inconsistent parameters. Version",
-                peer.locator, peer.pid,
+                peer.locator, peer.zid,
             );
             log::debug!("{}", e);
             bail!("{}", e);
@@ -150,40 +150,39 @@ impl TransportMulticastInner {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
-                join.pid,
+                join.zid,
                 self.manager.config.multicast.max_sessions,
             );
             return Ok(());
         }
 
-        // @TODO: handle experimental versions
-        if join.version != self.manager.config.version.stable {
+        if join.version() != self.manager.config.version {
             log::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
+                "Ingoring Join on {} from peer: {}. Unsupported version: {:?}. Expected: {}.",
                 locator,
-                join.pid,
-                join.version,
+                join.zid,
+                join.version(),
                 self.manager.config.version.stable, // @TODO: handle experimental versions
             );
             return Ok(());
         }
 
-        if join.sn_resolution > self.manager.config.sn_resolution {
+        if join.sn_bytes > self.manager.config.sn_bytes {
             log::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {}. Expected: <= {}.",
+                "Ingoring Join on {} from peer: {}. Unsupported SN bytes: {}. Expected: <= {}.",
                 locator,
-                join.pid,
-                join.sn_resolution,
-                self.manager.config.sn_resolution,
+                join.zid,
+                join.sn_bytes.value(),
+                self.manager.config.sn_bytes.value(),
             );
             return Ok(());
         }
 
-        if !self.manager.config.multicast.is_qos && join.is_qos() {
+        if !self.manager.config.multicast.is_qos && join.exts.qos.is_some() {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
-                join.pid,
+                join.zid,
             );
             return Ok(());
         }
@@ -213,7 +212,7 @@ impl TransportMulticastInner {
                         } else {
                             bail!(
                                 "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.pid,
+                                self.manager.config.zid,
                                 self.locator,
                                 channel.priority,
                                 peer.locator

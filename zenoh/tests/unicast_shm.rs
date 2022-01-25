@@ -146,7 +146,7 @@ mod tests {
             ]));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_shm01)
+            .zid(peer_shm01)
             .unicast(unicast)
             .build(peer_shm01_handler.clone())
             .unwrap();
@@ -159,7 +159,7 @@ mod tests {
             ]));
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_shm02)
+            .zid(peer_shm02)
             .unicast(unicast)
             .build(peer_shm02_handler.clone())
             .unwrap();
@@ -168,7 +168,7 @@ mod tests {
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_net01)
+            .zid(peer_net01)
             .build(peer_net01_handler.clone())
             .unwrap();
 

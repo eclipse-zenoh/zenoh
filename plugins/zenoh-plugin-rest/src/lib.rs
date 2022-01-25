@@ -351,7 +351,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let pid = runtime.get_pid_str();
+    let pid = runtime.get_zid_str();
     let session = Session::init(runtime, true, vec![], vec![]).await;
 
     let mut app = Server::with_state((Arc::new(session), pid));

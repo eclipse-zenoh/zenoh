@@ -19,6 +19,7 @@ use crate::net::protocol::core::{ZInt, ZenohId};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
+use crate::net::protocol::message::SeqNumBytes;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
@@ -198,7 +199,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        _zid: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
@@ -220,7 +221,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let mut zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => {
-                log::debug!("Peer {} did not express interest in SHM", cookie.pid);
+                log::debug!("Peer {} did not express interest in SHM", cookie.zid);
                 return Ok((None, None));
             }
         };
@@ -237,12 +238,12 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
             Ok(res) => {
                 if !res {
-                    log::debug!("Peer {} can not operate over SHM: error", cookie.pid);
+                    log::debug!("Peer {} can not operate over SHM: error", cookie.zid);
                     return Ok((None, None));
                 }
             }
             Err(e) => {
-                log::debug!("Peer {} can not operate over SHM: {}", cookie.pid, e);
+                log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
                 return Ok((None, None));
             }
         }
@@ -253,7 +254,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
             Ok(bytes) => bytes,
             Err(e) => {
-                log::debug!("Peer {} can not operate over SHM: {}", cookie.pid, e);
+                log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
                 return Ok((None, None));
             }
         };
@@ -275,14 +276,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &ZenohId,
-        _sn_resolution: ZInt,
+        zid: &ZenohId,
+        _sn_bytes: SeqNumBytes,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
         let mut zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => {
-                log::debug!("Peer {} did not express interest in shared memory", peer_id);
+                log::debug!("Peer {} did not express interest in shared memory", zid);
                 return Ok(None);
             }
         };
@@ -367,7 +368,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
 
-    async fn handle_close(&self, _peer_id: &ZenohId) {}
+    async fn handle_close(&self, _zid: &ZenohId) {}
 }
 
 impl From<Arc<SharedMemoryAuthenticator>> for PeerAuthenticator {

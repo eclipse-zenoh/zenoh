@@ -82,7 +82,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
+        .zid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
         .build(Arc::new(SH::default()))
         .unwrap();
 

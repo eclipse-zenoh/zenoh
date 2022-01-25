@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::{properties_from_attachment, AuthenticatedPeerLink, EstablishmentProperties};
+use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{WhatAmI, ZInt, ZenohId};
-use crate::net::protocol::message::{Close, TransportBody};
+use crate::net::protocol::core::{WhatAmI, ZenohId};
+use crate::net::protocol::message::{Close, InitSyn, SeqNumBytes, WireProperties};
 use crate::net::transport::TransportManager;
 use zenoh_util::zerror;
 
@@ -26,10 +26,10 @@ use zenoh_util::zerror;
 // Read and eventually accept an InitSyn
 pub(super) struct Output {
     pub(super) whatami: WhatAmI,
-    pub(super) pid: ZenohId,
-    pub(super) sn_resolution: ZInt,
+    pub(super) sn_bytes: SeqNumBytes,
+    pub(super) zid: ZenohId,
     pub(super) is_qos: bool,
-    pub(super) init_syn_properties: EstablishmentProperties,
+    pub(super) init_syn_auth_ext: WireProperties,
 }
 pub(super) async fn recv(
     link: &LinkUnicast,
@@ -37,68 +37,46 @@ pub(super) async fn recv(
     auth_link: &mut AuthenticatedPeerLink,
 ) -> AResult<Output> {
     // Wait to read an InitSyn
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
-        let e = zerror!(
-            "Received multiple messages instead of a single InitSyn on {}: {:?}",
-            link,
-            messages,
-        );
-        return Err((e.into(), Some(Close::INVALID)));
-    }
-
-    let mut msg = messages.remove(0);
-    let init_syn = match msg.body {
-        TransportBody::InitSyn(init_syn) => init_syn,
-        _ => {
-            let e = zerror!(
-                "Received invalid message instead of an InitSyn on {}: {:?}",
-                link,
-                msg.body
-            );
-            return Err((e.into(), Some(Close::INVALID)));
-        }
-    };
+    let mut init_syn: InitSyn = link.recv().await.map_err(|e| (e, None))?;
 
     // Check the peer id associate to the authenticated link
-    match auth_link.peer_id {
-        Some(pid) => {
-            if pid != init_syn.pid {
+    match auth_link.zid {
+        Some(zid) => {
+            if zid != init_syn.zid {
                 let e = zerror!(
                     "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
                     link,
-                    pid,
-                    init_syn.pid
+                    zid,
+                    init_syn.zid
                 );
                 return Err((e.into(), Some(Close::INVALID)));
             }
         }
-        None => auth_link.peer_id = Some(init_syn.pid),
+        None => auth_link.zid = Some(init_syn.zid),
     }
 
     // Check if the version is supported
-    // @TODO: handle experimental version
-    if init_syn.version != manager.config.version.stable {
+    if init_syn.version() != manager.config.version {
         let e = zerror!(
-            "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
+            "Rejecting InitSyn on {} because of unsupported Zenoh version from node: {}",
             link,
-            init_syn.pid
+            init_syn.zid
         );
         return Err((e.into(), Some(Close::INVALID)));
     }
 
     // Validate the InitSyn with the peer authenticators
-    let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
-        None => EstablishmentProperties::new(),
+    let init_syn_auth_ext: WireProperties = match init_syn.exts.authentication.take() {
+        Some(auth) => auth.into_inner().into(),
+        None => WireProperties::new(),
     };
 
     let output = Output {
         whatami: init_syn.whatami,
-        pid: init_syn.pid,
-        sn_resolution: init_syn.sn_resolution,
-        is_qos: init_syn.is_qos,
-        init_syn_properties,
+        sn_bytes: init_syn.sn_bytes,
+        zid: init_syn.zid,
+        is_qos: init_syn.exts.qos.is_some(),
+        init_syn_auth_ext,
     };
     Ok(output)
 }

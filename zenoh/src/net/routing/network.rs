@@ -44,7 +44,7 @@ pub(crate) struct Link {
 
 impl Link {
     fn new(transport: TransportUnicast) -> Self {
-        let pid = transport.get_pid().unwrap();
+        let pid = transport.get_zid().unwrap();
         Link {
             transport,
             pid,
@@ -59,7 +59,7 @@ impl Link {
     }
 
     #[inline]
-    pub(crate) fn get_pid(&self, psid: &ZInt) -> Option<&ZenohId> {
+    pub(crate) fn get_zid(&self, psid: &ZInt) -> Option<&ZenohId> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
@@ -235,7 +235,7 @@ impl Network {
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &TransportUnicast) {
         let msg = self.make_msg(idxs);
-        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_pid(), msg);
+        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
         if let Err(e) = transport.handle_message(msg) {
             log::debug!("{} Error sending LinkStateList: {}", self.name, e);
         }
@@ -310,7 +310,7 @@ impl Network {
                         link_state.links,
                     ))
                 } else {
-                    match src_link.get_pid(&link_state.psid) {
+                    match src_link.get_zid(&link_state.psid) {
                         Some(pid) => Some((
                             *pid,
                             link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
@@ -339,7 +339,7 @@ impl Network {
                 let links: Vec<ZenohId> = links
                     .iter()
                     .filter_map(|l| {
-                        if let Some(pid) = src_link.get_pid(l) {
+                        if let Some(pid) = src_link.get_zid(l) {
                             Some(*pid)
                         } else {
                             log::error!(
@@ -537,7 +537,7 @@ impl Network {
         };
         self.links.insert(free_index, Link::new(transport.clone()));
 
-        let pid = transport.get_pid().unwrap();
+        let pid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
         let (idx, new) = match self.get_idx(&pid) {
             Some(idx) => (idx, false),

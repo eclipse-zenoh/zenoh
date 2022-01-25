@@ -15,7 +15,7 @@ use super::core::*;
 use super::io::WBuf;
 use super::transport::*;
 use super::zenoh::*;
-use super::{transport, zenoh, Attachment, Header, Options};
+use super::{zenoh, Attachment, Header, Options};
 use zenoh_util::zcheck;
 
 impl WBuf {
@@ -89,17 +89,13 @@ impl WBuf {
 
         let res = match &mut msg.body {
             TransportBody::Frame(frame) => self.write_frame(frame),
-            TransportBody::InitSyn(init_syn) => self.write_init_syn(init_syn),
-            TransportBody::InitAck(init_ack) => self.write_init_ack(init_ack),
-            TransportBody::OpenSyn(open_syn) => self.write_open_syn(open_syn),
-            TransportBody::OpenAck(open_ack) => self.write_open_ack(open_ack),
-            TransportBody::Join(join) => self.write_join(join),
             TransportBody::Close(close) => self.write_close(close),
             TransportBody::Sync(sync) => self.write_sync(sync),
             TransportBody::AckNack(ack_nack) => self.write_ack_nack(ack_nack),
             TransportBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
             TransportBody::Ping(ping) => self.write_ping(ping),
             TransportBody::Pong(pong) => self.write_pong(pong),
+            _ => panic!(),
         };
 
         #[cfg(feature = "stats")]
@@ -127,89 +123,6 @@ impl WBuf {
                 true
             }
         }
-    }
-
-    fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
-        let header = init_syn.header();
-        zcheck!(self.write(header));
-        if init_syn.has_options() {
-            zcheck!(self.write_zint(init_syn.options()));
-        }
-        zcheck!(self.write(init_syn.version));
-        zcheck!(self.write(init_syn.whatami.into()));
-        zcheck!(self.write_zenohid(&init_syn.pid));
-        if super::has_flag(header, transport::flag::S) {
-            zcheck!(self.write_zint(init_syn.sn_resolution));
-        }
-        true
-    }
-
-    fn write_init_ack(&mut self, init_ack: &InitAck) -> bool {
-        zcheck!(self.write(init_ack.header()));
-        if init_ack.has_options() {
-            zcheck!(self.write_zint(init_ack.options()));
-        }
-        zcheck!(self.write(init_ack.whatami.into()));
-        zcheck!(self.write_zenohid(&init_ack.pid));
-        if let Some(snr) = init_ack.sn_resolution {
-            zcheck!(self.write_zint(snr));
-        }
-        self.write_zslice_array(init_ack.cookie.clone())
-    }
-
-    fn write_open_syn(&mut self, open_syn: &OpenSyn) -> bool {
-        let header = open_syn.header();
-        zcheck!(self.write(header));
-        if super::has_flag(header, transport::flag::T2) {
-            zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
-        }
-        zcheck!(self.write_zint(open_syn.initial_sn));
-        self.write_zslice_array(open_syn.cookie.clone())
-    }
-
-    fn write_open_ack(&mut self, open_ack: &OpenAck) -> bool {
-        let header = open_ack.header();
-        zcheck!(self.write(header));
-        if super::has_flag(header, transport::flag::T2) {
-            zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
-        }
-        self.write_zint(open_ack.initial_sn)
-    }
-
-    fn write_join(&mut self, join: &Join) -> bool {
-        let header = join.header();
-        zcheck!(self.write(header));
-        if join.has_options() {
-            zcheck!(self.write_zint(join.options()));
-        }
-        zcheck!(self.write(join.version));
-        zcheck!(self.write(join.whatami.into()));
-        zcheck!(self.write_zenohid(&join.pid));
-        if super::has_flag(header, transport::flag::T1) {
-            zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
-        }
-        if super::has_flag(header, transport::flag::S) {
-            zcheck!(self.write_zint(join.sn_resolution));
-        }
-        match &join.next_sns {
-            ConduitSnList::Plain(sn) => {
-                zcheck!(self.write_zint(sn.reliable));
-                zcheck!(self.write_zint(sn.best_effort));
-            }
-            ConduitSnList::QoS(sns) => {
-                for sn in sns.iter() {
-                    zcheck!(self.write_zint(sn.reliable));
-                    zcheck!(self.write_zint(sn.best_effort));
-                }
-            }
-        }
-        true
     }
 
     fn write_close(&mut self, close: &Close) -> bool {

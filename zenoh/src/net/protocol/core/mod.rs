@@ -34,7 +34,6 @@ pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type AtomicZInt = AtomicU64;
 pub type NonZeroZInt = NonZeroU64;
-pub const ZINT_MAX_BYTES: usize = 10;
 
 /// The zenoh version
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +47,7 @@ pub type WhatAmI = whatami::WhatAmI;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami {
-    use super::NonZeroU8;
+    use super::{NonZeroU8, TryFrom};
 
     #[repr(u8)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,17 +78,21 @@ pub mod whatami {
                 WhatAmI::Client => "client",
             }
         }
+    }
 
-        pub fn try_from(value: u8) -> Option<Self> {
+    impl TryFrom<u8> for WhatAmI {
+        type Error = ();
+
+        fn try_from(b: u8) -> Result<Self, Self::Error> {
             const CLIENT: u8 = WhatAmI::Client as u8;
             const ROUTER: u8 = WhatAmI::Router as u8;
             const PEER: u8 = WhatAmI::Peer as u8;
 
-            match value {
-                CLIENT => Some(WhatAmI::Client),
-                ROUTER => Some(WhatAmI::Router),
-                PEER => Some(WhatAmI::Peer),
-                _ => None,
+            match b {
+                CLIENT => Ok(WhatAmI::Client),
+                ROUTER => Ok(WhatAmI::Router),
+                PEER => Ok(WhatAmI::Peer),
+                _ => Err(()),
             }
         }
     }
@@ -902,7 +905,7 @@ pub struct Channel {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConduitSnList {
     Plain(ConduitSn),
-    QoS(Box<[ConduitSn; Priority::NUM]>),
+    QoS([ConduitSn; Priority::NUM]),
 }
 
 impl fmt::Display for ConduitSnList {

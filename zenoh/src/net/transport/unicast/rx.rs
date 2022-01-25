@@ -69,7 +69,7 @@ impl TransportUnicastInner {
         } else {
             log::debug!(
                 "Transport: {}. No callback available, dropping message: {}",
-                self.config.pid,
+                self.config.zid,
                 msg
             );
             Ok(())
@@ -79,17 +79,17 @@ impl TransportUnicastInner {
     fn handle_close(
         &self,
         link: &LinkUnicast,
-        pid: Option<ZenohId>,
+        zid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
     ) -> ZResult<()> {
-        // Check if the PID is correct when provided
-        if let Some(pid) = pid {
-            if pid != self.config.pid {
+        // Check if the zid is correct when provided
+        if let Some(zid) = zid {
+            if zid != self.config.zid {
                 log::debug!(
                     "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
                     link,
-                    pid,
+                    zid,
                     reason
                 );
                 return Ok(());
@@ -126,7 +126,7 @@ impl TransportUnicastInner {
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.config.pid,
+                self.config.zid,
                 sn,
                 guard.sn.get()
             );
@@ -150,7 +150,7 @@ impl TransportUnicastInner {
                 if is_final {
                     // When shared-memory feature is disabled, msg does not need to be mutable
                     let msg = guard.defrag.defragment().ok_or_else(|| {
-                        zerror!("Transport: {}. Defragmentation error.", self.config.pid)
+                        zerror!("Transport: {}. Defragmentation error.", self.config.zid)
                     })?;
                     self.trigger_callback(msg)
                 } else {
@@ -182,7 +182,7 @@ impl TransportUnicastInner {
                 } else {
                     bail!(
                         "Transport: {}. Unknown conduit: {:?}.",
-                        self.config.pid,
+                        self.config.zid,
                         channel.priority
                     );
                 };
@@ -203,7 +203,7 @@ impl TransportUnicastInner {
             _ => {
                 log::debug!(
                     "Transport: {}. Message handling not implemented: {:?}",
-                    self.config.pid,
+                    self.config.zid,
                     msg
                 );
                 Ok(())

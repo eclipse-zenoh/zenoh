@@ -25,7 +25,7 @@ pub mod udp;
 pub mod unixsock_stream;
 
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::message::TransportMessage;
+use crate::net::protocol::message::{TransportMessage, ZMessage};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use endpoint::*;
@@ -122,6 +122,60 @@ pub(crate) trait LinkUnicastTrait: Send + Sync {
 }
 
 impl LinkUnicast {
+    pub async fn send<T: ZMessage>(&self, msg: &mut T) -> ZResult<usize> {
+        // Create the buffer for serializing the message
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        if self.is_streamed() {
+            // Reserve 16 bits to write the length
+            wbuf.write_bytes(&[0_u8, 0_u8]);
+        }
+        // Serialize the message
+        msg.write(&mut wbuf);
+        if self.is_streamed() {
+            // Write the length on the first 16 bits
+            let length: u16 = wbuf.len() as u16 - 2;
+            let bits = wbuf.get_first_slice_mut(..2);
+            bits.copy_from_slice(&length.to_le_bytes());
+        }
+        let mut buffer = vec![0_u8; wbuf.len()];
+        wbuf.copy_into_slice(&mut buffer[..]);
+
+        // Send the message on the link
+        let _ = self.0.write_all(&buffer).await?;
+
+        Ok(buffer.len())
+    }
+
+    pub async fn recv<T: ZMessage>(&self) -> ZResult<T> {
+        // Read from the link
+        let buffer = if self.is_streamed() {
+            // Read and decode the message length
+            let mut length_bytes = [0_u8; 2];
+            let _ = self.read_exact(&mut length_bytes).await?;
+            let to_read = u16::from_le_bytes(length_bytes) as usize;
+            // Read the message
+            let mut buffer = vec![0_u8; to_read];
+            let _ = self.read_exact(&mut buffer).await?;
+            buffer
+        } else {
+            // Read the message
+            let mut buffer = vec![0_u8; self.get_mtu() as usize];
+            let n = self.read(&mut buffer).await?;
+            buffer.truncate(n);
+            buffer
+        };
+
+        let mut zbuf = ZBuf::from(buffer);
+
+        let header = zbuf.read().ok_or_else(|| zerror!("Decoding failed"))?;
+        if crate::net::protocol::message::mid(header) != T::ID {
+            bail!("Wrong message");
+        }
+        let msg = T::read(&mut zbuf, header).ok_or_else(|| zerror!("Decoding failed"))?;
+
+        Ok(msg)
+    }
+
     pub(crate) async fn write_transport_message(
         &self,
         msg: &mut TransportMessage,
@@ -147,39 +201,6 @@ impl LinkUnicast {
         let _ = self.0.write_all(&buffer).await?;
 
         Ok(buffer.len())
-    }
-
-    pub(crate) async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
-        // Read from the link
-        let buffer = if self.is_streamed() {
-            // Read and decode the message length
-            let mut length_bytes = [0_u8; 2];
-            let _ = self.read_exact(&mut length_bytes).await?;
-            let to_read = u16::from_le_bytes(length_bytes) as usize;
-            // Read the message
-            let mut buffer = vec![0_u8; to_read];
-            let _ = self.read_exact(&mut buffer).await?;
-            buffer
-        } else {
-            // Read the message
-            let mut buffer = vec![0_u8; self.get_mtu() as usize];
-            let n = self.read(&mut buffer).await?;
-            buffer.truncate(n);
-            buffer
-        };
-
-        let mut zbuf = ZBuf::from(buffer);
-        let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
-        while zbuf.can_read() {
-            match zbuf.read_transport_message() {
-                Some(msg) => messages.push(msg),
-                None => {
-                    bail!("Invalid Message: Decoding error on link: {}", self);
-                }
-            }
-        }
-
-        Ok(messages)
     }
 }
 
@@ -250,13 +271,10 @@ pub(crate) trait LinkMulticastTrait: Send + Sync {
 }
 
 impl LinkMulticast {
-    pub(crate) async fn write_transport_message(
-        &self,
-        msg: &mut TransportMessage,
-    ) -> ZResult<usize> {
+    pub async fn send<T: ZMessage>(&self, msg: &mut T) -> ZResult<usize> {
         // Create the buffer for serializing the message
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_transport_message(msg);
+        msg.write(&mut wbuf);
         let mut buffer = vec![0_u8; wbuf.len()];
         wbuf.copy_into_slice(&mut buffer[..]);
 

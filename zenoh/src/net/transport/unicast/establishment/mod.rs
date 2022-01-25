@@ -16,88 +16,27 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::message::{Attachment, TransportMessage};
+use super::protocol::message::TransportMessage;
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
+use crate::net::protocol::message::{SeqNumBytes, WireProperties};
 use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
-use std::ops::{Deref, DerefMut};
+use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::crypto::{BlockCipher, PseudoRng};
 use zenoh_util::{bail, zerror};
-
-const WBUF_SIZE: usize = 64;
-
-/*************************************/
-/*            PROPERTIES             */
-/*************************************/
-pub(crate) struct EstablishmentProperties(Vec<Property>);
-
-impl Deref for EstablishmentProperties {
-    type Target = Vec<Property>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for EstablishmentProperties {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl EstablishmentProperties {
-    pub(crate) fn new() -> Self {
-        EstablishmentProperties(vec![])
-    }
-
-    pub(crate) fn insert(&mut self, p: Property) -> ZResult<()> {
-        if self.0.iter().any(|x| x.key == p.key) {
-            bail!("Property {} already exists", p.key)
-        }
-        self.0.push(p);
-        Ok(())
-    }
-
-    pub(crate) fn remove(&mut self, key: ZInt) -> Option<Property> {
-        self.0
-            .iter()
-            .position(|x| x.key == key)
-            .map(|i| self.0.remove(i))
-    }
-}
-
-pub(super) fn attachment_from_properties(ps: &EstablishmentProperties) -> ZResult<Attachment> {
-    if ps.is_empty() {
-        bail!("Can not create an attachment with zero properties")
-    }
-
-    let mut wbuf = WBuf::new(WBUF_SIZE, false);
-    wbuf.write_properties(ps);
-    let zbuf: ZBuf = wbuf.into();
-    let attachment = Attachment::new(zbuf);
-    Ok(attachment)
-}
-
-pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<EstablishmentProperties> {
-    let ps = att
-        .buffer
-        .read_properties()
-        .ok_or_else(|| zerror!("Error while decoding attachment properties"))?;
-    Ok(EstablishmentProperties(ps))
-}
 
 /*************************************/
 /*             COOKIE                */
 /*************************************/
 pub struct Cookie {
     whatami: WhatAmI,
-    pid: ZenohId,
-    sn_resolution: ZInt,
+    zid: ZenohId,
+    sn_bytes: SeqNumBytes,
     is_qos: bool,
     nonce: ZInt,
 }
@@ -108,7 +47,7 @@ impl Cookie {
         self,
         cipher: &BlockCipher,
         prng: &mut PseudoRng,
-        properties: EstablishmentProperties,
+        properties: WireProperties,
     ) -> ZResult<Vec<u8>> {
         macro_rules! zwrite {
             ($op:expr) => {
@@ -121,11 +60,11 @@ impl Cookie {
         let mut wbuf = WBuf::new(64, false);
 
         zwrite!(wbuf.write(self.whatami.into()));
-        zwrite!(wbuf.write_zenohid(&self.pid));
-        zwrite!(wbuf.write_zint(self.sn_resolution));
+        zwrite!(wbuf.write_zenohid(&self.zid));
+        zwrite!(wbuf.write(self.sn_bytes.value()));
         zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
         zwrite!(wbuf.write_zint(self.nonce));
-        zwrite!(wbuf.write_properties(properties.as_slice()));
+        zwrite!(wbuf.write_wire_properties(&properties));
 
         let serialized = ZBuf::from(wbuf).to_vec();
         let encrypted = cipher.encrypt(serialized, prng);
@@ -135,7 +74,7 @@ impl Cookie {
     pub(super) fn decrypt(
         bytes: Vec<u8>,
         cipher: &BlockCipher,
-    ) -> ZResult<(Cookie, EstablishmentProperties)> {
+    ) -> ZResult<(Cookie, WireProperties)> {
         macro_rules! zread {
             ($op:expr) => {
                 $op.ok_or_else(|| zerror!("Invalid Cookie"))?
@@ -147,22 +86,19 @@ impl Cookie {
         let mut zbuf = ZBuf::from(decrypted);
 
         let whatami =
-            WhatAmI::try_from(zread!(zbuf.read())).ok_or_else(|| zerror!("Invalid Cookie"))?;
-        let pid = zread!(zbuf.read_zenohid());
-        let sn_resolution = zread!(zbuf.read_zint());
+            WhatAmI::try_from(zread!(zbuf.read())).map_err(|_| zerror!("Invalid Cookie"))?;
+        let zid = zread!(zbuf.read_zenohid());
+        let sn_bytes =
+            SeqNumBytes::try_from(zread!(zbuf.read())).map_err(|_| zerror!("Invalid Cookie"))?;
         let is_qos = zread!(zbuf.read()) == 1;
         let nonce = zread!(zbuf.read_zint());
 
-        let mut ps = zread!(zbuf.read_properties());
-        let mut properties = EstablishmentProperties::new();
-        for p in ps.drain(..) {
-            properties.insert(p)?;
-        }
+        let properties = zread!(zbuf.read_wire_properties());
 
         let cookie = Cookie {
             whatami,
-            pid,
-            sn_resolution,
+            zid,
+            sn_bytes,
             is_qos,
             nonce,
         };
@@ -178,10 +114,10 @@ pub(super) async fn close_link(
 ) {
     if let Some(reason) = reason.take() {
         // Build the close message
-        let peer_id = Some(manager.config.pid);
+        let zid = Some(manager.config.zid);
         let link_only = true;
         let attachment = None;
-        let mut message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
+        let mut message = TransportMessage::make_close(zid, reason, link_only, attachment);
         // Send the close message on the link
         let _ = link.write_transport_message(&mut message).await;
     }
@@ -198,9 +134,9 @@ pub(super) async fn close_link(
 /*            TRANSPORT              */
 /*************************************/
 pub(super) struct InputInit {
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
+    pub(super) sn_bytes: SeqNumBytes,
     pub(super) is_shm: bool,
     pub(super) is_qos: bool,
 }
@@ -209,12 +145,13 @@ async fn transport_init(
     input: self::InputInit,
 ) -> ZResult<TransportUnicast> {
     // Initialize the transport if it is new
-    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.sn_resolution);
+    let sn_resolution = input.sn_bytes.resolution();
+    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..sn_resolution);
 
     let config = TransportConfigUnicast {
-        peer: input.pid,
+        peer: input.zid,
         whatami: input.whatami,
-        sn_resolution: input.sn_resolution,
+        sn_resolution,
         is_shm: input.is_shm,
         is_qos: input.is_qos,
         initial_sn_tx,
@@ -253,7 +190,7 @@ pub(super) async fn transport_finalize(
         }
         None => {
             let peer = TransportPeer {
-                pid: transport.get_pid(),
+                zid: transport.get_zid(),
                 whatami: transport.get_whatami(),
                 is_qos: transport.is_qos(),
                 is_shm: transport.is_shm(),

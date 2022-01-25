@@ -13,12 +13,14 @@
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::message::TransportMessage;
+use super::protocol::message::extension::{ZExt, ZExtPolicy};
+use super::protocol::message::{Join, SeqNumBytes, TransportMessage};
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
-use crate::net::protocol::core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
+use crate::net::protocol::core::{ConduitSn, Priority, WhatAmI, ZenohId};
+use crate::net::protocol::VERSION;
 use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;
@@ -33,13 +35,12 @@ use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
 
 pub(super) struct TransportLinkMulticastConfig {
-    pub(super) version: u8,
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) keep_alive: Duration,
     pub(super) join_interval: Duration,
-    pub(super) sn_resolution: ZInt,
+    pub(super) sn_bytes: SeqNumBytes,
     pub(super) batch_size: u16,
 }
 
@@ -249,26 +250,21 @@ async fn tx_task(
                 pipeline.refill(batch, priority);
             }
             Action::Join => {
-                let attachment = None;
-                let initial_sns = if next_sns.len() == Priority::NUM {
-                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
-                    ConduitSnList::QoS(tmp.into())
-                } else {
-                    assert_eq!(next_sns.len(), 1);
-                    ConduitSnList::Plain(next_sns[0])
-                };
-                let mut message = TransportMessage::make_join(
-                    config.version,
+                let mut msg = Join::new(
+                    VERSION,
                     config.whatami,
-                    config.pid,
+                    config.zid,
+                    config.sn_bytes,
                     config.lease,
-                    config.sn_resolution,
-                    initial_sns,
-                    attachment,
+                    next_sns[0],
                 );
+                if next_sns.len() == Priority::NUM {
+                    let sns: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                    msg.exts.qos = Some(ZExt::new(sns, ZExtPolicy::Ignore));
+                }
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.send(&mut msg).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -278,7 +274,7 @@ async fn tx_task(
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
-                let pid = Some(config.pid);
+                let pid = Some(config.zid);
                 let attachment = None;
                 let message = TransportMessage::make_keep_alive(pid, attachment);
                 pipeline.push_transport_message(message, Priority::Background);

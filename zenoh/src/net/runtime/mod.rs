@@ -111,7 +111,7 @@ impl Runtime {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .pid(pid)
+            .zid(pid)
             .build(handler.clone())?;
 
         let config = Notifier::new(config);
@@ -167,7 +167,7 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn get_pid_str(&self) -> String {
+    pub fn get_zid_str(&self) -> String {
         self.pid.to_string()
     }
 

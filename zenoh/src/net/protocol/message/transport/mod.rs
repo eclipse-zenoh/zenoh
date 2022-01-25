@@ -11,30 +11,51 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+mod init;
+mod join;
+mod open;
+
 use super::core::*;
-use super::defaults::SEQ_NUM_RES;
 use super::flag as iflag;
 use super::id as iid;
 use super::io::ZSlice;
 use super::zenoh::ZenohMessage;
-use super::{Attachment, Header, Options};
-use std::time::Duration;
+use super::{Attachment, Header};
+pub use init::*;
+pub use join::*;
+pub use open::*;
+use std::convert::TryFrom;
 
 /*************************************/
 /*               IDS                 */
 /*************************************/
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TransportId {
+    // 0x00: Reserved
+    Init = 0x01,
+    Open = 0x02,
+    Join = 0x03,
+    // 0x04: Reserved
+    // ..  : Reserved
+    // 0x1f: Reserved
+}
+
+impl TransportId {
+    const fn id(self) -> u8 {
+        self as u8
+    }
+}
+
 // Transport message IDs -- Re-export of some of the Inner Message IDs
 pub mod id {
     // Messages
-    pub const INIT: u8 = super::iid::INIT;
-    pub const OPEN: u8 = super::iid::OPEN;
     pub const CLOSE: u8 = super::iid::CLOSE;
     pub const SYNC: u8 = super::iid::SYNC;
     pub const ACK_NACK: u8 = super::iid::ACK_NACK;
     pub const KEEP_ALIVE: u8 = super::iid::KEEP_ALIVE;
     pub const PING_PONG: u8 = super::iid::PING_PONG;
     pub const FRAME: u8 = super::iid::FRAME;
-    pub const JOIN: u8 = super::iid::JOIN;
 
     // Message decorators
     pub const PRIORITY: u8 = super::iid::PRIORITY;
@@ -43,19 +64,14 @@ pub mod id {
 
 // Transport message flags
 pub mod flag {
-    pub const A: u8 = 1 << 5; // 0x20 Ack           if A==1 then the message is an acknowledgment
     pub const C: u8 = 1 << 6; // 0x40 Count         if C==1 then number of unacknowledged messages is present
     pub const E: u8 = 1 << 7; // 0x80 End           if E==1 then it is the last FRAME fragment
     pub const F: u8 = 1 << 6; // 0x40 Fragment      if F==1 then the FRAME is a fragment
     pub const I: u8 = 1 << 5; // 0x20 ZenohId        if I==1 then the ZenohId is requested or present
     pub const K: u8 = 1 << 6; // 0x40 CloseLink     if K==1 then close the transport link only
     pub const M: u8 = 1 << 5; // 0x20 Mask          if M==1 then a Mask is present
-    pub const O: u8 = 1 << 7; // 0x80 Options       if O==1 then Options are present
     pub const P: u8 = 1 << 5; // 0x20 PingOrPong    if P==1 then the message is Ping, otherwise is Pong
     pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
-    pub const S: u8 = 1 << 6; // 0x40 SN Resolution if S==1 then the SN Resolution is present
-    pub const T1: u8 = 1 << 5; // 0x20 TimeRes       if U==1 then the time resolution is in seconds
-    pub const T2: u8 = 1 << 6; // 0x40 TimeRes       if T==1 then the time resolution is in seconds
     pub const Z: u8 = super::iflag::Z; // 0x20 MixedSlices   if Z==1 then the payload contains a mix of raw and shm_info payload
 
     // pub const X: u8 = 0; // Unused flags are set to zero
@@ -64,274 +80,62 @@ pub mod flag {
 /*************************************/
 /*       TRANSPORT MESSAGES          */
 /*************************************/
-/// # Init message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The INIT message is sent on a specific Locator to initiate a transport with the peer associated
-/// with that Locator. The initiator MUST send an INIT message with the A flag set to 0.  If the
-/// corresponding peer deems appropriate to initialize a transport with the initiator, the corresponding
-/// peer MUST reply with an INIT message with the A flag set to 1.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|S|A|   INIT  |
-/// +-+-+-+-+-------+
-/// ~             |Q~ if O==1
-/// +---------------+
-/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
-/// +-------+-------+
-/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
-/// +---------------+
-/// ~    peer_id    ~ -- PID of the sender of the INIT message
-/// +---------------+
-/// ~ sn_resolution ~ if S==1 -- the sequence number resolution(*)
-/// +---------------+
-/// ~     cookie    ~ if A==1
-/// +---------------+
-///
-/// (*) if A==0 and S==0 then 2^28 is assumed.
-///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
-///
-/// - if Q==1 then the initiator/responder support QoS.
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct InitSyn {
-    pub version: u8,
-    pub whatami: WhatAmI,
-    pub pid: ZenohId,
-    pub sn_resolution: ZInt,
-    pub is_qos: bool,
+#[repr(u8)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum SeqNumBytes {
+    One = 0,   // SeqNum max value: 2^7
+    Two = 1,   // SeqNum max value: 2^14
+    Three = 2, // SeqNum max value: 2^21
+    Four = 3,  // SeqNum max value: 2^28
+    Five = 4,  // SeqNum max value: 2^35
+    Six = 5,   // SeqNum max value: 2^42
+    Seven = 6, // SeqNum max value: 2^49
+    Eight = 7, // SeqNum max value: 2^56
 }
 
-impl InitSyn {
-    pub const OPT_QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
-}
-impl InitAck {
-    pub const OPT_QOS: ZInt = InitSyn::OPT_QOS; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
-}
+impl SeqNumBytes {
+    pub const MIN: SeqNumBytes = SeqNumBytes::One;
+    pub const MAX: SeqNumBytes = SeqNumBytes::Eight;
 
-impl Header for InitSyn {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::INIT;
-        if self.sn_resolution != SEQ_NUM_RES {
-            header |= flag::S;
-        }
-        if self.has_options() {
-            header |= flag::O;
-        }
-        header
+    pub const fn value(self) -> u8 {
+        self as u8
+    }
+
+    pub const fn resolution(&self) -> ZInt {
+        (2 as ZInt).pow(7 * (1 + self.value() as u32))
     }
 }
 
-impl Options for InitSyn {
-    fn options(&self) -> ZInt {
-        let mut options = 0;
-        if self.is_qos {
-            options |= Self::OPT_QOS;
-        }
-        options
-    }
+impl TryFrom<u8> for SeqNumBytes {
+    type Error = ();
 
-    fn has_options(&self) -> bool {
-        self.is_qos
-    }
-}
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        const ONE: u8 = SeqNumBytes::One.value();
+        const TWO: u8 = SeqNumBytes::Two.value();
+        const THREE: u8 = SeqNumBytes::Three.value();
+        const FOUR: u8 = SeqNumBytes::Four.value();
+        const FIVE: u8 = SeqNumBytes::Five.value();
+        const SIX: u8 = SeqNumBytes::Six.value();
+        const SEVEN: u8 = SeqNumBytes::Seven.value();
+        const EIGHT: u8 = SeqNumBytes::Eight.value();
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct InitAck {
-    pub whatami: WhatAmI,
-    pub pid: ZenohId,
-    pub sn_resolution: Option<ZInt>,
-    pub is_qos: bool,
-    pub cookie: ZSlice,
-}
-
-impl Header for InitAck {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::INIT;
-        header |= flag::A;
-        if self.sn_resolution.is_some() {
-            header |= flag::S;
-        }
-        if self.has_options() {
-            header |= flag::O;
-        }
-        header
-    }
-}
-
-impl Options for InitAck {
-    fn options(&self) -> ZInt {
-        let mut options = 0;
-        if self.is_qos {
-            options |= Self::OPT_QOS;
-        }
-        options
-    }
-
-    fn has_options(&self) -> bool {
-        self.is_qos
-    }
-}
-
-/// # Open message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The OPEN message is sent on a link to finally open an initialized transport with the peer.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |X|T|A|   OPEN  |
-/// +-+-+-+-+-------+
-/// ~    lease      ~ -- Lease period of the sender of the OPEN message(*)
-/// +---------------+
-/// ~  initial_sn   ~ -- Initial SN proposed by the sender of the OPEN(**)
-/// +---------------+
-/// ~    cookie     ~ if A==0(***)
-/// +---------------+
-///
-/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**)  the initial sequence number MUST be compatible with the sequence number resolution agreed in the
-///       InitSyn/InitAck message exchange
-/// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct OpenSyn {
-    pub lease: Duration,
-    pub initial_sn: ZInt,
-    pub cookie: ZSlice,
-}
-
-impl Header for OpenSyn {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::OPEN;
-        if self.lease.as_millis() % 1_000 == 0 {
-            header |= flag::T2;
-        }
-        header
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct OpenAck {
-    pub lease: Duration,
-    pub initial_sn: ZInt,
-}
-
-impl Header for OpenAck {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::OPEN;
-        header |= flag::A;
-        if self.lease.as_millis() % 1_000 == 0 {
-            header |= flag::T2;
-        }
-        header
-    }
-}
-
-/// # Join message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|S|T|   JOIN  |
-/// +-+-+-+-+-------+
-/// ~             |Q~ if O==1
-/// +---------------+
-/// | v_maj | v_min | -- Protocol Version VMaj.VMin
-/// +-------+-------+
-/// ~    whatami    ~ -- Router, Peer or a combination of them
-/// +---------------+
-/// ~    peer_id    ~ -- PID of the sender of the JOIN message
-/// +---------------+
-/// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
-/// +---------------+
-/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
-/// +---------------+
-/// ~   [next_sn]   ~ (***)
-/// +---------------+
-///
-/// - if Q==1 then the sender supports QoS.
-///
-/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**)  if S==0 then 2^28 is assumed.
-/// (***) if Q==1 then 8 sequence numbers are present: one for each priority.
-///       if Q==0 then only one sequence number is present.
-///
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct Join {
-    pub version: u8,
-    pub whatami: WhatAmI,
-    pub pid: ZenohId,
-    pub lease: Duration,
-    pub sn_resolution: ZInt,
-    pub next_sns: ConduitSnList,
-}
-
-impl Join {
-    pub const OPT_QOS: ZInt = 1 << 0; // 0x01 QoS       if PRIORITY==1 then the transport supports QoS
-
-    pub fn is_qos(&self) -> bool {
-        match self.next_sns {
-            ConduitSnList::QoS(_) => true,
-            ConduitSnList::Plain(_) => false,
+        match b {
+            ONE => Ok(Self::One),
+            TWO => Ok(Self::Two),
+            THREE => Ok(Self::Three),
+            FOUR => Ok(Self::Four),
+            FIVE => Ok(Self::Five),
+            SIX => Ok(Self::Six),
+            SEVEN => Ok(Self::Seven),
+            EIGHT => Ok(Self::Eight),
+            _ => Err(()),
         }
     }
 }
 
-impl Header for Join {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = id::JOIN;
-        if self.lease.as_millis() % 1_000 == 0 {
-            header |= flag::T1;
-        }
-        if self.sn_resolution != SEQ_NUM_RES {
-            header |= flag::S;
-        }
-        if self.has_options() {
-            header |= flag::O;
-        }
-        header
-    }
-}
-
-impl Options for Join {
-    fn options(&self) -> ZInt {
-        let mut options = 0;
-        if self.is_qos() {
-            options |= Self::OPT_QOS;
-        }
-        options
-    }
-
-    fn has_options(&self) -> bool {
-        self.options() > 0
+impl Default for SeqNumBytes {
+    fn default() -> Self {
+        Self::Four
     }
 }
 
@@ -673,114 +477,45 @@ pub enum TransportBody {
     Frame(Frame),
 }
 
+impl From<InitSyn> for TransportBody {
+    fn from(msg: InitSyn) -> Self {
+        Self::InitSyn(msg)
+    }
+}
+
+impl From<InitAck> for TransportBody {
+    fn from(msg: InitAck) -> Self {
+        Self::InitAck(msg)
+    }
+}
+
+impl From<OpenSyn> for TransportBody {
+    fn from(msg: OpenSyn) -> Self {
+        Self::OpenSyn(msg)
+    }
+}
+
+impl From<OpenAck> for TransportBody {
+    fn from(msg: OpenAck) -> Self {
+        Self::OpenAck(msg)
+    }
+}
+
+impl From<Join> for TransportBody {
+    fn from(msg: Join) -> Self {
+        Self::Join(msg)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
-    pub size: Option<std::num::NonZeroUsize>,
+    pub size: Option<NonZeroUsize>,
 }
 
 impl TransportMessage {
-    pub fn make_init_syn(
-        version: u8,
-        whatami: WhatAmI,
-        pid: ZenohId,
-        sn_resolution: ZInt,
-        is_qos: bool,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::InitSyn(InitSyn {
-                version,
-                whatami,
-                pid,
-                sn_resolution,
-                is_qos,
-            }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_init_ack(
-        whatami: WhatAmI,
-        pid: ZenohId,
-        sn_resolution: Option<ZInt>,
-        is_qos: bool,
-        cookie: ZSlice,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::InitAck(InitAck {
-                whatami,
-                pid,
-                sn_resolution,
-                is_qos,
-                cookie,
-            }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_open_syn(
-        lease: Duration,
-        initial_sn: ZInt,
-        cookie: ZSlice,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::OpenSyn(OpenSyn {
-                lease,
-                initial_sn,
-                cookie,
-            }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_open_ack(
-        lease: Duration,
-        initial_sn: ZInt,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_join(
-        version: u8,
-        whatami: WhatAmI,
-        pid: ZenohId,
-        lease: Duration,
-        sn_resolution: ZInt,
-        next_sns: ConduitSnList,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Join(Join {
-                version,
-                whatami,
-                pid,
-                lease,
-                sn_resolution,
-                next_sns,
-            }),
-            attachment,
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
     pub fn make_close(
         pid: Option<ZenohId>,
         reason: u8,
@@ -882,5 +617,16 @@ impl TransportMessage {
 impl PartialEq for TransportMessage {
     fn eq(&self, other: &Self) -> bool {
         self.body.eq(&other.body) && self.attachment.eq(&other.attachment)
+    }
+}
+
+impl<T: Into<TransportBody>> From<T> for TransportMessage {
+    fn from(msg: T) -> Self {
+        Self {
+            body: msg.into(),
+            attachment: None,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
     }
 }

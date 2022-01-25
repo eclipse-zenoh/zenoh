@@ -12,14 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::super::authenticator::AuthenticatedPeerLink;
-use super::{properties_from_attachment, OResult};
+use super::OResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::message::{Close, TransportBody};
-use crate::net::transport::unicast::establishment::EstablishmentProperties;
+use crate::net::protocol::message::{Close, OpenAck, WireProperties};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
-use zenoh_util::zerror;
 
 pub(super) struct Output {
     pub(super) initial_sn: ZInt,
@@ -33,56 +31,15 @@ pub(super) async fn recv(
     _input: super::open_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an OpenAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
-    if messages.len() != 1 {
-        return Err((
-            zerror!(
-                "Received multiple messages in response to an OpenSyn on {}: {:?}",
-                link,
-                messages,
-            )
-            .into(),
-            Some(Close::INVALID),
-        ));
-    }
+    let mut open_ack: OpenAck = link.recv().await.map_err(|e| (e, None))?;
 
-    let mut msg = messages.remove(0);
-    let open_ack = match msg.body {
-        TransportBody::OpenAck(open_ack) => open_ack,
-        TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                    reason,
-                    link,
-                )
-                .into(),
-                None,
-            ));
-        }
-        _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an OpenSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(Close::INVALID),
-            ));
-        }
-    };
-
-    let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => properties_from_attachment(att).map_err(|e| (e, Some(Close::INVALID)))?,
-        None => EstablishmentProperties::new(),
+    let mut open_ack_auth_ext: WireProperties = match open_ack.exts.authentication.take() {
+        Some(auth) => auth.into_inner().into(),
+        None => WireProperties::new(),
     };
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let _ = pa
-            .handle_open_ack(
-                auth_link,
-                opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
-            )
+            .handle_open_ack(auth_link, open_ack_auth_ext.remove(&pa.id().into()))
             .await
             .map_err(|e| (e, Some(Close::INVALID)))?;
     }

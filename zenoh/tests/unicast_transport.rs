@@ -166,7 +166,7 @@ async fn open_transport(
     let unicast = TransportManager::config_unicast().max_links(endpoints.len());
 
     let router_manager = TransportManager::builder()
-        .pid(router_id)
+        .zid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build(router_handler.clone())
@@ -176,7 +176,7 @@ async fn open_transport(
     let unicast = TransportManager::config_unicast().max_links(endpoints.len());
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClient::default()))
         .unwrap();

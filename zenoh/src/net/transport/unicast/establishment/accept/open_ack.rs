@@ -15,7 +15,8 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::message::{Attachment, TransportMessage};
+use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::{OpenAck, WireProperties};
 use crate::net::transport::TransportManager;
 
 /*************************************/
@@ -24,7 +25,7 @@ use crate::net::transport::TransportManager;
 // Send an OpenAck
 pub(super) struct Input {
     pub(super) initial_sn: ZInt,
-    pub(super) attachment: Option<Attachment>,
+    pub(super) open_ack_auth_ext: WireProperties,
 }
 
 pub(super) async fn send(
@@ -34,17 +35,13 @@ pub(super) async fn send(
     input: Input,
 ) -> AResult<()> {
     // Build OpenAck message
-    let mut message = TransportMessage::make_open_ack(
-        manager.config.unicast.lease,
-        input.initial_sn,
-        input.attachment,
-    );
+    let mut message = OpenAck::new(manager.config.unicast.lease, input.initial_sn);
+    if !input.open_ack_auth_ext.is_empty() {
+        message.exts.authentication = Some(ZExt::new(input.open_ack_auth_ext, ZExtPolicy::Ignore));
+    }
 
     // Send the message on the link
-    let _ = link
-        .write_transport_message(&mut message)
-        .await
-        .map_err(|e| (e, None))?;
+    let _ = link.send(&mut message).await.map_err(|e| (e, None))?;
 
     Ok(())
 }

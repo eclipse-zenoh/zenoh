@@ -15,10 +15,10 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{Version, WhatAmI, ZInt, ZenohId};
+use super::protocol::core::{Version, WhatAmI, ZenohId};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
-use super::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES};
+use super::protocol::message::defaults::BATCH_SIZE;
 use super::protocol::VERSION;
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
@@ -27,9 +27,11 @@ use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use crate::config::Config;
 use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
+use crate::net::protocol::message::SeqNumBytes;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
@@ -80,10 +82,10 @@ use zenoh_util::zparse;
 ///         .max_links(1)    // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
-///         .pid(ZenohId::rand())
+///         .zid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
-///         .sn_resolution(128)             // Use a sequence number resolution of 128
+///         .sn_bytes(4)                    // Use max 4 bytes for the SN: 2^28 sequence numbers
 ///         .unicast(unicast)               // Configure unicast parameters
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
@@ -91,9 +93,9 @@ use zenoh_util::zparse;
 
 pub struct TransportManagerConfig {
     pub version: Version,
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub whatami: WhatAmI,
-    pub sn_resolution: ZInt,
+    pub sn_bytes: SeqNumBytes,
     pub batch_size: u16,
     pub defrag_buff_size: usize,
     pub link_rx_buff_size: usize,
@@ -115,9 +117,9 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: Version,
-    pid: ZenohId,
+    zid: ZenohId,
     whatami: WhatAmI,
-    sn_resolution: ZInt,
+    sn_bytes: SeqNumBytes,
     batch_size: u16,
     defrag_buff_size: usize,
     link_rx_buff_size: usize,
@@ -127,8 +129,8 @@ pub struct TransportManagerBuilder {
 }
 
 impl TransportManagerBuilder {
-    pub fn pid(mut self, pid: ZenohId) -> Self {
-        self.pid = pid;
+    pub fn zid(mut self, zid: ZenohId) -> Self {
+        self.zid = zid;
         self
     }
 
@@ -137,8 +139,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn sn_resolution(mut self, sn_resolution: ZInt) -> Self {
-        self.sn_resolution = sn_resolution;
+    pub fn sn_bytes(mut self, sn_bytes: SeqNumBytes) -> Self {
+        self.sn_bytes = sn_bytes;
         self
     }
 
@@ -174,13 +176,15 @@ impl TransportManagerBuilder {
 
     pub async fn from_config(mut self, properties: &Config) -> ZResult<TransportManagerBuilder> {
         if let Some(v) = properties.id() {
-            self = self.pid(zparse!(v)?);
+            self = self.zid(zparse!(v)?);
         }
         if let Some(v) = properties.mode() {
             self = self.whatami(*v);
         }
         if let Some(v) = properties.transport().sequence_number_resolution() {
-            self = self.sn_resolution(*v);
+            let b = u8::try_from(*v).map_err(|_| zerror!("Invalid SN Bytes"))?;
+            let b = SeqNumBytes::try_from(b).map_err(|_| zerror!("Invalid SN Bytes"))?;
+            self = self.sn_bytes(b);
         }
         if let Some(v) = properties.transport().link().batch_size() {
             self = self.batch_size(*v);
@@ -212,9 +216,9 @@ impl TransportManagerBuilder {
 
         let config = TransportManagerConfig {
             version: self.version,
-            pid: self.pid,
+            zid: self.zid,
             whatami: self.whatami,
-            sn_resolution: self.sn_resolution,
+            sn_bytes: self.sn_bytes,
             batch_size: self.batch_size,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buff_size: self.link_rx_buff_size,
@@ -239,9 +243,9 @@ impl Default for TransportManagerBuilder {
     fn default() -> Self {
         Self {
             version: VERSION,
-            pid: ZenohId::rand(),
+            zid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
-            sn_resolution: SEQ_NUM_RES,
+            sn_bytes: SeqNumBytes::default(),
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
@@ -284,8 +288,8 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn pid(&self) -> ZenohId {
-        self.config.pid
+    pub fn zid(&self) -> ZenohId {
+        self.config.zid
     }
 
     pub async fn close(&self) {

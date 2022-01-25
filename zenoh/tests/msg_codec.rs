@@ -16,13 +16,29 @@ use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
-use zenoh::net::protocol::message::defaults::SEQ_NUM_RES;
+use zenoh::net::protocol::message::extension::{ZExt, ZExtPolicy};
 use zenoh::net::protocol::message::*;
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;
 const PROP_MAX_SIZE: usize = 64;
 const MAX_PAYLOAD_SIZE: usize = 256;
+
+macro_rules! ztesth {
+    ( $m:expr, $r:expr) => {
+        let mut wbuf = WBuf::new(256, false);
+        println!("\nWrite message: {:?}", $m);
+        assert!($m.write(&mut wbuf));
+
+        println!("Read message from: {:?}", wbuf);
+        let mut zbuf = ZBuf::from(wbuf);
+        let h = zbuf.read().unwrap();
+        let r = $r(&mut zbuf, h).unwrap();
+
+        println!("Message read: {:?}", r);
+        assert_eq!($m, r);
+    };
+}
 
 macro_rules! gen {
     ($name:ty) => {
@@ -272,16 +288,6 @@ fn gen_wireproperties() -> WireProperties {
 /*************************************/
 /*       SCOUTING MESSAGES           */
 /*************************************/
-fn test_write_read_scouting_message(mut msg: ScoutingMessage) {
-    let mut buf = WBuf::new(164, false);
-    println!("\nWrite message: {:?}", msg);
-    buf.write_scouting_message(&mut msg);
-    println!("Read message from: {:?}", buf);
-    let result = ZBuf::from(buf).read_scouting_message().unwrap();
-    println!("Message read: {:?}", result);
-    assert_eq!(msg, result);
-}
-
 #[test]
 fn codec_scout() {
     for _ in 0..NUM_ITER {
@@ -296,19 +302,12 @@ fn codec_scout() {
             },
         ];
         let tmp = 1 + (gen!(u8) % 6);
-        println!("{}", tmp);
         let what = WhatAmIMatcher::try_from(tmp).unwrap();
         let zid = [None, Some(gen_zid())];
         let u_ext = [
             None,
-            Some(ZExt::new(
-                ZUser::new(gen_wireproperties()),
-                ZExtPolicy::Ignore,
-            )),
-            Some(ZExt::new(
-                ZUser::new(gen_wireproperties()),
-                ZExtPolicy::Forward,
-            )),
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Forward)),
         ];
 
         for v in version.iter() {
@@ -316,7 +315,7 @@ fn codec_scout() {
                 for u in u_ext.iter() {
                     let mut msg = Scout::new(v.clone(), what, *z);
                     msg.exts.user = u.clone();
-                    test_write_read_scouting_message(msg.into());
+                    ztesth!(msg, Scout::read);
                 }
             }
         }
@@ -347,14 +346,8 @@ fn codec_hello() {
         ];
         let u_ext = [
             None,
-            Some(ZExt::new(
-                ZUser::new(gen_wireproperties()),
-                ZExtPolicy::Ignore,
-            )),
-            Some(ZExt::new(
-                ZUser::new(gen_wireproperties()),
-                ZExtPolicy::Forward,
-            )),
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Forward)),
         ];
 
         for v in version.iter() {
@@ -363,7 +356,7 @@ fn codec_hello() {
                     for u in u_ext.iter() {
                         let mut msg = Hello::new(v.clone(), *w, zid, l.clone());
                         msg.exts.user = u.clone();
-                        test_write_read_scouting_message(msg.into());
+                        ztesth!(msg, Hello::read);
                     }
                 }
             }
@@ -391,43 +384,53 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
 #[test]
 fn codec_init() {
     for _ in 0..NUM_ITER {
-        let is_qos = [true, false];
-        let wami = [WhatAmI::Router, WhatAmI::Client];
-        let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
-        let attachment = [None, Some(gen_attachment())];
+        let version = [
+            Version {
+                stable: gen!(u8),
+                experimental: None,
+            },
+            Version {
+                stable: gen!(u8),
+                experimental: NonZeroZInt::new(gen!(ZInt)),
+            },
+        ];
+        let whatami = [WhatAmI::Router, WhatAmI::Client];
+        let sn_bytes = [SeqNumBytes::default(), SeqNumBytes::MIN, SeqNumBytes::MAX];
+        let ext_qos = [None, Some(ZExt::new((), ZExtPolicy::Ignore))];
+        let ext_auth = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
+        let ext_user = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
 
-        for q in is_qos.iter() {
-            for w in wami.iter() {
-                for s in sn_resolution.iter() {
-                    for a in attachment.iter() {
-                        let msg = TransportMessage::make_init_syn(
-                            gen!(u8),
-                            *w,
-                            gen_zid(),
-                            *s,
-                            *q,
-                            a.clone(),
-                        );
-                        test_write_read_transport_message(msg);
-                    }
-                }
-            }
-        }
+        for v in version.iter() {
+            for w in whatami.iter() {
+                for s in sn_bytes.iter() {
+                    for q in ext_qos.iter() {
+                        for a in ext_auth.iter() {
+                            for u in ext_user.iter() {
+                                let mut msg = InitSyn::new(v.clone(), *w, gen_zid(), *s);
+                                msg.exts.qos = q.clone();
+                                msg.exts.authentication = a.clone();
+                                msg.exts.user = u.clone();
+                                ztesth!(msg, InitSyn::read);
 
-        let sn_resolution = [None, Some(gen!(ZInt))];
-        for q in is_qos.iter() {
-            for w in wami.iter() {
-                for s in sn_resolution.iter() {
-                    for a in attachment.iter() {
-                        let msg = TransportMessage::make_init_ack(
-                            *w,
-                            gen_zid(),
-                            *s,
-                            *q,
-                            gen_buffer(64).into(),
-                            a.clone(),
-                        );
-                        test_write_read_transport_message(msg);
+                                let mut msg = InitAck::new(
+                                    v.clone(),
+                                    *w,
+                                    gen_zid(),
+                                    *s,
+                                    gen_buffer(64).into(),
+                                );
+                                msg.exts.qos = q.clone();
+                                msg.exts.authentication = a.clone();
+                                msg.exts.user = u.clone();
+                                ztesth!(msg, InitAck::read);
+                            }
+                        }
                     }
                 }
             }
@@ -439,24 +442,28 @@ fn codec_init() {
 fn codec_open() {
     for _ in 0..NUM_ITER {
         let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
-        let attachment = [None, Some(gen_attachment())];
+        let ext_auth = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
+        let ext_user = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
 
         for l in lease.iter() {
-            for a in attachment.iter() {
-                let msg = TransportMessage::make_open_syn(
-                    *l,
-                    gen!(ZInt),
-                    gen_buffer(64).into(),
-                    a.clone(),
-                );
-                test_write_read_transport_message(msg);
-            }
-        }
+            for a in ext_auth.iter() {
+                for u in ext_user.iter() {
+                    let mut msg = OpenSyn::new(*l, gen!(ZInt), gen_buffer(64).into());
+                    msg.exts.authentication = a.clone();
+                    msg.exts.user = u.clone();
+                    ztesth!(msg, OpenSyn::read);
 
-        for l in lease.iter() {
-            for a in attachment.iter() {
-                let msg = TransportMessage::make_open_ack(*l, gen!(ZInt), a.clone());
-                test_write_read_transport_message(msg);
+                    let mut msg = OpenAck::new(*l, gen!(ZInt));
+                    msg.exts.authentication = a.clone();
+                    msg.exts.user = u.clone();
+                    ztesth!(msg, OpenAck::read);
+                }
             }
         }
     }
@@ -465,30 +472,56 @@ fn codec_open() {
 #[test]
 fn codec_join() {
     for _ in 0..NUM_ITER {
-        let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
-        let wami = [WhatAmI::Router, WhatAmI::Client];
-        let sn_resolution = [SEQ_NUM_RES, gen!(ZInt)];
-        let initial_sns = [
-            ConduitSnList::Plain(gen_initial_sn()),
-            ConduitSnList::QoS(Box::new([gen_initial_sn(); Priority::NUM])),
+        let version = [
+            Version {
+                stable: gen!(u8),
+                experimental: None,
+            },
+            Version {
+                stable: gen!(u8),
+                experimental: NonZeroZInt::new(gen!(ZInt)),
+            },
         ];
-        let attachment = [None, Some(gen_attachment())];
+        let whatami = [WhatAmI::Router, WhatAmI::Client];
+        let sn_bytes = [SeqNumBytes::default(), SeqNumBytes::MIN, SeqNumBytes::MAX];
+        let lease = [Duration::from_secs(1), Duration::from_millis(1234)];
+        let ext_qos = [
+            None,
+            Some(ZExt::new(
+                [gen_initial_sn(); Priority::NUM],
+                ZExtPolicy::Ignore,
+            )),
+        ];
+        let ext_auth = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
+        let ext_user = [
+            None,
+            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
+        ];
 
-        for l in lease.iter() {
-            for w in wami.iter() {
-                for s in sn_resolution.iter() {
-                    for i in initial_sns.iter() {
-                        for a in attachment.iter() {
-                            let msg = TransportMessage::make_join(
-                                gen!(u8),
-                                *w,
-                                gen_zid(),
-                                *l,
-                                *s,
-                                i.clone(),
-                                a.clone(),
-                            );
-                            test_write_read_transport_message(msg);
+        for v in version.iter() {
+            for w in whatami.iter() {
+                for s in sn_bytes.iter() {
+                    for l in lease.iter() {
+                        for q in ext_qos.iter() {
+                            for a in ext_auth.iter() {
+                                for u in ext_user.iter() {
+                                    let mut msg = Join::new(
+                                        v.clone(),
+                                        *w,
+                                        gen_zid(),
+                                        *s,
+                                        *l,
+                                        gen_initial_sn(),
+                                    );
+                                    msg.exts.qos = q.clone();
+                                    msg.exts.authentication = a.clone();
+                                    msg.exts.user = u.clone();
+                                    ztesth!(msg, Join::read);
+                                }
+                            }
                         }
                     }
                 }
