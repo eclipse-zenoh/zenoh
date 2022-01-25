@@ -28,6 +28,7 @@ use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_core::zasynclock;
 use zenoh_core::Result as ZResult;
 use zenoh_crypto::PseudoRng;
+use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 
 const WBUF_SIZE: usize = 64;
 const MULTILINK_VERSION: ZInt = 1;
@@ -51,22 +52,6 @@ const MULTILINK_VERSION: ZInt = 1;
 /// - 0x00 => Zenoh Properties
 /// ```
 
-impl WBuf {
-    fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool {
-        self.write_bytes_array(pub_key.n().to_bytes_le().as_slice())
-            && self.write_bytes_array(pub_key.e().to_bytes_le().as_slice())
-    }
-}
-
-impl ZBuf {
-    fn read_rsa_pub_key(&mut self) -> Option<RsaPublicKey> {
-        let n = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
-        let e = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
-
-        RsaPublicKey::new(n, e).ok()
-    }
-}
-
 /*************************************/
 /*             InitSyn               */
 /*************************************/
@@ -81,25 +66,6 @@ impl ZBuf {
 struct InitSynProperty {
     version: ZInt,
     alice_pubkey: RsaPublicKey,
-}
-
-impl WBuf {
-    fn write_init_syn_property_multilink(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        self.write_zint(init_syn_property.version)
-            && self.write_rsa_pub_key(&init_syn_property.alice_pubkey)
-    }
-}
-
-impl ZBuf {
-    fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        let alice_pubkey = self.read_rsa_pub_key()?;
-
-        Some(InitSynProperty {
-            version,
-            alice_pubkey,
-        })
-    }
 }
 
 /*************************************/
@@ -118,28 +84,6 @@ struct InitAckProperty {
     nonce_encrypted_with_alice_pubkey: Vec<u8>,
 }
 
-impl WBuf {
-    fn write_init_ack_property_multilink(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        self.write_rsa_pub_key(&init_ack_property.bob_pubkey)
-            && self.write_bytes_array(
-                init_ack_property
-                    .nonce_encrypted_with_alice_pubkey
-                    .as_slice(),
-            )
-    }
-}
-
-impl ZBuf {
-    fn read_init_ack_property_multilink(&mut self) -> Option<InitAckProperty> {
-        let bob_pubkey = self.read_rsa_pub_key()?;
-        let nonce_encrypted_with_alice_pubkey = self.read_bytes_array()?;
-        Some(InitAckProperty {
-            bob_pubkey,
-            nonce_encrypted_with_alice_pubkey,
-        })
-    }
-}
-
 /*************************************/
 /*             OpenSyn               */
 /*************************************/
@@ -153,18 +97,69 @@ struct OpenSynProperty {
     nonce_encrypted_with_bob_pubkey: Vec<u8>,
 }
 
-impl WBuf {
+trait WPubKey {
+    fn write_init_syn_property_multilink(&mut self, init_syn_property: &InitSynProperty) -> bool;
+    fn write_init_ack_property_multilink(&mut self, init_ack_property: &InitAckProperty) -> bool;
+    fn write_open_syn_property_multilink(&mut self, open_syn_property: &OpenSynProperty) -> bool;
+    fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool;
+}
+impl WPubKey for WBuf {
+    fn write_init_syn_property_multilink(&mut self, init_syn_property: &InitSynProperty) -> bool {
+        self.write_zint(init_syn_property.version)
+            && self.write_rsa_pub_key(&init_syn_property.alice_pubkey)
+    }
+    fn write_init_ack_property_multilink(&mut self, init_ack_property: &InitAckProperty) -> bool {
+        self.write_rsa_pub_key(&init_ack_property.bob_pubkey)
+            && self.write_bytes_array(
+                init_ack_property
+                    .nonce_encrypted_with_alice_pubkey
+                    .as_slice(),
+            )
+    }
     fn write_open_syn_property_multilink(&mut self, open_syn_property: &OpenSynProperty) -> bool {
         self.write_bytes_array(open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice())
     }
+    fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool {
+        self.write_bytes_array(pub_key.n().to_bytes_le().as_slice())
+            && self.write_bytes_array(pub_key.e().to_bytes_le().as_slice())
+    }
 }
 
-impl ZBuf {
+trait ZPubKey {
+    fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty>;
+    fn read_init_ack_property_multilink(&mut self) -> Option<InitAckProperty>;
+    fn read_open_syn_property_multilink(&mut self) -> Option<OpenSynProperty>;
+    fn read_rsa_pub_key(&mut self) -> Option<RsaPublicKey>;
+}
+impl ZPubKey for ZBuf {
+    fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty> {
+        let version = self.read_zint()?;
+        let alice_pubkey = self.read_rsa_pub_key()?;
+
+        Some(InitSynProperty {
+            version,
+            alice_pubkey,
+        })
+    }
+    fn read_init_ack_property_multilink(&mut self) -> Option<InitAckProperty> {
+        let bob_pubkey = self.read_rsa_pub_key()?;
+        let nonce_encrypted_with_alice_pubkey = self.read_bytes_array()?;
+        Some(InitAckProperty {
+            bob_pubkey,
+            nonce_encrypted_with_alice_pubkey,
+        })
+    }
     fn read_open_syn_property_multilink(&mut self) -> Option<OpenSynProperty> {
         let nonce_encrypted_with_bob_pubkey = self.read_bytes_array()?;
         Some(OpenSynProperty {
             nonce_encrypted_with_bob_pubkey,
         })
+    }
+    fn read_rsa_pub_key(&mut self) -> Option<RsaPublicKey> {
+        let n = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
+        let e = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
+
+        RsaPublicKey::new(n, e).ok()
     }
 }
 

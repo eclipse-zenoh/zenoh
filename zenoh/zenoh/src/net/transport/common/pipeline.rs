@@ -37,6 +37,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
 use zenoh_core::zlock;
+use zenoh_protocol::proto::MessageWriter;
 use zenoh_sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
 
 macro_rules! zgetbatch {
@@ -641,6 +642,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use zenoh_protocol::proto::MessageReader;
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);

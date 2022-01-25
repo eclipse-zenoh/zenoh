@@ -16,17 +16,22 @@
 extern crate lazy_static;
 use std::path::{Path, PathBuf};
 #[cfg(features = "zenoh-collections")]
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_collections as collections;
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_core as core;
 #[cfg(features = "zenoh-crypto")]
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_crypto as crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;
 pub use lib_loader::*;
 #[cfg(features = "zenoh-cfg-properties")]
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_cfg_properties as properties;
 #[cfg(features = "zenoh-sync")]
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_sync as sync;
 
 /// the "ZENOH_HOME" environement variable name

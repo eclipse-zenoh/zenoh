@@ -15,10 +15,6 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use crate::config::Config;
-use crate::net::protocol::core::{PeerId, ZInt};
-use crate::net::protocol::io::{
-    SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
-};
 use crate::net::transport::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
@@ -28,6 +24,11 @@ use zenoh_core::zcheck;
 use zenoh_core::zresult::ShmError;
 use zenoh_core::Result as ZResult;
 use zenoh_crypto::PseudoRng;
+use zenoh_protocol::io::{
+    SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, WBufCodec, ZBuf, ZBufCodec,
+    ZSlice,
+};
+use zenoh_protocol_core::{PeerId, ZInt};
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;
@@ -51,21 +52,6 @@ struct InitSynProperty {
     shm: ZSlice,
 }
 
-impl WBuf {
-    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        zcheck!(self.write_zint(init_syn_property.version));
-        self.write_zslice_array(init_syn_property.shm.clone())
-    }
-}
-
-impl ZBuf {
-    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitSynProperty { version, shm })
-    }
-}
-
 /*************************************/
 /*             InitAck               */
 /*************************************/
@@ -82,21 +68,6 @@ struct InitAckProperty {
     shm: ZSlice,
 }
 
-impl WBuf {
-    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        zcheck!(self.write_zint(init_ack_property.challenge));
-        self.write_zslice_array(init_ack_property.shm.clone())
-    }
-}
-
-impl ZBuf {
-    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
-        let challenge = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitAckProperty { challenge, shm })
-    }
-}
-
 /*************************************/
 /*             OpenSyn               */
 /*************************************/
@@ -110,13 +81,41 @@ struct OpenSynProperty {
     challenge: ZInt,
 }
 
-impl WBuf {
+trait WShm {
+    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool;
+    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool;
+    fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool;
+}
+impl WShm for WBuf {
+    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
+        zcheck!(self.write_zint(init_syn_property.version));
+        self.write_zslice_array(init_syn_property.shm.clone())
+    }
+    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
+        zcheck!(self.write_zint(init_ack_property.challenge));
+        self.write_zslice_array(init_ack_property.shm.clone())
+    }
     fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool {
         self.write_zint(open_syn_property.challenge)
     }
 }
 
-impl ZBuf {
+trait ZShm {
+    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty>;
+    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty>;
+    fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty>;
+}
+impl ZShm for ZBuf {
+    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
+        let version = self.read_zint()?;
+        let shm = self.read_shminfo()?;
+        Some(InitSynProperty { version, shm })
+    }
+    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
+        let challenge = self.read_zint()?;
+        let shm = self.read_shminfo()?;
+        Some(InitAckProperty { challenge, shm })
+    }
     fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty> {
         let challenge = self.read_zint()?;
         Some(OpenSynProperty { challenge })

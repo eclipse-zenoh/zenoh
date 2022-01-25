@@ -25,6 +25,7 @@ use zenoh_cfg_properties::Properties;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_crypto::hmac;
+use zenoh_protocol::io::{ZBufCodec, WBufCodec};
 
 const WBUF_SIZE: usize = 64;
 const USRPWD_VERSION: ZInt = 1;
@@ -61,19 +62,6 @@ struct InitSynProperty {
     version: ZInt,
 }
 
-impl WBuf {
-    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        self.write_zint(init_syn_property.version)
-    }
-}
-
-impl ZBuf {
-    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        Some(InitSynProperty { version })
-    }
-}
-
 /*************************************/
 /*             InitAck               */
 /*************************************/
@@ -85,19 +73,6 @@ impl ZBuf {
 /// +---------------+
 struct InitAckProperty {
     nonce: ZInt,
-}
-
-impl WBuf {
-    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        self.write_zint(init_ack_property.nonce)
-    }
-}
-
-impl ZBuf {
-    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
-        let nonce = self.read_zint()?;
-        Some(InitAckProperty { nonce })
-    }
 }
 
 /*************************************/
@@ -116,14 +91,38 @@ struct OpenSynProperty {
     hmac: Vec<u8>,
 }
 
-impl WBuf {
+trait WUsrPw {
+    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool;
+    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool;
+    fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool;
+}
+impl WUsrPw for WBuf {
+    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool {
+        self.write_zint(init_syn_property.version)
+    }
+    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool {
+        self.write_zint(init_ack_property.nonce)
+    }
     fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool {
         zcheck!(self.write_bytes_array(&open_syn_property.user));
         self.write_bytes_array(&open_syn_property.hmac)
     }
 }
 
-impl ZBuf {
+trait ZUsrPw {
+    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty>;
+    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty>;
+    fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty>;
+}
+impl ZUsrPw for ZBuf {
+    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
+        let version = self.read_zint()?;
+        Some(InitSynProperty { version })
+    }
+    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
+        let nonce = self.read_zint()?;
+        Some(InitAckProperty { nonce })
+    }
     fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty> {
         let user = self.read_bytes_array()?;
         let hmac = self.read_bytes_array()?;

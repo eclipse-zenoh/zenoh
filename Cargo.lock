@@ -163,7 +163,6 @@ dependencies = [
  "futures-lite",
  "num_cpus",
  "once_cell",
- "tokio",
 ]
 
 [[package]]
@@ -1538,9 +1537,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f305c2c2e4c39a82f7bf0bf65fb557f9070ce06781d4f2454295cc34b1c43188"
+checksum = "9f866317acbd3a240710c63f065ffb1e4fd466259045ccb504130b7f668f35c6"
 dependencies = [
  "bitflags",
  "cc",
@@ -3218,7 +3217,6 @@ name = "zenoh"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-global-executor",
- "async-rustls",
  "async-std",
  "async-trait",
  "base64 0.13.0",
@@ -3237,14 +3235,11 @@ dependencies = [
  "lazy_static",
  "libloading",
  "log",
- "nix 0.23.0",
  "num-traits",
  "ordered-float",
  "paste",
  "petgraph",
- "quinn",
  "rand 0.8.4",
- "rcgen",
  "regex",
  "rsa",
  "rustc_version 0.4.0",
@@ -3257,16 +3252,32 @@ dependencies = [
  "uuid",
  "validated_struct",
  "vec_map",
- "webpki 0.22.0",
+ "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
+ "zenoh-link",
  "zenoh-plugin-trait",
+ "zenoh-protocol",
  "zenoh-protocol-core",
  "zenoh-sync",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-buffers"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "bincode",
+ "hex",
+ "log",
+ "serde",
+ "shared_memory",
+ "zenoh-collections",
+ "zenoh-core",
 ]
 
 [[package]]
@@ -3345,6 +3356,91 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-link"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "quinn",
+ "rcgen",
+ "webpki 0.22.0",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-link-quic",
+ "zenoh-link-tcp",
+ "zenoh-link-tls",
+ "zenoh-link-udp",
+ "zenoh-link-unixsock_stream",
+ "zenoh-protocol-core",
+]
+
+[[package]]
+name = "zenoh-link-commons"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "flume",
+ "zenoh-buffers",
+ "zenoh-core",
+ "zenoh-protocol",
+ "zenoh-protocol-core",
+]
+
+[[package]]
+name = "zenoh-link-quic"
+version = "0.1.0"
+
+[[package]]
+name = "zenoh-link-tcp"
+version = "0.1.0"
+
+[[package]]
+name = "zenoh-link-tls"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-rustls",
+ "async-std",
+ "async-trait",
+ "log",
+ "zenoh-cfg-properties",
+ "zenoh-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-link-udp"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "log",
+ "socket2 0.4.2",
+ "zenoh-collections",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-link-unixsock_stream"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "log",
+ "nix 0.23.1",
+ "uuid",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+]
+
+[[package]]
 name = "zenoh-macros"
 version = "0.6.0-dev.0"
 dependencies = [
@@ -3409,6 +3505,17 @@ dependencies = [
  "zenoh-core",
  "zenoh-macros",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-protocol"
+version = "0.6.0-dev.0"
+dependencies = [
+ "log",
+ "uhlc",
+ "zenoh-buffers",
+ "zenoh-core",
+ "zenoh-protocol-core",
 ]
 
 [[package]]

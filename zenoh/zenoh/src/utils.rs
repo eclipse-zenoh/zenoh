@@ -15,4 +15,5 @@
 //! Some useful operations for the zenoh API.
 
 /// Helpers to manipulate and compare key expressions.
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_protocol_core::key_expr;

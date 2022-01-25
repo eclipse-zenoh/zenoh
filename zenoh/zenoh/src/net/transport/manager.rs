@@ -25,7 +25,7 @@ use super::unicast::manager::{
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use crate::config::Config;
-use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
+use crate::net::link::{EndPoint, Locator};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;

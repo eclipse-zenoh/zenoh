@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[doc(hidden)]
-pub mod link;
+pub use zenoh_link as link;
 #[doc(hidden)]
 pub mod protocol;
 #[doc(hidden)]

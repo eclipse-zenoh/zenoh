@@ -105,6 +105,7 @@ pub use session::*;
 #[doc(hidden)]
 pub mod net;
 
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod info;
 pub mod prelude;
@@ -217,6 +218,7 @@ pub mod properties {
 ///     }
 /// }
 /// ```
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub mod sync {
     pub use zenoh_sync::zready;
     pub use zenoh_sync::ZFuture;

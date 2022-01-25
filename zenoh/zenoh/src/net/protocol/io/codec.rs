@@ -11,17 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
-#[cfg(feature = "shared-memory")]
-use super::SharedMemoryBufInfo;
 #[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use crate::net::link::Locator;
-#[cfg(feature = "shared-memory")]
-use zenoh_core::zerror;
-#[cfg(feature = "shared-memory")]
-use zenoh_core::Result as ZResult;
+use zenoh_protocol_core::{PeerId, Property, Timestamp, ZInt, ZINT_MAX_BYTES};
 
 #[cfg(feature = "shared-memory")]
 mod zslice {
@@ -53,19 +47,33 @@ macro_rules! read_zint {
     };
 }
 
-#[cfg(feature = "shared-memory")]
-impl SharedMemoryBufInfo {
-    pub fn serialize(&self) -> ZResult<Vec<u8>> {
-        bincode::serialize(self)
-            .map_err(|e| zerror!("Unable to serialize SharedMemoryBufInfo: {}", e).into())
-    }
+pub trait ZBufCodec {
+    fn read_zint(&mut self) -> Option<ZInt>;
 
-    pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
-        match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
-            Ok(info) => Ok(info),
-            Err(e) => bail!("Unable to deserialize SharedMemoryBufInfo: {}", e),
-        }
-    }
+    fn read_zint_as_u64(&mut self) -> Option<u64>;
+
+    fn read_zint_as_usize(&mut self) -> Option<usize>;
+
+    // Same as read_bytes but with array length before the bytes.
+    fn read_bytes_array(&mut self) -> Option<Vec<u8>>;
+    fn read_string(&mut self) -> Option<String>;
+    fn read_peeexpr_id(&mut self) -> Option<PeerId>;
+    fn read_locator(&mut self) -> Option<Locator>;
+    fn read_locators(&mut self) -> Option<Vec<Locator>>;
+    fn read_zslice_array(&mut self) -> Option<ZSlice>;
+    #[cfg(feature = "shared-memory")]
+    fn read_shminfo(&mut self) -> Option<ZSlice>;
+    fn read_zbuf_flat(&mut self) -> Option<ZBuf>;
+    #[cfg(feature = "shared-memory")]
+    fn read_zbuf_sliced(&mut self) -> Option<ZBuf>;
+    // Same as read_bytes_array but 0 copy on ZBuf.
+    #[cfg(feature = "shared-memory")]
+    fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf>;
+    #[cfg(not(feature = "shared-memory"))]
+    fn read_zbuf(&mut self) -> Option<ZBuf>;
+    fn read_properties(&mut self) -> Option<Vec<Property>>;
+    fn read_property(&mut self) -> Option<Property>;
+    fn read_timestamp(&mut self) -> Option<Timestamp>;
 }
 
 // ZBuf encoding
@@ -100,26 +108,25 @@ impl SharedMemoryBufInfo {
 // +---------------+
 // ~  slice bytes  ~
 // +---------------+
-
-impl ZBuf {
+impl ZBufCodec for ZBuf {
     #[inline(always)]
-    pub fn read_zint(&mut self) -> Option<ZInt> {
+    fn read_zint(&mut self) -> Option<ZInt> {
         read_zint!(self, ZInt);
     }
 
     #[inline(always)]
-    pub fn read_zint_as_u64(&mut self) -> Option<u64> {
+    fn read_zint_as_u64(&mut self) -> Option<u64> {
         read_zint!(self, u64);
     }
 
     #[inline(always)]
-    pub fn read_zint_as_usize(&mut self) -> Option<usize> {
+    fn read_zint_as_usize(&mut self) -> Option<usize> {
         read_zint!(self, usize);
     }
 
     // Same as read_bytes but with array length before the bytes.
     #[inline(always)]
-    pub fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
+    fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
         let len = self.read_zint_as_usize()?;
         let mut buf = vec![0; len];
         if self.read_bytes(buf.as_mut_slice()) {
@@ -130,13 +137,13 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_string(&mut self) -> Option<String> {
+    fn read_string(&mut self) -> Option<String> {
         let bytes = self.read_bytes_array()?;
         Some(String::from(String::from_utf8_lossy(&bytes)))
     }
 
     #[inline(always)]
-    pub fn read_peeexpr_id(&mut self) -> Option<PeerId> {
+    fn read_peeexpr_id(&mut self) -> Option<PeerId> {
         let size = self.read_zint_as_usize()?;
         if size > PeerId::MAX_SIZE {
             log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
@@ -151,12 +158,12 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_locator(&mut self) -> Option<Locator> {
+    fn read_locator(&mut self) -> Option<Locator> {
         self.read_string()?.parse().ok()
     }
 
     #[inline(always)]
-    pub fn read_locators(&mut self) -> Option<Vec<Locator>> {
+    fn read_locators(&mut self) -> Option<Vec<Locator>> {
         let len = self.read_zint()?;
         let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -166,14 +173,14 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_zslice_array(&mut self) -> Option<ZSlice> {
+    fn read_zslice_array(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         self.read_zslice(len)
     }
 
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
-    pub fn read_shminfo(&mut self) -> Option<ZSlice> {
+    fn read_shminfo(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         let mut info = vec![0; len];
         if !self.read_bytes(&mut info) {
@@ -220,7 +227,7 @@ impl ZBuf {
     // Same as read_bytes_array but 0 copy on ZBuf.
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
-    pub fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf> {
+    fn read_zbuf(&mut self, sliced: bool) -> Option<ZBuf> {
         if !sliced {
             self.read_zbuf_flat()
         } else {
@@ -230,11 +237,11 @@ impl ZBuf {
 
     #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
-    pub fn read_zbuf(&mut self) -> Option<ZBuf> {
+    fn read_zbuf(&mut self) -> Option<ZBuf> {
         self.read_zbuf_flat()
     }
 
-    pub fn read_properties(&mut self) -> Option<Vec<Property>> {
+    fn read_properties(&mut self) -> Option<Vec<Property>> {
         let len = self.read_zint()?;
         let mut vec: Vec<Property> = Vec::with_capacity(len as usize);
         for _ in 0..len {
@@ -249,7 +256,7 @@ impl ZBuf {
         Some(Property { key, value })
     }
 
-    pub fn read_timestamp(&mut self) -> Option<Timestamp> {
+    fn read_timestamp(&mut self) -> Option<Timestamp> {
         let time = self.read_zint_as_u64()?;
         let size = self.read_zint_as_usize()?;
         if size > (uhlc::ID::MAX_SIZE) {
@@ -281,47 +288,69 @@ macro_rules! write_zint {
     };
 }
 
-impl WBuf {
+pub trait WBufCodec {
+    fn write_zint(&mut self, v: ZInt) -> bool;
+    fn write_u64_as_zint(&mut self, v: u64) -> bool;
+    fn write_usize_as_zint(&mut self, v: usize) -> bool;
+    fn write_bytes_array(&mut self, s: &[u8]) -> bool;
+    fn write_string(&mut self, s: &str) -> bool;
+    fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool;
+    fn write_locator(&mut self, locator: &Locator) -> bool;
+    fn write_locators(&mut self, locators: &[Locator]) -> bool;
+    fn write_zslice_array(&mut self, slice: ZSlice) -> bool;
+    fn write_zbuf_flat(&mut self, zbuf: &ZBuf) -> bool;
+    #[cfg(feature = "shared-memory")]
+    fn write_zbuf_sliced(&mut self, zbuf: &ZBuf) -> bool;
+    #[cfg(feature = "shared-memory")]
+    fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool;
+    #[cfg(not(feature = "shared-memory"))]
+    fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool;
+    fn write_zbuf_slices(&mut self, zbuf: &ZBuf) -> bool;
+    fn write_properties(&mut self, props: &[Property]) -> bool;
+    fn write_property(&mut self, p: &Property) -> bool;
+    fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool;
+}
+impl WBufCodec for WBuf {
     /// This the traditional VByte encoding, in which an arbirary integer
     /// is encoded as a sequence of 7 bits integers
     #[inline(always)]
-    pub fn write_zint(&mut self, v: ZInt) -> bool {
+    fn write_zint(&mut self, v: ZInt) -> bool {
         write_zint!(self, v);
     }
 
     #[inline(always)]
-    pub fn write_u64_as_zint(&mut self, v: u64) -> bool {
+    fn write_u64_as_zint(&mut self, v: u64) -> bool {
         write_zint!(self, v);
     }
 
     #[inline(always)]
-    pub fn write_usize_as_zint(&mut self, v: usize) -> bool {
+    fn write_usize_as_zint(&mut self, v: usize) -> bool {
         write_zint!(self, v);
     }
 
     // Same as write_bytes but with array length before the bytes.
     #[inline(always)]
-    pub fn write_bytes_array(&mut self, s: &[u8]) -> bool {
+    fn write_bytes_array(&mut self, s: &[u8]) -> bool {
         self.write_usize_as_zint(s.len()) && self.write_bytes(s)
     }
 
     #[inline(always)]
-    pub fn write_string(&mut self, s: &str) -> bool {
+    fn write_string(&mut self, s: &str) -> bool {
         self.write_usize_as_zint(s.len()) && self.write_bytes(s.as_bytes())
     }
 
     #[inline(always)]
-    pub fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
+    fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
         self.write_bytes_array(pid.as_slice())
     }
 
     #[inline(always)]
-    pub fn write_locator(&mut self, locator: &Locator) -> bool {
+    fn write_locator(&mut self, locator: &Locator) -> bool {
         self.write_string(&locator.to_string())
     }
 
     #[inline(always)]
-    pub fn write_locators(&mut self, locators: &[Locator]) -> bool {
+    fn write_locators(&mut self, locators: &[Locator]) -> bool {
         zcheck!(self.write_usize_as_zint(locators.len()));
         for l in locators {
             zcheck!(self.write_locator(l));
@@ -330,7 +359,7 @@ impl WBuf {
     }
 
     #[inline(always)]
-    pub fn write_zslice_array(&mut self, slice: ZSlice) -> bool {
+    fn write_zslice_array(&mut self, slice: ZSlice) -> bool {
         self.write_usize_as_zint(slice.len()) && self.write_zslice(slice)
     }
 
@@ -359,7 +388,7 @@ impl WBuf {
 
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
-    pub fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool {
+    fn write_zbuf(&mut self, zbuf: &ZBuf, sliced: bool) -> bool {
         if !sliced {
             self.write_zbuf_flat(zbuf)
         } else {
@@ -369,12 +398,12 @@ impl WBuf {
 
     #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
-    pub fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool {
+    fn write_zbuf(&mut self, zbuf: &ZBuf) -> bool {
         self.write_zbuf_flat(zbuf)
     }
 
     #[inline(always)]
-    pub fn write_zbuf_slices(&mut self, zbuf: &ZBuf) -> bool {
+    fn write_zbuf_slices(&mut self, zbuf: &ZBuf) -> bool {
         let mut idx = 0;
         while let Some(slice) = zbuf.get_zslice(idx) {
             zcheck!(self.write_zslice(slice.clone()));
@@ -383,7 +412,7 @@ impl WBuf {
         true
     }
 
-    pub fn write_properties(&mut self, props: &[Property]) -> bool {
+    fn write_properties(&mut self, props: &[Property]) -> bool {
         zcheck!(self.write_usize_as_zint(props.len()));
         for p in props {
             zcheck!(self.write_property(p));
@@ -395,7 +424,7 @@ impl WBuf {
         self.write_zint(p.key) && self.write_bytes_array(&p.value)
     }
 
-    pub fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
+    fn write_timestamp(&mut self, tstamp: &Timestamp) -> bool {
         self.write_u64_as_zint(tstamp.get_time().as_u64())
             && self.write_bytes_array(tstamp.get_id().as_slice())
     }

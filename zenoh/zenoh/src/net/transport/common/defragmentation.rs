@@ -17,6 +17,7 @@ use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
 
 use zenoh_core::Result as ZResult;
+use zenoh_protocol::proto::MessageReader;
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {

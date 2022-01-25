@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+pub use zenoh_protocol::{io, proto};
+#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_protocol_core as core;
-pub mod io;
-pub mod proto;
