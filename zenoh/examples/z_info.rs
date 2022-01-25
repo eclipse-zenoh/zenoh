@@ -45,6 +45,9 @@ fn parse_args() -> Config {
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
+        .arg(Arg::from_usage(
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {

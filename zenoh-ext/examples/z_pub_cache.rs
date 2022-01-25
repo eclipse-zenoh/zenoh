@@ -66,15 +66,18 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
             Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
                 .default_value("Pub from Rust!"),
         )
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
         .arg(
             Arg::from_usage("-h, --history=[SIZE] 'The number of publications to keep in cache'")
                 .default_value("1"),
         )
         .arg(Arg::from_usage(
             "-x, --prefix=[STRING] 'An optional queryable prefix'",
+        ))
+        .arg(Arg::from_usage(
+            "-c, --config=[FILE]      'A configuration file.'",
+        ))
+        .arg(Arg::from_usage(
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 

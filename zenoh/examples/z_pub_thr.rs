@@ -56,6 +56,9 @@ fn parse_args() -> (Config, usize) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
+        .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))
         .get_matches();

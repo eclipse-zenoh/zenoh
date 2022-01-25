@@ -91,15 +91,15 @@ fn parse_args() -> (Config, String) {
         .arg(Arg::from_usage(
             "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
         ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The selection of resources to store'")
                 .default_value("/demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
+        ))
+        .arg(Arg::from_usage(
+            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
 
