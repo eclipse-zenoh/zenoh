@@ -68,13 +68,6 @@ fn parse_args() -> (Config, usize) {
     if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
         config.set_mode(Some(mode)).unwrap();
     }
-    match args.value_of("mode").map(|m| m.parse()) {
-        Some(Ok(mode)) => {
-            config.set_mode(Some(mode)).unwrap();
-        }
-        Some(Err(())) => panic!("Invalid mode"),
-        None => {}
-    };
     if let Some(values) = args.values_of("peer") {
         config.peers.extend(values.map(|v| v.parse().unwrap()))
     }
