@@ -11,12 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod endpoint;
-mod unicast;
+use async_std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 
-pub use endpoint::*;
+use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_protocol_core::locator;
+
+mod unicast;
 pub use unicast::*;
-use zenoh_core::zconfigurable;
 
 // Default MTU (TCP PDU) in bytes.
 // NOTE: Since TCP is a byte-stream oriented transport, theoretically it has
@@ -25,6 +27,8 @@ use zenoh_core::zconfigurable;
 //       payload length in byte-streamed, the TCP MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
 const TCP_MAX_MTU: u16 = u16::MAX;
+
+pub const TCP_LOCATOR_PREFIX: &str = "tcp";
 
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.
@@ -37,4 +41,12 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+pub async fn get_tcp_addr(address: &locator) -> ZResult<SocketAddr> {
+    let mut addrs = address.address().to_socket_addrs().await?;
+    match addrs.next() {
+        Some(address) => Ok(address),
+        None => bail!("Couldn't resolve TCP locator address: {}", address),
+    }
 }

@@ -37,6 +37,9 @@ zenoh-util = { path = "../../../zenoh-utils/zenoh-util/" }
 zenoh-cfg-properties = { path = "../../../zenoh-utils/zenoh-cfg-properties/" }
 zenoh-sync = { path = "../../../zenoh-utils/zenoh-sync/" }
 
+zenoh-protocol-core = { path = "../../zenoh-protocol-core/" }
+zenoh-link-commons = { path = "../../zenoh-link-commons/" }
+
 async-rustls = { version = "=0.2.0" }
 async-std = { version = "=1.9.0", default-features = false }
 async-trait = "0.1.42"

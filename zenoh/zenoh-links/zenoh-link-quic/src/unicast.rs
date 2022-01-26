@@ -12,17 +12,10 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-use crate::net::link::quic::{
-    config::*, get_quic_addr, get_quic_dns, LocatorQuic, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
-    QUIC_DEFAULT_MTU,
+use crate::{
+    config::*, get_quic_addr, get_quic_dns, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
+    QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
-use crate::net::link::EndPoint as ZEndPoint;
-use crate::net::link::LinkManagerUnicastTrait;
-use crate::net::link::LinkUnicast;
-use crate::net::link::LinkUnicastTrait;
-use crate::net::link::Locator;
-use crate::net::link::LocatorAddress;
-use crate::net::transport::TransportManager;
 use async_std::fs;
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::*;
@@ -34,16 +27,23 @@ use quinn::Endpoint as QuicEndPoint;
 use quinn::*;
 use std::collections::HashMap;
 use std::fmt;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zasynclock, zerror, zread, zwrite};
+use zenoh_link_commons::{
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+};
+use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
     connection: NewConnection,
     src_addr: SocketAddr,
+    src_locator: Locator,
+    dst_locator: Locator,
     send: AsyncMutex<SendStream>,
     recv: AsyncMutex<RecvStream>,
 }
@@ -52,6 +52,7 @@ impl LinkUnicastQuic {
     fn new(
         connection: NewConnection,
         src_addr: SocketAddr,
+        dst_locator: Locator,
         send: SendStream,
         recv: RecvStream,
     ) -> LinkUnicastQuic {
@@ -59,6 +60,8 @@ impl LinkUnicastQuic {
         LinkUnicastQuic {
             connection,
             src_addr,
+            src_locator: Locator::new(QUIC_LOCATOR_PREFIX, &src_addr),
+            dst_locator,
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
         }
@@ -125,21 +128,13 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(self.src_addr)),
-            metadata: None,
-        }
+    fn get_src(&self) -> &locator {
+        &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::Quic(LocatorQuic::SocketAddr(
-                self.connection.connection.remote_address(),
-            )),
-            metadata: None,
-        }
+    fn get_dst(&self) -> &locator {
+        &self.dst_locator
     }
 
     #[inline(always)]
@@ -189,7 +184,7 @@ impl fmt::Debug for LinkUnicastQuic {
 /*          LISTENER                 */
 /*************************************/
 struct ListenerUnicastQuic {
-    endpoint: ZEndPoint,
+    endpoint: EndPoint,
     active: Arc<AtomicBool>,
     signal: Signal,
     handle: JoinHandle<ZResult<()>>,
@@ -197,7 +192,7 @@ struct ListenerUnicastQuic {
 
 impl ListenerUnicastQuic {
     fn new(
-        endpoint: ZEndPoint,
+        endpoint: EndPoint,
         active: Arc<AtomicBool>,
         signal: Signal,
         handle: JoinHandle<ZResult<()>>,
@@ -212,12 +207,12 @@ impl ListenerUnicastQuic {
 }
 
 pub struct LinkManagerUnicastQuic {
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastQuic>>>,
 }
 
 impl LinkManagerUnicastQuic {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -227,29 +222,34 @@ impl LinkManagerUnicastQuic {
 
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
-    async fn new_link(&self, endpoint: ZEndPoint) -> ZResult<LinkUnicast> {
-        let domain = get_quic_dns(&endpoint.locator.address).await?;
-        let addr = get_quic_addr(&endpoint.locator.address).await?;
+    async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+        let (dst_locator, config) = endpoint.split();
+        let domain = get_quic_dns(dst_locator).await?;
+        let addr = get_quic_addr(dst_locator).await?;
         let host: &str = domain.as_ref().into();
 
         // Initialize the QUIC connection
-        let bytes = match endpoint.config.as_ref() {
-            Some(config) => match config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-                Some(tls_ca_certificate) => tls_ca_certificate.as_bytes().to_vec(),
-                None => match config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                    Some(tls_ca_certificate) => fs::read(tls_ca_certificate)
+        let mut tls_root_ca_certificate = Vec::new();
+        for (key, value) in config {
+            match key {
+                TLS_ROOT_CA_CERTIFICATE_RAW => {
+                    tls_root_ca_certificate = value.as_bytes().to_vec();
+                    break;
+                }
+                TLS_ROOT_CA_CERTIFICATE_FILE => {
+                    tls_root_ca_certificate = fs::read(value)
                         .await
-                        .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?,
-                    None => vec![],
-                },
-            },
-            None => vec![],
-        };
+                        .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?;
+                    break;
+                }
+                _ => {}
+            }
+        }
 
-        let mut config = if bytes.is_empty() {
+        let mut config = if tls_root_ca_certificate.is_empty() {
             ClientConfigBuilder::default()
         } else {
-            let ca = Certificate::from_pem(&bytes)
+            let ca = Certificate::from_pem(&tls_root_ca_certificate)
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?;
 
             let mut cc = ClientConfigBuilder::default();
@@ -288,56 +288,55 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
+        let link = Arc::new(LinkUnicastQuic::new(
+            quic_conn,
+            src_addr,
+            dst_locator.to_owned(),
+            send,
+            recv,
+        ));
 
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, mut endpoint: ZEndPoint) -> ZResult<Locator> {
-        let addr = get_quic_addr(&endpoint.locator.address).await?;
+    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let (locator, config) = endpoint.split();
+        let addr = get_quic_addr(locator).await?;
 
-        // Verify there is a valid ServerConfig
-        let config = endpoint.config.as_ref().ok_or_else(|| {
-            zerror!(
-                "Can not create a new QUIC listener on {}: no ServerConfig provided",
-                addr
-            )
-        })?;
+        let mut tls_server_private_key = Vec::new();
+        let mut tls_server_certificate = Vec::new();
+        for (key, value) in config {
+            match key {
+                TLS_SERVER_PRIVATE_KEY_RAW => tls_server_private_key = value.as_bytes().to_vec(),
+                TLS_SERVER_PRIVATE_KEY_FILE => {
+                    tls_server_private_key = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid QUIC server private key file: {}", e))?
+                }
+                TLS_SERVER_CERTIFICATE_RAW => {
+                    tls_server_certificate = value.as_bytes().to_vec();
+                }
+                TLS_SERVER_CERTIFICATE_FILE => {
+                    tls_server_certificate = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid QUIC server certificate file: {}", e))?;
+                }
+                _ => {}
+            }
+        }
 
         // Configure the server private key
-        let bytes = match config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
-            Some(tls_server_private_key) => tls_server_private_key.as_bytes().to_vec(),
-            None => match config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-                Some(tls_server_private_key) => fs::read(tls_server_private_key)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?,
-                None => bail!(
-                    "Can not create a new QUIC listener on {}. ServerConfig not provided: {}.",
-                    addr,
-                    TLS_SERVER_PRIVATE_KEY_FILE
-                ),
-            },
-        };
-        let keys = PrivateKey::from_pem(bytes.as_slice()).unwrap();
+        if tls_server_private_key.is_empty() {
+            bail!(
+                "Can not create a new QUIC listener on {}: missing server private key",
+                addr
+            )
+        }
+        let keys = PrivateKey::from_pem(&tls_server_private_key).unwrap();
 
         // Configure the server certificate
-        let bytes = match config.get(TLS_SERVER_CERTIFICATE_RAW) {
-            Some(tls_server_certificate) => tls_server_certificate.as_bytes().to_vec(),
-            None => match config.get(TLS_SERVER_CERTIFICATE_FILE) {
-                Some(tls_server_certificate) => fs::read(tls_server_certificate)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS server certificate file: {}", e))?,
-                None => {
-                    bail!(
-                        "Can not create a new QUIC listener on {}. ServerConfig not provided: {}.",
-                        addr,
-                        TLS_SERVER_CERTIFICATE_FILE
-                    )
-                }
-            },
-        };
-        let certs = CertificateChain::from_pem(bytes.as_slice())
-            .map_err(|e| zerror!("Invalid TLS server certificate file: {}", e))?;
+        let certs = CertificateChain::from_pem(&tls_server_certificate)
+            .map_err(|e| zerror!("Invalid TLS server certificate: {}", e))?;
 
         let mut tc = TransportConfig::default();
         // We do not accept unidireactional streams.
@@ -365,7 +364,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
-        endpoint.locator.address = LocatorAddress::Quic(LocatorQuic::SocketAddr(local_addr));
+        assert!(endpoint.set_addr(&format!("{}", local_addr)));
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -384,7 +383,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         });
 
         // Initialize the QuicAcceptor
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.locator().to_owned();
         let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -392,8 +391,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &ZEndPoint) -> ZResult<()> {
-        let addr = get_quic_addr(&endpoint.locator.address).await?;
+    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
+        let addr = get_quic_addr(endpoint.locator()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -411,7 +410,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         listener.handle.await
     }
 
-    fn get_listeners(&self) -> Vec<ZEndPoint> {
+    fn get_listeners(&self) -> Vec<EndPoint> {
         zread!(self.listeners)
             .values()
             .map(|x| x.endpoint.clone())
@@ -419,51 +418,57 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = vec![];
+        let mut locators = Vec::new();
         let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
-
-        for (key, value) in zread!(self.listeners).iter() {
-            if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                locators.push((
-                                    SocketAddr::new(ipaddr, key.port()),
-                                    value.endpoint.locator.metadata.clone(),
-                                ));
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                locators.push((
-                                    SocketAddr::new(ipaddr, key.port()),
-                                    value.endpoint.locator.metadata.clone(),
-                                ));
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else {
-                locators.push((*key, value.endpoint.locator.metadata.clone()));
-            }
+        lazy_static::lazy_static! {
+            static ref V4_LOCAL_ADDRESSES: Vec<Locator> = zenoh_util::net::get_local_addresses()
+                .unwrap_or_else(|e| {
+                    log::error!("Unable to get local addresses : {}", e);
+                    Vec::new()
+                })
+                .into_iter()
+                .filter_map(|addr| match addr {
+                    IpAddr::V4(addr) => Some(Locator::new(QUIC_LOCATOR_PREFIX, &addr)),
+                    IpAddr::V6(_) => None,
+                })
+                .collect();
+            static ref V6_LOCAL_ADDRESSES: Vec<Locator> = zenoh_util::net::get_local_addresses()
+                .unwrap_or_else(|e| {
+                    log::error!("Unable to get local addresses : {}", e);
+                    Vec::new()
+                })
+                .into_iter()
+                .filter_map(|addr| match addr {
+                    IpAddr::V6(addr) => Some(Locator::new(QUIC_LOCATOR_PREFIX, &addr)),
+                    IpAddr::V4(_) => None,
+                })
+                .collect();
         }
 
+        let guard = zread!(self.listeners);
+        for (key, value) in guard.iter() {
+            if key.ip() == default_ipv4 {
+                let meta = value.endpoint.locator().metadata_str();
+                locators.extend(V4_LOCAL_ADDRESSES.iter().map(|l| {
+                    let mut l = l.clone();
+                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l
+                }))
+            } else if key.ip() == default_ipv6 {
+                let meta = value.endpoint.locator().metadata_str();
+                locators.extend(V6_LOCAL_ADDRESSES.iter().map(|l| {
+                    let mut l = l.clone();
+                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l
+                }))
+            } else {
+                locators.push(value.endpoint.locator().to_owned());
+            }
+        }
+        std::mem::drop(guard);
+
         locators
-            .into_iter()
-            .map(|(addr, metadata)| Locator {
-                address: LocatorAddress::Quic(LocatorQuic::SocketAddr(addr)),
-                metadata,
-            })
-            .collect()
     }
 }
 
@@ -472,7 +477,7 @@ async fn accept_task(
     mut acceptor: Incoming,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     enum Action {
         Accept(NewConnection),
@@ -545,10 +550,18 @@ async fn accept_task(
         let dst_addr = quic_conn.connection.remote_address();
         log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
-        let link = Arc::new(LinkUnicastQuic::new(quic_conn, src_addr, send, recv));
+        let link = Arc::new(LinkUnicastQuic::new(
+            quic_conn,
+            src_addr,
+            Locator::new(QUIC_LOCATOR_PREFIX, &dst_addr),
+            send,
+            recv,
+        ));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(LinkUnicast(link)).await;
+        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+            log::error!("{}-{}: {}", file!(), line!(), e)
+        }
     }
 
     Ok(())

@@ -51,6 +51,6 @@ zenoh-link-unixsock_stream = { path = "../zenoh-links/zenoh-link-unixsock_stream
 
 async-std = { version = "=1.9.0", default-features = false }
 async-trait = "0.1.42"
-quinn = { version = "0.7.2", optional = true }
+
 rcgen = { version = "0.8.9", optional = true }
 webpki = { version = "0.22.0", features = ["std"], optional = true }

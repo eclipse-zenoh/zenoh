@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME;
-use crate::net::transport::TransportManager;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::PathBuf;
 use async_std::prelude::*;
@@ -30,29 +29,32 @@ use std::time::Duration;
 use uuid::Uuid;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread, zwrite};
-use zenoh_link_commons::{LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait};
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_link_commons::{
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+};
+use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
 use zenoh_sync::Signal;
 
 use super::{
-    get_unix_path, get_unix_path_as_string, LocatorUnixSocketStream, UNIXSOCKSTREAM_DEFAULT_MTU,
+    get_unix_path, get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU,
+    UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library
     socket: UnixStream,
     // The Unix domain socket source path
-    src_path: String,
+    src_locator: Locator,
     // The Unix domain socker destination path (random UUIDv4)
-    dst_path: String,
+    dst_locator: Locator,
 }
 
 impl LinkUnicastUnixSocketStream {
-    fn new(socket: UnixStream, src_path: String, dst_path: String) -> LinkUnicastUnixSocketStream {
+    fn new(socket: UnixStream, src_path: &str, dst_path: &str) -> LinkUnicastUnixSocketStream {
         LinkUnicastUnixSocketStream {
             socket,
-            src_path,
-            dst_path,
+            src_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, &src_path),
+            dst_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, &dst_path),
         }
     }
 }
@@ -100,23 +102,13 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
-                path: PathBuf::from(self.src_path.clone()),
-            }),
-            metadata: None,
-        }
+    fn get_src(&self) -> &locator {
+        &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::UnixSocketStream(LocatorUnixSocketStream {
-                path: PathBuf::from(self.dst_path.clone()),
-            }),
-            metadata: None,
-        }
+    fn get_dst(&self) -> &locator {
+        &self.dst_locator
     }
 
     #[inline(always)]
@@ -144,7 +136,7 @@ impl Drop for LinkUnicastUnixSocketStream {
 
 impl fmt::Display for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", self.src_path, self.dst_path)?;
+        write!(f, "{} => {}", &*self.src_locator, &*self.dst_locator)?;
         Ok(())
     }
 }
@@ -152,8 +144,8 @@ impl fmt::Display for LinkUnicastUnixSocketStream {
 impl fmt::Debug for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UnixSocketStream")
-            .field("src", &self.src_path)
-            .field("dst", &self.dst_path)
+            .field("src", &self.src_locator)
+            .field("dst", &self.dst_locator)
             .finish()
     }
 }
@@ -188,12 +180,12 @@ impl ListenerUnixSocketStream {
 }
 
 pub struct LinkManagerUnicastUnixSocketStream {
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
     listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnicastUnixSocketStream {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -204,7 +196,7 @@ impl LinkManagerUnicastUnixSocketStream {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let path = get_unix_path(&endpoint.locator)?;
+        let path = get_unix_path(endpoint.locator());
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
@@ -250,29 +242,23 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             }
         };
 
-        let local_path_str = local_path
-            .to_str()
-            .ok_or_else(|| {
-                let e = zerror!(
-                    "Can not create a new UnixSocketStream link bound to {:?}",
-                    path
-                );
-                log::warn!("{}", e);
-                e
-            })?
-            .to_string();
+        let local_path_str = local_path.to_str().ok_or_else(|| {
+            let e = zerror!(
+                "Can not create a new UnixSocketStream link bound to {:?}",
+                path
+            );
+            log::warn!("{}", e);
+            e
+        })?;
 
-        let remote_path_str = path
-            .to_str()
-            .ok_or_else(|| {
-                let e = zerror!(
-                    "Can not create a new UnixSocketStream link bound to {:?}",
-                    path
-                );
-                log::warn!("{}", e);
-                e
-            })?
-            .to_string();
+        let remote_path_str = path.to_str().ok_or_else(|| {
+            let e = zerror!(
+                "Can not create a new UnixSocketStream link bound to {:?}",
+                path
+            );
+            log::warn!("{}", e);
+            e
+        })?;
 
         let link = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
@@ -284,7 +270,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.locator());
 
         // Because of the lack of SO_REUSEADDR we have to check if the
         // file is still there and if it is not used by another process.
@@ -370,18 +356,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             e
         })?);
 
-        let local_path_str = local_path
-            .to_str()
-            .ok_or_else(|| {
-                let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
-                log::warn!("{}", e);
-                e
-            })?
-            .to_string();
+        let local_path_str = local_path.to_str().ok_or_else(|| {
+            let e = zerror!("Can not create a new UnixSocketStream listener on {}", path);
+            log::warn!("{}", e);
+            e
+        })?;
 
         // Update the endpoint with the acutal local path
-        endpoint.locator.address =
-            LocatorAddress::UnixSocketStream(LocatorUnixSocketStream { path: local_path });
+        assert!(endpoint.set_addr(local_path_str));
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -391,7 +373,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
-        let c_path = local_path_str.clone();
+        let c_path = local_path_str.to_owned();
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
@@ -399,15 +381,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.locator().to_owned();
         let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
-        zwrite!(self.listeners).insert(local_path_str, listener);
+        zwrite!(self.listeners).insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
+        let path = get_unix_path_as_string(endpoint.locator());
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -446,7 +428,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     fn get_locators(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .values()
-            .map(|x| x.endpoint.locator.clone())
+            .map(|x| x.endpoint.locator().to_owned())
             .collect()
     }
 }
@@ -455,7 +437,7 @@ async fn accept_task(
     socket: UnixListener,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     enum Action {
         Accept(UnixStream),
@@ -487,17 +469,14 @@ async fn accept_task(
         e
     })?);
 
-    let src_path = local_path
-        .to_str()
-        .ok_or_else(|| {
-            let e = zerror!(
-                "Can not create a new UnixSocketStream link bound to {:?}",
-                src_addr
-            );
-            log::warn!("{}", e);
-            e
-        })?
-        .to_string();
+    let src_path = local_path.to_str().ok_or_else(|| {
+        let e = zerror!(
+            "Can not create a new UnixSocketStream link bound to {:?}",
+            src_addr
+        );
+        log::warn!("{}", e);
+        e
+    })?;
 
     // The accept future
     log::trace!(
@@ -530,13 +509,13 @@ async fn accept_task(
 
         // Create the new link object
         let link = Arc::new(LinkUnicastUnixSocketStream::new(
-            stream,
-            src_path.clone(),
-            dst_path,
+            stream, src_path, &dst_path,
         ));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(LinkUnicast(link)).await;
+        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+            log::error!("{}-{}: {}", file!(), line!(), e)
+        }
     }
 
     Ok(())

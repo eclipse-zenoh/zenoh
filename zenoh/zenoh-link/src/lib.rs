@@ -11,22 +11,25 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+#[allow(unused_imports)]
+use std::sync::Arc;
 
-// #[cfg(feature = "transport_quic")]
-// use crate::net::link::quic::LinkManagerUnicastQuic;
-// #[cfg(feature = "transport_tcp")]
-// use crate::net::link::tcp::LinkManagerUnicastTcp;
-// #[cfg(feature = "transport_tls")]
-// use crate::net::link::tls::LinkManagerUnicastTls;
-// #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-// use crate::net::link::unixsock_stream::LinkManagerUnicastUnixSocketStream;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_link_commons::{LinkManagerMulticast, LinkManagerUnicast, NewLinkChannelSender};
+
+#[cfg(feature = "transport_quic")]
+use zenoh_link_quic::{LinkManagerUnicastQuic, QUIC_LOCATOR_PREFIX};
+#[cfg(feature = "transport_tcp")]
+use zenoh_link_tcp::{LinkManagerUnicastTcp, TCP_LOCATOR_PREFIX};
+#[cfg(feature = "transport_tls")]
+use zenoh_link_tls::{LinkManagerUnicastTls, TLS_LOCATOR_PREFIX};
 #[cfg(feature = "transport_udp")]
 use zenoh_link_udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp, UDP_LOCATOR_PREFIX};
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+use zenoh_link_unixsock_stream::{
+    LinkManagerUnicastUnixSocketStream, UNIXSOCKSTREAM_LOCATOR_PREFIX,
+};
 
 pub use zenoh_link_commons::*;
-pub use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
 
 /*************************************/
 /*             UNICAST               */
@@ -35,20 +38,20 @@ pub use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
 pub struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
-    pub fn make(manager: NewLinkChannelSender, protocol: &str) -> ZResult<LinkManagerUnicast> {
+    pub fn make(_manager: NewLinkChannelSender, protocol: &str) -> ZResult<LinkManagerUnicast> {
         match protocol {
-            // #[cfg(feature = "transport_tcp")]
-            // LocatorProtocol::Tcp => Ok(Arc::new(LinkManagerUnicastTcp::new(manager))),
+            #[cfg(feature = "transport_tcp")]
+            TCP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastTcp::new(_manager))),
             #[cfg(feature = "transport_udp")]
-            UDP_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastUdp::new(manager))),
-            // #[cfg(feature = "transport_tls")]
-            // LocatorProtocol::Tls => Ok(Arc::new(LinkManagerUnicastTls::new(manager))),
-            // #[cfg(feature = "transport_quic")]
-            // LocatorProtocol::Quic => Ok(Arc::new(LinkManagerUnicastQuic::new(manager))),
-            // #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            // LocatorProtocol::UnixSocketStream => {
-            //     Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(manager)))
-            // }
+            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastUdp::new(_manager))),
+            #[cfg(feature = "transport_tls")]
+            TLS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastTls::new(_manager))),
+            #[cfg(feature = "transport_quic")]
+            QUIC_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastQuic::new(_manager))),
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            UNIXSOCKSTREAM_LOCATOR_PREFIX => {
+                Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(_manager)))
+            }
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }
@@ -64,7 +67,7 @@ impl LinkManagerBuilderMulticast {
     pub fn make(protocol: &str) -> ZResult<LinkManagerMulticast> {
         match protocol {
             #[cfg(feature = "transport_udp")]
-            UDP_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerMulticastUdp::default())),
+            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerMulticastUdp::default())),
             _ => bail!("Multicast not supported for {} protocol", protocol),
         }
     }

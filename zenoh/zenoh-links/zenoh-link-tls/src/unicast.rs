@@ -1,3 +1,4 @@
+use crate::TLS_LOCATOR_PREFIX;
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -11,14 +12,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use crate::net::link::tls::{
-    config::*, get_tls_addr, get_tls_dns, get_tls_host, LocatorTls, TLS_ACCEPT_THROTTLE_TIME,
-    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT,
+use crate::{
+    config::*, get_tls_addr, get_tls_dns, get_tls_host, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
+    TLS_LINGER_TIMEOUT,
 };
-use crate::net::link::{
-    EndPoint, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, Locator, LocatorAddress,
-};
-use crate::net::transport::TransportManager;
 use async_rustls::rustls::internal::pemfile;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
@@ -39,8 +36,13 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zerror, zread, zwrite};
+use zenoh_link_commons::{
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+};
+use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastTls {
@@ -55,8 +57,10 @@ pub struct LinkUnicastTls {
     inner: UnsafeCell<TlsStream<TcpStream>>,
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
+    src_locator: Locator,
     // The destination socket address of this link (address used on the local host)
     dst_addr: SocketAddr,
+    dst_locator: Locator,
     // Make sure there are no concurrent read or writes
     write_mtx: AsyncMutex<()>,
     read_mtx: AsyncMutex<()>,
@@ -101,7 +105,9 @@ impl LinkUnicastTls {
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
             src_addr,
+            src_locator: Locator::new(TLS_LOCATOR_PREFIX, &src_addr),
             dst_addr,
+            dst_locator: Locator::new(TLS_LOCATOR_PREFIX, &dst_addr),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
         }
@@ -165,19 +171,13 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::Tls(LocatorTls::SocketAddr(self.src_addr)),
-            metadata: None,
-        }
+    fn get_src(&self) -> &locator {
+        &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> Locator {
-        Locator {
-            address: LocatorAddress::Tls(LocatorTls::SocketAddr(self.dst_addr)),
-            metadata: None,
-        }
+    fn get_dst(&self) -> &locator {
+        &self.dst_locator
     }
 
     #[inline(always)]
@@ -250,12 +250,12 @@ impl ListenerUnicastTls {
 }
 
 pub struct LinkManagerUnicastTls {
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
 }
 
 impl LinkManagerUnicastTls {
-    pub(crate) fn new(manager: TransportManager) -> Self {
+    pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
             listeners: Arc::new(RwLock::new(HashMap::new())),
@@ -266,8 +266,9 @@ impl LinkManagerUnicastTls {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let domain = get_tls_dns(&endpoint.locator.address).await?;
-        let addr = get_tls_addr(&endpoint.locator.address).await?;
+        let (locator, config) = endpoint.split();
+        let domain = get_tls_dns(locator).await?;
+        let addr = get_tls_addr(locator).await?;
         let host: &str = domain.as_ref().into();
 
         // Initialize the TcpStream
@@ -284,18 +285,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
 
         // Initialize the TLS stream
-        let bytes = match endpoint.config.as_ref() {
-            Some(config) => match config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-                Some(tls_ca_certificate) => tls_ca_certificate.as_bytes().to_vec(),
-                None => match config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                    Some(tls_ca_certificate) => fs::read(tls_ca_certificate)
+        let mut bytes = Vec::new();
+        for (key, value) in config {
+            match key {
+                TLS_ROOT_CA_CERTIFICATE_RAW => bytes = value.as_bytes().to_vec(),
+                TLS_ROOT_CA_CERTIFICATE_FILE => {
+                    bytes = fs::read(value)
                         .await
-                        .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?,
-                    None => vec![],
-                },
-            },
-            None => vec![],
-        };
+                        .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
+                }
+                _ => {}
+            }
+        }
 
         let config = if bytes.is_empty() {
             Arc::new(ClientConfig::new())
@@ -321,60 +322,51 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_tls_addr(&endpoint.locator.address).await?;
-        let host = get_tls_host(&endpoint.locator.address)?;
+        let (locator, config) = endpoint.split();
+        let addr = get_tls_addr(endpoint.locator()).await?;
+        let host = get_tls_host(endpoint.locator())?;
 
-        // Verify there is a valid ServerConfig
-        let config = endpoint.config.as_ref().ok_or_else(|| {
-            zerror!(
-                "Can not create a new TLS listener on {}: no ServerConfig provided",
-                addr
-            )
-        })?;
+        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
+        let mut tls_server_private_key = Vec::new();
+        let mut tls_server_certificate = Vec::new();
+
+        for (key, value) in config {
+            match key {
+                TLS_SERVER_PRIVATE_KEY_RAW => tls_server_private_key = value.as_bytes().to_vec(),
+                TLS_SERVER_PRIVATE_KEY_FILE => {
+                    tls_server_private_key = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
+                }
+                TLS_SERVER_CERTIFICATE_RAW => tls_server_certificate = value.as_bytes().to_vec(),
+                TLS_SERVER_CERTIFICATE_FILE => {
+                    tls_server_certificate = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
+                }
+                TLS_CLIENT_AUTH => client_auth = value.parse()?,
+                _ => {}
+            }
+        }
 
         // Configure the server private key
-        let bytes = match config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
-            Some(tls_server_private_key) => tls_server_private_key.as_bytes().to_vec(),
-            None => match config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-                Some(tls_server_private_key) => fs::read(tls_server_private_key)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?,
-                None => {
-                    bail!(
-                        "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
-                        addr,
-                        TLS_SERVER_PRIVATE_KEY_FILE
-                    );
-                }
-            },
-        };
-        let mut keys = pemfile::rsa_private_keys(&mut Cursor::new(bytes.as_slice())).unwrap();
+        if tls_server_private_key.is_empty() {
+            bail!(
+                "Can not create a new TLS listener on {}. Missing server private key.",
+                addr,
+            );
+        }
+        let mut keys =
+            pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key)).unwrap();
 
         // Configure the server certificate
-        let bytes = match config.get(TLS_SERVER_CERTIFICATE_RAW) {
-            Some(tls_server_certificate) => tls_server_certificate.as_bytes().to_vec(),
-            None => match config.get(TLS_SERVER_CERTIFICATE_FILE) {
-                Some(tls_server_certificate) => fs::read(tls_server_certificate)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS server certificate file: {}", e))?,
-                None => {
-                    bail!(
-                        "Can not create a new TLS listener on {}. ServerConfig not provided: {}.",
-                        addr,
-                        TLS_SERVER_CERTIFICATE_FILE
-                    )
-                }
-            },
-        };
-        let certs = pemfile::certs(&mut Cursor::new(bytes.as_slice())).unwrap();
-
-        // Configure the client authentication
-        let client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
-            Some(ca) => ca,
-            None => TLS_CLIENT_AUTH_DEFAULT,
+        if tls_server_certificate.is_empty() {
+            bail!(
+                "Can not create a new TLS listener on {}. Missing server certificate.",
+                addr,
+            );
         }
-        .parse()
-        .map_err(|e| zerror!("Invalid {} value: {}", TLS_CLIENT_AUTH, e))?;
+        let certs = pemfile::certs(&mut Cursor::new(&tls_server_certificate)).unwrap();
 
         let mut sc = if client_auth {
             // @TODO: implement Client authentication
@@ -417,10 +409,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         });
 
         // Update the endpoint locator address
-        let locator = Locator {
-            address: LocatorAddress::Tls(LocatorTls::DnsName(format!("{}:{}", host, local_port))),
-            metadata: endpoint.locator.metadata.clone(),
-        };
+        let mut locator: Locator = locator.to_owned();
+        assert!(locator.set_addr(&format!("{}:{}", host, local_port)));
 
         let listener = ListenerUnicastTls::new(endpoint, locator.clone(), active, signal, handle);
         // Update the list of active listeners on the manager
@@ -429,8 +419,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_tls_addr(&endpoint.locator.address).await?;
+    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
+        let addr = get_tls_addr(endpoint.locator()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -468,7 +458,7 @@ async fn accept_task(
     acceptor: TlsAcceptor,
     active: Arc<AtomicBool>,
     signal: Signal,
-    manager: TransportManager,
+    manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     enum Action {
         Accept((TcpStream, SocketAddr)),
@@ -526,7 +516,9 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        manager.handle_new_link_unicast(LinkUnicast(link)).await;
+        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+            log::error!("{}-{}: {}", file!(), line!(), e)
+        }
     }
 
     Ok(())

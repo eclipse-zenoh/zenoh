@@ -25,7 +25,6 @@ use super::unicast::manager::{
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use crate::config::Config;
-use crate::net::link::{EndPoint, Locator};
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -36,6 +35,7 @@ use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_core::zparse;
 use zenoh_core::Result as ZResult;
 use zenoh_crypto::{BlockCipher, PseudoRng};
+use zenoh_protocol_core::{EndPoint, Locator};
 
 /// # Examples
 /// ```

@@ -1669,13 +1669,11 @@ checksum = "0744126afe1a6dd7f394cb50a716dbe086cb06e255e53d8d0185d82828358fb5"
 
 [[package]]
 name = "pem"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06673860db84d02a63942fa69cd9543f2624a5df3aea7f33173048fa7ad5cf1a"
+checksum = "e9a3b09a20e374558580a4914d3b7d89bd61b954a5a5e1dcbea98753addb1947"
 dependencies = [
  "base64 0.13.0",
- "once_cell",
- "regex",
 ]
 
 [[package]]
@@ -3361,7 +3359,6 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
- "quinn",
  "rcgen",
  "webpki 0.22.0",
  "zenoh-core",
@@ -3389,11 +3386,36 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-quic"
-version = "0.1.0"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "lazy_static",
+ "log",
+ "quinn",
+ "webpki 0.22.0",
+ "zenoh-cfg-properties",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
 
 [[package]]
 name = "zenoh-link-tcp"
-version = "0.1.0"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "lazy_static",
+ "log",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
 
 [[package]]
 name = "zenoh-link-tls"
@@ -3405,6 +3427,8 @@ dependencies = [
  "log",
  "zenoh-cfg-properties",
  "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
  "zenoh-sync",
  "zenoh-util",
 ]

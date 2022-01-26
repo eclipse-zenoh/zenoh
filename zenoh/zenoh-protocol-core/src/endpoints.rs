@@ -51,6 +51,15 @@ impl EndPoint {
         unsafe { std::mem::transmute::<_, &mut Locator>(self) }.set_addr(addr)
     }
 }
+impl From<EndPoint> for Locator {
+    fn from(val: EndPoint) -> Self {
+        let mut inner = val.inner;
+        if let Some(index) = inner.find(CONFIG_SEPARATOR) {
+            inner.truncate(index);
+        }
+        Locator { inner }
+    }
+}
 
 /// A `str` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[allow(non_camel_case_types)]

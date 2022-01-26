@@ -11,12 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod endpoint;
-mod unicast;
+use async_std::net::ToSocketAddrs;
+use std::net::SocketAddr;
+use webpki::{DnsName, DnsNameRef};
+use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
+use zenoh_protocol_core::locator;
 
-pub use endpoint::*;
+mod unicast;
 pub use unicast::*;
-use zenoh_core::zconfigurable;
 
 // Default ALPN protocol
 pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
@@ -28,6 +30,7 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       payload length in byte-streamed, the QUIC MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
 const QUIC_MAX_MTU: u16 = u16::MAX;
+pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.
@@ -53,4 +56,18 @@ pub mod config {
 
     pub const TLS_SERVER_CERTIFICATE_FILE: &str = ZN_TLS_SERVER_CERTIFICATE_STR;
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
+}
+
+async fn get_quic_addr(address: &locator) -> ZResult<SocketAddr> {
+    let addr = address.address();
+    match addr.to_socket_addrs().await?.next() {
+        Some(addr) => Ok(addr),
+        None => bail!("Couldn't resolve QUIC locator address: {}", addr),
+    }
+}
+
+async fn get_quic_dns(address: &locator) -> ZResult<DnsName> {
+    let addr = address.address().split(':').next().unwrap();
+    let domain = DnsNameRef::try_from_ascii(addr.as_bytes()).map_err(|e| zerror!(e))?;
+    Ok(domain.to_owned())
 }

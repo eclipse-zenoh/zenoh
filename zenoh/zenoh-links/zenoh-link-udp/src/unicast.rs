@@ -413,7 +413,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                 })
                 .into_iter()
                 .filter_map(|addr| match addr {
-                    IpAddr::V4(addr) => Locator::try_from(format!("udp/{}", addr)).ok(),
+                    IpAddr::V4(addr) => Some(Locator::new(crate::UDP_LOCATOR_PREFIX, &addr)),
                     IpAddr::V6(_) => None,
                 })
                 .collect();
@@ -424,7 +424,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                 })
                 .into_iter()
                 .filter_map(|addr| match addr {
-                    IpAddr::V6(addr) => Locator::try_from(format!("udp/{}", addr)).ok(),
+                    IpAddr::V6(addr) => Some(Locator::new(crate::UDP_LOCATOR_PREFIX, &addr)),
                     IpAddr::V4(_) => None,
                 })
                 .collect();

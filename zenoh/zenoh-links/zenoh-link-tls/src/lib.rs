@@ -11,10 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-mod unicast;
+use std::net::SocketAddr;
 
+use async_std::net::ToSocketAddrs;
+use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_protocol_core::locator;
+
+mod unicast;
 pub use unicast::*;
-use zenoh_core::zconfigurable;
 
 // Default MTU (TLS PDU) in bytes.
 // NOTE: Since TLS is a byte-stream oriented transport, theoretically it has
@@ -23,6 +27,7 @@ use zenoh_core::zconfigurable;
 //       payload length in byte-streamed, the TLS MTU is constrained to
 //       2^16 - 1 bytes (i.e., 65535).
 const TLS_MAX_MTU: u16 = u16::MAX;
+pub const TLS_LOCATOR_PREFIX: &str = "tls";
 
 zconfigurable! {
     // Default MTU (TLS PDU) in bytes.
@@ -56,4 +61,23 @@ pub mod config {
 
     pub const TLS_CLIENT_AUTH: &str = ZN_TLS_CLIENT_AUTH_STR;
     pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
+}
+
+pub async fn get_tls_addr(address: &locator) -> ZResult<SocketAddr> {
+    let addr = address.address();
+    match addr.to_socket_addrs().await?.next() {
+        Some(addr) => Ok(addr),
+        None => bail!("Couldn't resolve TLS locator address: {}", addr),
+    }
+}
+
+pub fn get_tls_host(address: &locator) -> ZResult<&str> {
+    Ok(address.address().split(':').next().unwrap())
+}
+
+pub async fn get_tls_dns(address: &locator) -> ZResult<DNSName> {
+    match DNSNameRef::try_from_ascii_str(get_tls_host(address)?) {
+        Ok(v) => Ok(v.to_owned()),
+        Err(e) => bail!(e),
+    }
 }

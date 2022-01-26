@@ -13,7 +13,7 @@ pub const FIELD_SEPARATOR: char = '=';
 #[repr(transparent)]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Locator {
-    inner: String,
+    pub(crate) inner: String,
 }
 impl From<Locator> for String {
     fn from(val: Locator) -> Self {
@@ -72,6 +72,10 @@ impl FromStr for Locator {
 }
 
 impl Locator {
+    #[inline(always)]
+    pub fn new<Addr: std::fmt::Display>(protocol: &str, addr: &Addr) -> Self {
+        Locator::try_from(format!("{}{}{}", protocol, PROTO_SEPARATOR, addr)).unwrap()
+    }
     #[must_use = "returns true if successful"]
     pub fn set_addr(&mut self, addr: &str) -> bool {
         if addr.contains(&[METADATA_SEPARATOR, CONFIG_SEPARATOR]) {
