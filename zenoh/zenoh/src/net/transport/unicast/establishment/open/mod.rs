@@ -18,7 +18,7 @@ mod open_syn;
 
 use super::authenticator::AuthenticatedPeerLink;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::proto::tmsg;
+use zenoh_protocol::proto::tmsg;
 use crate::net::transport::unicast::establishment::{
     close_link, transport_finalize, InputFinalize, InputInit,
 };

@@ -14,8 +14,8 @@
 use super::super::{properties_from_attachment, AuthenticatedPeerLink, EstablishmentProperties};
 use super::AResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{PeerId, WhatAmI, ZInt};
-use crate::net::protocol::proto::{tmsg, TransportBody};
+use zenoh_protocol_core::{PeerId, WhatAmI, ZInt};
+use zenoh_protocol::proto::{tmsg, TransportBody};
 use crate::net::transport::TransportManager;
 use zenoh_core::zerror;
 

@@ -13,7 +13,7 @@
 //
 use crate::config::Config;
 use crate::net::link::*;
-use crate::net::protocol::proto::tmsg;
+use zenoh_protocol::proto::tmsg;
 use crate::net::transport::unicast::{
     establishment::authenticator::*,
     protocol::core::PeerId,
@@ -29,6 +29,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zasynclock, zerror, zlock, zparse, Result as ZResult};
+use zenoh_protocol_core::locators::LocatorProtocol;
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -53,7 +54,8 @@ pub struct TransportManagerStateUnicast {
     // Active link authenticators
     pub(super) link_authenticator: AsyncArc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
     // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<LocatorProtocol, LinkManagerUnicast>>>,
+    pub(super) protocols:
+        Arc<Mutex<HashMap<<LocatorProtocol as ToOwned>::Owned, LinkManagerUnicast>>>,
     // Established transports
     pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
 }
@@ -284,7 +286,7 @@ impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    fn new_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
+    fn new_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
         if let Some(lm) = w_guard.get(protocol) {
             Ok(lm.clone())
@@ -319,13 +321,9 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(&endpoint.locator.address.get_proto())?;
+        let manager = self.new_link_manager_unicast(endpoint.locator().protocol())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self
-            .config
-            .endpoint
-            .get(&endpoint.locator.address.get_proto())
-        {
+        if let Some(config) = self.config.endpoint.get(endpoint.locator().protocol()) {
             let config = match endpoint.config.as_ref() {
                 Some(ec) => {
                     let mut config = config.clone();

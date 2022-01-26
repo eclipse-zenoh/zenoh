@@ -15,15 +15,6 @@ use crate::config::Config;
 use crate::config::Notifier;
 use crate::data_kind;
 use crate::info::*;
-use crate::net::protocol::core::EMPTY_EXPR_ID;
-use crate::net::protocol::{
-    core::{
-        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
-    },
-    io::ZBuf,
-    proto::{DataInfo, RoutingContext},
-};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -53,8 +44,17 @@ use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
+use zenoh_protocol::{
+    core::{
+        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
+    },
+    io::ZBuf,
+    proto::{DataInfo, RoutingContext},
+};
 use zenoh_protocol_core::PeerId;
 use zenoh_protocol_core::WhatAmI;
+use zenoh_protocol_core::EMPTY_EXPR_ID;
 use zenoh_sync::zpinbox;
 
 zconfigurable! {

@@ -19,6 +19,7 @@ use criterion::{black_box, Criterion};
 
 use zenoh::net::protocol::core::ZInt;
 use zenoh::net::protocol::io::WBuf;
+use zenoh_protocol::io::WBufCodec;
 
 fn bench_foo((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);

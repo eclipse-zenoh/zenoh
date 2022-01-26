@@ -12,9 +12,11 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::net::ToSocketAddrs;
+use async_trait::async_trait;
 use std::net::SocketAddr;
 use webpki::{DnsName, DnsNameRef};
 use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
+use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol_core::locator;
 
 mod unicast;
@@ -31,6 +33,18 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 //       2^16 - 1 bytes (i.e., 65535).
 const QUIC_MAX_MTU: u16 = u16::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
+
+#[derive(Default, Clone, Copy)]
+pub struct QuicLocatorInspector;
+#[async_trait]
+impl LocatorInspector for QuicLocatorInspector {
+    fn protocol(&self) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(QUIC_LOCATOR_PREFIX)
+    }
+    async fn is_multicast(&self, _locator: &locator) -> ZResult<bool> {
+        Ok(false)
+    }
+}
 
 zconfigurable! {
     // Default MTU (QUIC PDU) in bytes.

@@ -14,7 +14,6 @@
 [workspace]
 
 members = [
-  "zenoh/zenoh",
   "zenoh/zenoh-config",
   "zenoh/zenoh-buffers",
   "zenoh/zenoh-protocol-core",
@@ -26,6 +25,8 @@ members = [
   "zenoh/zenoh-links/zenoh-link-quic/",
   "zenoh/zenoh-links/zenoh-link-unixsock_stream/",
   "zenoh/zenoh-link",
+  "zenoh/zenoh-transport",
+  "zenoh/zenoh",
   "zenoh/zenoh-ext",
   "zenoh-utils/zenoh-cfg-properties",
   "zenoh-utils/zenoh-collections",

@@ -13,8 +13,8 @@
 //
 use super::OResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::Property;
-use crate::net::protocol::proto::TransportMessage;
+use zenoh_protocol_core::Property;
+use zenoh_protocol::proto::TransportMessage;
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::{
     attachment_from_properties, EstablishmentProperties,

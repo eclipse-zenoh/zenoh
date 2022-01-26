@@ -141,21 +141,21 @@ macro_rules! zconfigurable {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
-        zconfigurable!($($t)*);
+        $crate::zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
         $crate::lazy_static!($(#[$attr])* pub static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
-        zconfigurable!($($t)*);
+        $crate::zconfigurable!($($t)*);
     };
     ($(#[$attr:meta])* pub ($($vis:tt)+) static ref $N:ident : $T:ty = $e:expr; $($t:tt)*) => {
         $crate::lazy_static!($(#[$attr])* pub ($($vis)+) static ref $N : $T = match option_env!(stringify!($N)) {
             Some(value) => {value.parse().unwrap()}
             None => {$e}
         };) ;
-        zconfigurable!($($t)*);
+        $crate::zconfigurable!($($t)*);
     };
     () => ()
 }

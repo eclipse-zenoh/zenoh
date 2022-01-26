@@ -20,5 +20,4 @@ pub mod routing;
 #[doc(hidden)]
 pub mod runtime;
 #[doc(hidden)]
-#[macro_use]
-pub mod transport;
+pub use zenoh_transport as transport;

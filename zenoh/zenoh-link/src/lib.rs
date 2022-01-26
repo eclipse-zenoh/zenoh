@@ -17,19 +17,65 @@ use std::sync::Arc;
 use zenoh_core::{bail, Result as ZResult};
 
 #[cfg(feature = "transport_quic")]
-use zenoh_link_quic::{LinkManagerUnicastQuic, QUIC_LOCATOR_PREFIX};
+pub use zenoh_link_quic as quic;
+#[cfg(feature = "transport_quic")]
+use zenoh_link_quic::{LinkManagerUnicastQuic, QuicLocatorInspector, QUIC_LOCATOR_PREFIX};
 #[cfg(feature = "transport_tcp")]
-use zenoh_link_tcp::{LinkManagerUnicastTcp, TCP_LOCATOR_PREFIX};
+pub use zenoh_link_tcp as tcp;
+#[cfg(feature = "transport_tcp")]
+use zenoh_link_tcp::{LinkManagerUnicastTcp, TcpLocatorInspector, TCP_LOCATOR_PREFIX};
 #[cfg(feature = "transport_tls")]
-use zenoh_link_tls::{LinkManagerUnicastTls, TLS_LOCATOR_PREFIX};
+pub use zenoh_link_tls as tls;
+#[cfg(feature = "transport_tls")]
+use zenoh_link_tls::{LinkManagerUnicastTls, TlsLocatorInspector, TLS_LOCATOR_PREFIX};
 #[cfg(feature = "transport_udp")]
-use zenoh_link_udp::{LinkManagerMulticastUdp, LinkManagerUnicastUdp, UDP_LOCATOR_PREFIX};
+pub use zenoh_link_udp as udp;
+#[cfg(feature = "transport_udp")]
+use zenoh_link_udp::{
+    LinkManagerMulticastUdp, LinkManagerUnicastUdp, UdpLocatorInspector, UDP_LOCATOR_PREFIX,
+};
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+pub use zenoh_link_unixsock_stream as unixsock_stream;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 use zenoh_link_unixsock_stream::{
     LinkManagerUnicastUnixSocketStream, UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
 
 pub use zenoh_link_commons::*;
+use zenoh_protocol_core::locator;
+pub use zenoh_protocol_core::{EndPoint, Locator};
+
+#[derive(Default, Clone)]
+pub struct LocatorInspector {
+    #[cfg(feature = "transport_quic")]
+    quic_inspector: QuicLocatorInspector,
+    #[cfg(feature = "transport_tcp")]
+    tcp_inspector: TcpLocatorInspector,
+    #[cfg(feature = "transport_tls")]
+    tls_inspector: TlsLocatorInspector,
+    #[cfg(feature = "transport_udp")]
+    udp_inspector: UdpLocatorInspector,
+}
+impl LocatorInspector {
+    pub async fn is_multicast(&self, locator: &locator) -> ZResult<bool> {
+        #[allow(unused_imports)]
+        use zenoh_link_commons::LocatorInspector;
+        let protocol = locator.protocol();
+        match protocol {
+            #[cfg(feature = "transport_tcp")]
+            TCP_LOCATOR_PREFIX => self.tcp_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_udp")]
+            UDP_LOCATOR_PREFIX => self.udp_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_tls")]
+            TLS_LOCATOR_PREFIX => self.tls_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_quic")]
+            QUIC_LOCATOR_PREFIX => self.quic_inspector.is_multicast(locator).await,
+            #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+            UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(false),
+            _ => bail!("Unsupported protocol: {}.", protocol),
+        }
+    }
+}
 
 /*************************************/
 /*             UNICAST               */

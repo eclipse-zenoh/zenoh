@@ -35,6 +35,7 @@ use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_core::zparse;
 use zenoh_core::Result as ZResult;
 use zenoh_crypto::{BlockCipher, PseudoRng};
+use zenoh_protocol_core::locators::LocatorProtocol;
 use zenoh_protocol_core::{EndPoint, Locator};
 
 /// # Examples
@@ -198,7 +199,8 @@ impl TransportManagerBuilder {
         if let Some(v) = properties.transport().link().rx_buff_size() {
             self = self.link_rx_buff_size(*v);
         }
-        self = self.endpoint(LocatorConfig::from_config(properties)?);
+        todo!();
+        // self = self.endpoint(LocatorConfig::from_config(properties)?);
         self = self.unicast(
             TransportManager::config_unicast()
                 .from_config(properties)
@@ -267,6 +269,7 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     #[cfg(feature = "shared-memory")]
     pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
+    pub(crate) locator_inspector: zenoh_link::LocatorInspector,
 }
 
 impl TransportManager {
@@ -284,6 +287,7 @@ impl TransportManager {
             cipher: Arc::new(cipher),
             #[cfg(feature = "shared-memory")]
             shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
+            locator_inspector: Default::default(),
         }
     }
 
@@ -305,7 +309,11 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        if endpoint.locator.address.is_multicast() {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
             // @TODO: multicast
             unimplemented!();
         } else {
@@ -314,7 +322,11 @@ impl TransportManager {
     }
 
     pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        if endpoint.locator.address.is_multicast() {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
             // @TODO: multicast
             unimplemented!();
         } else {
@@ -346,7 +358,11 @@ impl TransportManager {
     }
 
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        if endpoint.locator.address.is_multicast() {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
             // @TODO: multicast
             unimplemented!();
         } else {

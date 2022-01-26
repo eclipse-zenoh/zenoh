@@ -13,6 +13,7 @@
 //
 use zenoh::net::protocol::core::{ZInt, ZINT_MAX_BYTES};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
+use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 
 fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);

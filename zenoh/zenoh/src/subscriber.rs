@@ -13,7 +13,6 @@
 //
 
 //! Subscribing primitives.
-use crate::net::protocol::core::SubInfo;
 use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
@@ -27,13 +26,14 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
+use zenoh_protocol_core::SubInfo;
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The subscription mode.
-pub use crate::net::protocol::core::SubMode;
+pub use zenoh_protocol_core::SubMode;
 
 /// The kind of reliability.
-pub use crate::net::protocol::core::Reliability;
+pub use zenoh_protocol_core::Reliability;
 
 /// The callback that will be called on each data for a [`CallbackSubscriber`](CallbackSubscriber).
 pub type DataHandler = dyn FnMut(Sample) + Send + Sync + 'static;

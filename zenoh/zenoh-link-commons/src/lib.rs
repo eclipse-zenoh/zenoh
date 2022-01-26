@@ -39,6 +39,12 @@ pub struct Link {
     pub is_streamed: bool,
 }
 
+#[async_trait]
+pub trait LocatorInspector: Default {
+    fn protocol(&self) -> Cow<'static, str>;
+    async fn is_multicast(&self, locator: &locator) -> ZResult<bool>;
+}
+
 impl fmt::Display for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} => {}", &*self.src, &*self.dst)

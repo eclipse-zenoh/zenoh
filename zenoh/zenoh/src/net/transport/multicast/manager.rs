@@ -13,7 +13,7 @@
 //
 use crate::config::Config;
 use crate::net::link::*;
-use crate::net::protocol::proto::tmsg;
+use zenoh_protocol::proto::tmsg;
 use crate::net::transport::multicast::transport::TransportMulticastInner;
 use crate::net::transport::multicast::TransportMulticast;
 use crate::net::transport::TransportManager;
@@ -23,6 +23,7 @@ use std::time::Duration;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zlock, zparse};
+use zenoh_protocol_core::locators::LocatorProtocol;
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,

@@ -12,8 +12,8 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::ZInt;
-use crate::net::protocol::proto::{tmsg, Close, TransportBody};
+use zenoh_protocol_core::ZInt;
+use zenoh_protocol::proto::{tmsg, Close, TransportBody};
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::open::OResult;
 use crate::net::transport::unicast::establishment::{

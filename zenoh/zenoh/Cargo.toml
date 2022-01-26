@@ -35,16 +35,17 @@ readme = "README.md"
 maintenance = { status = "actively-developed" }
 
 [features]
-auth_pubkey = ["rsa", "num-traits"]
-auth_usrpwd = []
+auth_pubkey = ["rsa", "num-traits", "zenoh-transport/auth_pubkey"]
+auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 complete_n = ["zenoh-protocol-core/complete_n", "zenoh-protocol/complete_n"]
 shared-memory = [
     "bincode",
     "shared_memory",
     "zenoh-buffers/shared-memory",
     "zenoh-protocol/shared-memory",
+    "zenoh-transport/shared-memory",
 ]
-stats = []
+stats = ["zenoh-transport/stats"]
 transport_quic = ["zenoh-link/transport_quic"]
 transport_tcp = ["zenoh-link/transport_tcp"]
 transport_tls = ["zenoh-link/transport_tls"]
@@ -71,10 +72,11 @@ zenoh-util = { path = "../../zenoh-utils/zenoh-util" }
 zenoh-plugin-trait = { path = "../../plugins/zenoh-plugin-trait", default-features = false }
 
 zenoh-buffers = { path = "../zenoh-buffers/" }
+zenoh-config = { path = "../zenoh-config/" }
 zenoh-link = { path = "../zenoh-link/" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 zenoh-protocol = { path = "../zenoh-protocol/" }
-zenoh-config = { path = "../zenoh-config/" }
+zenoh-transport = { path = "../zenoh-transport/" }
 
 async-global-executor = "2.0.2"
 async-std = { version = "=1.9.0", default-features = false, features = [

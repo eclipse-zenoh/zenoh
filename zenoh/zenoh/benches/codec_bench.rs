@@ -24,6 +24,8 @@ use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
 };
+use zenoh_protocol::io::{WBufCodec, ZBufCodec};
+use zenoh_protocol::proto::MessageWriter;
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);

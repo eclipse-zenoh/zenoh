@@ -28,7 +28,7 @@ use std::{
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-pub use zenoh_protocol_core::{whatami, WhatAmI};
+pub use zenoh_protocol_core::{whatami, Locator, WhatAmI};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -41,7 +41,6 @@ pub type ValidationFunction = std::sync::Arc<
         + Sync,
 >;
 type ZInt = u64;
-type Locator = String;
 
 /// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
 /// to configure the zenoh [`Session`](crate::Session).

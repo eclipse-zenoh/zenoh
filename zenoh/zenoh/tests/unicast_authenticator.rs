@@ -35,7 +35,6 @@ use zenoh::net::transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_cfg_properties::Properties;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 
@@ -916,12 +915,17 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
-    let mut config = Properties::default();
-    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
-    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
-    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
-    endpoint.config = Some(Arc::new(config));
+    let endpoint: EndPoint = zenoh_protocol_core::endpoint::new("tls/localhost:11448")
+        .unwrap()
+        .extend_config(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .copied(),
+        );
 
     task::block_on(run(&endpoint));
 }
@@ -1010,12 +1014,17 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
-    let mut config = Properties::default();
-    config.insert(TLS_ROOT_CA_CERTIFICATE_RAW.to_string(), ca.to_string());
-    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
-    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
-    endpoint.config = Some(Arc::new(config));
+    let endpoint: EndPoint = zenoh_protocol_core::endpoint::new("quic/localhost:11448")
+        .unwrap()
+        .extend_config(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .copied(),
+        );
 
     task::block_on(run(&endpoint));
 }

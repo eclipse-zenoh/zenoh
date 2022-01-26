@@ -14,7 +14,6 @@
 
 //! Queryable primitives.
 
-use crate::net::protocol::core::QueryableInfo;
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::channel::Receiver;
@@ -31,9 +30,10 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
+use zenoh_protocol_core::QueryableInfo;
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
-pub use crate::net::protocol::core::queryable::*;
+pub use zenoh_protocol_core::queryable::*;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {

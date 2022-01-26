@@ -14,19 +14,9 @@
 mod adminspace;
 pub mod orchestrator;
 
-use super::link;
-use super::link::{Link, Locator};
-use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
-use super::transport;
-use super::transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
-};
 use crate::config::{Config, Notifier};
 pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
@@ -36,7 +26,16 @@ use std::time::Duration;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
+use zenoh_link::{Link, Locator};
+use zenoh_protocol;
+use zenoh_protocol::core::{PeerId, WhatAmI};
+use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_sync::get_mut_unchecked;
+use zenoh_transport;
+use zenoh_transport::{
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+};
 
 pub struct RuntimeState {
     pub pid: PeerId,

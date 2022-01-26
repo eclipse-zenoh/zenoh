@@ -18,6 +18,7 @@ use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::SEQ_NUM_RES;
 use zenoh::net::protocol::proto::*;
+use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 
 const NUM_ITER: usize = 100;
 const PROPS_LENGTH: usize = 3;

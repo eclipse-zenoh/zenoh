@@ -3261,6 +3261,7 @@ dependencies = [
  "zenoh-protocol",
  "zenoh-protocol-core",
  "zenoh-sync",
+ "zenoh-transport",
  "zenoh-util",
 ]
 
@@ -3360,7 +3361,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "rcgen",
- "webpki 0.22.0",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-link-quic",
@@ -3564,6 +3564,31 @@ dependencies = [
  "flume",
  "futures-lite",
  "zenoh-core",
+]
+
+[[package]]
+name = "zenoh-transport"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-global-executor",
+ "async-std",
+ "async-trait",
+ "flume",
+ "log",
+ "paste",
+ "rand 0.8.4",
+ "rsa",
+ "serde",
+ "zenoh-buffers",
+ "zenoh-cfg-properties",
+ "zenoh-collections",
+ "zenoh-config",
+ "zenoh-core",
+ "zenoh-crypto",
+ "zenoh-link",
+ "zenoh-protocol",
+ "zenoh-protocol-core",
+ "zenoh-sync",
 ]
 
 [[package]]

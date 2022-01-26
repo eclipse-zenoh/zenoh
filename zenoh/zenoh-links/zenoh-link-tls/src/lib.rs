@@ -14,7 +14,9 @@
 use std::net::SocketAddr;
 
 use async_std::net::ToSocketAddrs;
+use async_trait::async_trait;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol_core::locator;
 
 mod unicast;
@@ -28,6 +30,18 @@ pub use unicast::*;
 //       2^16 - 1 bytes (i.e., 65535).
 const TLS_MAX_MTU: u16 = u16::MAX;
 pub const TLS_LOCATOR_PREFIX: &str = "tls";
+
+#[derive(Default, Clone, Copy)]
+pub struct TlsLocatorInspector;
+#[async_trait]
+impl LocatorInspector for TlsLocatorInspector {
+    fn protocol(&self) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(TLS_LOCATOR_PREFIX)
+    }
+    async fn is_multicast(&self, _locator: &locator) -> ZResult<bool> {
+        Ok(false)
+    }
+}
 
 zconfigurable! {
     // Default MTU (TLS PDU) in bytes.

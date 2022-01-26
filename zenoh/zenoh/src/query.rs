@@ -28,17 +28,17 @@ use std::task::{Context, Poll};
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use crate::net::protocol::core::Target;
+pub use zenoh_protocol_core::Target;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use crate::net::protocol::core::QueryTarget;
+pub use zenoh_protocol_core::QueryTarget;
 
 /// The kind of consolidation.
-pub use crate::net::protocol::core::ConsolidationMode;
+pub use zenoh_protocol_core::ConsolidationMode;
 
 /// The kind of consolidation that should be applied on replies to a [`get`](Session::get)
 /// at different stages of the reply process.
-pub use crate::net::protocol::core::QueryConsolidation;
+pub use zenoh_protocol_core::QueryConsolidation;
 
 /// Structs returned by a [`get`](Session::get).
 #[derive(Clone, Debug)]

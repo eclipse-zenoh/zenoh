@@ -19,6 +19,11 @@ use std::{
 pub struct EndPoint {
     inner: String,
 }
+impl core::fmt::Display for EndPoint {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.inner)
+    }
+}
 
 impl Deref for EndPoint {
     type Target = endpoint;
@@ -58,6 +63,11 @@ impl From<EndPoint> for Locator {
             inner.truncate(index);
         }
         Locator { inner }
+    }
+}
+impl From<Locator> for EndPoint {
+    fn from(val: Locator) -> Self {
+        EndPoint { inner: val.inner }
     }
 }
 
@@ -156,5 +166,43 @@ impl endpoint {
     pub fn locator_mut(&mut self) -> &mut locator {
         let (locator, _) = split_once_mut(&mut self.inner, CONFIG_SEPARATOR);
         unsafe { locator::new_unchecked_mut(locator) }
+    }
+    pub fn config(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator + Clone {
+        self.split().1
+    }
+    pub fn extend_config<'a, I: Iterator<Item = (&'a str, &'a str)> + Clone>(
+        &'a self,
+        config: I,
+    ) -> EndPoint {
+        let (locator, previous) = self.split();
+        let mut config = previous.chain(config);
+        let mut result = locator.inner.to_owned();
+        if config.clone().is_canon() {
+            if let Some((key, value)) = config.next() {
+                result += key;
+                result.push(FIELD_SEPARATOR);
+                result += value;
+            }
+            for (key, value) in config {
+                result.push(LIST_SEPARATOR);
+                result += key;
+                result.push(FIELD_SEPARATOR);
+                result += value;
+            }
+        } else {
+            let mut config = config.canonicalize().into_iter();
+            if let Some((key, value)) = config.next() {
+                result += key;
+                result.push(FIELD_SEPARATOR);
+                result += value;
+            }
+            for (key, value) in config {
+                result.push(LIST_SEPARATOR);
+                result += key;
+                result.push(FIELD_SEPARATOR);
+                result += value;
+            }
+        }
+        EndPoint { inner: result }
     }
 }

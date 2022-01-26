@@ -11,7 +11,9 @@ pub const FIELD_SEPARATOR: char = '=';
 
 /// A `String` that respects the [`Locator`] canon form: `<proto>/<address>?<metadata>`, such that `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[repr(transparent)]
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(into = "String")]
+#[serde(try_from = "String")]
 pub struct Locator {
     pub(crate) inner: String,
 }
@@ -23,12 +25,19 @@ impl From<Locator> for String {
 /// A `str` that respects the [`Locator`] canon form: `<proto>/<address>?<metadata>`, such that `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[serde(transparent)]
 pub struct locator {
-    inner: str,
+    pub(crate) inner: str,
 }
 
 impl core::fmt::Display for locator {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.inner)
+    }
+}
+
+impl core::fmt::Display for Locator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.inner)
     }
@@ -332,3 +341,5 @@ pub(crate) fn extend_with_props(s: &mut String, props: &[(&str, &str)]) {
     s.push(FIELD_SEPARATOR);
     *s += v;
 }
+
+pub type LocatorProtocol = str;

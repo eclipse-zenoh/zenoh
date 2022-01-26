@@ -18,7 +18,7 @@ use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
-use crate::net::protocol::core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use zenoh_protocol_core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
 use async_std::task;

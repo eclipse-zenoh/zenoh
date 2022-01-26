@@ -1,3 +1,5 @@
+use zenoh_protocol::proto::MessageWriter;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -378,14 +380,16 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
+    use zenoh_protocol::proto::MessageReader;
+
     use super::*;
-    use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
-    use crate::net::protocol::io::{WBuf, ZBuf};
-    use crate::net::protocol::proto::defaults::SEQ_NUM_RES;
-    use crate::net::protocol::proto::{
+    use std::convert::TryFrom;
+    use zenoh_protocol::io::{WBuf, ZBuf};
+    use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
+    use zenoh_protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
-    use std::convert::TryFrom;
+    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, ZInt};
 
     fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {

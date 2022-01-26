@@ -279,7 +279,7 @@ impl ZSlice {
 
     #[cfg(feature = "shared-memory")]
     #[inline(never)]
-    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+    pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmInfo(info) => {
                 // Deserialize the shmb info into shm buff
@@ -307,7 +307,7 @@ impl ZSlice {
 
     #[cfg(feature = "shared-memory")]
     #[inline(never)]
-    pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
+    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmBuffer(shmb) => {
                 // Serialize the shmb info

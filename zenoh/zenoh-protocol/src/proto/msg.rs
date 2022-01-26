@@ -315,11 +315,11 @@ pub mod zmsg {
 /*************************************/
 /*              TRAITS               */
 /*************************************/
-pub(crate) trait Header {
+pub trait Header {
     fn header(&self) -> u8;
 }
 
-pub(crate) trait Options {
+pub trait Options {
     fn options(&self) -> ZInt;
     fn has_options(&self) -> bool;
 }

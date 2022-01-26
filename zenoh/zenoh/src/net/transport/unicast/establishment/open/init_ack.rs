@@ -12,9 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{PeerId, Property, WhatAmI, ZInt};
-use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{tmsg, Attachment, Close, TransportBody};
+use zenoh_protocol_core::{PeerId, Property, WhatAmI, ZInt};
+use zenoh_protocol::io::ZSlice;
+use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
 use crate::net::transport::unicast::establishment::open::OResult;
 use crate::net::transport::unicast::establishment::{
     attachment_from_properties, properties_from_attachment,

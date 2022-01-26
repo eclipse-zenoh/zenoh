@@ -1,4 +1,4 @@
-use crate::net::protocol::core::whatami::WhatAmIMatcher;
+use zenoh_protocol_core::whatami::WhatAmIMatcher;
 
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.

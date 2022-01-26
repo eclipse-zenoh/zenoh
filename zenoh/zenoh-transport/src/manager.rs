@@ -1,0 +1,388 @@
+//
+// Copyright (c) 2017, 2020 ADLINK Technology Inc.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+//
+use super::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
+use super::protocol::core::{PeerId, WhatAmI, ZInt};
+#[cfg(feature = "shared-memory")]
+use super::protocol::io::SharedMemoryReader;
+use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
+use super::unicast::manager::{
+    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
+};
+use super::unicast::TransportUnicast;
+use super::TransportEventHandler;
+use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
+use rand::{RngCore, SeedableRng};
+use std::collections::HashMap;
+use std::sync::Arc;
+#[cfg(feature = "shared-memory")]
+use std::sync::RwLock;
+use zenoh_cfg_properties::{config::*, Properties};
+use zenoh_config::Config;
+use zenoh_core::zparse;
+use zenoh_core::Result as ZResult;
+use zenoh_crypto::{BlockCipher, PseudoRng};
+use zenoh_link::NewLinkChannelSender;
+use zenoh_protocol_core::locators::LocatorProtocol;
+use zenoh_protocol_core::{EndPoint, Locator};
+
+/// # Examples
+/// ```
+/// use async_std::sync::Arc;
+/// use std::time::Duration;
+/// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
+/// use zenoh::net::transport::*;
+/// use zenoh::Result as ZResult;
+///
+/// // Create my transport handler to be notified when a new transport is initiated with me
+/// #[derive(Default)]
+/// struct MySH;
+///
+/// impl TransportEventHandler for MySH {
+///     fn new_unicast(&self,
+///         _peer: TransportPeer,
+///         _transport: TransportUnicast
+///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+///     }
+///
+///     fn new_multicast(&self,
+///         _transport: TransportMulticast
+///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+///         Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
+///     }
+/// }
+///
+/// // Create the default TransportManager
+/// let manager = TransportManager::builder()
+///         .build(Arc::new(MySH::default()))
+///         .unwrap();
+///
+/// // Create the TransportManager with custom configuration
+/// // Configure the unicast transports parameters
+/// let unicast = TransportManager::config_unicast()
+///         .lease(Duration::from_secs(1))
+///         .keep_alive(Duration::from_millis(100))
+///         .open_timeout(Duration::from_secs(1))
+///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports        
+///         .max_links(1)    // Allow max 1 inbound link per transport
+///         .max_sessions(5);   // Allow max 5 transports open
+/// let manager = TransportManager::builder()
+///         .pid(PeerId::rand())
+///         .whatami(WhatAmI::Peer)
+///         .batch_size(1_024)              // Use a batch size of 1024 bytes
+///         .sn_resolution(128)             // Use a sequence number resolution of 128
+///         .unicast(unicast)               // Configure unicast parameters
+///         .build(Arc::new(MySH::default()))
+///         .unwrap();
+/// ```
+
+pub struct TransportManagerConfig {
+    pub version: u8,
+    pub pid: PeerId,
+    pub whatami: WhatAmI,
+    pub sn_resolution: ZInt,
+    pub batch_size: u16,
+    pub defrag_buff_size: usize,
+    pub link_rx_buff_size: usize,
+    pub unicast: TransportManagerConfigUnicast,
+    pub multicast: TransportManagerConfigMulticast,
+    pub endpoint: HashMap<String, Properties>,
+    pub handler: Arc<dyn TransportEventHandler>,
+}
+
+pub struct TransportManagerState {
+    pub unicast: TransportManagerStateUnicast,
+    pub multicast: TransportManagerStateMulticast,
+}
+
+pub struct TransportManagerParams {
+    config: TransportManagerConfig,
+    state: TransportManagerState,
+}
+
+pub struct TransportManagerBuilder {
+    version: u8,
+    pid: PeerId,
+    whatami: WhatAmI,
+    sn_resolution: ZInt,
+    batch_size: u16,
+    defrag_buff_size: usize,
+    link_rx_buff_size: usize,
+    unicast: TransportManagerBuilderUnicast,
+    multicast: TransportManagerBuilderMulticast,
+    endpoint: HashMap<String, Properties>,
+}
+
+impl TransportManagerBuilder {
+    pub fn version(mut self, version: u8) -> Self {
+        self.version = version;
+        self
+    }
+
+    pub fn pid(mut self, pid: PeerId) -> Self {
+        self.pid = pid;
+        self
+    }
+
+    pub fn whatami(mut self, whatami: WhatAmI) -> Self {
+        self.whatami = whatami;
+        self
+    }
+
+    pub fn sn_resolution(mut self, sn_resolution: ZInt) -> Self {
+        self.sn_resolution = sn_resolution;
+        self
+    }
+
+    pub fn batch_size(mut self, batch_size: u16) -> Self {
+        self.batch_size = batch_size;
+        self
+    }
+
+    pub fn defrag_buff_size(mut self, defrag_buff_size: usize) -> Self {
+        self.defrag_buff_size = defrag_buff_size;
+        self
+    }
+
+    pub fn link_rx_buff_size(mut self, link_rx_buff_size: usize) -> Self {
+        self.link_rx_buff_size = link_rx_buff_size;
+        self
+    }
+
+    pub fn endpoint(mut self, endpoint: HashMap<String, Properties>) -> Self {
+        self.endpoint = endpoint;
+        self
+    }
+
+    pub fn unicast(mut self, unicast: TransportManagerBuilderUnicast) -> Self {
+        self.unicast = unicast;
+        self
+    }
+
+    pub fn multicast(mut self, multicast: TransportManagerBuilderMulticast) -> Self {
+        self.multicast = multicast;
+        self
+    }
+
+    pub async fn from_config(mut self, properties: &Config) -> ZResult<TransportManagerBuilder> {
+        if let Some(v) = properties.version() {
+            self = self.version(*v);
+        }
+        if let Some(v) = properties.id() {
+            self = self.pid(zparse!(v)?);
+        }
+        if let Some(v) = properties.mode() {
+            self = self.whatami(*v);
+        }
+        if let Some(v) = properties.transport().sequence_number_resolution() {
+            self = self.sn_resolution(*v);
+        }
+        if let Some(v) = properties.transport().link().batch_size() {
+            self = self.batch_size(*v);
+        }
+        if let Some(v) = properties.transport().link().defrag_buffer_size() {
+            self = self.defrag_buff_size(*v);
+        }
+        if let Some(v) = properties.transport().link().rx_buff_size() {
+            self = self.link_rx_buff_size(*v);
+        }
+        todo!();
+        // self = self.endpoint(LocatorConfig::from_config(properties)?);
+        self = self.unicast(
+            TransportManager::config_unicast()
+                .from_config(properties)
+                .await?,
+        );
+        self = self.multicast(
+            TransportManagerBuilderMulticast::default()
+                .from_config(properties)
+                .await?,
+        );
+
+        Ok(self)
+    }
+
+    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+        let unicast = self.unicast.build()?;
+        let multicast = self.multicast.build()?;
+
+        let config = TransportManagerConfig {
+            version: self.version,
+            pid: self.pid,
+            whatami: self.whatami,
+            sn_resolution: self.sn_resolution,
+            batch_size: self.batch_size,
+            defrag_buff_size: self.defrag_buff_size,
+            link_rx_buff_size: self.link_rx_buff_size,
+            unicast: unicast.config,
+            multicast: multicast.config,
+            endpoint: self.endpoint,
+            handler,
+        };
+
+        let state = TransportManagerState {
+            unicast: unicast.state,
+            multicast: multicast.state,
+        };
+
+        let params = TransportManagerParams { config, state };
+
+        Ok(TransportManager::new(params))
+    }
+}
+
+impl Default for TransportManagerBuilder {
+    fn default() -> Self {
+        Self {
+            version: VERSION,
+            pid: PeerId::rand(),
+            whatami: ZN_MODE_DEFAULT.parse().unwrap(),
+            sn_resolution: SEQ_NUM_RES,
+            batch_size: BATCH_SIZE,
+            defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
+            link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
+            endpoint: HashMap::new(),
+            unicast: TransportManagerBuilderUnicast::default(),
+            multicast: TransportManagerBuilderMulticast::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct TransportManager {
+    pub config: Arc<TransportManagerConfig>,
+    pub(crate) state: Arc<TransportManagerState>,
+    pub(crate) prng: AsyncArc<AsyncMutex<PseudoRng>>,
+    pub(crate) cipher: Arc<BlockCipher>,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
+    pub(crate) locator_inspector: zenoh_link::LocatorInspector,
+    pub(crate) new_unicast_link_sender: NewLinkChannelSender,
+}
+
+impl TransportManager {
+    pub fn new(params: TransportManagerParams) -> TransportManager {
+        // Initialize the PRNG and the Cipher
+        let mut prng = PseudoRng::from_entropy();
+        let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
+        prng.fill_bytes(&mut key);
+        let cipher = BlockCipher::new(key);
+
+        let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
+
+        let this = TransportManager {
+            config: Arc::new(params.config),
+            state: Arc::new(params.state),
+            prng: AsyncArc::new(AsyncMutex::new(prng)),
+            cipher: Arc::new(cipher),
+            #[cfg(feature = "shared-memory")]
+            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
+            locator_inspector: Default::default(),
+            new_unicast_link_sender,
+        };
+
+        async_std::task::spawn({
+            let this = this.clone();
+            async move {
+                while let Ok(link) = new_unicast_link_receiver.recv_async().await {
+                    this.handle_new_link_unicast(link).await;
+                }
+            }
+        });
+
+        this
+    }
+
+    pub fn builder() -> TransportManagerBuilder {
+        TransportManagerBuilder::default()
+    }
+
+    pub fn pid(&self) -> PeerId {
+        self.config.pid
+    }
+
+    pub async fn close(&self) {
+        log::trace!("TransportManager::clear())");
+        self.close_unicast().await;
+        self.close_multicast().await;
+    }
+
+    /*************************************/
+    /*              LISTENER             */
+    /*************************************/
+    pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
+            // @TODO: multicast
+            unimplemented!();
+        } else {
+            self.add_listener_unicast(endpoint).await
+        }
+    }
+
+    pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
+            // @TODO: multicast
+            unimplemented!();
+        } else {
+            self.del_listener_unicast(endpoint).await
+        }
+    }
+
+    pub fn get_listeners(&self) -> Vec<EndPoint> {
+        self.get_listeners_unicast()
+        // @TODO: multicast
+    }
+
+    pub fn get_locators(&self) -> Vec<Locator> {
+        self.get_locators_unicast()
+        // @TODO: multicast
+    }
+
+    /*************************************/
+    /*             TRANSPORT             */
+    /*************************************/
+    pub fn get_transport(&self, peer: &PeerId) -> Option<TransportUnicast> {
+        self.get_transport_unicast(peer)
+        // @TODO: multicast
+    }
+
+    pub fn get_transports(&self) -> Vec<TransportUnicast> {
+        self.get_transports_unicast()
+        // @TODO: multicast
+    }
+
+    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        if self
+            .locator_inspector
+            .is_multicast(endpoint.locator())
+            .await?
+        {
+            // @TODO: multicast
+            unimplemented!();
+        } else {
+            self.open_transport_unicast(endpoint).await
+        }
+    }
+}

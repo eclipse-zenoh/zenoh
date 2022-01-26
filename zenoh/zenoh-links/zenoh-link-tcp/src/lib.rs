@@ -12,7 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use async_std::net::ToSocketAddrs;
+use async_trait::async_trait;
 use std::net::SocketAddr;
+use zenoh_link_commons::LocatorInspector;
 
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_protocol_core::locator;
@@ -29,6 +31,18 @@ pub use unicast::*;
 const TCP_MAX_MTU: u16 = u16::MAX;
 
 pub const TCP_LOCATOR_PREFIX: &str = "tcp";
+
+#[derive(Default, Clone, Copy)]
+pub struct TcpLocatorInspector;
+#[async_trait]
+impl LocatorInspector for TcpLocatorInspector {
+    fn protocol(&self) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(TCP_LOCATOR_PREFIX)
+    }
+    async fn is_multicast(&self, _locator: &locator) -> ZResult<bool> {
+        Ok(false)
+    }
+}
 
 zconfigurable! {
     // Default MTU (TCP PDU) in bytes.

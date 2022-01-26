@@ -1,5 +1,3 @@
-use crate::{net::protocol::proto::data_kind, prelude::Selector};
-
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -12,18 +10,10 @@ use crate::{net::protocol::proto::data_kind, prelude::Selector};
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-use super::protocol::{
-    core::{
-        key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
-    },
-    io::ZBuf,
-    proto::{DataInfo, RoutingContext},
-};
 use super::routing::face::Face;
-use super::transport::{Primitives, TransportUnicast};
 use super::Runtime;
 use crate::plugins::PluginsManager;
+use crate::prelude::Selector;
 use async_std::sync::Arc;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
@@ -31,6 +21,13 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
+use zenoh_protocol_core::{
+    key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
+    QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+};
+use zenoh_transport::{Primitives, TransportUnicast};
 
 pub struct AdminContext {
     runtime: Runtime,

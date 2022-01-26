@@ -12,9 +12,9 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::Property;
-use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::proto::{tmsg, TransportMessage};
+use zenoh_protocol_core::Property;
+use zenoh_protocol::io::ZSlice;
+use zenoh_protocol::proto::{tmsg, TransportMessage};
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::{
     attachment_from_properties, Cookie, EstablishmentProperties,

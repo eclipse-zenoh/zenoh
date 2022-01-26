@@ -23,7 +23,6 @@ use zenoh::net::transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
-use zenoh_cfg_properties::Properties;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 
@@ -111,37 +110,38 @@ async fn run(endpoints: &[EndPoint]) {
 
 #[test]
 fn endpoint_parsing() {
+    use std::collections::HashMap;
     let s = "tcp/127.0.0.1:0";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    assert!(endpoint.locator.metadata.is_none());
+    assert!(endpoint.config().next().is_none());
+    assert!(endpoint.locator().metadata().next().is_none());
 
     let s = "tcp/127.0.0.1:0?one=1";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
+    assert!(endpoint.config().next().is_none());
+    let metadata = endpoint.locator().metadata().collect::<HashMap<_, _>>();
     assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata.get("one").unwrap(), "1");
+    assert_eq!(metadata.get("one").unwrap(), &"1");
 
     let s = "tcp/127.0.0.1:0#a=A";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.locator.metadata.is_none());
-    let config = endpoint.config.as_ref().unwrap();
+    assert!(endpoint.locator().metadata().next().is_none());
+    let config = endpoint.config().collect::<HashMap<_, _>>();
     assert_eq!(config.len(), 1);
-    assert_eq!(config.get("a").unwrap(), "A");
+    assert_eq!(config.get("a").unwrap(), &"A");
 
     let s = "tcp/127.0.0.1:0?one=1#a=A";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
+    let metadata = endpoint.locator().metadata().collect::<HashMap<_, _>>();
     assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata.get("one").unwrap(), "1");
-    let config = endpoint.config.as_ref().unwrap();
+    assert_eq!(metadata.get("one").unwrap(), &"1");
+    let config = endpoint.config().collect::<HashMap<_, _>>();
     assert_eq!(config.len(), 1);
-    assert_eq!(config.get("a").unwrap(), "A");
+    assert_eq!(config.get("a").unwrap(), &"A");
 
     let s = "tcp/127.0.0.1:0#a=A?one=1";
     println!("Endpoint parsing: {}", s);
@@ -150,32 +150,32 @@ fn endpoint_parsing() {
     let s = "tcp/127.0.0.1:0?one=1;two=2";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
+    assert!(endpoint.config().next().is_none());
+    let metadata = endpoint.locator().metadata().collect::<HashMap<_, _>>();
     assert_eq!(metadata.len(), 2);
-    assert_eq!(metadata.get("one").unwrap(), "1");
-    assert_eq!(metadata.get("two").unwrap(), "2");
+    assert_eq!(metadata.get("one").unwrap(), &"1");
+    assert_eq!(metadata.get("two").unwrap(), &"2");
 
     let s = "tcp/127.0.0.1:0#a=A;b=B";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.locator.metadata.is_none());
-    let config = endpoint.config.as_ref().unwrap();
+    assert!(endpoint.locator().metadata().next().is_none());
+    let config = endpoint.config().collect::<HashMap<_, _>>();
     assert_eq!(config.len(), 2);
-    assert_eq!(config.get("a").unwrap(), "A");
-    assert_eq!(config.get("b").unwrap(), "B");
+    assert_eq!(config.get("a").unwrap(), &"A");
+    assert_eq!(config.get("b").unwrap(), &"B");
 
     let s = "tcp/127.0.0.1:0?one=1;two=2#a=A;b=B";
     println!("Endpoint parsing: {}", s);
     let endpoint: EndPoint = s.parse().unwrap();
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
+    let metadata = endpoint.locator().metadata().collect::<HashMap<_, _>>();
     assert_eq!(metadata.len(), 2);
-    assert_eq!(metadata.get("one").unwrap(), "1");
-    assert_eq!(metadata.get("two").unwrap(), "2");
-    let config = endpoint.config.as_ref().unwrap();
+    assert_eq!(metadata.get("one").unwrap(), &"1");
+    assert_eq!(metadata.get("two").unwrap(), &"2");
+    let config = endpoint.config().collect::<HashMap<_, _>>();
     assert_eq!(config.len(), 2);
-    assert_eq!(config.get("a").unwrap(), "A");
-    assert_eq!(config.get("b").unwrap(), "B");
+    assert_eq!(config.get("a").unwrap(), &"A");
+    assert_eq!(config.get("b").unwrap(), &"B");
 
     let s = "tcp/127.0.0.1:0?";
     println!("Endpoint parsing: {}", s);
@@ -414,11 +414,16 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = "tls/localhost:9452".parse().unwrap();
-    let mut config = Properties::default();
-    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
-    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
-    endpoint.config = Some(Arc::new(config));
+    let endpoint: EndPoint = zenoh_protocol_core::endpoint::new("tls/localhost:9452")
+        .unwrap()
+        .extend_config(
+            [
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .copied(),
+        );
 
     let endpoints = vec![endpoint];
     task::block_on(run(&endpoints));
@@ -488,12 +493,16 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = "quic/localhost:9453".parse().unwrap();
-    let mut config = Properties::default();
-    config.insert(TLS_SERVER_PRIVATE_KEY_RAW.to_string(), key.to_string());
-    config.insert(TLS_SERVER_CERTIFICATE_RAW.to_string(), cert.to_string());
-    endpoint.config = Some(Arc::new(config));
-
+    let endpoint: EndPoint = zenoh_protocol_core::endpoint::new("quic/localhost:9453")
+        .unwrap()
+        .extend_config(
+            [
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .copied(),
+        );
     let endpoints = vec![endpoint];
     task::block_on(run(&endpoints));
 }

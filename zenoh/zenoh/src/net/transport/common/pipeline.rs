@@ -631,10 +631,10 @@ impl fmt::Debug for TransmissionPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
-    use crate::net::protocol::io::ZBuf;
-    use crate::net::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
-    use crate::net::protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
+    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, ZInt};
+    use zenoh_protocol::io::ZBuf;
+    use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
+    use zenoh_protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
     use crate::net::transport::defaults::ZN_QUEUE_SIZE_CONTROL;
     use async_std::prelude::*;
     use async_std::task;

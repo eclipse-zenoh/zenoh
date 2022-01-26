@@ -17,9 +17,11 @@ mod unicast;
 use std::net::SocketAddr;
 
 use async_std::net::ToSocketAddrs;
+use async_trait::async_trait;
 pub use multicast::*;
 pub use unicast::*;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol_core::{locator, Locator};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
@@ -58,6 +60,18 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct UdpLocatorInspector;
+#[async_trait]
+impl LocatorInspector for UdpLocatorInspector {
+    fn protocol(&self) -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed(UDP_LOCATOR_PREFIX)
+    }
+    async fn is_multicast(&self, locator: &locator) -> ZResult<bool> {
+        Ok(get_udp_addr(locator).await?.ip().is_multicast())
+    }
 }
 
 pub mod config {

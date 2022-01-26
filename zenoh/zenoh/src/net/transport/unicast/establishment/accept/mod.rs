@@ -17,7 +17,7 @@ mod open_ack;
 mod open_syn;
 
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::proto::tmsg;
+use zenoh_protocol::proto::tmsg;
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::{
     close_link, transport_finalize, transport_init, InputFinalize,

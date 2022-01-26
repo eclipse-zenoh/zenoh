@@ -121,28 +121,28 @@ pub mod plugins;
 /// reading and writing data.
 pub mod buf {
     /// A read-only bytes buffer.
-    pub use crate::net::protocol::io::ZBuf;
+    pub use zenoh_protocol::io::ZBuf;
 
     /// A [`ZBuf`] slice.
-    pub use crate::net::protocol::io::ZSlice;
+    pub use zenoh_protocol::io::ZSlice;
 
     /// A writable bytes buffer.
-    pub use crate::net::protocol::io::WBuf;
+    pub use zenoh_protocol::io::WBuf;
 
     #[cfg(feature = "shared-memory")]
-    pub use crate::net::protocol::io::SharedMemoryBuf;
+    pub use zenoh_protocol::io::SharedMemoryBuf;
     #[cfg(feature = "shared-memory")]
-    pub use crate::net::protocol::io::SharedMemoryBufInfo;
+    pub use zenoh_protocol::io::SharedMemoryBufInfo;
     #[cfg(feature = "shared-memory")]
-    pub use crate::net::protocol::io::SharedMemoryManager;
+    pub use zenoh_protocol::io::SharedMemoryManager;
 }
 
 /// Time related types and functions.
 pub mod time {
-    pub use crate::net::protocol::core::{Timestamp, TimestampId, NTP64};
+    pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
 
     /// A time period.
-    pub use crate::net::protocol::core::Period;
+    pub use zenoh_protocol_core::Period;
 
     /// Generates a reception [`Timestamp`] with id=0x00.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
@@ -248,10 +248,10 @@ pub mod scouting {
     use zenoh_sync::zreceiver;
 
     /// Constants and helpers for zenoh `whatami` flags.
-    pub use crate::net::protocol::core::WhatAmI;
+    pub use zenoh_protocol_core::WhatAmI;
 
     /// A zenoh Hello message.
-    pub use crate::net::protocol::proto::Hello;
+    pub use zenoh_protocol::proto::Hello;
 
     zreceiver! {
         /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.
