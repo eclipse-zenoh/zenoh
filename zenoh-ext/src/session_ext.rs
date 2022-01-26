@@ -11,7 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
+use super::{
+    PointToPointChannelBuilder, PointToPointServerBuilder, PublicationCacheBuilder,
+    QueryingSubscriberBuilder,
+};
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -87,6 +90,20 @@ pub trait SessionExt {
     ) -> PublicationCacheBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>;
+
+    fn point_to_point_server<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointServerBuilder<'a, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>;
+
+    fn point_to_point_channel<'a, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointChannelBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>;
 }
 
 impl SessionExt for Session {
@@ -109,6 +126,26 @@ impl SessionExt for Session {
     {
         PublicationCacheBuilder::new(self, pub_key_expr.into())
     }
+
+    fn point_to_point_server<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointServerBuilder<'a, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        PointToPointServerBuilder::new(SessionRef::Borrow(self), ptp_key_expr.into())
+    }
+
+    fn point_to_point_channel<'a, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointChannelBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        PointToPointChannelBuilder::new(SessionRef::Borrow(self), ptp_key_expr.into())
+    }
 }
 
 impl SessionExt for Arc<Session> {
@@ -130,5 +167,25 @@ impl SessionExt for Arc<Session> {
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.into())
+    }
+
+    fn point_to_point_server<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointServerBuilder<'a, 'b>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        PointToPointServerBuilder::new(SessionRef::Shared(self.clone()), ptp_key_expr.into())
+    }
+
+    fn point_to_point_channel<'a, IntoKeyExpr>(
+        &'a self,
+        ptp_key_expr: IntoKeyExpr,
+    ) -> PointToPointChannelBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        PointToPointChannelBuilder::new(SessionRef::Shared(self.clone()), ptp_key_expr.into())
     }
 }

@@ -62,3 +62,19 @@ path = "examples/z_member.rs"
 [[example]]
 name = "z_view_size"
 path = "examples/z_view_size.rs"
+
+[[example]]
+name = "z_ptp_responder"
+path = "examples/z_ptp_responder.rs"
+
+[[example]]
+name = "z_ptp_requester"
+path = "examples/z_ptp_requester.rs"
+
+[[example]]
+name = "z_ptp_pong"
+path = "examples/z_ptp_pong.rs"
+
+[[example]]
+name = "z_ptp_ping"
+path = "examples/z_ptp_ping.rs"

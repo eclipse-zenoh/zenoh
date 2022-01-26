@@ -12,9 +12,13 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 pub mod group;
+mod point_to_point;
 mod publication_cache;
 mod querying_subscriber;
 mod session_ext;
+pub use point_to_point::{
+    PointToPointChannel, PointToPointChannelBuilder, PointToPointServer, PointToPointServerBuilder,
+};
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
 pub use session_ext::SessionExt;
