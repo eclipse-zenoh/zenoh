@@ -17,6 +17,7 @@ use std::path::Path;
 use zenoh_core::zconfigurable;
 #[cfg(target_family = "unix")]
 mod unicast;
+#[cfg(target_family = "unix")]
 pub use unicast::*;
 use zenoh_protocol_core::Locator;
 // Default MTU (UnixSocketStream PDU) in bytes.
