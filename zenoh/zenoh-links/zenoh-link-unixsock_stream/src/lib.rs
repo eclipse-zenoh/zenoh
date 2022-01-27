@@ -15,7 +15,7 @@
 use std::path::Path;
 
 use zenoh_core::zconfigurable;
-
+#[cfg(target_family = "unix")]
 mod unicast;
 pub use unicast::*;
 use zenoh_protocol_core::Locator;
