@@ -50,9 +50,9 @@ mod encoding;
 pub use encoding::Encoding;
 
 pub mod locators;
-pub use locators::{locator, Locator};
+pub use locators::Locator;
 pub mod endpoints;
-pub use endpoints::{endpoint, EndPoint};
+pub use endpoints::EndPoint;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Property {

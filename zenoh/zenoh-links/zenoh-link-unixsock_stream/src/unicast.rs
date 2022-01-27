@@ -32,7 +32,7 @@ use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 use super::{
@@ -102,12 +102,12 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> &locator {
+    fn get_src(&self) -> &Locator {
         &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> &locator {
+    fn get_dst(&self) -> &Locator {
         &self.dst_locator
     }
 
@@ -136,7 +136,7 @@ impl Drop for LinkUnicastUnixSocketStream {
 
 impl fmt::Display for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", &*self.src_locator, &*self.dst_locator)?;
+        write!(f, "{} => {}", &self.src_locator, &self.dst_locator)?;
         Ok(())
     }
 }
@@ -196,7 +196,7 @@ impl LinkManagerUnicastUnixSocketStream {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let path = get_unix_path(endpoint.locator());
+        let path = get_unix_path(&endpoint.locator);
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
@@ -270,7 +270,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(endpoint.locator());
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Because of the lack of SO_REUSEADDR we have to check if the
         // file is still there and if it is not used by another process.
@@ -381,15 +381,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             res
         });
 
-        let locator = endpoint.locator().to_owned();
+        let locator = endpoint.locator.clone();
         let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
-        let path = get_unix_path_as_string(endpoint.locator());
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let path = get_unix_path_as_string(&endpoint.locator);
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -428,7 +428,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     fn get_locators(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .values()
-            .map(|x| x.endpoint.locator().to_owned())
+            .map(|x| x.endpoint.locator.clone())
             .collect()
     }
 }

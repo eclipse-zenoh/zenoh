@@ -28,6 +28,7 @@ members = [
   "zenoh/zenoh-transport",
   "zenoh/zenoh",
   "zenoh/zenoh-ext",
+  "zenohd",
   "zenoh-utils/zenoh-cfg-properties",
   "zenoh-utils/zenoh-collections",
   "zenoh-utils/zenoh-core",

@@ -28,7 +28,7 @@ use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 use super::{
@@ -129,12 +129,12 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> &locator {
+    fn get_src(&self) -> &Locator {
         &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> &locator {
+    fn get_dst(&self) -> &Locator {
         &self.dst_locator
     }
 
@@ -220,7 +220,7 @@ impl LinkManagerUnicastTcp {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addr = get_tcp_addr(endpoint.locator()).await?;
+        let dst_addr = get_tcp_addr(&endpoint.locator).await?;
 
         let stream = TcpStream::connect(dst_addr)
             .await
@@ -240,7 +240,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_tcp_addr(endpoint.locator()).await?;
+        let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
@@ -270,7 +270,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             res
         });
 
-        let locator = endpoint.locator().to_owned();
+        let locator = endpoint.locator.clone();
         let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -278,8 +278,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
-        let addr = get_tcp_addr(endpoint.locator()).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -335,22 +335,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
+            let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {
-                let meta = value.endpoint.locator().metadata_str();
                 locators.extend(V4_LOCAL_ADDRESSES.iter().map(|l| {
                     let mut l = l.clone();
-                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l.metadata = listener_locator.metadata.clone();
                     l
                 }))
             } else if key.ip() == default_ipv6 {
-                let meta = value.endpoint.locator().metadata_str();
                 locators.extend(V6_LOCAL_ADDRESSES.iter().map(|l| {
                     let mut l = l.clone();
-                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l.metadata = listener_locator.metadata.clone();
                     l
                 }))
             } else {
-                locators.push(value.endpoint.locator().to_owned());
+                locators.push(listener_locator.clone());
             }
         }
         std::mem::drop(guard);

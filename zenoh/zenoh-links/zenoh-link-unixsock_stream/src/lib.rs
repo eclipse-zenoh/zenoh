@@ -15,10 +15,10 @@
 use std::path::Path;
 
 use zenoh_core::zconfigurable;
-use zenoh_protocol_core::locator;
 
 mod unicast;
 pub use unicast::*;
+use zenoh_protocol_core::Locator;
 // Default MTU (UnixSocketStream PDU) in bytes.
 // NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has
 //       no limit regarding the MTU. However, given the batching strategy
@@ -37,10 +37,10 @@ zconfigurable! {
     static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-pub fn get_unix_path(locator: &locator) -> &Path {
+pub fn get_unix_path(locator: &Locator) -> &Path {
     locator.address().as_ref()
 }
 
-pub fn get_unix_path_as_string(locator: &locator) -> String {
+pub fn get_unix_path_as_string(locator: &Locator) -> String {
     locator.address().to_owned()
 }

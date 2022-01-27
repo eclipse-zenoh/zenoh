@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
 // This program and the accompanying materials are made available under the
@@ -11,11 +10,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-pub mod face;
-pub mod network;
-pub mod pubsub;
-pub mod queries;
-pub mod resource;
-pub mod router;
-
-use super::runtime;
+fn main() {
+    // Add rustc version to zenohd
+    let version_meta = rustc_version::version_meta().unwrap();
+    println!(
+        "cargo:rustc-env=RUSTC_VERSION={}",
+        version_meta.short_version_string
+    );
+}

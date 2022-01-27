@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -14,12 +15,16 @@
 #[allow(unused_imports)]
 use std::sync::Arc;
 
+use zenoh_cfg_properties::Properties;
+use zenoh_config::Config;
 use zenoh_core::{bail, Result as ZResult};
 
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
 #[cfg(feature = "transport_quic")]
-use zenoh_link_quic::{LinkManagerUnicastQuic, QuicLocatorInspector, QUIC_LOCATOR_PREFIX};
+use zenoh_link_quic::{
+    LinkManagerUnicastQuic, QuicConfigurator, QuicLocatorInspector, QUIC_LOCATOR_PREFIX,
+};
 #[cfg(feature = "transport_tcp")]
 pub use zenoh_link_tcp as tcp;
 #[cfg(feature = "transport_tcp")]
@@ -27,7 +32,9 @@ use zenoh_link_tcp::{LinkManagerUnicastTcp, TcpLocatorInspector, TCP_LOCATOR_PRE
 #[cfg(feature = "transport_tls")]
 pub use zenoh_link_tls as tls;
 #[cfg(feature = "transport_tls")]
-use zenoh_link_tls::{LinkManagerUnicastTls, TlsLocatorInspector, TLS_LOCATOR_PREFIX};
+use zenoh_link_tls::{
+    LinkManagerUnicastTls, TlsConfigurator, TlsLocatorInspector, TLS_LOCATOR_PREFIX,
+};
 #[cfg(feature = "transport_udp")]
 pub use zenoh_link_udp as udp;
 #[cfg(feature = "transport_udp")]
@@ -42,7 +49,6 @@ use zenoh_link_unixsock_stream::{
 };
 
 pub use zenoh_link_commons::*;
-use zenoh_protocol_core::locator;
 pub use zenoh_protocol_core::{EndPoint, Locator};
 
 #[derive(Default, Clone)]
@@ -57,7 +63,7 @@ pub struct LocatorInspector {
     udp_inspector: UdpLocatorInspector,
 }
 impl LocatorInspector {
-    pub async fn is_multicast(&self, locator: &locator) -> ZResult<bool> {
+    pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
         #[allow(unused_imports)]
         use zenoh_link_commons::LocatorInspector;
         let protocol = locator.protocol();
@@ -74,6 +80,48 @@ impl LocatorInspector {
             UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(false),
             _ => bail!("Unsupported protocol: {}.", protocol),
         }
+    }
+}
+#[derive(Default)]
+pub struct LinkConfigurator {
+    #[cfg(feature = "transport_quic")]
+    quic_inspector: QuicConfigurator,
+    #[cfg(feature = "transport_tls")]
+    tls_inspector: TlsConfigurator,
+}
+impl LinkConfigurator {
+    pub async fn configurations(
+        &self,
+        config: &Config,
+    ) -> (
+        HashMap<String, Properties>,
+        HashMap<String, zenoh_core::Error>,
+    ) {
+        let mut configs = HashMap::new();
+        let mut errors = HashMap::new();
+        let mut insert_config = |proto: String, cfg: ZResult<Properties>| match cfg {
+            Ok(v) => {
+                configs.insert(proto, v);
+            }
+            Err(e) => {
+                errors.insert(proto, e);
+            }
+        };
+        #[cfg(feature = "transport_quic")]
+        {
+            insert_config(
+                QUIC_LOCATOR_PREFIX.into(),
+                self.quic_inspector.inspect_config(config).await,
+            );
+        }
+        #[cfg(feature = "transport_tls")]
+        {
+            insert_config(
+                TLS_LOCATOR_PREFIX.into(),
+                self.tls_inspector.inspect_config(config).await,
+            );
+        }
+        (configs, errors)
     }
 }
 

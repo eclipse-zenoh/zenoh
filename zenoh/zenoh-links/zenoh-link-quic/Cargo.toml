@@ -37,10 +37,14 @@ zenoh-cfg-properties = { path = "../../../zenoh-utils/zenoh-cfg-properties/" }
 zenoh-sync = { path = "../../../zenoh-utils/zenoh-sync/" }
 zenoh-util = { path = "../../../zenoh-utils/zenoh-util/" }
 
+zenoh-config = { path = "../../zenoh-config/" }
 zenoh-protocol-core = { path = "../../zenoh-protocol-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
-async-std = { version = "=1.9.0", default-features = false }
+async-std = { version = "=1.9.0", default-features = false, features = [
+	"unstable",
+	"tokio1",
+] }
 async-trait = "0.1.42"
 lazy_static = "1.4.0"
 log = "0.4"

@@ -13,11 +13,15 @@
 //
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
+use config::{
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
+};
 use std::net::SocketAddr;
 use webpki::{DnsName, DnsNameRef};
+use zenoh_cfg_properties::Properties;
+use zenoh_config::{Config, Locator};
 use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
-use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::locator;
+use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 
 mod unicast;
 pub use unicast::*;
@@ -34,15 +38,45 @@ pub const ALPN_QUIC_HTTP: &[&[u8]] = &[b"hq-29"];
 const QUIC_MAX_MTU: u16 = u16::MAX;
 pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct QuicLocatorInspector;
 #[async_trait]
 impl LocatorInspector for QuicLocatorInspector {
-    fn protocol(&self) -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed(QUIC_LOCATOR_PREFIX)
+    fn protocol(&self) -> &str {
+        QUIC_LOCATOR_PREFIX
     }
-    async fn is_multicast(&self, _locator: &locator) -> ZResult<bool> {
+    async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+}
+#[derive(Default, Clone, Copy, Debug)]
+pub struct QuicConfigurator;
+#[async_trait]
+impl ConfigurationInspector<Config> for QuicConfigurator {
+    async fn inspect_config(&self, config: &Config) -> ZResult<Properties> {
+        let mut properties = Properties::default();
+
+        let c = config.transport().link().tls();
+        if let Some(tls_ca_certificate) = c.root_ca_certificate() {
+            properties.insert(
+                TLS_ROOT_CA_CERTIFICATE_FILE.into(),
+                tls_ca_certificate.into(),
+            );
+        }
+        if let Some(tls_server_private_key) = c.server_private_key() {
+            properties.insert(
+                TLS_SERVER_PRIVATE_KEY_FILE.into(),
+                tls_server_private_key.into(),
+            );
+        }
+        if let Some(tls_server_certificate) = c.server_certificate() {
+            properties.insert(
+                TLS_SERVER_CERTIFICATE_FILE.into(),
+                tls_server_certificate.into(),
+            );
+        }
+
+        Ok(properties)
     }
 }
 
@@ -72,7 +106,7 @@ pub mod config {
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
 }
 
-async fn get_quic_addr(address: &locator) -> ZResult<SocketAddr> {
+async fn get_quic_addr(address: &Locator) -> ZResult<SocketAddr> {
     let addr = address.address();
     match addr.to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
@@ -80,7 +114,7 @@ async fn get_quic_addr(address: &locator) -> ZResult<SocketAddr> {
     }
 }
 
-async fn get_quic_dns(address: &locator) -> ZResult<DnsName> {
+async fn get_quic_dns(address: &Locator) -> ZResult<DnsName> {
     let addr = address.address().split(':').next().unwrap();
     let domain = DnsNameRef::try_from_ascii(addr.as_bytes()).map_err(|e| zerror!(e))?;
     Ok(domain.to_owned())

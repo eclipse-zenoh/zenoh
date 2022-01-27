@@ -23,12 +23,12 @@ use std::sync::{RwLock, Weak};
 use zenoh_collections::Timed;
 use zenoh_sync::get_mut_unchecked;
 
-use super::protocol::core::{
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::{
     key_expr, queryable, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Target,
     WhatAmI, ZInt,
 };
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;

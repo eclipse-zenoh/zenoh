@@ -36,7 +36,7 @@ use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
@@ -128,12 +128,12 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> &locator {
+    fn get_src(&self) -> &Locator {
         &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> &locator {
+    fn get_dst(&self) -> &Locator {
         &self.dst_locator
     }
 
@@ -223,28 +223,26 @@ impl LinkManagerUnicastQuic {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let (dst_locator, config) = endpoint.split();
+        let dst_locator = &endpoint.locator;
         let domain = get_quic_dns(dst_locator).await?;
         let addr = get_quic_addr(dst_locator).await?;
         let host: &str = domain.as_ref().into();
+        let config = &endpoint.config;
 
         // Initialize the QUIC connection
-        let mut tls_root_ca_certificate = Vec::new();
-        for (key, value) in config {
-            match key {
-                TLS_ROOT_CA_CERTIFICATE_RAW => {
-                    tls_root_ca_certificate = value.as_bytes().to_vec();
-                    break;
-                }
-                TLS_ROOT_CA_CERTIFICATE_FILE => {
-                    tls_root_ca_certificate = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?;
-                    break;
-                }
-                _ => {}
+        let tls_root_ca_certificate = if let Some(config) = config {
+            if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                value.as_bytes().to_vec()
+            } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+            } else {
+                Vec::new()
             }
-        }
+        } else {
+            Vec::new()
+        };
 
         let mut config = if tls_root_ca_certificate.is_empty() {
             ClientConfigBuilder::default()
@@ -300,28 +298,26 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let (locator, config) = endpoint.split();
+        let locator = &endpoint.locator;
         let addr = get_quic_addr(locator).await?;
 
         let mut tls_server_private_key = Vec::new();
         let mut tls_server_certificate = Vec::new();
-        for (key, value) in config {
-            match key {
-                TLS_SERVER_PRIVATE_KEY_RAW => tls_server_private_key = value.as_bytes().to_vec(),
-                TLS_SERVER_PRIVATE_KEY_FILE => {
-                    tls_server_private_key = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid QUIC server private key file: {}", e))?
-                }
-                TLS_SERVER_CERTIFICATE_RAW => {
-                    tls_server_certificate = value.as_bytes().to_vec();
-                }
-                TLS_SERVER_CERTIFICATE_FILE => {
-                    tls_server_certificate = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid QUIC server certificate file: {}", e))?;
-                }
-                _ => {}
+        if let Some(config) = &endpoint.config {
+            let config = &***config;
+            if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+                tls_server_private_key = value.as_bytes().to_vec()
+            } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+                tls_server_private_key = fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid QUIC server private key file: {}", e))?
+            }
+            if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+                tls_server_certificate = value.as_bytes().to_vec();
+            } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+                fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid QUIC server certificate file: {}", e))?;
             }
         }
 
@@ -383,7 +379,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         });
 
         // Initialize the QuicAcceptor
-        let locator = endpoint.locator().to_owned();
+        let locator = endpoint.locator.clone();
         let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -391,8 +387,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
-        let addr = get_quic_addr(endpoint.locator()).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_quic_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -448,22 +444,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
+            let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {
-                let meta = value.endpoint.locator().metadata_str();
                 locators.extend(V4_LOCAL_ADDRESSES.iter().map(|l| {
                     let mut l = l.clone();
-                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l.metadata = listener_locator.metadata.clone();
                     l
                 }))
             } else if key.ip() == default_ipv6 {
-                let meta = value.endpoint.locator().metadata_str();
                 locators.extend(V6_LOCAL_ADDRESSES.iter().map(|l| {
                     let mut l = l.clone();
-                    unsafe { l.with_metadata_str_unchecked(meta) }
+                    l.metadata = listener_locator.metadata.clone();
                     l
                 }))
             } else {
-                locators.push(value.endpoint.locator().to_owned());
+                locators.push(listener_locator.clone());
             }
         }
         std::mem::drop(guard);

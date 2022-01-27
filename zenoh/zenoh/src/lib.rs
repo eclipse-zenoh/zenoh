@@ -74,6 +74,9 @@
 //! }
 //! ```
 
+// #[cfg(test)]
+// mod tests;
+
 #[macro_use]
 extern crate zenoh_core;
 
@@ -95,7 +98,6 @@ use zenoh_sync::zpinbox;
 /// A zenoh result.
 pub use zenoh_core::Result;
 
-pub use validated_struct;
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
 #[macro_use]

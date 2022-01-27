@@ -40,7 +40,9 @@ transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
 
 [dependencies]
 zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
+zenoh-cfg-properties = { path = "../../zenoh-utils/zenoh-cfg-properties/" }
 
+zenoh-config = { path = "../zenoh-config/" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 zenoh-link-commons = { path = "../zenoh-link-commons/" }
 zenoh-link-quic = { path = "../zenoh-links/zenoh-link-quic/", optional = true }

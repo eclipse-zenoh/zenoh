@@ -175,7 +175,7 @@ impl TransportUnicast {
         let link = transport
             .get_links()
             .into_iter()
-            .find(|l| l.get_src() == &*link.src && l.get_dst() == &*link.dst)
+            .find(|l| l.get_src() == &link.src && l.get_dst() == &link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
         transport
             .close_link(&link, tmsg::close_reason::GENERIC)

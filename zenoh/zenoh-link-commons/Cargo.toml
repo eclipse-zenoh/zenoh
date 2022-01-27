@@ -33,6 +33,7 @@ readme = "README.md"
 
 [dependencies]
 zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
+zenoh-cfg-properties = { path = "../../zenoh-utils/zenoh-cfg-properties/" }
 
 zenoh-buffers = { path = "../zenoh-buffers/" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }

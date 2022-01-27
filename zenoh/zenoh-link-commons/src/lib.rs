@@ -20,9 +20,10 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use zenoh_buffers::{WBuf, ZBuf};
+use zenoh_cfg_properties::Properties;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_protocol::proto::{MessageReader, MessageWriter, TransportMessage};
-use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 
 const WBUF_SIZE: usize = 64;
 
@@ -41,13 +42,17 @@ pub struct Link {
 
 #[async_trait]
 pub trait LocatorInspector: Default {
-    fn protocol(&self) -> Cow<'static, str>;
-    async fn is_multicast(&self, locator: &locator) -> ZResult<bool>;
+    fn protocol(&self) -> &str;
+    async fn is_multicast(&self, locator: &Locator) -> ZResult<bool>;
+}
+#[async_trait]
+pub trait ConfigurationInspector<C>: Default {
+    async fn inspect_config(&self, configuration: &C) -> ZResult<Properties>;
 }
 
 impl fmt::Display for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", &*self.src, &*self.dst)
+        write!(f, "{} => {}", &self.src, &self.dst)
     }
 }
 
@@ -98,7 +103,7 @@ pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 pub trait LinkManagerUnicastTrait: Send + Sync {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast>;
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator>;
-    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()>;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
     fn get_listeners(&self) -> Vec<EndPoint>;
     fn get_locators(&self) -> Vec<Locator>;
 }
@@ -119,8 +124,8 @@ pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
     fn get_mtu(&self) -> u16;
-    fn get_src(&self) -> &locator;
-    fn get_dst(&self) -> &locator;
+    fn get_src(&self) -> &Locator;
+    fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
@@ -243,7 +248,7 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
 
 #[async_trait]
 pub trait LinkManagerMulticastTrait: Send + Sync {
-    async fn new_link(&self, endpoint: &endpoint) -> ZResult<LinkMulticast>;
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast>;
 }
 
 pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
@@ -254,12 +259,12 @@ pub struct LinkMulticast(pub Arc<dyn LinkMulticastTrait>);
 #[async_trait]
 pub trait LinkMulticastTrait: Send + Sync {
     fn get_mtu(&self) -> u16;
-    fn get_src(&self) -> &locator;
-    fn get_dst(&self) -> &locator;
+    fn get_src(&self) -> &Locator;
+    fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
-    async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, locator>)>;
+    async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)>;
     async fn close(&self) -> ZResult<()>;
 }
 

@@ -15,9 +15,15 @@ use std::net::SocketAddr;
 
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
+use config::{
+    TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
+};
+use zenoh_cfg_properties::Properties;
+use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
-use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::locator;
+use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
+use zenoh_protocol_core::Locator;
 
 mod unicast;
 pub use unicast::*;
@@ -35,11 +41,59 @@ pub const TLS_LOCATOR_PREFIX: &str = "tls";
 pub struct TlsLocatorInspector;
 #[async_trait]
 impl LocatorInspector for TlsLocatorInspector {
-    fn protocol(&self) -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed(TLS_LOCATOR_PREFIX)
+    fn protocol(&self) -> &str {
+        TLS_LOCATOR_PREFIX
     }
-    async fn is_multicast(&self, _locator: &locator) -> ZResult<bool> {
+    async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
+    }
+}
+#[derive(Default, Clone, Copy, Debug)]
+pub struct TlsConfigurator;
+#[async_trait]
+impl ConfigurationInspector<Config> for TlsConfigurator {
+    async fn inspect_config(&self, config: &Config) -> ZResult<Properties> {
+        let mut properties = Properties::default();
+
+        let c = config.transport().link().tls();
+        if let Some(tls_ca_certificate) = c.root_ca_certificate() {
+            properties.insert(
+                TLS_ROOT_CA_CERTIFICATE_FILE.into(),
+                tls_ca_certificate.into(),
+            );
+        }
+        if let Some(tls_server_private_key) = c.server_private_key() {
+            properties.insert(
+                TLS_SERVER_PRIVATE_KEY_FILE.into(),
+                tls_server_private_key.into(),
+            );
+        }
+        if let Some(tls_server_certificate) = c.server_certificate() {
+            properties.insert(
+                TLS_SERVER_CERTIFICATE_FILE.into(),
+                tls_server_certificate.into(),
+            );
+        }
+        if let Some(tls_client_auth) = c.client_auth() {
+            match tls_client_auth {
+                true => properties.insert(TLS_CLIENT_AUTH.into(), ZN_TRUE.into()),
+                false => properties.insert(TLS_CLIENT_AUTH.into(), ZN_FALSE.into()),
+            };
+        }
+        if let Some(tls_client_private_key) = c.client_private_key() {
+            properties.insert(
+                TLS_CLIENT_PRIVATE_KEY_FILE.into(),
+                tls_client_private_key.into(),
+            );
+        }
+        if let Some(tls_client_certificate) = c.client_certificate() {
+            properties.insert(
+                TLS_CLIENT_CERTIFICATE_FILE.into(),
+                tls_client_certificate.into(),
+            );
+        }
+
+        Ok(properties)
     }
 }
 
@@ -77,7 +131,7 @@ pub mod config {
     pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
 }
 
-pub async fn get_tls_addr(address: &locator) -> ZResult<SocketAddr> {
+pub async fn get_tls_addr(address: &Locator) -> ZResult<SocketAddr> {
     let addr = address.address();
     match addr.to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
@@ -85,11 +139,11 @@ pub async fn get_tls_addr(address: &locator) -> ZResult<SocketAddr> {
     }
 }
 
-pub fn get_tls_host(address: &locator) -> ZResult<&str> {
+pub fn get_tls_host(address: &Locator) -> ZResult<&str> {
     Ok(address.address().split(':').next().unwrap())
 }
 
-pub async fn get_tls_dns(address: &locator) -> ZResult<DNSName> {
+pub async fn get_tls_dns(address: &Locator) -> ZResult<DNSName> {
     match DNSNameRef::try_from_ascii_str(get_tls_host(address)?) {
         Ok(v) => Ok(v.to_owned()),
         Err(e) => bail!(e),

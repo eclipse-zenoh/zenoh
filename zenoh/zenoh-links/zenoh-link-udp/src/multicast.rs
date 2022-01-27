@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::{borrow::Cow, fmt};
 use zenoh_core::{zerror, Result as ZResult};
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol_core::{endpoint, locator, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link
@@ -90,7 +90,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
         Ok(())
     }
 
-    async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, locator>)> {
+    async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)> {
         loop {
             let (n, addr) = (&self.mcast_sock).recv_from(buffer).await.map_err(|e| {
                 let e = zerror!("Read error on UDP link {}: {}", self, e);
@@ -108,12 +108,12 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> &locator {
+    fn get_src(&self) -> &Locator {
         &self.unicast_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> &locator {
+    fn get_dst(&self) -> &Locator {
         &self.multicast_locator
     }
 
@@ -152,8 +152,8 @@ pub struct LinkManagerMulticastUdp;
 
 #[async_trait]
 impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
-    async fn new_link(&self, ep: &endpoint) -> ZResult<LinkMulticast> {
-        let (locator, mut config) = ep.split();
+    async fn new_link(&self, ep: &EndPoint) -> ZResult<LinkMulticast> {
+        let locator = &ep.locator;
         let mcast_addr = get_udp_addr(locator).await?;
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
@@ -176,13 +176,11 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;
-        if let Some(iface) = config.find_map(|(k, v)| {
-            if k == UDP_MULTICAST_SRC_IFACE {
-                Some(v)
-            } else {
-                None
-            }
-        }) {
+        if let Some(iface) = if let Some(config) = &ep.config {
+            config.get(UDP_MULTICAST_SRC_IFACE)
+        } else {
+            None
+        } {
             iface_addr = match iface.parse() {
                 Ok(addr) => Some(addr),
                 Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?

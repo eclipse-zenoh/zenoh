@@ -42,7 +42,7 @@ use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{endpoint, locator, EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastTls {
@@ -171,12 +171,12 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     #[inline(always)]
-    fn get_src(&self) -> &locator {
+    fn get_src(&self) -> &Locator {
         &self.src_locator
     }
 
     #[inline(always)]
-    fn get_dst(&self) -> &locator {
+    fn get_dst(&self) -> &Locator {
         &self.dst_locator
     }
 
@@ -266,7 +266,7 @@ impl LinkManagerUnicastTls {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let (locator, config) = endpoint.split();
+        let locator = &endpoint.locator;
         let domain = get_tls_dns(locator).await?;
         let addr = get_tls_addr(locator).await?;
         let host: &str = domain.as_ref().into();
@@ -286,15 +286,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Initialize the TLS stream
         let mut bytes = Vec::new();
-        for (key, value) in config {
-            match key {
-                TLS_ROOT_CA_CERTIFICATE_RAW => bytes = value.as_bytes().to_vec(),
-                TLS_ROOT_CA_CERTIFICATE_FILE => {
-                    bytes = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
-                }
-                _ => {}
+        if let Some(config) = endpoint.config {
+            if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                bytes = value.as_bytes().to_vec()
+            } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                bytes = fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
             }
         }
 
@@ -322,30 +320,32 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let (locator, config) = endpoint.split();
-        let addr = get_tls_addr(endpoint.locator()).await?;
-        let host = get_tls_host(endpoint.locator())?;
+        let locator = &endpoint.locator;
+        let addr = get_tls_addr(locator).await?;
+        let host = get_tls_host(locator)?;
 
         let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
         let mut tls_server_private_key = Vec::new();
         let mut tls_server_certificate = Vec::new();
 
-        for (key, value) in config {
-            match key {
-                TLS_SERVER_PRIVATE_KEY_RAW => tls_server_private_key = value.as_bytes().to_vec(),
-                TLS_SERVER_PRIVATE_KEY_FILE => {
-                    tls_server_private_key = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
-                }
-                TLS_SERVER_CERTIFICATE_RAW => tls_server_certificate = value.as_bytes().to_vec(),
-                TLS_SERVER_CERTIFICATE_FILE => {
-                    tls_server_certificate = fs::read(value)
-                        .await
-                        .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
-                }
-                TLS_CLIENT_AUTH => client_auth = value.parse()?,
-                _ => {}
+        if let Some(config) = &endpoint.config {
+            let config = &***config;
+            if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+                tls_server_private_key = value.as_bytes().to_vec()
+            } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+                tls_server_private_key = fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
+            }
+            if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+                tls_server_certificate = value.as_bytes().to_vec()
+            } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+                tls_server_certificate = fs::read(value)
+                    .await
+                    .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
+            }
+            if let Some(value) = config.get(TLS_CLIENT_AUTH) {
+                client_auth = value.parse()?
             }
         }
 
@@ -419,8 +419,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         Ok(locator)
     }
 
-    async fn del_listener(&self, endpoint: &endpoint) -> ZResult<()> {
-        let addr = get_tls_addr(endpoint.locator()).await?;
+    async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
+        let addr = get_tls_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {

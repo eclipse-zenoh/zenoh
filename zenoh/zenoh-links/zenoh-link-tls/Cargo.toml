@@ -37,6 +37,7 @@ zenoh-util = { path = "../../../zenoh-utils/zenoh-util/" }
 zenoh-cfg-properties = { path = "../../../zenoh-utils/zenoh-cfg-properties/" }
 zenoh-sync = { path = "../../../zenoh-utils/zenoh-sync/" }
 
+zenoh-config = { path = "../../zenoh-config/" }
 zenoh-protocol-core = { path = "../../zenoh-protocol-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 

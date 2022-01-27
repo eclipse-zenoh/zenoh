@@ -635,10 +635,16 @@ impl io::Read for ZBuf {
     }
 
     #[inline]
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        if self.read_bytes(buf) {
+    fn read_exact(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
+        let fallback = self.pos;
+        while !buf.is_empty() && !self.is_empty() {
+            let len = io::Read::read(self, buf)?;
+            buf = &mut buf[len..];
+        }
+        if buf.is_empty() {
             Ok(())
         } else {
+            self.pos = fallback;
             Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",

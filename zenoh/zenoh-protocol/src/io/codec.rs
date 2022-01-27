@@ -16,7 +16,7 @@ use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use std::{convert::TryFrom, io::Write};
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
-use zenoh_protocol_core::{locator, Locator, PeerId, Property, Timestamp, ZInt};
+use zenoh_protocol_core::{Locator, PeerId, Property, Timestamp, ZInt};
 
 #[cfg(feature = "shared-memory")]
 mod zslice {
@@ -38,7 +38,7 @@ impl Decoder<u64> for ZenohCodec {
         let mut b = 0;
         reader.read_exact(std::slice::from_mut(&mut b))?;
         let mut i = 0;
-        let mut k = std::mem::size_of::<u64>();
+        let mut k = 10;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as u64) << i;
             i += 7;
@@ -60,7 +60,7 @@ impl Decoder<usize> for ZenohCodec {
         let mut b = 0;
         reader.read_exact(std::slice::from_mut(&mut b))?;
         let mut i = 0;
-        let mut k = std::mem::size_of::<usize>();
+        let mut k = 10;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as usize) << i;
             i += 7;
@@ -216,11 +216,8 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
 // #[deprecated = "Use the `zenoh_protocol::io::codec::Decoder` trait methods on `zenoh_protocol::io::codec::ZenohCodec` instead"]
 pub trait ZBufCodec {
     fn read_zint(&mut self) -> Option<ZInt>;
-
     fn read_zint_as_u64(&mut self) -> Option<u64>;
-
     fn read_zint_as_usize(&mut self) -> Option<usize>;
-
     // Same as read_bytes but with array length before the bytes.
     fn read_bytes_array(&mut self) -> Option<Vec<u8>>;
     fn read_string(&mut self) -> Option<String>;
@@ -243,14 +240,24 @@ pub trait ZBufCodec {
     fn read_timestamp(&mut self) -> Option<Timestamp>;
 }
 
-macro_rules! zdecode {
-    ($buffer: expr) => {
-        match ZenohCodec.read($buffer) {
-            Ok(v) => Some(v),
-            Err(e) => {
-                log::warn!("{}", e);
-                None
-            }
+macro_rules! read_zint {
+    ($buf:expr, $res:ty) => {
+        let mut v: $res = 0;
+        let mut b = $buf.read()?;
+        let mut i = 0;
+        let mut k = 10;
+        while b > 0x7f && k > 0 {
+            v |= ((b & 0x7f) as $res) << i;
+            i += 7;
+            b = $buf.read()?;
+            k -= 1;
+        }
+        if k > 0 {
+            v |= ((b & 0x7f) as $res) << i;
+            return Some(v);
+        } else {
+            log::trace!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX);
+            return None;
         }
     };
 }
@@ -291,43 +298,65 @@ macro_rules! zdecode {
 impl ZBufCodec for ZBuf {
     #[inline(always)]
     fn read_zint(&mut self) -> Option<ZInt> {
-        zdecode!(self)
+        read_zint!(self, ZInt);
     }
 
     #[inline(always)]
     fn read_zint_as_u64(&mut self) -> Option<u64> {
-        zdecode!(self)
+        read_zint!(self, u64);
     }
 
     #[inline(always)]
     fn read_zint_as_usize(&mut self) -> Option<usize> {
-        zdecode!(self)
+        read_zint!(self, usize);
     }
 
     // Same as read_bytes but with array length before the bytes.
     #[inline(always)]
     fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
-        zdecode!(self)
+        let len = self.read_zint_as_usize()?;
+        let mut buf = vec![0; len];
+        if self.read_bytes(buf.as_mut_slice()) {
+            Some(buf)
+        } else {
+            None
+        }
     }
 
     #[inline(always)]
     fn read_string(&mut self) -> Option<String> {
-        zdecode!(self)
+        let bytes = self.read_bytes_array()?;
+        Some(String::from(String::from_utf8_lossy(&bytes)))
     }
 
     #[inline(always)]
     fn read_peeexpr_id(&mut self) -> Option<PeerId> {
-        zdecode!(self)
+        let size = self.read_zint_as_usize()?;
+        if size > PeerId::MAX_SIZE {
+            log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
+            return None;
+        }
+        let mut id = [0_u8; PeerId::MAX_SIZE];
+        if self.read_bytes(&mut id[..size]) {
+            Some(PeerId::new(size, id))
+        } else {
+            None
+        }
     }
 
     #[inline(always)]
     fn read_locator(&mut self) -> Option<Locator> {
-        zdecode!(self)
+        self.read_string()?.parse().ok()
     }
 
     #[inline(always)]
     fn read_locators(&mut self) -> Option<Vec<Locator>> {
-        zdecode!(self)
+        let len = self.read_zint()?;
+        let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            vec.push(self.read_locator()?);
+        }
+        Some(vec)
     }
 
     #[inline(always)]
@@ -361,8 +390,25 @@ impl ZBufCodec for ZBuf {
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
-        let this: Option<SlicedZBuf> = zdecode!(self);
-        this.map(|t| t.0)
+        let num = self.read_zint_as_usize()?;
+        let mut zbuf = ZBuf::new();
+        for _ in 0..num {
+            let kind = self.read()?;
+            match kind {
+                zslice::kind::RAW => {
+                    let len = self.read_zint_as_usize()?;
+                    if !self.read_into_zbuf(&mut zbuf, len) {
+                        return None;
+                    }
+                }
+                zslice::kind::SHM_INFO => {
+                    let slice = self.read_shminfo()?;
+                    zbuf.add_zslice(slice);
+                }
+                _ => return None,
+            }
+        }
+        Some(zbuf)
     }
 
     // Same as read_bytes_array but 0 copy on ZBuf.
@@ -379,19 +425,41 @@ impl ZBufCodec for ZBuf {
     #[cfg(not(feature = "shared-memory"))]
     #[inline(always)]
     fn read_zbuf(&mut self) -> Option<ZBuf> {
-        self.read_bytes_array().map(|v| v.into())
+        self.read_zbuf_flat()
     }
 
     fn read_properties(&mut self) -> Option<Vec<Property>> {
-        zdecode!(self)
+        let len = self.read_zint()?;
+        let mut vec: Vec<Property> = Vec::with_capacity(len as usize);
+        for _ in 0..len {
+            vec.push(self.read_property()?);
+        }
+        Some(vec)
     }
 
     fn read_property(&mut self) -> Option<Property> {
-        zdecode!(self)
+        let key = self.read_zint()?;
+        let value = self.read_bytes_array()?;
+        Some(Property { key, value })
     }
 
     fn read_timestamp(&mut self) -> Option<Timestamp> {
-        zdecode!(self)
+        let time = self.read_zint_as_u64()?;
+        let size = self.read_zint_as_usize()?;
+        if size > (uhlc::ID::MAX_SIZE) {
+            log::trace!(
+                "Reading a Timestamp's ID size that exceed {} bytes: {}",
+                uhlc::ID::MAX_SIZE,
+                size
+            );
+            return None;
+        }
+        let mut id = [0_u8; PeerId::MAX_SIZE];
+        if self.read_bytes(&mut id[..size]) {
+            Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
+        } else {
+            None
+        }
     }
 }
 
@@ -460,12 +528,6 @@ impl Encoder<&str> for ZenohCodec {
     type Err = zenoh_core::Error;
     fn write<W: Write>(&self, writer: &mut W, value: &str) -> Result<usize, Self::Err> {
         self.write(writer, value.as_bytes())
-    }
-}
-impl Encoder<&locator> for ZenohCodec {
-    type Err = zenoh_core::Error;
-    fn write<W: Write>(&self, writer: &mut W, value: &locator) -> Result<usize, Self::Err> {
-        self.write(writer, value.as_ref())
     }
 }
 impl Encoder<&Property> for ZenohCodec {
@@ -572,7 +634,7 @@ impl WBufCodec for WBuf {
 
     #[inline(always)]
     fn write_zbuf_flat(&mut self, zbuf: &ZBuf) -> bool {
-        // zcheck!(self.write_usize_as_zint(zbuf.len()));
+        zcheck!(self.write_usize_as_zint(zbuf.len()));
         self.write_zbuf_slices(zbuf)
     }
 

@@ -14,7 +14,12 @@
 #[doc(hidden)]
 pub use zenoh_link as link;
 #[doc(hidden)]
-pub mod protocol;
+pub mod protocol {
+    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+    pub use zenoh_protocol::{io, proto};
+    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+    pub use zenoh_protocol_core as core;
+}
 #[doc(hidden)]
 pub mod routing;
 #[doc(hidden)]

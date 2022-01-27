@@ -323,19 +323,19 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(endpoint.locator().protocol())?;
+        let manager = self.new_link_manager_unicast(endpoint.locator.protocol())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.locator().protocol()) {
-            endpoint = endpoint.extend_config(config.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        if let Some(config) = self.config.endpoint.get(endpoint.locator.protocol()) {
+            endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
         };
         manager.new_listener(endpoint).await
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(endpoint.locator().protocol())?;
+        let lm = self.get_link_manager_unicast(endpoint.locator.protocol())?;
         lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(endpoint.locator().protocol())?;
+            self.del_link_manager_unicast(endpoint.locator.protocol())?;
         }
         Ok(())
     }
@@ -464,7 +464,7 @@ impl TransportManager {
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
-            .is_multicast(endpoint.locator())
+            .is_multicast(&endpoint.locator)
             .await?
         {
             bail!(
@@ -474,10 +474,10 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(endpoint.locator().protocol())?;
+        let manager = self.new_link_manager_unicast(endpoint.locator.protocol())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.locator().protocol()) {
-            endpoint = endpoint.extend_config(config.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+        if let Some(config) = self.config.endpoint.get(endpoint.locator.protocol()) {
+            endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
         };
 
         // Create a new link associated by calling the Link Manager

@@ -41,3 +41,7 @@ zenoh-buffers = { path = "../zenoh-buffers/" }
 
 log = "0.4"
 uhlc = "0.4.0"
+
+[dev-dependencies]
+rand = "0.8.3"
+uuid = { version = "0.8.2", features = ["v4"] }

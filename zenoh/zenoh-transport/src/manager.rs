@@ -32,11 +32,10 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::Config;
-use zenoh_core::zparse;
 use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zparse};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
-use zenoh_protocol_core::locators::LocatorProtocol;
 use zenoh_protocol_core::{EndPoint, Locator};
 
 /// # Examples
@@ -200,10 +199,20 @@ impl TransportManagerBuilder {
         if let Some(v) = properties.transport().link().rx_buff_size() {
             self = self.link_rx_buff_size(*v);
         }
-        todo!();
-        // self = self.endpoint(LocatorConfig::from_config(properties)?);
+        let (config, errors) = zenoh_link::LinkConfigurator::default()
+            .configurations(properties)
+            .await;
+        if !errors.is_empty() {
+            use std::fmt::Write;
+            let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
+            for (proto, err) in errors {
+                write!(&mut formatter, "\t{}: {}\r\n", proto, err)?;
+            }
+            bail!("{}", formatter);
+        }
+        self = self.endpoint(config);
         self = self.unicast(
-            TransportManager::config_unicast()
+            TransportManagerBuilderUnicast::default()
                 .from_config(properties)
                 .await?,
         );
@@ -327,7 +336,7 @@ impl TransportManager {
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         if self
             .locator_inspector
-            .is_multicast(endpoint.locator())
+            .is_multicast(&endpoint.locator)
             .await?
         {
             // @TODO: multicast
@@ -340,7 +349,7 @@ impl TransportManager {
     pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         if self
             .locator_inspector
-            .is_multicast(endpoint.locator())
+            .is_multicast(&endpoint.locator)
             .await?
         {
             // @TODO: multicast
@@ -376,7 +385,7 @@ impl TransportManager {
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
-            .is_multicast(endpoint.locator())
+            .is_multicast(&endpoint.locator)
             .await?
         {
             // @TODO: multicast

@@ -1,52 +1,37 @@
+use zenoh_core::bail;
+
 use crate::{
-    locator,
-    locators::{extend_with_props, split_once, split_once_mut, HasCanonForm},
+    locators::{split_once, ArcProperties},
     Locator,
 };
 
 use super::locators::{CONFIG_SEPARATOR, FIELD_SEPARATOR, LIST_SEPARATOR, METADATA_SEPARATOR};
 
 use std::{
-    borrow::Borrow,
-    convert::TryFrom,
-    ops::{Deref, DerefMut},
+    convert::{TryFrom, TryInto},
+    iter::FromIterator,
     str::FromStr,
 };
 
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
-#[repr(transparent)]
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EndPoint {
-    inner: String,
+    pub locator: Locator,
+    pub config: Option<ArcProperties>,
 }
 impl core::fmt::Display for EndPoint {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.inner)
-    }
-}
-
-impl Deref for EndPoint {
-    type Target = endpoint;
-    fn deref(&self) -> &Self::Target {
-        unsafe { endpoint::new_unchecked(&self.inner) }
-    }
-}
-impl DerefMut for EndPoint {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { endpoint::new_unchecked_mut(&mut self.inner) }
-    }
-}
-impl Borrow<endpoint> for EndPoint {
-    fn borrow(&self) -> &endpoint {
-        &*self
-    }
-}
-impl ToOwned for endpoint {
-    type Owned = EndPoint;
-    fn to_owned(&self) -> Self::Owned {
-        EndPoint {
-            inner: self.inner.to_owned(),
+        write!(f, "{}", &self.locator)?;
+        if let Some(meta) = &self.config {
+            let mut iter = meta.iter();
+            if let Some((k, v)) = iter.next() {
+                write!(f, "{}{}{}{}", CONFIG_SEPARATOR, k, FIELD_SEPARATOR, v)?;
+            }
+            for (k, v) in iter {
+                write!(f, "{}{}{}{}", LIST_SEPARATOR, k, FIELD_SEPARATOR, v)?;
+            }
         }
+        Ok(())
     }
 }
 
@@ -55,154 +40,65 @@ impl EndPoint {
     pub fn set_addr(&mut self, addr: &str) -> bool {
         unsafe { std::mem::transmute::<_, &mut Locator>(self) }.set_addr(addr)
     }
+    pub fn extend_configuration(&mut self, extension: impl IntoIterator<Item = (String, String)>) {
+        match self.config.is_some() {
+            true => match &mut self.config {
+                Some(config) => config.extend(extension),
+                None => unsafe { std::hint::unreachable_unchecked() },
+            },
+            false => {
+                self.config =
+                    Some(std::collections::HashMap::from_iter(extension.into_iter()).into())
+            }
+        }
+    }
 }
 impl From<EndPoint> for Locator {
     fn from(val: EndPoint) -> Self {
-        let mut inner = val.inner;
-        if let Some(index) = inner.find(CONFIG_SEPARATOR) {
-            inner.truncate(index);
-        }
-        Locator { inner }
+        val.locator
     }
 }
 impl From<Locator> for EndPoint {
     fn from(val: Locator) -> Self {
-        EndPoint { inner: val.inner }
-    }
-}
-
-/// A `str` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
-#[allow(non_camel_case_types)]
-#[repr(transparent)]
-#[derive(Debug, Eq, PartialEq, Hash)]
-pub struct endpoint {
-    inner: str,
-}
-impl core::fmt::Display for endpoint {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.inner)
+        EndPoint {
+            locator: val,
+            config: None,
+        }
     }
 }
 
 impl TryFrom<String> for EndPoint {
     type Error = zenoh_core::Error;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if endpoint::new(&value).is_none() {
-            value.parse()
-        } else {
-            Ok(EndPoint { inner: value })
+    fn try_from(mut value: String) -> Result<Self, Self::Error> {
+        let (l, r) = split_once(&value, CONFIG_SEPARATOR);
+        if r.contains(METADATA_SEPARATOR) {
+            bail!(
+                "{} is a forbidden character in endpoint metadata",
+                METADATA_SEPARATOR
+            );
         }
+        let config = r.parse().ok();
+        let locator_len = l.len();
+        value.truncate(locator_len);
+        Ok(EndPoint {
+            locator: value.try_into()?,
+            config,
+        })
     }
 }
 impl FromStr for EndPoint {
     type Err = zenoh_core::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (l, r) = split_once(s, CONFIG_SEPARATOR);
-        let l: Locator = l.parse()?;
-        let mut inner = l.into();
-        let config = r
-            .split(LIST_SEPARATOR)
-            .map(|prop| split_once(prop, FIELD_SEPARATOR));
-        if config.is_canon() {
-            Ok(EndPoint { inner: inner + r })
-        } else {
-            extend_with_props(&mut inner, &config.canonicalize());
-            Ok(EndPoint { inner })
+        if r.contains(METADATA_SEPARATOR) {
+            bail!(
+                "{} is a forbidden character in endpoint metadata",
+                METADATA_SEPARATOR
+            );
         }
-    }
-}
-impl AsRef<str> for endpoint {
-    fn as_ref(&self) -> &str {
-        &self.inner
-    }
-}
-impl endpoint {
-    /// # Safety
-    /// This function doesn't check whether `s` is a valid locator or not.
-    ///
-    /// Use [`EndPointRef::new`] instead
-    pub unsafe fn new_unchecked(s: &str) -> &Self {
-        std::mem::transmute(s)
-    }
-    /// # Safety
-    /// This function doesn't check whether `s` is a valid locator or not.
-    ///
-    /// Use [`EndPointRef::new`] instead
-    pub unsafe fn new_unchecked_mut(s: &mut str) -> &mut Self {
-        std::mem::transmute(s)
-    }
-    pub fn new(s: &str) -> Option<&Self> {
-        let (l, r) = split_once(s, CONFIG_SEPARATOR);
-        let invalid = r.contains(METADATA_SEPARATOR)
-            || locator::new(l).is_none()
-            || !r
-                .split(LIST_SEPARATOR)
-                .map(|prop| split_once(prop, FIELD_SEPARATOR))
-                .is_canon();
-        match invalid {
-            true => None,
-            false => Some(unsafe { endpoint::new_unchecked(s) }),
-        }
-    }
-    pub fn split(
-        &self,
-    ) -> (
-        &locator,
-        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator + Clone,
-    ) {
-        let (locator, config) = split_once(&self.inner, CONFIG_SEPARATOR);
-        let locator = unsafe { locator::new_unchecked(locator) };
-        (
-            locator,
-            config
-                .split(LIST_SEPARATOR)
-                .map(|prop| split_once(prop, FIELD_SEPARATOR)),
-        )
-    }
-    pub fn locator(&self) -> &locator {
-        let (locator, _) = split_once(&self.inner, CONFIG_SEPARATOR);
-        unsafe { locator::new_unchecked(locator) }
-    }
-    pub fn locator_mut(&mut self) -> &mut locator {
-        let (locator, _) = split_once_mut(&mut self.inner, CONFIG_SEPARATOR);
-        unsafe { locator::new_unchecked_mut(locator) }
-    }
-    pub fn config(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator + Clone {
-        self.split().1
-    }
-    pub fn extend_config<'a, I: Iterator<Item = (&'a str, &'a str)> + Clone>(
-        &'a self,
-        config: I,
-    ) -> EndPoint {
-        let (locator, previous) = self.split();
-        let mut config = previous.chain(config);
-        let mut result = locator.inner.to_owned();
-        if config.clone().is_canon() {
-            if let Some((key, value)) = config.next() {
-                result += key;
-                result.push(FIELD_SEPARATOR);
-                result += value;
-            }
-            for (key, value) in config {
-                result.push(LIST_SEPARATOR);
-                result += key;
-                result.push(FIELD_SEPARATOR);
-                result += value;
-            }
-        } else {
-            let mut config = config.canonicalize().into_iter();
-            if let Some((key, value)) = config.next() {
-                result += key;
-                result.push(FIELD_SEPARATOR);
-                result += value;
-            }
-            for (key, value) in config {
-                result.push(LIST_SEPARATOR);
-                result += key;
-                result.push(FIELD_SEPARATOR);
-                result += value;
-            }
-        }
-        EndPoint { inner: result }
+        Ok(EndPoint {
+            locator: l.parse()?,
+            config: r.parse().ok(),
+        })
     }
 }
