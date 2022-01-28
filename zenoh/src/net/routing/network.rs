@@ -474,7 +474,7 @@ impl Network {
                         let runtime = self.runtime.clone();
                         let pid = node.pid;
                         let locators = locators.clone();
-                        async_std::task::spawn(async move {
+                        self.runtime.spawn(async move {
                             // random backoff
                             async_std::task::sleep(std::time::Duration::from_millis(
                                 rand::random::<u64>() % 100,

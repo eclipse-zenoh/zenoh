@@ -154,7 +154,7 @@ impl Runtime {
 
         for peer in peers {
             let this = self.clone();
-            async_std::task::spawn(async move { this.peer_connector(peer).await });
+            self.spawn(async move { this.peer_connector(peer).await });
         }
 
         if scouting {
@@ -167,7 +167,7 @@ impl Runtime {
                     .collect();
                 if !sockets.is_empty() {
                     let this = self.clone();
-                    async_std::task::spawn(async move {
+                    self.spawn(async move {
                         async_std::prelude::FutureExt::race(
                             this.responder(&mcast_socket, &sockets),
                             this.connect_all(
@@ -227,7 +227,7 @@ impl Runtime {
 
         for peer in peers {
             let this = self.clone();
-            async_std::task::spawn(async move { this.peer_connector(peer).await });
+            self.spawn(async move { this.peer_connector(peer).await });
         }
 
         if scouting {
@@ -241,7 +241,7 @@ impl Runtime {
                 if !sockets.is_empty() {
                     let this = self.clone();
                     if routers_autoconnect_multicast {
-                        async_std::task::spawn(async move {
+                        self.spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
                                 this.connect_all(&sockets, WhatAmI::Router, &addr),
@@ -302,7 +302,7 @@ impl Runtime {
                     false
                 }) {
                     let this = self.clone();
-                    async_std::task::spawn(async move { this.peer_connector(peer).await });
+                    self.spawn(async move { this.peer_connector(peer).await });
                 }
             }
         }
@@ -758,7 +758,7 @@ impl Runtime {
         match session.runtime.whatami {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
-                async_std::task::spawn(async move {
+                session.runtime.spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
                     while runtime.start_client().await.is_err() {
                         async_std::task::sleep(std::time::Duration::from_millis(delay)).await;
@@ -775,9 +775,9 @@ impl Runtime {
                     if peers.contains(locator) {
                         let locator = locator.clone();
                         let runtime = session.runtime.clone();
-                        async_std::task::spawn(
-                            async move { runtime.peer_connector(locator).await },
-                        );
+                        session
+                            .runtime
+                            .spawn(async move { runtime.peer_connector(locator).await });
                     }
                 }
             }

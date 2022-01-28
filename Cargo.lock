@@ -2659,6 +2659,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
 
 [[package]]
+name = "stop-token"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af91f480ee899ab2d9f8435bfdfc14d08a5754bd9d3fef1f1a1c23336aad6c8b"
+dependencies = [
+ "async-channel",
+ "cfg-if 1.0.0",
+ "futures-core",
+ "pin-project-lite 0.2.7",
+]
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3253,6 +3265,7 @@ dependencies = [
  "serde_yaml",
  "shared_memory",
  "socket2 0.4.2",
+ "stop-token",
  "uhlc",
  "uuid",
  "validated_struct",

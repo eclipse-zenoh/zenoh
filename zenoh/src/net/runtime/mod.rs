@@ -31,8 +31,12 @@ use crate::config::{Config, Notifier};
 pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
 use async_std::sync::Arc;
+use async_std::task::JoinHandle;
+use futures::Future;
 use std::any::Any;
 use std::time::Duration;
+use stop_token::future::FutureExt;
+use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
@@ -45,6 +49,7 @@ pub struct RuntimeState {
     pub config: Notifier<Config>,
     pub manager: TransportManager,
     pub hlc: Option<Arc<HLC>>,
+    pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
 #[derive(Clone)]
@@ -129,6 +134,7 @@ impl Runtime {
                 config: config.clone(),
                 manager: transport_manager,
                 hlc,
+                stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
@@ -141,13 +147,13 @@ impl Runtime {
         }
 
         let receiver = config.subscribe();
-        async_std::task::spawn({
-            let runtime = runtime.clone();
+        runtime.spawn({
+            let runtime2 = runtime.clone();
             async move {
                 let mut stream = receiver.into_stream();
                 while let Some(event) = stream.next().await {
                     if &*event == "peers" {
-                        if let Err(e) = runtime.update_peers().await {
+                        if let Err(e) = runtime2.update_peers().await {
                             log::error!("Error updating peers : {}", e);
                         }
                     }
@@ -168,6 +174,7 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
+        drop(self.stop_source.write().unwrap().take());
         self.manager().close().await;
         Ok(())
     }
@@ -178,6 +185,18 @@ impl Runtime {
 
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
+    }
+
+    pub(crate) fn spawn<F, T>(&self, future: F) -> Option<JoinHandle<Result<T, TimedOutError>>>
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.stop_source
+            .read()
+            .unwrap()
+            .as_ref()
+            .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
     }
 }
 
