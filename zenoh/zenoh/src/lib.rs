@@ -123,20 +123,20 @@ pub mod plugins;
 /// reading and writing data.
 pub mod buf {
     /// A read-only bytes buffer.
-    pub use zenoh_protocol::io::ZBuf;
+    pub use zenoh_buffers::ZBuf;
 
     /// A [`ZBuf`] slice.
-    pub use zenoh_protocol::io::ZSlice;
+    pub use zenoh_buffers::ZSlice;
 
     /// A writable bytes buffer.
-    pub use zenoh_protocol::io::WBuf;
+    pub use zenoh_buffers::WBuf;
 
     #[cfg(feature = "shared-memory")]
-    pub use zenoh_protocol::io::SharedMemoryBuf;
+    pub use zenoh_buffers::SharedMemoryBuf;
     #[cfg(feature = "shared-memory")]
-    pub use zenoh_protocol::io::SharedMemoryBufInfo;
+    pub use zenoh_buffers::SharedMemoryBufInfo;
     #[cfg(feature = "shared-memory")]
-    pub use zenoh_protocol::io::SharedMemoryManager;
+    pub use zenoh_buffers::SharedMemoryManager;
 }
 
 /// Time related types and functions.

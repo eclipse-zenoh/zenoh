@@ -35,7 +35,9 @@ use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
 use zenoh_core::bail;
+pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
+pub use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 pub(crate) type Id = usize;
 

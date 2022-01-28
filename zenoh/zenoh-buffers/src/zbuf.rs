@@ -99,7 +99,7 @@ impl Default for ZBufInner {
 ///
 /// Example for creating a data buffer:
 /// ```
-/// use zenoh::buf::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
 /// let zbuf: ZBuf = vec![0_u8; 16].into();
@@ -121,7 +121,7 @@ impl Default for ZBufInner {
 /// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contigous in memory.
 ///
 /// ```
-/// use zenoh::buf::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice};
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// let zslice: ZSlice = vec![0_u8; 16].into();
@@ -145,7 +145,7 @@ impl Default for ZBufInner {
 /// dealing with shared memory access or with large data that has been likely fragmented on the network.
 ///
 /// ```
-/// use zenoh::buf::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice};
 ///
 /// let zslice: ZSlice = vec![0_u8; 16].into();
 ///

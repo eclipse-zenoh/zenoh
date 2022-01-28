@@ -17,7 +17,12 @@ use uhlc::Timestamp;
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
-use zenoh_protocol::proto::*;
+use zenoh_protocol::proto::{
+    Attachment, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
+    ForgetSubscriber, FramePayload, MessageReader, MessageWriter, Publisher, Queryable,
+    ReplierInfo, ReplyContext, Resource, RoutingContext, Subscriber, TransportMessage,
+    ZenohMessage,
+};
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, *};
 
 const NUM_ITER: usize = 100;

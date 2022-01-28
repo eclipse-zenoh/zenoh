@@ -42,9 +42,9 @@ use zenoh_protocol_core::{EndPoint, Locator};
 /// ```
 /// use async_std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh::net::protocol::core::{PeerId, WhatAmI, whatami};
-/// use zenoh::net::transport::*;
-/// use zenoh::Result as ZResult;
+/// use zenoh_protocol_core::{PeerId, WhatAmI, whatami};
+/// use zenoh_transport::*;
+/// use zenoh_core::Result as ZResult;
 ///
 /// // Create my transport handler to be notified when a new transport is initiated with me
 /// #[derive(Default)]

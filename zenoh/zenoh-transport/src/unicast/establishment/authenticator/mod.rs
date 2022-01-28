@@ -141,12 +141,12 @@ impl From<PeerAuthenticatorId> for ZInt {
 pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
-    pub(crate) async fn from_config(config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
+    pub async fn from_config(_config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
         let mut pas = HashSet::new();
 
         #[cfg(feature = "auth_pubkey")]
         {
-            let mut res = PubKeyAuthenticator::from_config(config).await?;
+            let mut res = PubKeyAuthenticator::from_config(_config).await?;
             if let Some(pa) = res.take() {
                 pas.insert(pa.into());
             }
@@ -154,7 +154,7 @@ impl PeerAuthenticator {
 
         #[cfg(feature = "auth_usrpwd")]
         {
-            let mut res = UserPasswordAuthenticator::from_config(config).await?;
+            let mut res = UserPasswordAuthenticator::from_config(_config).await?;
             if let Some(pa) = res.take() {
                 pas.insert(pa.into());
             }
@@ -162,7 +162,7 @@ impl PeerAuthenticator {
 
         #[cfg(feature = "shared-memory")]
         {
-            let mut res = SharedMemoryAuthenticator::from_config(config).await?;
+            let mut res = SharedMemoryAuthenticator::from_config(_config).await?;
             if let Some(pa) = res.take() {
                 pas.insert(pa.into());
             }
