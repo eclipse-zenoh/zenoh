@@ -1,0 +1,138 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh"
+version = "0.6.0-dev.0"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
+]
+edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[badges]
+maintenance = { status = "actively-developed" }
+
+[features]
+auth_pubkey = ["zenoh-transport/auth_pubkey"]
+auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
+complete_n = ["zenoh-protocol-core/complete_n", "zenoh-protocol/complete_n"]
+shared-memory = [
+    "zenoh-buffers/shared-memory",
+    "zenoh-protocol/shared-memory",
+    "zenoh-transport/shared-memory",
+]
+stats = ["zenoh-transport/stats"]
+transport_quic = ["zenoh-transport/transport_quic"]
+transport_tcp = ["zenoh-transport/transport_tcp"]
+transport_tls = ["zenoh-transport/transport_tls"]
+transport_udp = ["zenoh-transport/transport_udp"]
+transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
+default = [
+    "auth_pubkey",
+    "auth_usrpwd",
+    "shared-memory",
+    "transport_quic",
+    "transport_tcp",
+    "transport_tls",
+    "transport_udp",
+    "transport_unixsock-stream",
+]
+
+[dependencies]
+zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-crypto = { path = "../commons/zenoh-crypto/" }
+zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
+zenoh-collections = { path = "../commons/zenoh-collections/" }
+zenoh-sync = { path = "../commons/zenoh-sync/" }
+zenoh-util = { path = "../commons/zenoh-util" }
+zenoh-buffers = { path = "../commons/zenoh-buffers/" }
+zenoh-config = { path = "../commons/zenoh-config/" }
+zenoh-protocol-core = { path = "../commons/zenoh-protocol-core/" }
+zenoh-protocol = { path = "../commons/zenoh-protocol/" }
+
+zenoh-link = { path = "../io/zenoh-link/" }
+zenoh-transport = { path = "../io/zenoh-transport/" }
+
+zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
+
+async-global-executor = "2.0.2"
+async-std = { version = "=1.9.0", default-features = false, features = [
+    "attributes",
+] }
+async-trait = "0.1.42"
+base64 = "0.13.0"
+env_logger = "0.9.0"
+event-listener = "2.5.1"
+futures = "0.3.12"
+futures-lite = "1.11.3"
+flume = "0.10.5"
+git-version = "0.3.4"
+hex = "0.4.2"
+lazy_static = "1.4.0"
+log = "0.4"
+ordered-float = "2.5.1"
+petgraph = "0.6.0"
+rand = "0.8.3"
+regex = "1"
+serde_json = "1.0"
+serde = "1.0.123"
+socket2 = "0.4.0"
+uhlc = "0.4.0"
+uuid = { version = "0.8.2", features = ["v4"] }
+validated_struct = { version = "0.1", features = ["json5", "serde_json"] }
+vec_map = "0.8.2"
+
+[dev-dependencies]
+criterion = "0.3.4"
+
+[build-dependencies]
+rustc_version = "0.4.0"
+
+[lib]
+name = "zenoh"
+
+[[bench]]
+name = "codec_bench"
+harness = false
+
+[[bench]]
+name = "rwbuf_bench"
+harness = false
+
+[[bench]]
+name = "key_expr_bench"
+harness = false
+
+[[bench]]
+name = "data_creation"
+harness = false
+
+[[bench]]
+name = "frame_codec"
+harness = false
+
+[[bench]]
+name = "tables_bench"
+harness = false

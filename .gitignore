@@ -18,3 +18,5 @@
 .DS_Store
 
 .vscode
+
+cargo-timing*.html

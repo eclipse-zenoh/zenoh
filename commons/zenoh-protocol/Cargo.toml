@@ -12,33 +12,35 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-plugin-trait"
+name = "zenoh-protocol"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@adlinktech.com>",
-    "Luca Cominardi <luca.cominardi@adlinktech.com>",
-    "Pierre Avital <pierre.avital@adlinktech.com>",
+	"kydos <angelo@icorsaro.net>",
+	"Julien Enoch <julien@enoch.fr>",
+	"Olivier Hécart <olivier.hecart@adlinktech.com>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
-
-[lib]
-name = "zenoh_plugin_trait"
+description = "Internal crate for zenoh."
 
 [features]
-no_mangle = []
-default = ["no_mangle"]
+shared-memory = ["zenoh-buffers/shared-memory"]
+complete_n = ["zenoh-protocol-core/complete_n"]
 
 [dependencies]
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-util = { path = "../../commons/zenoh-util" }
-zenoh-macros = { path = "../../commons/zenoh-macros/" }
-libloading = "0.7.0"
+zenoh-core = { path = "../zenoh-core/" }
+
+zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
+zenoh-buffers = { path = "../zenoh-buffers/" }
+
 log = "0.4"
-serde_json = "1.0"
+uhlc = "0.4.0"
+
+[dev-dependencies]
+rand = "0.8.3"
+uuid = { version = "0.8.2", features = ["v4"] }

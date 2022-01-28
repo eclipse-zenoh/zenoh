@@ -318,7 +318,10 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     match req.body_bytes().await {
         Ok(bytes) => {
             let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
-            let encoding: Encoding = req.content_type().map(|m| m.into()).unwrap_or_default();
+            let encoding: Encoding = req
+                .content_type()
+                .map(|m| m.essence().to_owned().into())
+                .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
             match req

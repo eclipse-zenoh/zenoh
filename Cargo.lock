@@ -3361,6 +3361,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-examples"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "clap",
+ "env_logger",
+ "futures",
+ "git-version",
+ "json5",
+ "lazy_static",
+ "log",
+ "rand 0.8.4",
+ "rustc_version 0.4.0",
+ "validated_struct",
+ "zenoh",
+]
+
+[[package]]
 name = "zenoh-ext"
 version = "0.6.0-dev.0"
 dependencies = [
@@ -3579,7 +3597,6 @@ name = "zenoh-protocol-core"
 version = "0.6.0-dev.0"
 dependencies = [
  "hex",
- "http-types",
  "lazy_static",
  "serde",
  "uhlc",

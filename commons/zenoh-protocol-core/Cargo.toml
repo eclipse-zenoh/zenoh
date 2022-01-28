@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenohd"
+name = "zenoh-protocol-core"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -26,46 +26,18 @@ authors = [
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
-readme = "../README.md"
+description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = ["zenoh/shared-memory"]
+complete_n = []
 
 [dependencies]
-zenoh = { path = "../zenoh/" }
+zenoh-core = { path = "../zenoh-core/" }
 
-async-std = { version = "=1.9.0", default-features = false, features = [
-	"attributes",
-] }
-clap = "2.33.3"
-env_logger = "0.9.0"
-futures = "0.3.12"
-git-version = "0.3.4"
-json5 = "0.4.1"
+hex = "0.4.2"
 lazy_static = "1.4.0"
-log = "0.4"
-validated_struct = { version = "0.1", features = ["json5", "serde_json"] }
-
-[dev-dependencies]
-rand = "0.8.3"
-
-[build-dependencies]
-rustc_version = "0.4.0"
-
-[package.metadata.deb]
-name = "zenohd"
-maintainer = "zenoh-dev@eclipse.org"
-copyright = "2017, 2021 ADLINK Technology Inc."
-section = "net"
-license-file = ["../LICENSE", "0"]
-depends = "$auto"
-maintainer-scripts = "zenoh/.deb"
-assets = [
-	# binary
-	["target/release/zenohd", "/usr/bin/", "755"],
-	# service
-	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
-]
+uhlc = "0.4.0"
+uuid = { version = "0.8.2", features = ["v4"] }
+serde = "1.0.123"

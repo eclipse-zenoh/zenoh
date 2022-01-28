@@ -51,10 +51,10 @@ log = "0.4"
 serde = "1.0"
 serde_json = "1.0"
 tide = "0.16.0"
-zenoh = { path = "../../zenoh/zenoh" }
+zenoh = { path = "../../zenoh" }
+zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { path = "../../zenoh-utils/zenoh-util/" }
-zenoh-core = { path = "../../zenoh-utils/zenoh-core/" }
 
 [[example]]
 name = "z_serve_sse"

@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenohd"
+name = "zenoh-examples"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -26,8 +26,8 @@ authors = [
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
-readme = "../README.md"
+description = "Internal crate for zenoh."
+readme = "examples/README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -69,3 +69,78 @@ assets = [
 	# service
 	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]
+
+
+[[example]]
+name = "z_scout"
+path = "examples/z_scout.rs"
+
+[[example]]
+name = "z_info"
+path = "examples/z_info.rs"
+
+[[example]]
+name = "z_put"
+path = "examples/z_put.rs"
+
+[[example]]
+name = "z_put_float"
+path = "examples/z_put_float.rs"
+
+[[example]]
+name = "z_delete"
+path = "examples/z_delete.rs"
+
+[[example]]
+name = "z_pub"
+path = "examples/z_pub.rs"
+
+[[example]]
+name = "z_pub_shm"
+path = "examples/z_pub_shm.rs"
+required-features = ["shared-memory"]
+
+[[example]]
+name = "z_sub"
+path = "examples/z_sub.rs"
+
+[[example]]
+name = "z_pull"
+path = "examples/z_pull.rs"
+
+[[example]]
+name = "z_eval"
+path = "examples/z_eval.rs"
+
+[[example]]
+name = "z_storage"
+path = "examples/z_storage.rs"
+
+[[example]]
+name = "z_get"
+path = "examples/z_get.rs"
+
+[[example]]
+name = "z_forward"
+path = "examples/z_forward.rs"
+
+[[example]]
+name = "z_pub_thr"
+path = "examples/z_pub_thr.rs"
+
+[[example]]
+name = "z_sub_thr"
+path = "examples/z_sub_thr.rs"
+
+[[example]]
+name = "z_pub_shm_thr"
+path = "examples/z_pub_shm_thr.rs"
+required-features = ["shared-memory"]
+
+[[example]]
+name = "z_ping"
+path = "examples/z_ping.rs"
+
+[[example]]
+name = "z_pong"
+path = "examples/z_pong.rs"

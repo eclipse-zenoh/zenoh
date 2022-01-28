@@ -12,33 +12,25 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-plugin-trait"
+name = "zenoh-crypto"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@adlinktech.com>",
-    "Luca Cominardi <luca.cominardi@adlinktech.com>",
-    "Pierre Avital <pierre.avital@adlinktech.com>",
+	"kydos <angelo@icorsaro.net>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
-
-[lib]
-name = "zenoh_plugin_trait"
-
-[features]
-no_mangle = []
-default = ["no_mangle"]
+description = "Internal crate for zenoh."
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-util = { path = "../../commons/zenoh-util" }
-zenoh-macros = { path = "../../commons/zenoh-macros/" }
-libloading = "0.7.0"
-log = "0.4"
-serde_json = "1.0"
+zenoh-core = { path = "../zenoh-core/" }
+aes = "0.7.4"
+hmac = { version = "0.11.0", features = ["std"] }
+rand = "0.8.3"
+rand_chacha = "0.3.0"
+sha3 = "0.9.1"
