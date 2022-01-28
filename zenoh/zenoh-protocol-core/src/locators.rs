@@ -277,10 +277,6 @@ impl<'a, T: Iterator<Item = (&'a str, V)> + Clone, V> HasCanonForm for T {
 fn locators() {
     Locator::from_str("udp/127.0.0.1").unwrap();
     let locator = Locator::from_str("udp/127.0.0.1?hello=there;general=kenobi").unwrap();
-    assert_eq!(
-        &locator.to_string(),
-        "udp/127.0.0.1?general=kenobi;hello=there"
-    );
     assert_eq!(locator.protocol(), "udp");
     assert_eq!(locator.address(), "127.0.0.1");
     assert_eq!(
