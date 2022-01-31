@@ -328,7 +328,7 @@ pub enum ConsolidationMode {
     Full,
 }
 
-/// The kind of consolidation that should be applied on replies to a [`get`](crate::Session::get)
+/// The kind of consolidation that should be applied on replies to a [`get`](zenoh::Session::get)
 /// at different stages of the reply process.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryConsolidation {
@@ -357,7 +357,7 @@ impl Default for QueryConsolidation {
     }
 }
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
+/// The [`Queryable`](zenoh::queryable::Queryable)s that should be target of a [`get`](zenoh::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
@@ -374,7 +374,7 @@ impl Default for Target {
     }
 }
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](crate::Session::get).
+/// The [`Queryable`](zenoh::queryable::Queryable)s that should be target of a [`get`](zenoh::Session::get).
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
     pub kind: ZInt,

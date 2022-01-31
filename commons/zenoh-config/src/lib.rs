@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! Properties to pass to [`open`](super::open) and [`scout`](super::scout) functions as configuration
+//! Properties to pass to [`open`](zenoh::open) and [`scout`](zenoh::scout) functions as configuration
 //! and associated constants.
 
 use serde_json::Value;
@@ -42,13 +42,13 @@ pub type ValidationFunction = std::sync::Arc<
 >;
 type ZInt = u64;
 
-/// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](super::open)  
-/// to configure the zenoh [`Session`](crate::Session).
+/// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](zenoh::open)  
+/// to configure the zenoh [`Session`](zenoh::Session).
 ///
 /// Multiple values are coma separated.
 ///
 /// The [`IntKeyProperties`](zenoh_cfg_properties::IntKeyProperties) can be built from (`String`/`String`)
-/// [`Properties`](crate::properties::Properties) and reverse.
+/// [`Properties`](zenoh_cfg_properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {

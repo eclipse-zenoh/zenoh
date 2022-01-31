@@ -93,7 +93,7 @@ impl Decoder<String> for ZenohCodec {
     type Err = zenoh_core::Error;
     fn read<R: std::io::Read>(&self, reader: &mut R) -> ZResult<String> {
         let vec = self.read(reader)?;
-        String::from_utf8(vec).map_err(|e| zerror!(e).into())
+        String::from_utf8(vec).map_err(|e| zerror!("{}", e).into())
     }
 }
 impl Decoder<PeerId> for ZenohCodec {

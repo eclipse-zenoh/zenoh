@@ -14,7 +14,7 @@
 mod multicast;
 mod unicast;
 
-use std::net::SocketAddr;
+use std::{convert::TryFrom, net::SocketAddr};
 
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;

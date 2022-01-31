@@ -3495,7 +3495,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-udp"
-version = "0.1.0"
+version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",

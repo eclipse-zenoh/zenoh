@@ -55,7 +55,7 @@ pub use zenoh_protocol_core::Encoding;
 /// The global unique id of a zenoh peer.
 pub use zenoh_protocol_core::PeerId;
 
-/// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
+/// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
 pub use zenoh_protocol_core::ExprId;
 
 /// A key expression.
