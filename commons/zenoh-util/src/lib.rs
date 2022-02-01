@@ -16,22 +16,22 @@
 extern crate lazy_static;
 use std::path::{Path, PathBuf};
 #[cfg(features = "zenoh-collections")]
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+#[deprecated = "This module is now a separate crate. Use the `zenoh_collections` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_collections as collections;
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+#[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_core as core;
 #[cfg(features = "zenoh-crypto")]
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+#[deprecated = "This module is now a separate crate. Use the `zenoh_crypto` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_crypto as crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;
 pub use lib_loader::*;
 #[cfg(features = "zenoh-cfg-properties")]
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+#[deprecated = "This module is now a separate crate. Use the `zenoh_cfg_properties` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_cfg_properties as properties;
 #[cfg(features = "zenoh-sync")]
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+#[deprecated = "This module is now a separate crate. Use the `zenoh_sync` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_sync as sync;
 
 /// the "ZENOH_HOME" environement variable name
