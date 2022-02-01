@@ -14,18 +14,18 @@
 
 //! Publishing primitives.
 
-use super::net::protocol::core::Channel;
-use super::net::protocol::proto::{data_kind, DataInfo, Options};
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::Session;
 use zenoh_core::zread;
+use zenoh_protocol::proto::{data_kind, DataInfo, Options};
+use zenoh_protocol_core::Channel;
 use zenoh_sync::{derive_zfuture, Runnable};
 
 /// The kind of congestion control.
-pub use super::net::protocol::core::CongestionControl;
+pub use zenoh_protocol_core::CongestionControl;
 
 derive_zfuture! {
     /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).

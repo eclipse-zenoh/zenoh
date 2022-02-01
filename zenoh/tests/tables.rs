@@ -15,17 +15,17 @@ use async_std::sync::Arc;
 use std::convert::TryInto;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
-use zenoh::net::protocol::core::key_expr::intersect;
-use zenoh::net::protocol::core::{
+use zenoh::net::routing::router::*;
+use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
+use zenoh_core::zlock;
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::key_expr::intersect;
+use zenoh_protocol_core::{
     Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
     Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
 };
-use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, RoutingContext};
-use zenoh::net::routing::router::*;
-use zenoh::net::transport::{DummyPrimitives, Primitives};
-use zenoh_core::zlock;
+use zenoh_transport::{DummyPrimitives, Primitives};
 
 #[test]
 fn base_test() {

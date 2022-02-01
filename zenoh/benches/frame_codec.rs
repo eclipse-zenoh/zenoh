@@ -19,6 +19,7 @@ use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, Priority, 
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
 use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 fn criterion_benchmark(c: &mut Criterion) {
     let batch_size = BATCH_SIZE as usize;

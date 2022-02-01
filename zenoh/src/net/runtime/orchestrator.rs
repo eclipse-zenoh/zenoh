@@ -11,21 +11,21 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::link::{EndPoint, Locator};
-use super::protocol::core::{PeerId, WhatAmI};
-use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
-use super::transport::TransportUnicast;
 use super::{Runtime, RuntimeSession};
-use crate::net::protocol::core::whatami::WhatAmIMatcher;
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
-use zenoh_util::properties::config::*;
+use zenoh_link::Locator;
+use zenoh_protocol::io::{WBuf, ZBuf};
+use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
+use zenoh_protocol::proto::{MessageReader, MessageWriter};
+use zenoh_protocol_core::{whatami::WhatAmIMatcher, PeerId, WhatAmI};
+use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = 65536;
 const SEND_BUF_INITIAL_SIZE: usize = 8;
@@ -99,11 +99,7 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    let endpoint = EndPoint {
-                        locator: locator.clone(),
-                        config: None,
-                    };
-                    match self.manager().open_transport(endpoint).await {
+                    match self.manager().open_transport(locator.clone().into()).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -123,9 +119,10 @@ impl Runtime {
             } else {
                 guard.listeners().clone()
             };
+            let peers = guard.peers().clone();
             (
                 listeners,
-                guard.peers().clone(),
+                peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -197,9 +194,10 @@ impl Runtime {
             } else {
                 guard.listeners().clone()
             };
+            let peers = guard.peers().clone();
             (
                 listeners,
-                guard.peers().clone(),
+                peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -261,7 +259,7 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = self.config.lock().peers().clone();
+        let peers = { self.config.lock().peers().clone() };
         let tranports = self.manager().get_transports();
 
         if self.whatami == WhatAmI::Client {
@@ -312,10 +310,7 @@ impl Runtime {
 
     async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
         for listener in listeners {
-            let endpoint = EndPoint {
-                locator: listener.clone(),
-                config: None,
-            };
+            let endpoint = listener.clone().into();
             match self.manager().add_listener(endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
@@ -471,10 +466,7 @@ impl Runtime {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
-            let endpoint = EndPoint {
-                locator: peer.clone(),
-                config: None,
-            };
+            let endpoint = peer.clone().into();
             if let Ok(transport) = self.manager().open_transport(endpoint).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let Some(orch_transport) = transport
@@ -579,10 +571,7 @@ impl Runtime {
 
     async fn connect(&self, locators: &[Locator]) -> Option<TransportUnicast> {
         for locator in locators {
-            let endpoint = EndPoint {
-                locator: locator.clone(),
-                config: None,
-            };
+            let endpoint = locator.clone().into();
             match self.manager().open_transport(endpoint).await {
                 Ok(transport) => return Some(transport),
                 Err(e) => log::trace!("Failed to connect to {} : {}", locator, e),
@@ -771,7 +760,7 @@ impl Runtime {
             }
             _ => {
                 if let Some(locator) = &*zread!(session.locator) {
-                    let peers = session.runtime.config.lock().peers().clone();
+                    let peers = { session.runtime.config.lock().peers().clone() };
                     if peers.contains(locator) {
                         let locator = locator.clone();
                         let runtime = session.runtime.clone();

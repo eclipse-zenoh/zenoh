@@ -18,7 +18,4 @@ pub mod queries;
 pub mod resource;
 pub mod router;
 
-use super::link;
-use super::protocol;
 use super::runtime;
-use super::transport;

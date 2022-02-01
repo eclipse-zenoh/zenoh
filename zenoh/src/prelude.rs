@@ -26,7 +26,6 @@
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
-use crate::net::protocol::proto::DataInfo;
 use crate::queryable::{Query, QueryableBuilder};
 use crate::subscriber::SubscriberBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
@@ -36,6 +35,9 @@ use regex::Regex;
 use std::convert::TryFrom;
 use std::fmt;
 use zenoh_core::bail;
+pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
+use zenoh_protocol::proto::DataInfo;
+pub use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 pub(crate) type Id = usize;
 
@@ -45,22 +47,22 @@ pub use crate::sync::channel::Receiver;
 pub use crate::sync::ZFuture;
 
 /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
-pub use crate::net::link::Locator;
+pub use zenoh_protocol_core::Locator;
 
 /// The encoding of a zenoh [`Value`].
-pub use super::net::protocol::core::Encoding;
+pub use zenoh_protocol_core::Encoding;
 
 /// The global unique id of a zenoh peer.
-pub use super::net::protocol::core::PeerId;
+pub use zenoh_protocol_core::PeerId;
 
-/// A numerical Id mapped to a key expression with [`declare_expr`](Session::declare_expr).
-pub use super::net::protocol::core::ExprId;
+/// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
+pub use zenoh_protocol_core::ExprId;
 
 /// A key expression.
-pub use super::net::protocol::core::KeyExpr;
+pub use zenoh_protocol_core::KeyExpr;
 
 /// A zenoh integer.
-pub use super::net::protocol::core::ZInt;
+pub use zenoh_protocol_core::ZInt;
 
 /// A zenoh Value.
 #[derive(Clone)]

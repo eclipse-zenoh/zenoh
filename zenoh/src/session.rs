@@ -11,29 +11,31 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::info::*;
-use super::publication::*;
-use super::query::*;
-use super::queryable::*;
-use super::subscriber::*;
-use super::*;
-use crate::config::{Config, Notifier};
-use crate::net::protocol::core::EMPTY_EXPR_ID;
+use crate::config::Config;
+use crate::config::Notifier;
+use crate::data_kind;
+use crate::info::*;
+use crate::net::routing::face::Face;
+use crate::net::runtime::Runtime;
+use crate::net::transport::Primitives;
+use crate::prelude::EntityFactory;
+use crate::publication::*;
+use crate::query::*;
+use crate::queryable::*;
+use crate::subscriber::*;
+use crate::sync::zready;
+use crate::Id;
+use crate::Priority;
+use crate::Sample;
+use crate::Selector;
+use crate::Value;
+use crate::ZFuture;
+use crate::GIT_VERSION;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
+use futures_lite::StreamExt;
 use log::{error, trace, warn};
-use net::protocol::{
-    core::{
-        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
-    },
-    io::ZBuf,
-    proto::{DataInfo, RoutingContext},
-};
-use net::routing::face::Face;
-use net::runtime::Runtime;
-use net::transport::Primitives;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
@@ -42,6 +44,17 @@ use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
+use zenoh_protocol::{
+    core::{
+        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
+        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
+    },
+    io::ZBuf,
+    proto::{DataInfo, RoutingContext},
+};
+use zenoh_protocol_core::PeerId;
+use zenoh_protocol_core::WhatAmI;
+use zenoh_protocol_core::EMPTY_EXPR_ID;
 use zenoh_sync::zpinbox;
 
 zconfigurable! {
@@ -237,7 +250,7 @@ impl Session {
     where
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
-        debug!("Zenoh Rust API {}", GIT_VERSION);
+        log::debug!("Zenoh Rust API {}", GIT_VERSION);
         zpinbox(async move {
             let config: Config = match config.try_into() {
                 Ok(c) => c,
@@ -245,7 +258,7 @@ impl Session {
                     bail!("invalid configuration {:?}", &e)
                 }
             };
-            debug!("Config: {:?}", &config);
+            log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();

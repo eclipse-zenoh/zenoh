@@ -19,12 +19,12 @@ use std::sync::RwLock;
 use zenoh_core::zread;
 use zenoh_sync::get_mut_unchecked;
 
-use super::protocol::core::{
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::{
     Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI,
     ZInt,
 };
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;

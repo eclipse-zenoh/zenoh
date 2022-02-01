@@ -13,14 +13,10 @@
 //
 use super::face::{Face, FaceState};
 use super::network::{shared_nodes, Network};
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
-use super::protocol::proto::{ZenohBody, ZenohMessage};
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
-use super::transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
-use crate::net::link::Link;
 use async_std::sync::{Arc, Weak};
 use async_std::task::JoinHandle;
 use std::any::Any;
@@ -28,6 +24,10 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_link::Link;
+use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
+use zenoh_protocol_core::{PeerId, WhatAmI, ZInt};
+use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
 // use zenoh_collections::Timer;
 use zenoh_core::zconfigurable;
 use zenoh_core::Result as ZResult;

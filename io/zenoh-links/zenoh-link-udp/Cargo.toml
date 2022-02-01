@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2017, 2020 ADLINK Technology Inc.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+#
+[package]
+name = "zenoh-link-udp"
+version = "0.6.0-dev.0"
+repository = "https://github.com/eclipse-zenoh/zenoh"
+homepage = "http://zenoh.io"
+authors = [
+	"kydos <angelo@icorsaro.net>",
+	"Julien Enoch <julien@enoch.fr>",
+	"Olivier Hécart <olivier.hecart@adlinktech.com>",
+	"Luca Cominardi <luca.cominardi@adlinktech.com>",
+	"Pierre Avital <pierre.avital@adlinktech.com>",
+]
+edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming"]
+description = "Internal crate for zenoh."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+zenoh-core = { path = "../../../commons/zenoh-core/" }
+zenoh-util = { path = "../../../commons/zenoh-util/" }
+zenoh-collections = { path = "../../../commons/zenoh-collections/" }
+zenoh-sync = { path = "../../../commons/zenoh-sync/" }
+zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
+
+zenoh-link-commons = { path = "../../zenoh-link-commons/" }
+
+async-std = { version = "=1.9.0", default-features = false }
+async-trait = "0.1.42"
+log = "0.4"
+socket2 = "0.4.0"

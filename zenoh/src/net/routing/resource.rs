@@ -12,21 +12,21 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::face::FaceState;
-use super::protocol::core::key_expr;
-use super::protocol::core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::Tables;
 use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::key_expr;
+use zenoh_protocol_core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, super::protocol::core::Target)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::Target)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = Route;
 pub(super) struct TargetQabl {

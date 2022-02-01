@@ -12,13 +12,17 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 #[doc(hidden)]
-pub mod link;
+pub use zenoh_link as link;
 #[doc(hidden)]
-pub mod protocol;
+pub mod protocol {
+    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+    pub use zenoh_protocol::{io, proto};
+    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
+    pub use zenoh_protocol_core as core;
+}
 #[doc(hidden)]
 pub mod routing;
 #[doc(hidden)]
 pub mod runtime;
 #[doc(hidden)]
-#[macro_use]
-pub mod transport;
+pub use zenoh_transport as transport;

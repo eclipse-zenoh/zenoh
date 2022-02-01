@@ -25,7 +25,7 @@ use zenoh::net::routing::pubsub::*;
 use zenoh::net::routing::resource::*;
 use zenoh::net::routing::router::Tables;
 use zenoh::net::transport::DummyPrimitives;
-use zenoh_util::properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
+use zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(

@@ -11,18 +11,18 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
-    SubInfo, WhatAmI, ZInt,
-};
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
 use super::router::*;
-use super::transport::Primitives;
 use async_std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::RwLock;
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::{
+    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    SubInfo, WhatAmI, ZInt,
+};
+use zenoh_transport::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,
