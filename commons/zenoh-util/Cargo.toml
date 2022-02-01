@@ -27,6 +27,14 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+compat = [
+    "zenoh-cfg-properties",
+    "zenoh-crypto",
+    "zenoh-sync",
+    "zenoh-collections",
+]
+default = ["compat"]
 [badges]
 maintenance = { status = "actively-developed" }
 
