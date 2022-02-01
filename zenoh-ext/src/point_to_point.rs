@@ -149,7 +149,11 @@ impl<'a> PointToPointServer<'a> {
         use futures::FutureExt;
         loop {
             select!(
-                stream = self.accept.accept().fuse() => self.stream.push(PTPStream::new(stream?.0)),
+                stream = self.accept.accept().fuse() => {
+                    let stream = stream?.0;
+                    stream.set_nodelay(true)?;
+                    self.stream.push(PTPStream::new(stream))
+                },
                 msg = self.stream.next() => if let Some(msg) = msg { return Ok(msg) },
             )
         }
@@ -157,6 +161,7 @@ impl<'a> PointToPointServer<'a> {
 
     pub async fn accept(&mut self) -> std::io::Result<PointToPointChannel> {
         let stream = self.accept.accept().await?.0;
+        stream.set_nodelay(true)?;
         self.stream.push(PTPStream::new(stream.clone()));
         Ok(PointToPointChannel { stream })
     }
@@ -255,6 +260,7 @@ impl PointToPointChannel {
         if let Some(reply) = replies.next().await {
             for addr in reply.data.value.to_string().split(';') {
                 if let Ok(stream) = TcpStream::connect(addr).await {
+                    stream.set_nodelay(true)?;
                     return Ok(PointToPointChannel { stream });
                 }
             }
