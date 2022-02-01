@@ -28,5 +28,5 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { version = "1.0.48", default-features = false }
+anyhow = { version = "1.0.48", default-features = false, features = ["std"] }
 lazy_static = "1.4"
