@@ -137,20 +137,6 @@ impl Decoder<Property> for ZenohCodec {
         Ok(Property { key, value })
     }
 }
-impl<T> Decoder<Vec<T>> for ZenohCodec
-where
-    Self: Decoder<T, Err = zenoh_core::Error>,
-{
-    type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<Vec<T>, Self::Err> {
-        let len: usize = <Self as Decoder<usize>>::read(self, reader)?;
-        let mut result = Vec::with_capacity(len);
-        for _ in 0..len {
-            result.push(self.read(reader)?);
-        }
-        Ok(result)
-    }
-}
 impl Decoder<Locator> for ZenohCodec {
     type Err = zenoh_core::Error;
     fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<Locator, Self::Err> {
