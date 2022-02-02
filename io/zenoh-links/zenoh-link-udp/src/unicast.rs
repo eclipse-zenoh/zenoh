@@ -19,13 +19,12 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
 use zenoh_collections::{RecyclingObject, RecyclingObjectPool};
+use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zasynclock, zerror, zlock, zread, zwrite};
-use zenoh_core::{lazy_static, Result as ZResult};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
@@ -405,46 +404,42 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let mut locators = Vec::new();
         let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
-        lazy_static! {
-            static ref V4_LOCAL_ADDRESSES: Vec<Locator> = zenoh_util::net::get_local_addresses()
-                .unwrap_or_else(|e| {
-                    log::error!("Unable to get local addresses : {}", e);
-                    Vec::new()
-                })
-                .into_iter()
-                .filter_map(|addr| match addr {
-                    IpAddr::V4(addr) => Some(Locator::new(crate::UDP_LOCATOR_PREFIX, &addr)),
-                    IpAddr::V6(_) => None,
-                })
-                .collect();
-            static ref V6_LOCAL_ADDRESSES: Vec<Locator> = zenoh_util::net::get_local_addresses()
-                .unwrap_or_else(|e| {
-                    log::error!("Unable to get local addresses : {}", e);
-                    Vec::new()
-                })
-                .into_iter()
-                .filter_map(|addr| match addr {
-                    IpAddr::V6(addr) => Some(Locator::new(crate::UDP_LOCATOR_PREFIX, &addr)),
-                    IpAddr::V4(_) => None,
-                })
-                .collect();
-        }
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {
-                locators.extend(V4_LOCAL_ADDRESSES.iter().map(|l| {
-                    let mut l = l.clone();
-                    l.metadata = listener_locator.metadata.clone();
-                    l
-                }))
+                match zenoh_util::net::get_local_addresses() {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
+                                let mut l = Locator::new(
+                                    crate::UDP_LOCATOR_PREFIX,
+                                    &SocketAddr::new(ipaddr, key.port()),
+                                );
+                                l.metadata = value.endpoint.locator.metadata.clone();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                }
             } else if key.ip() == default_ipv6 {
-                locators.extend(V6_LOCAL_ADDRESSES.iter().map(|l| {
-                    let mut l = l.clone();
-                    l.metadata = listener_locator.metadata.clone();
-                    l
-                }))
+                match zenoh_util::net::get_local_addresses() {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
+                                let mut l = Locator::new(
+                                    crate::UDP_LOCATOR_PREFIX,
+                                    &SocketAddr::new(ipaddr, key.port()),
+                                );
+                                l.metadata = value.endpoint.locator.metadata.clone();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                }
             } else {
                 locators.push(listener_locator.clone());
             }
