@@ -580,10 +580,9 @@ impl MessageReader for ZBuf {
             info.kind = Some(self.read_zint()?);
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
-            info.encoding = Some(Encoding {
-                prefix: self.read_zint()?,
-                suffix: self.read_string()?.into(),
-            });
+            let prefix = self.read_zint()?;
+            let suffix = self.read_string()?;
+            info.encoding = Some(Encoding::new(prefix, suffix)?);
         }
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);

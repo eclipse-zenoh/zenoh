@@ -413,8 +413,8 @@ impl MessageWriter for WBuf {
             zcheck!(self.write_zint(kind));
         }
         if let Some(enc) = info.encoding.as_ref() {
-            zcheck!(self.write_zint(enc.prefix));
-            zcheck!(self.write_string(enc.suffix.as_ref()));
+            zcheck!(self.write((*enc.prefix()).into()));
+            zcheck!(self.write_string(enc.suffix()));
         }
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
