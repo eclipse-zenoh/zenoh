@@ -29,4 +29,4 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 anyhow = { version = "1.0.48", default-features = false, features = ["std"] }
-lazy_static = "1.4"
+lazy_static = "1.4.0"

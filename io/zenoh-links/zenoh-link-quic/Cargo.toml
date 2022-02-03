@@ -45,7 +45,6 @@ async-std = { version = "=1.9.0", default-features = false, features = [
 	"tokio1",
 ] }
 async-trait = "0.1.42"
-lazy_static = "1.4.0"
 log = "0.4"
 quinn = { version = "0.7.2" }
 webpki = { version = "0.22.0", features = ["std"] }

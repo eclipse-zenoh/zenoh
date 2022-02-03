@@ -3382,7 +3382,6 @@ dependencies = [
  "futures",
  "git-version",
  "json5",
- "lazy_static",
  "log",
  "rand 0.8.4",
  "rustc_version 0.4.0",
@@ -3448,7 +3447,6 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
- "lazy_static",
  "log",
  "quinn",
  "webpki 0.22.0",
@@ -3467,7 +3465,6 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
- "lazy_static",
  "log",
  "zenoh-core",
  "zenoh-link-commons",
@@ -3567,7 +3564,6 @@ dependencies = [
  "env_logger",
  "futures",
  "git-version",
- "lazy_static",
  "libloading",
  "log",
  "serde_json",
