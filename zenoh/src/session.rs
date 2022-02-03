@@ -858,7 +858,7 @@ impl Session {
     pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
-            println!("unsubscribe({:?})", sub_state);
+            trace!("unsubscribe({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
