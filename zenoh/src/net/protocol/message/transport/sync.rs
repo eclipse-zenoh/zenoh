@@ -18,63 +18,6 @@ use crate::net::protocol::message::{has_flag, ZMessage};
 
 /// @TODO: define the message. The definition below is just a placeholder.
 ///
-/// # Sync message
-///
-/// The [`Sync`] message SHOULD be sent periodically to avoid the expiration of the
-/// link lease period. A [`Sync`] message MAY NOT be sent on the link if some other
-/// data has been transmitted on the same link during the last keep alive interval.
-///
-/// The [`Sync`] message flow is the following:
-///
-/// ```text
-/// A                   B
-/// |    KEEP ALIVE     |
-/// |------------------>|
-/// |                   |
-/// ~        ...        ~
-/// |                   |
-/// |    KEEP ALIVE     |
-/// |<------------------|
-/// |                   |
-/// |    KEEP ALIVE     |
-/// |------------------>|
-/// |                   |
-/// ~        ...        ~
-/// |                   |
-/// |    KEEP ALIVE     |
-/// |<------------------|
-/// |                   |
-/// ~        ...        ~
-/// |                   |
-/// |    KEEP ALIVE     |
-/// |------------------>|
-/// |                   |
-/// ~        ...        ~
-/// |                   |
-/// ```
-///
-/// NOTE: In order to consider eventual packet loss, transmission latency and jitter, the time
-///       interval between two subsequent [`Sync`] messages SHOULD be set to one fourth of
-///       the lease time. This is in-line with the ITU-T G.8013/Y.1731 specification on continous
-///       connectivity check which considers a link as failed when no messages are received in
-///       3.5 times the target keep alive interval.
-///
-/// The [`Sync`] message structure is defined as follows:
-///
-/// ```text
-/// Flags:
-/// - X: Reserved
-/// - X: Reserved
-/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|X| KALIVE  |
-/// +-+-+-+---------+
-/// ~  [KAliveExts] ~ if Flag(Z)==1
-/// +---------------+
-/// ```
-///
 #[derive(Clone, PartialEq, Default, Debug)]
 pub struct Sync {
     pub exts: SyncExts,

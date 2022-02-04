@@ -147,6 +147,17 @@ impl Fragment {
 
         Some((reliability, sn, has_more, exts))
     }
+
+    pub fn read_body(zbuf: &mut ZBuf) -> Option<ZSlice> {
+        zbuf.read_zslice(zbuf.readable())
+    }
+
+    pub fn skip_body(zbuf: &mut ZBuf) -> Option<()> {
+        match zbuf.skip_bytes(zbuf.readable()) {
+            true => Some(()),
+            false => None,
+        }
+    }
 }
 
 impl ZMessage for Fragment {
@@ -170,7 +181,7 @@ impl ZMessage for Fragment {
         // Read header
         let (reliability, sn, has_more, exts) = Fragment::read_header(zbuf, header)?;
         // Read payload
-        let payload = zbuf.read_zslice(zbuf.readable())?;
+        let payload = Fragment::read_body(zbuf)?;
 
         Some(Fragment {
             reliability,

@@ -136,6 +136,17 @@ impl Frame {
 
         Some((reliability, sn, exts))
     }
+
+    pub fn skip_body(zbuf: &mut ZBuf) -> Option<()> {
+        while zbuf.can_read() {
+            let pos = zbuf.get_pos();
+            if zbuf.read_zenoh_message(Reliability::default()).is_none() {
+                zbuf.set_pos(pos);
+                break;
+            }
+        }
+        Some(())
+    }
 }
 
 impl ZMessage for Frame {

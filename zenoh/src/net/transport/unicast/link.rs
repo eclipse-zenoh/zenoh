@@ -14,7 +14,7 @@
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::core::Priority;
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
-use super::protocol::message::{TransportMessage, TransportProto, ZMessage};
+use super::protocol::message::{TransportProto, ZMessage};
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -341,19 +341,7 @@ async fn rx_task_stream(
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
 
-                while zbuf.can_read() {
-                    match TransportMessage::read(&mut zbuf) {
-                        Some(msg) => {
-                            #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_t_msgs(1);
-
-                            transport.receive_message(msg, &link)?
-                        }
-                        None => {
-                            bail!("{}: decoding error", link);
-                        }
-                    }
-                }
+                transport.deserialize(&mut zbuf, &link)?;
             }
             Action::Stop => break,
         }
@@ -418,19 +406,7 @@ async fn rx_task_dgram(
                 zbuf.add_zslice(zs);
 
                 // Deserialize all the messages from the current ZBuf
-                while zbuf.can_read() {
-                    match TransportMessage::read(&mut zbuf) {
-                        Some(msg) => {
-                            #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_t_msgs(1);
-
-                            transport.receive_message(msg, &link)?
-                        }
-                        None => {
-                            bail!("{}: decoding error", link);
-                        }
-                    }
-                }
+                transport.deserialize(&mut zbuf, &link)?;
             }
             Action::Stop => break,
         }

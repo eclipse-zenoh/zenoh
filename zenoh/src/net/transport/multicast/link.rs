@@ -14,7 +14,7 @@
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::message::extensions::{ZExt, ZExtPolicy};
-use super::protocol::message::{Join, SeqNumBytes, TransportMessage, TransportProto, ZMessage};
+use super::protocol::message::{Join, SeqNumBytes, TransportProto, ZMessage};
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
@@ -398,19 +398,7 @@ async fn rx_task(
                 zbuf.add_zslice(zs);
 
                 // Deserialize all the messages from the current ZBuf
-                while zbuf.can_read() {
-                    match TransportMessage::read(&mut zbuf) {
-                        Some(msg) => {
-                            #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_t_msgs(1);
-
-                            transport.receive_message(msg, &loc)?
-                        }
-                        None => {
-                            bail!("{}: decoding error", link);
-                        }
-                    }
-                }
+                transport.deserialize(&mut zbuf, &loc)?;
             }
             Action::Stop => break,
         }
