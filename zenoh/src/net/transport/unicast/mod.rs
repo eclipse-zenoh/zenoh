@@ -23,7 +23,7 @@ use super::common;
 use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::{WhatAmI, ZInt, ZenohId};
-use super::protocol::message::{Close, ZenohMessage};
+use super::protocol::message::{CloseReason, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 use crate::net::link::Link;
 pub use manager::*;
@@ -177,7 +177,7 @@ impl TransportUnicast {
             .into_iter()
             .find(|l| l.get_src() == link.src && l.get_dst() == link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
-        transport.close_link(&link, Close::GENERIC).await?;
+        transport.close_link(&link, CloseReason::Generic).await?;
         Ok(())
     }
 
@@ -185,7 +185,7 @@ impl TransportUnicast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_inner() {
-            Ok(transport) => transport.close(Close::GENERIC).await,
+            Ok(transport) => transport.close(CloseReason::Generic).await,
             Err(_) => Ok(()),
         }
     }

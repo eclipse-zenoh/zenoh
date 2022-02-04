@@ -24,8 +24,6 @@ pub mod udp;
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 pub mod unixsock_stream;
 
-use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::message::{TransportMessage, ZMessage};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 pub use endpoint::*;
@@ -35,8 +33,6 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use zenoh_util::core::Result as ZResult;
-
-const WBUF_SIZE: usize = 64;
 
 /*************************************/
 /*            GENERAL                */
@@ -105,7 +101,7 @@ pub(crate) enum LinkUnicastDirection {
 }
 
 #[derive(Clone)]
-pub(crate) struct LinkUnicast(Arc<dyn LinkUnicastTrait>);
+pub(crate) struct LinkUnicast(pub(crate) Arc<dyn LinkUnicastTrait>);
 
 #[async_trait]
 pub(crate) trait LinkUnicastTrait: Send + Sync {
@@ -119,89 +115,6 @@ pub(crate) trait LinkUnicastTrait: Send + Sync {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
-}
-
-impl LinkUnicast {
-    pub async fn send<T: ZMessage>(&self, msg: &mut T) -> ZResult<usize> {
-        // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        if self.is_streamed() {
-            // Reserve 16 bits to write the length
-            wbuf.write_bytes(&[0_u8, 0_u8]);
-        }
-        // Serialize the message
-        msg.write(&mut wbuf);
-        if self.is_streamed() {
-            // Write the length on the first 16 bits
-            let length: u16 = wbuf.len() as u16 - 2;
-            let bits = wbuf.get_first_slice_mut(..2);
-            bits.copy_from_slice(&length.to_le_bytes());
-        }
-        let mut buffer = vec![0_u8; wbuf.len()];
-        wbuf.copy_into_slice(&mut buffer[..]);
-
-        // Send the message on the link
-        let _ = self.0.write_all(&buffer).await?;
-
-        Ok(buffer.len())
-    }
-
-    pub async fn recv<T: ZMessage>(&self) -> ZResult<T> {
-        // Read from the link
-        let buffer = if self.is_streamed() {
-            // Read and decode the message length
-            let mut length_bytes = [0_u8; 2];
-            let _ = self.read_exact(&mut length_bytes).await?;
-            let to_read = u16::from_le_bytes(length_bytes) as usize;
-            // Read the message
-            let mut buffer = vec![0_u8; to_read];
-            let _ = self.read_exact(&mut buffer).await?;
-            buffer
-        } else {
-            // Read the message
-            let mut buffer = vec![0_u8; self.get_mtu() as usize];
-            let n = self.read(&mut buffer).await?;
-            buffer.truncate(n);
-            buffer
-        };
-
-        let mut zbuf = ZBuf::from(buffer);
-
-        let header = zbuf.read().ok_or_else(|| zerror!("Decoding failed"))?;
-        if crate::net::protocol::message::mid(header) != T::ID {
-            bail!("Wrong message");
-        }
-        let msg = T::read(&mut zbuf, header).ok_or_else(|| zerror!("Decoding failed"))?;
-
-        Ok(msg)
-    }
-
-    pub(crate) async fn write_transport_message(
-        &self,
-        msg: &mut TransportMessage,
-    ) -> ZResult<usize> {
-        // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        if self.is_streamed() {
-            // Reserve 16 bits to write the length
-            wbuf.write_bytes(&[0_u8, 0_u8]);
-        }
-        // Serialize the message
-        wbuf.write_transport_message(msg);
-        if self.is_streamed() {
-            // Write the length on the first 16 bits
-            let length: u16 = wbuf.len() as u16 - 2;
-            let bits = wbuf.get_first_slice_mut(..2);
-            bits.copy_from_slice(&length.to_le_bytes());
-        }
-        let mut buffer = vec![0_u8; wbuf.len()];
-        wbuf.copy_into_slice(&mut buffer[..]);
-
-        // Send the message on the link
-        let _ = self.0.write_all(&buffer).await?;
-
-        Ok(buffer.len())
-    }
 }
 
 impl Deref for LinkUnicast {
@@ -256,7 +169,7 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
 /*            MULTICAST              */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct LinkMulticast(Arc<dyn LinkMulticastTrait>);
+pub(crate) struct LinkMulticast(pub(crate) Arc<dyn LinkMulticastTrait>);
 
 #[async_trait]
 pub(crate) trait LinkMulticastTrait: Send + Sync {
@@ -268,42 +181,6 @@ pub(crate) trait LinkMulticastTrait: Send + Sync {
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<(usize, Locator)>;
     async fn close(&self) -> ZResult<()>;
-}
-
-impl LinkMulticast {
-    pub async fn send<T: ZMessage>(&self, msg: &mut T) -> ZResult<usize> {
-        // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        msg.write(&mut wbuf);
-        let mut buffer = vec![0_u8; wbuf.len()];
-        wbuf.copy_into_slice(&mut buffer[..]);
-
-        // Send the message on the link
-        let _ = self.0.write_all(&buffer).await;
-
-        Ok(buffer.len())
-    }
-
-    //     pub(crate) async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {
-    //         // Read the message
-    //         let mut buffer = vec![0_u8; self.get_mtu()];
-    //         let (n, locator) = self.read(&mut buffer).await?;
-    //         buffer.truncate(n);
-
-    //         let mut zbuf = ZBuf::from(buffer);
-    //         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
-    //         while zbuf.can_read() {
-    //             match zbuf.read_transport_message() {
-    //                 Some(msg) => messages.push(msg),
-    //                 None => {
-    //                     let e = format!("Decoding error on link: {}", self);
-    //                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
-    //                 }
-    //             }
-    //         }
-
-    //         Ok((messages, locator))
-    //     }
 }
 
 impl Deref for LinkMulticast {

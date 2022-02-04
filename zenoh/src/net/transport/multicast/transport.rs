@@ -14,7 +14,7 @@
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 use super::protocol::core::{ConduitSnList, Priority, Version, WhatAmI, ZInt, ZenohId};
-use super::protocol::message::{Close, Join, SeqNumBytes, TransportMessage, ZenohMessage};
+use super::protocol::message::{Close, CloseReason, Join, SeqNumBytes, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};
@@ -69,7 +69,9 @@ impl Timed for TransportMulticastPeerLeaseTimer {
     async fn run(&mut self) {
         let is_active = self.whatchdog.swap(false, Ordering::AcqRel);
         if !is_active {
-            let _ = self.transport.del_peer(&self.locator, Close::EXPIRED);
+            let _ = self
+                .transport
+                .del_peer(&self.locator, CloseReason::LeaseExpired);
         }
     }
 }
@@ -200,7 +202,7 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
+    pub(crate) async fn close(&self, reason: CloseReason) -> ZResult<()> {
         log::trace!(
             "Closing multicast transport of peer {}: {}",
             self.manager.config.zid,
@@ -216,14 +218,7 @@ impl TransportMulticastInner {
             .clone();
 
         // Close message to be sent on all the links
-        let peer_id = Some(self.manager.zid());
-        let reason_id = reason;
-        // link_only should always be false for user-triggered close. However, in case of
-        // multiple links, it is safer to close all the links first. When no links are left,
-        // the transport is then considered closed.
-        let link_only = true;
-        let attachment = None; // No attachment here
-        let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+        let msg = Close::new(reason);
 
         pipeline.push_transport_message(msg, Priority::Background);
 
@@ -422,11 +417,11 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
+    pub(super) fn del_peer(&self, locator: &Locator, reason: CloseReason) -> ZResult<()> {
         let mut guard = zwrite!(self.peers);
         if let Some(peer) = guard.remove(locator) {
             log::debug!(
-                "Peer {}/{}/{} has left multicast {} with reason: {}",
+                "Peer {}/{}/{} has left multicast {} with reason: {:?}",
                 peer.zid,
                 peer.whatami,
                 locator,

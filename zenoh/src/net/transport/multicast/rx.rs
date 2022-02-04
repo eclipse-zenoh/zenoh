@@ -16,10 +16,11 @@ use super::protocol::core::{Priority, Reliability, ZInt};
 #[cfg(feature = "stats")]
 use super::protocol::message::ZenohBody;
 use super::protocol::message::{
-    Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
+    Fragment, Frame, Join, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use crate::net::link::Locator;
+use crate::net::protocol::io::ZSlice;
 use std::sync::MutexGuard;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::zerror;
@@ -66,10 +67,94 @@ impl TransportMulticastInner {
         peer.handler.handle_message(msg)
     }
 
+    // fn handle_frame(
+    //     &self,
+    //     sn: ZInt,
+    //     // payload: FramePayload,
+    //     mut guard: MutexGuard<'_, TransportChannelRx>,
+    //     peer: &TransportMulticastPeer,
+    // ) -> ZResult<()> {
+    // let precedes = guard.sn.precedes(sn)?;
+    // if !precedes {
+    //     log::debug!(
+    //         "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+    //         self.manager.config.zid,
+    //         sn,
+    //         guard.sn.get()
+    //     );
+    //     // Drop the fragments if needed
+    //     if !guard.defrag.is_empty() {
+    //         guard.defrag.clear();
+    //     }
+    //     // Keep reading
+    //     return Ok(());
+    // }
+
+    // // Set will always return OK because we have already checked
+    // // with precedes() that the sn has the right resolution
+    // let _ = guard.sn.set(sn);
+    // match payload {
+    //     FramePayload::Fragment { buffer, is_final } => {
+    //         if guard.defrag.is_empty() {
+    //             let _ = guard.defrag.sync(sn);
+    //         }
+    //         guard.defrag.push(sn, buffer)?;
+    //         if is_final {
+    //             // When shared-memory feature is disabled, msg does not need to be mutable
+    //             let msg = guard.defrag.defragment().ok_or_else(|| {
+    //                 zerror!(
+    //                     "Transport {}: {}. Defragmentation error.",
+    //                     self.manager.config.zid,
+    //                     self.locator
+    //                 )
+    //             })?;
+    //             self.trigger_callback(msg, peer)
+    //         } else {
+    //             Ok(())
+    //         }
+    //     }
+    //     FramePayload::Messages { mut messages } => {
+    //         for msg in messages.drain(..) {
+    //             self.trigger_callback(msg, peer)?;
+    //         }
+    //         Ok(())
+    //     }
+    // }
+    // }
+
     fn handle_frame(
         &self,
         sn: ZInt,
-        payload: FramePayload,
+        mut payload: Vec<ZenohMessage>,
+        mut guard: MutexGuard<'_, TransportChannelRx>,
+        peer: &TransportMulticastPeer,
+    ) -> ZResult<()> {
+        let precedes = guard.sn.precedes(sn)?;
+        if !precedes {
+            log::debug!(
+                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                self.manager.config.zid,
+                sn,
+                guard.sn.get()
+            );
+            // Keep reading
+            return Ok(());
+        }
+
+        // Set will always return OK because we have already checked
+        // with precedes() that the sn has the right resolution
+        let _ = guard.sn.set(sn);
+        for msg in payload.drain(..) {
+            self.trigger_callback(msg, peer)?;
+        }
+        Ok(())
+    }
+
+    fn handle_fragment(
+        &self,
+        sn: ZInt,
+        payload: ZSlice,
+        has_more: bool,
         mut guard: MutexGuard<'_, TransportChannelRx>,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
@@ -92,32 +177,22 @@ impl TransportMulticastInner {
         // Set will always return OK because we have already checked
         // with precedes() that the sn has the right resolution
         let _ = guard.sn.set(sn);
-        match payload {
-            FramePayload::Fragment { buffer, is_final } => {
-                if guard.defrag.is_empty() {
-                    let _ = guard.defrag.sync(sn);
-                }
-                guard.defrag.push(sn, buffer)?;
-                if is_final {
-                    // When shared-memory feature is disabled, msg does not need to be mutable
-                    let msg = guard.defrag.defragment().ok_or_else(|| {
-                        zerror!(
-                            "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.zid,
-                            self.locator
-                        )
-                    })?;
-                    self.trigger_callback(msg, peer)
-                } else {
-                    Ok(())
-                }
-            }
-            FramePayload::Messages { mut messages } => {
-                for msg in messages.drain(..) {
-                    self.trigger_callback(msg, peer)?;
-                }
-                Ok(())
-            }
+        if guard.defrag.is_empty() {
+            let _ = guard.defrag.sync(sn);
+        }
+        guard.defrag.push(sn, payload)?;
+        if !has_more {
+            // When shared-memory feature is disabled, msg does not need to be mutable
+            let msg = guard.defrag.defragment().ok_or_else(|| {
+                zerror!(
+                    "Transport {}: {}. Defragmentation error.",
+                    self.manager.config.zid,
+                    self.locator
+                )
+            })?;
+            self.trigger_callback(msg, peer)
+        } else {
+            Ok(())
         }
     }
 
@@ -201,29 +276,58 @@ impl TransportMulticastInner {
 
                 match msg.body {
                     TransportBody::Frame(Frame {
-                        channel,
+                        reliability,
                         sn,
                         payload,
+                        exts,
                     }) => {
                         let c = if self.is_qos() {
-                            &peer.conduit_rx[channel.priority as usize]
-                        } else if channel.priority == Priority::default() {
-                            &peer.conduit_rx[0]
+                            match exts.qos.as_ref() {
+                                Some(q) => &peer.conduit_rx[q.priority.id() as usize],
+                                None => &peer.conduit_rx[Priority::default().id() as usize],
+                            }
                         } else {
-                            bail!(
-                                "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.zid,
-                                self.locator,
-                                channel.priority,
-                                peer.locator
-                            );
+                            &peer.conduit_rx[0]
                         };
 
-                        let guard = match channel.reliability {
+                        let guard = match reliability {
                             Reliability::Reliable => zlock!(c.reliable),
                             Reliability::BestEffort => zlock!(c.best_effort),
                         };
                         self.handle_frame(sn, payload, guard, peer)
+                    }
+                    TransportBody::Fragment(Fragment {
+                        reliability,
+                        sn,
+                        payload,
+                        has_more,
+                        exts,
+                    }) => {
+                        let c = if self.is_qos() {
+                            match exts.qos.as_ref() {
+                                Some(q) => &peer.conduit_rx[q.priority.id() as usize],
+                                None => &peer.conduit_rx[Priority::default().id() as usize],
+                            }
+                        } else {
+                            &peer.conduit_rx[0]
+                        };
+
+                        match reliability {
+                            Reliability::Reliable => self.handle_fragment(
+                                sn,
+                                payload,
+                                has_more,
+                                zlock!(c.reliable),
+                                peer,
+                            ),
+                            Reliability::BestEffort => self.handle_fragment(
+                                sn,
+                                payload,
+                                has_more,
+                                zlock!(c.best_effort),
+                                peer,
+                            ),
+                        }
                     }
                     TransportBody::Join(join) => self.handle_join_from_peer(join, peer),
                     TransportBody::Close(close) => {

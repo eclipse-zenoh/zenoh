@@ -17,7 +17,7 @@ use crate::net::protocol::io::{zint_len, WBuf, ZBuf};
 
 /// # Unknown extension
 ///
-/// It includes the zenoh properties.
+/// It includes an array of bytes.
 ///  
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+

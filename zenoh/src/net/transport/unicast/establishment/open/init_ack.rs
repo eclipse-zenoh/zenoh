@@ -15,7 +15,7 @@ use super::OResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{WhatAmI, ZenohId};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::{Close, InitAck, SeqNumBytes, WireProperties};
+use crate::net::protocol::message::{CloseReason, InitAck, SeqNumBytes, WireProperties};
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::TransportManager;
@@ -50,7 +50,7 @@ pub(super) async fn recv(
                 init_ack.sn_bytes.value()
             )
             .into(),
-            Some(Close::INVALID),
+            Some(CloseReason::Invalid),
         ));
     }
 
@@ -93,7 +93,7 @@ pub(super) async fn recv(
             };
         }
 
-        let mut ext = ext.map_err(|e| (e, Some(Close::INVALID)))?;
+        let mut ext = ext.map_err(|e| (e, Some(CloseReason::Invalid)))?;
         if let Some(ext) = ext.take() {
             open_syn_auth_ext.insert(pa.id().into(), ext);
         }

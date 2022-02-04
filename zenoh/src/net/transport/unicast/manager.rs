@@ -18,6 +18,7 @@ use super::transport::{TransportUnicastConfig, TransportUnicastInner};
 use super::*;
 use crate::config::Config;
 use crate::net::link::*;
+use crate::net::protocol::message::CloseReason;
 use async_std::prelude::*;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
@@ -274,7 +275,7 @@ impl TransportManager {
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportUnicastInner>>>();
         for tu in tu_guard.drain(..) {
-            let _ = tu.close(Close::GENERIC).await;
+            let _ = tu.close(CloseReason::Generic).await;
         }
     }
 

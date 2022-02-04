@@ -16,7 +16,7 @@ use super::AResult;
 use super::Cookie;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::message::{Close, OpenSyn, WireProperties};
+use crate::net::protocol::message::{CloseReason, OpenSyn, WireProperties};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
 use zenoh_util::crypto::hmac;
@@ -47,12 +47,12 @@ pub(super) async fn recv(
     let encrypted = open_syn.cookie.to_vec();
     if input.cookie_hash != hmac::digest(&encrypted) {
         let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
-        return Err((e.into(), Some(Close::INVALID)));
+        return Err((e.into(), Some(CloseReason::Invalid)));
     }
 
     // Decrypt the cookie with the cyper
     let (cookie, mut ps_cookie) =
-        Cookie::decrypt(encrypted, &manager.cipher).map_err(|e| (e, Some(Close::INVALID)))?;
+        Cookie::decrypt(encrypted, &manager.cipher).map_err(|e| (e, Some(CloseReason::Invalid)))?;
 
     // Validate with the peer authenticators
     let mut open_syn_auth: WireProperties = open_syn
@@ -94,7 +94,7 @@ pub(super) async fn recv(
             };
         }
 
-        let mut ext = ext.map_err(|e| (e, Some(Close::INVALID)))?;
+        let mut ext = ext.map_err(|e| (e, Some(CloseReason::Invalid)))?;
         if let Some(ext) = ext.take() {
             open_ack_auth_ext.insert(pa.id().into(), ext);
         }

@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::TransportId;
+use super::{TransportId, TransportProto};
 use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::{WBuf, ZBuf, ZSlice};
-use crate::net::protocol::message::extension::{eid, has_more, ZExt, ZExtProperties, ZExtUnknown};
+use crate::net::protocol::message::extensions::{eid, has_more, ZExt, ZExtProperties, ZExtUnknown};
 use crate::net::protocol::message::{has_flag, ZMessage};
 use std::convert::TryFrom;
 use std::time::Duration;
@@ -31,7 +31,7 @@ use std::time::Duration;
 /// Flags:
 /// - A: Ack            If A==0 then the message is an OpenSyn else it is an OpenAck
 /// - T: Lease period   if T==1 then the lease period is in seconds else in milliseconds
-/// - O: Option next    If O==1 then the next byte is an additional option
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -43,12 +43,20 @@ use std::time::Duration;
 /// +---------------+
 /// ~     <u8>      ~ if Flag(A)==0 (**) -- Cookie
 /// +---------------+
-/// ```
+/// ~   [OpenExts]  ~ if Flag(Z)==1
+/// +---------------+
 ///
 /// (*)     The initial sequence number MUST be compatible with the sequence number resolution agreed in the
 ///         [`super::InitSyn`]-[`super::InitAck`] message exchange
 /// (**)    The cookie MUST be the same received in the [`super::InitAck`]from the corresponding zenoh node
 /// ```
+///
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65535 bytes.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct OpenSyn {
     pub lease: Duration,
@@ -74,6 +82,7 @@ impl OpenSyn {
 }
 
 impl ZMessage for OpenSyn {
+    type Proto = TransportProto;
     const ID: u8 = TransportId::Open.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -102,7 +111,7 @@ impl ZMessage for OpenSyn {
         zcheck!(wbuf.write_zint(self.initial_sn));
         zcheck!(wbuf.write_zslice_array(self.cookie.clone()));
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -157,6 +166,7 @@ impl OpenAck {
 }
 
 impl ZMessage for OpenAck {
+    type Proto = TransportProto;
     const ID: u8 = TransportId::Open.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -184,7 +194,7 @@ impl ZMessage for OpenAck {
         }
         zcheck!(wbuf.write_zint(self.initial_sn));
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -224,11 +234,10 @@ impl ZMessage for OpenAck {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum OpenExtId {
     // 0x00: Reserved
-    // 0x01: Reserved
-    User = 0x02,
-    // 0x03: Reserved
-    Authentication = 0x04,
-    // 0x05: Reserved
+    // ..  : Reserved
+    // 0x02: Reserved
+    Authentication = 0x03,
+    // 0x04: Reserved
     // ..  : Reserved
     // 0x1f: Reserved
 }
@@ -237,11 +246,9 @@ impl TryFrom<u8> for OpenExtId {
     type Error = ();
 
     fn try_from(id: u8) -> Result<Self, Self::Error> {
-        const USR: u8 = OpenExtId::User.id();
         const AUT: u8 = OpenExtId::Authentication.id();
 
         match id {
-            USR => Ok(OpenExtId::User),
             AUT => Ok(OpenExtId::Authentication),
             _ => Err(()),
         }
@@ -253,28 +260,22 @@ impl OpenExtId {
         self as u8
     }
 }
-type OpenExtUsr = ZExt<ZExtProperties<{ OpenExtId::User.id() }>>;
 type OpenExtAut = ZExt<ZExtProperties<{ OpenExtId::Authentication.id() }>>;
 type OpenExtUnk = ZExt<ZExtUnknown>;
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct OpenExts {
     pub authentication: Option<OpenExtAut>,
-    pub user: Option<OpenExtUsr>,
 }
 
 impl OpenExts {
     fn is_empty(&self) -> bool {
-        self.authentication.is_none() && self.user.is_none()
+        self.authentication.is_none()
     }
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
         if let Some(aut) = self.authentication.as_ref() {
-            let has_more = self.user.is_some();
+            let has_more = false;
             zcheck!(aut.write(wbuf, has_more));
-        }
-
-        if let Some(usr) = self.user.as_ref() {
-            zcheck!(usr.write(wbuf, false));
         }
 
         true
@@ -291,10 +292,6 @@ impl OpenExts {
                     OpenExtId::Authentication => {
                         let e: OpenExtAut = ZExt::read(zbuf, header)?;
                         exts.authentication = Some(e);
-                    }
-                    OpenExtId::User => {
-                        let e: OpenExtUsr = ZExt::read(zbuf, header)?;
-                        exts.user = Some(e);
                     }
                 },
                 Err(_) => {

@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::ScoutingId;
+use super::{ScoutingId, ScoutingProto};
 use crate::net::protocol::core::{NonZeroZInt, Version, WhatAmI, ZenohId};
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::message::extension::{
+use crate::net::protocol::message::extensions::{
     eid, has_more, ZExt, ZExtPolicy, ZExtProperties, ZExtUnknown, ZExtZInt,
 };
 use crate::net::protocol::message::{has_flag, ZMessage};
@@ -143,6 +143,7 @@ impl Hello {
 }
 
 impl ZMessage for Hello {
+    type Proto = ScoutingProto;
     const ID: u8 = ScoutingId::Hello.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -177,7 +178,7 @@ impl ZMessage for Hello {
             zcheck!(wbuf.write_string_array(self.locators.as_slice()));
         }
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -256,6 +257,7 @@ impl HelloExtId {
 type HelloExtExp = ZExt<ZExtZInt<{ HelloExtId::Experimental.id() }>>;
 type HelloExtUsr = ZExt<ZExtProperties<{ HelloExtId::User.id() }>>;
 type HelloExtUnk = ZExt<ZExtUnknown>;
+
 #[derive(Clone, Default, Debug, Eq, PartialEq)]
 pub struct HelloExts {
     experimental: Option<HelloExtExp>,

@@ -18,7 +18,7 @@ use crate::net::protocol::io::{WBuf, ZBuf};
 ///
 /// An extension with no body.
 ///
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ZExtEmpty<const ID: u8>;
 
 impl<const ID: u8> ZExtension for ZExtEmpty<{ ID }> {

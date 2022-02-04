@@ -220,9 +220,5 @@ name = "data_creation"
 harness = false
 
 [[bench]]
-name = "frame_codec"
-harness = false
-
-[[bench]]
 name = "tables_bench"
 harness = false

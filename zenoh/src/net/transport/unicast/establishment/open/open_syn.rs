@@ -16,7 +16,7 @@ use super::OResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::extensions::{ZExt, ZExtPolicy};
 use crate::net::protocol::message::{OpenSyn, WireProperties};
 use crate::net::transport::TransportManager;
 

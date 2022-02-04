@@ -11,11 +11,11 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::ScoutingId;
+use super::{ScoutingId, ScoutingProto};
 use crate::net::protocol::core::whatami::WhatAmIMatcher;
 use crate::net::protocol::core::{NonZeroZInt, Version, ZenohId};
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::message::extension::{
+use crate::net::protocol::message::extensions::{
     eid, has_more, ZExt, ZExtPolicy, ZExtProperties, ZExtUnknown, ZExtZInt,
 };
 use crate::net::protocol::message::{has_flag, ZMessage};
@@ -114,6 +114,7 @@ impl Scout {
 }
 
 impl ZMessage for Scout {
+    type Proto = ScoutingProto;
     const ID: u8 = ScoutingId::Scout.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -142,7 +143,7 @@ impl ZMessage for Scout {
             zcheck!(wbuf.write_zenohid(zid));
         }
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }

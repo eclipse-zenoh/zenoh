@@ -18,10 +18,9 @@ pub(crate) mod open;
 use super::super::TransportManager;
 use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::message::TransportMessage;
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::message::{SeqNumBytes, WireProperties};
+use crate::net::protocol::message::{Close, CloseReason, SeqNumBytes, WireProperties};
 use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::convert::TryFrom;
@@ -110,16 +109,13 @@ pub(super) async fn close_link(
     link: &LinkUnicast,
     manager: &TransportManager,
     auth_link: &AuthenticatedPeerLink,
-    mut reason: Option<u8>,
+    mut reason: Option<CloseReason>,
 ) {
     if let Some(reason) = reason.take() {
         // Build the close message
-        let zid = Some(manager.config.zid);
-        let link_only = true;
-        let attachment = None;
-        let mut message = TransportMessage::make_close(zid, reason, link_only, attachment);
+        let mut message = Close::new(reason);
         // Send the close message on the link
-        let _ = link.write_transport_message(&mut message).await;
+        let _ = link.send(&mut message).await;
     }
 
     // Close the link

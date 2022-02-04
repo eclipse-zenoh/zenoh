@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod constants;
-pub mod extension;
+pub mod extensions;
 mod reader;
 mod scouting;
 mod shm;
@@ -122,7 +122,6 @@ pub use writer::*;
 /// the maximum representable ZInt value is given by the following formula:
 ///
 ///     Max ZInt Value := 2 ^ (7 * #max bytes)
-/// ```
 ///
 ///
 /// # Array field
@@ -377,7 +376,8 @@ pub(crate) trait Options {
     fn has_options(&self) -> bool;
 }
 
-pub trait ZMessage {
+pub trait ZMessage: Clone + PartialEq + Debug {
+    type Proto;
     const ID: u8;
 
     fn write(&self, wbuf: &mut WBuf) -> bool;

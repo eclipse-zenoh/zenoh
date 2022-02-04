@@ -12,14 +12,15 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
-use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::message::extension::{ZExt, ZExtPolicy};
-use super::protocol::message::{Join, SeqNumBytes, TransportMessage};
+use super::protocol::io::{WBuf, ZBuf, ZSlice};
+use super::protocol::message::extensions::{ZExt, ZExtPolicy};
+use super::protocol::message::{Join, SeqNumBytes, TransportMessage, TransportProto, ZMessage};
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
 use crate::net::protocol::core::{ConduitSn, Priority, WhatAmI, ZenohId};
+use crate::net::protocol::message::KeepAlive;
 use crate::net::protocol::VERSION;
 use crate::net::transport::common::batch::SerializationBatch;
 use async_std::prelude::*;
@@ -33,6 +34,44 @@ use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
+
+impl LinkMulticast {
+    pub async fn send<T: ZMessage<Proto = TransportProto>>(&self, msg: &mut T) -> ZResult<usize> {
+        const WBUF_SIZE: usize = 64;
+
+        // Create the buffer for serializing the message
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        msg.write(&mut wbuf);
+        let mut buffer = vec![0_u8; wbuf.len()];
+        wbuf.copy_into_slice(&mut buffer[..]);
+
+        // Send the message on the link
+        let _ = self.0.write_all(&buffer).await;
+
+        Ok(buffer.len())
+    }
+
+    //     pub(crate) async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {
+    //         // Read the message
+    //         let mut buffer = vec![0_u8; self.get_mtu()];
+    //         let (n, locator) = self.read(&mut buffer).await?;
+    //         buffer.truncate(n);
+
+    //         let mut zbuf = ZBuf::from(buffer);
+    //         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
+    //         while zbuf.can_read() {
+    //             match zbuf.read_transport_message() {
+    //                 Some(msg) => messages.push(msg),
+    //                 None => {
+    //                     let e = format!("Decoding error on link: {}", self);
+    //                     return zerror!(ZErrorKind::InvalidMessage { descr: e });
+    //                 }
+    //             }
+    //         }
+
+    //         Ok((messages, locator))
+    //     }
+}
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) zid: ZenohId,
@@ -274,9 +313,7 @@ async fn tx_task(
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
-                let pid = Some(config.zid);
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(pid, attachment);
+                let message = KeepAlive::new();
                 pipeline.push_transport_message(message, Priority::Background);
             }
             Action::Stop => {
@@ -362,7 +399,7 @@ async fn rx_task(
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
+                    match TransportMessage::read(&mut zbuf) {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);

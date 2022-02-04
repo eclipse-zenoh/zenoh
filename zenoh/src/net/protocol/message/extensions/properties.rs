@@ -15,6 +15,7 @@ use super::ZExtension;
 use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::{zint_len, WBuf, ZBuf};
 use crate::net::protocol::message::WireProperties;
+use std::ops::{Deref, DerefMut};
 
 /// # User extension
 ///
@@ -27,12 +28,12 @@ use crate::net::protocol::message::WireProperties;
 ///
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ZExtProperties<const ID: u8> {
-    pub properties: WireProperties,
+    pub value: WireProperties,
 }
 
 impl<const ID: u8> ZExtProperties<{ ID }> {
-    pub fn new(properties: WireProperties) -> Self {
-        Self { properties }
+    pub fn new(value: WireProperties) -> Self {
+        Self { value }
     }
 }
 
@@ -48,31 +49,45 @@ impl<const ID: u8> ZExtension for ZExtProperties<{ ID }> {
     }
 
     fn length(&self) -> usize {
-        self.properties
+        self.value
             .iter()
-            .fold(zint_len(self.properties.len() as ZInt), |len, (k, v)| {
+            .fold(zint_len(self.value.len() as ZInt), |len, (k, v)| {
                 len + zint_len(*k) + zint_len(v.len() as ZInt) + v.len()
             })
     }
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
-        wbuf.write_wire_properties(&self.properties)
+        wbuf.write_wire_properties(&self.value)
     }
 
     fn read(zbuf: &mut ZBuf, _header: u8, _length: usize) -> Option<Self> {
-        let properties = zbuf.read_wire_properties()?;
-        Some(Self { properties })
+        let value = zbuf.read_wire_properties()?;
+        Some(Self { value })
     }
 }
 
 impl<const ID: u8> From<WireProperties> for ZExtProperties<{ ID }> {
-    fn from(properties: WireProperties) -> Self {
-        Self::new(properties)
+    fn from(value: WireProperties) -> Self {
+        Self::new(value)
     }
 }
 
 impl<const ID: u8> From<ZExtProperties<{ ID }>> for WireProperties {
     fn from(ext: ZExtProperties<{ ID }>) -> WireProperties {
-        ext.properties
+        ext.value
+    }
+}
+
+impl<const ID: u8> Deref for ZExtProperties<{ ID }> {
+    type Target = WireProperties;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<const ID: u8> DerefMut for ZExtProperties<{ ID }> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }

@@ -103,23 +103,14 @@ impl ZenohMessage {
 #[allow(dead_code)]
 #[cfg(feature = "shared-memory")]
 impl TransportMessage {
-    pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-        let mut res = false;
-
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shmbuf(shmr)?;
-        }
-
-        Ok(res)
+    pub(crate) fn map_to_shmbuf(
+        &mut self,
+        _shmr: Arc<RwLock<SharedMemoryReader>>,
+    ) -> ZResult<bool> {
+        Ok(false)
     }
 
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        let mut res = false;
-
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shminfo()?;
-        }
-
-        Ok(res)
+        Ok(false)
     }
 }

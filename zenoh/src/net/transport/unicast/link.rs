@@ -13,12 +13,13 @@
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::core::Priority;
-use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::message::TransportMessage;
+use super::protocol::io::{WBuf, ZBuf, ZSlice};
+use super::protocol::message::{TransportMessage, TransportProto, ZMessage};
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
+use crate::net::protocol::message::KeepAlive;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -29,6 +30,67 @@ use zenoh_util::collections::RecyclingObjectPool;
 use zenoh_util::core::Result as ZResult;
 use zenoh_util::sync::Signal;
 use zenoh_util::zerror;
+
+impl LinkUnicast {
+    pub(crate) async fn send<T: ZMessage<Proto = TransportProto>>(
+        &self,
+        msg: &mut T,
+    ) -> ZResult<usize> {
+        const WBUF_SIZE: usize = 64;
+
+        // Create the buffer for serializing the message
+        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        if self.is_streamed() {
+            // Reserve 16 bits to write the length
+            wbuf.write_bytes(&[0_u8, 0_u8]);
+        }
+        // Serialize the message
+        msg.write(&mut wbuf);
+        if self.is_streamed() {
+            // Write the length on the first 16 bits
+            let length: u16 = wbuf.len() as u16 - 2;
+            let bits = wbuf.get_first_slice_mut(..2);
+            bits.copy_from_slice(&length.to_le_bytes());
+        }
+        let mut buffer = vec![0_u8; wbuf.len()];
+        wbuf.copy_into_slice(&mut buffer[..]);
+
+        // Send the message on the link
+        let _ = self.0.write_all(&buffer).await?;
+
+        Ok(buffer.len())
+    }
+
+    pub(crate) async fn recv<T: ZMessage<Proto = TransportProto>>(&self) -> ZResult<T> {
+        // Read from the link
+        let buffer = if self.is_streamed() {
+            // Read and decode the message length
+            let mut length_bytes = [0_u8; 2];
+            let _ = self.read_exact(&mut length_bytes).await?;
+            let to_read = u16::from_le_bytes(length_bytes) as usize;
+            // Read the message
+            let mut buffer = vec![0_u8; to_read];
+            let _ = self.read_exact(&mut buffer).await?;
+            buffer
+        } else {
+            // Read the message
+            let mut buffer = vec![0_u8; self.get_mtu() as usize];
+            let n = self.read(&mut buffer).await?;
+            buffer.truncate(n);
+            buffer
+        };
+
+        let mut zbuf = ZBuf::from(buffer);
+
+        let header = zbuf.read().ok_or_else(|| zerror!("Decoding failed"))?;
+        if crate::net::protocol::message::mid(header) != T::ID {
+            bail!("Wrong message");
+        }
+        let msg = T::read(&mut zbuf, header).ok_or_else(|| zerror!("Decoding failed"))?;
+
+        Ok(msg)
+    }
+}
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
@@ -199,9 +261,7 @@ async fn tx_task(
                 None => break,
             },
             Err(_) => {
-                let pid = None;
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(pid, attachment);
+                let message = KeepAlive::new();
                 pipeline.push_transport_message(message, Priority::Background);
             }
         }
@@ -282,7 +342,7 @@ async fn rx_task_stream(
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
 
                 while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
+                    match TransportMessage::read(&mut zbuf) {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
@@ -359,7 +419,7 @@ async fn rx_task_dgram(
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
+                    match TransportMessage::read(&mut zbuf) {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
@@ -367,7 +427,7 @@ async fn rx_task_dgram(
                             transport.receive_message(msg, &link)?
                         }
                         None => {
-                            bail!("{}: decoding error", link)
+                            bail!("{}: decoding error", link);
                         }
                     }
                 }

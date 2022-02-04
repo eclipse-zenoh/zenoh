@@ -19,11 +19,11 @@ mod open_syn;
 use super::authenticator::AuthenticatedPeerLink;
 use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::message::Close;
+use crate::net::protocol::message::CloseReason;
 use crate::net::transport::TransportManager;
 use zenoh_util::core::Result as ZResult;
 
-pub(super) type AError = (zenoh_util::core::Error, Option<u8>);
+pub(super) type AError = (zenoh_util::core::Error, Option<CloseReason>);
 pub(super) type AResult<T> = Result<T, AError>;
 
 pub(crate) async fn accept_link(
@@ -54,7 +54,7 @@ pub(crate) async fn accept_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(Close::INVALID)).await;
+                    close_link(link, manager, auth_link, Some(CloseReason::Invalid)).await;
                     return Err(e);
                 }
             }
@@ -90,22 +90,26 @@ pub(crate) async fn accept_link(
     }
 
     // Add the link to the transport
-    let _ = step!(
-        step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-            .add_link(link.clone(), LinkUnicastDirection::Inbound)
-            .map_err(|e| (e, Some(Close::MAX_LINKS)))
-    );
+    let _ = step!(step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .add_link(link.clone(), LinkUnicastDirection::Inbound)
+    .map_err(|e| (e, Some(CloseReason::MaxLinks))));
 
     // Sync the RX sequence number
-    let _ = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-        .sync(output.initial_sn)
-        .await;
+    let _ = step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .sync(output.initial_sn)
+    .await;
 
     log::debug!("New transport link established from {}: {}", zid, link);
 
-    let initial_sn = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-        .config
-        .initial_sn_tx;
+    let initial_sn = step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .config
+    .initial_sn_tx;
     let input = open_ack::Input {
         initial_sn,
         open_ack_auth_ext: output.open_ack_auth_ext,
@@ -119,7 +123,7 @@ pub(crate) async fn accept_link(
     };
     let _ = step!(transport_finalize(link, manager, input)
         .await
-        .map_err(|e| (e, Some(Close::INVALID))));
+        .map_err(|e| (e, Some(CloseReason::Invalid))));
 
     Ok(())
 }

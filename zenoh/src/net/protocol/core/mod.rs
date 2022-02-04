@@ -830,7 +830,7 @@ impl From<&ZenohId> for uhlc::ID {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,
@@ -844,7 +844,13 @@ pub enum Priority {
 }
 
 impl Priority {
+    pub const MIN: u8 = Priority::Control.id();
+    pub const MAX: u8 = Priority::Background.id();
     pub const NUM: usize = 8;
+
+    pub const fn id(self) -> u8 {
+        self as u8
+    }
 }
 
 impl Default for Priority {
@@ -854,31 +860,13 @@ impl Default for Priority {
 }
 
 impl TryFrom<u8> for Priority {
-    type Error = zenoh_util::core::Error;
+    type Error = ();
 
-    fn try_from(priority: u8) -> Result<Self, Self::Error> {
-        const CONTROL: u8 = Priority::Control as u8;
-        const REAL_TIME: u8 = Priority::RealTime as u8;
-        const INTERACTIVE_HIGH: u8 = Priority::InteractiveHigh as u8;
-        const INTERACTIVE_LOW: u8 = Priority::InteractiveLow as u8;
-        const DATA_HIGH: u8 = Priority::DataHigh as u8;
-        const DATA: u8 = Priority::Data as u8;
-        const DATA_LOW: u8 = Priority::DataLow as u8;
-        const BACKGROUND: u8 = Priority::Background as u8;
-
-        match priority {
-            CONTROL => Ok(Priority::Control),
-            REAL_TIME => Ok(Priority::RealTime),
-            INTERACTIVE_HIGH => Ok(Priority::InteractiveHigh),
-            INTERACTIVE_LOW => Ok(Priority::InteractiveLow),
-            DATA_HIGH => Ok(Priority::DataHigh),
-            DATA => Ok(Priority::Data),
-            DATA_LOW => Ok(Priority::DataLow),
-            BACKGROUND => Ok(Priority::Background),
-            unknown => bail!(
-                "{} is not a valid priority value. Admitted values are [0-7].",
-                unknown
-            ),
+    fn try_from(b: u8) -> Result<Self, Self::Error> {
+        if (Self::MIN..=Self::MAX).contains(&b) {
+            Ok(unsafe { std::mem::transmute(b) })
+        } else {
+            Err(())
         }
     }
 }

@@ -15,8 +15,8 @@ use super::{init_syn, AResult, Cookie};
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
-use crate::net::protocol::message::{Close, InitAck, WireProperties};
+use crate::net::protocol::message::extensions::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::{CloseReason, InitAck, WireProperties};
 use crate::net::protocol::VERSION;
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::TransportManager;
@@ -62,7 +62,7 @@ pub(super) async fn send(
                 input.init_syn_auth_ext.remove(&pa.id().into()),
             )
             .await
-            .map_err(|e| (e, Some(Close::INVALID)))?;
+            .map_err(|e| (e, Some(CloseReason::Invalid)))?;
         // Add attachment property if available
         if let Some(ext) = ext.take() {
             init_ack_auth_ext.insert(pa.id().into(), ext);
@@ -79,7 +79,7 @@ pub(super) async fn send(
             &mut *zasynclock!(manager.prng),
             init_ack_ckie_ext,
         )
-        .map_err(|e| (e, Some(Close::INVALID)))?;
+        .map_err(|e| (e, Some(CloseReason::Invalid)))?;
 
     // Compute the cookie hash
     let cookie_hash = hmac::digest(&encrypted);

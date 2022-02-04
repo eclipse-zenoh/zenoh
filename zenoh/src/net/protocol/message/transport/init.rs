@@ -11,10 +11,10 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{SeqNumBytes, TransportId};
+use super::{SeqNumBytes, TransportId, TransportProto};
 use crate::net::protocol::core::{NonZeroZInt, Version, WhatAmI, ZenohId};
 use crate::net::protocol::io::{WBuf, ZBuf, ZSlice};
-use crate::net::protocol::message::extension::{
+use crate::net::protocol::message::extensions::{
     eid, has_more, ZExt, ZExtEmpty, ZExtPolicy, ZExtProperties, ZExtUnknown, ZExtZInt,
 };
 use crate::net::protocol::message::{has_flag, ZMessage};
@@ -61,6 +61,8 @@ use std::convert::TryFrom;
 /// +---------------+
 /// ~      <u8>     ~ if Flag(A)==1 -- Cookie
 /// +---------------+
+/// ~   [InitExts]  ~ if Flag(Z)==1
+/// +---------------+
 ///
 /// (*) WhatAmI. It indicates the role of the zenoh node sending the INIT message.
 ///    The valid WhatAmI values are:
@@ -84,10 +86,10 @@ use std::convert::TryFrom;
 ///         sn_res := 2^(7 * max_sn_bs) + 1
 ///
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundaries of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message MUST NOT exceed 65_535 bytes.
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65535 bytes.
 /// ```
 ///
 #[derive(Debug, Clone, PartialEq)]
@@ -133,6 +135,7 @@ impl InitSyn {
 }
 
 impl ZMessage for InitSyn {
+    type Proto = TransportProto;
     const ID: u8 = TransportId::Init.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -161,7 +164,7 @@ impl ZMessage for InitSyn {
 
         zcheck!(wbuf.write_zenohid(&self.zid));
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -170,6 +173,10 @@ impl ZMessage for InitSyn {
     }
 
     fn read(zbuf: &mut ZBuf, header: u8) -> Option<InitSyn> {
+        if has_flag(header, InitAck::FLAG_A) {
+            return None;
+        }
+
         let version = zbuf.read()?;
 
         let tmp = zbuf.read()?;
@@ -239,6 +246,7 @@ impl InitAck {
 }
 
 impl ZMessage for InitAck {
+    type Proto = TransportProto;
     const ID: u8 = TransportId::Init.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -268,7 +276,7 @@ impl ZMessage for InitAck {
         zcheck!(wbuf.write_zenohid(&self.zid));
         zcheck!(wbuf.write_zslice_array(self.cookie.clone()));
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -318,10 +326,9 @@ impl ZMessage for InitAck {
 pub enum InitExtId {
     // 0x00: Reserved
     Experimental = 0x01,
-    User = 0x02,
-    QoS = 0x03,
-    Authentication = 0x04,
-    // 0x05: Reserved
+    QoS = 0x02,
+    Authentication = 0x03,
+    // 0x04: Reserved
     // ..  : Reserved
     // 0x1f: Reserved
 }
@@ -331,13 +338,11 @@ impl TryFrom<u8> for InitExtId {
 
     fn try_from(id: u8) -> Result<Self, Self::Error> {
         const EXP: u8 = InitExtId::Experimental.id();
-        const USR: u8 = InitExtId::User.id();
         const QOS: u8 = InitExtId::QoS.id();
         const AUT: u8 = InitExtId::Authentication.id();
 
         match id {
             EXP => Ok(InitExtId::Experimental),
-            USR => Ok(InitExtId::User),
             QOS => Ok(InitExtId::QoS),
             AUT => Ok(InitExtId::Authentication),
             _ => Err(()),
@@ -352,7 +357,6 @@ impl InitExtId {
 }
 
 type InitExtExp = ZExt<ZExtZInt<{ InitExtId::Experimental.id() }>>;
-type InitExtUsr = ZExt<ZExtProperties<{ InitExtId::User.id() }>>;
 type InitExtQoS = ZExt<ZExtEmpty<{ InitExtId::QoS.id() }>>;
 type InitExtAut = ZExt<ZExtProperties<{ InitExtId::Authentication.id() }>>;
 type InitExtUnk = ZExt<ZExtUnknown>;
@@ -361,36 +365,27 @@ pub struct InitExts {
     experimental: Option<InitExtExp>,
     pub qos: Option<InitExtQoS>,
     pub authentication: Option<InitExtAut>,
-    pub user: Option<InitExtUsr>,
 }
 
 impl InitExts {
     fn is_empty(&self) -> bool {
-        self.experimental.is_none()
-            && self.qos.is_none()
-            && self.authentication.is_none()
-            && self.user.is_none()
+        self.experimental.is_none() && self.qos.is_none() && self.authentication.is_none()
     }
 
     pub fn write(&self, wbuf: &mut WBuf) -> bool {
         if let Some(exp) = self.experimental.as_ref() {
-            let has_more =
-                self.qos.is_some() || self.authentication.is_some() || self.user.is_some();
+            let has_more = self.qos.is_some() || self.authentication.is_some();
             zcheck!(exp.write(wbuf, has_more));
         }
 
         if let Some(qos) = self.qos.as_ref() {
-            let has_more = self.authentication.is_some() || self.user.is_some();
+            let has_more = self.authentication.is_some();
             zcheck!(qos.write(wbuf, has_more));
         }
 
         if let Some(aut) = self.authentication.as_ref() {
-            let has_more = self.user.is_some();
+            let has_more = false;
             zcheck!(aut.write(wbuf, has_more));
-        }
-
-        if let Some(usr) = self.user.as_ref() {
-            zcheck!(usr.write(wbuf, false));
         }
 
         true
@@ -415,10 +410,6 @@ impl InitExts {
                     InitExtId::Authentication => {
                         let e: InitExtAut = ZExt::read(zbuf, header)?;
                         exts.authentication = Some(e);
-                    }
-                    InitExtId::User => {
-                        let e: InitExtUsr = ZExt::read(zbuf, header)?;
-                        exts.user = Some(e);
                     }
                 },
                 Err(_) => {

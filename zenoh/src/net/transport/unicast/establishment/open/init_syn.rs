@@ -13,7 +13,7 @@
 //
 use super::OResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::extensions::{ZExt, ZExtPolicy};
 use crate::net::protocol::message::{InitSyn, WireProperties};
 use crate::net::protocol::VERSION;
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;

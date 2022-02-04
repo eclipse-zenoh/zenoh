@@ -14,9 +14,10 @@
 use rand::*;
 use std::time::Duration;
 use uhlc::Timestamp;
+use zenoh::buf::ZSlice;
 use zenoh::net::protocol::core::{whatami::WhatAmIMatcher, *};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
-use zenoh::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use zenoh::net::protocol::message::extensions::{ZExt, ZExtPolicy};
 use zenoh::net::protocol::message::*;
 
 const NUM_ITER: usize = 100;
@@ -367,20 +368,6 @@ fn codec_hello() {
 /*************************************/
 /*       TRANSPORT MESSAGES          */
 /*************************************/
-fn test_write_read_transport_message(mut msg: TransportMessage) {
-    let mut buf = WBuf::new(164, false);
-    println!("\nWrite message: {:?}", msg);
-    buf.write_transport_message(&mut msg);
-    println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(buf).read_transport_message().unwrap();
-    println!("Message read: {:?}", result);
-    if let Some(attachment) = result.attachment.as_mut() {
-        let properties = attachment.buffer.read_properties();
-        println!("Properties read: {:?}", properties);
-    }
-    assert_eq!(msg, result);
-}
-
 #[test]
 fn codec_init() {
     for _ in 0..NUM_ITER {
@@ -401,35 +388,22 @@ fn codec_init() {
             None,
             Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
         ];
-        let ext_user = [
-            None,
-            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
-        ];
 
         for v in version.iter() {
             for w in whatami.iter() {
                 for s in sn_bytes.iter() {
                     for q in ext_qos.iter() {
                         for a in ext_auth.iter() {
-                            for u in ext_user.iter() {
-                                let mut msg = InitSyn::new(v.clone(), *w, gen_zid(), *s);
-                                msg.exts.qos = q.clone();
-                                msg.exts.authentication = a.clone();
-                                msg.exts.user = u.clone();
-                                ztesth!(msg, InitSyn::read);
+                            let mut msg = InitSyn::new(v.clone(), *w, gen_zid(), *s);
+                            msg.exts.qos = q.clone();
+                            msg.exts.authentication = a.clone();
+                            ztesth!(msg, InitSyn::read);
 
-                                let mut msg = InitAck::new(
-                                    v.clone(),
-                                    *w,
-                                    gen_zid(),
-                                    *s,
-                                    gen_buffer(64).into(),
-                                );
-                                msg.exts.qos = q.clone();
-                                msg.exts.authentication = a.clone();
-                                msg.exts.user = u.clone();
-                                ztesth!(msg, InitAck::read);
-                            }
+                            let mut msg =
+                                InitAck::new(v.clone(), *w, gen_zid(), *s, gen_buffer(64).into());
+                            msg.exts.qos = q.clone();
+                            msg.exts.authentication = a.clone();
+                            ztesth!(msg, InitAck::read);
                         }
                     }
                 }
@@ -446,24 +420,16 @@ fn codec_open() {
             None,
             Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
         ];
-        let ext_user = [
-            None,
-            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
-        ];
 
         for l in lease.iter() {
             for a in ext_auth.iter() {
-                for u in ext_user.iter() {
-                    let mut msg = OpenSyn::new(*l, gen!(ZInt), gen_buffer(64).into());
-                    msg.exts.authentication = a.clone();
-                    msg.exts.user = u.clone();
-                    ztesth!(msg, OpenSyn::read);
+                let mut msg = OpenSyn::new(*l, gen!(ZInt), gen_buffer(64).into());
+                msg.exts.authentication = a.clone();
+                ztesth!(msg, OpenSyn::read);
 
-                    let mut msg = OpenAck::new(*l, gen!(ZInt));
-                    msg.exts.authentication = a.clone();
-                    msg.exts.user = u.clone();
-                    ztesth!(msg, OpenAck::read);
-                }
+                let mut msg = OpenAck::new(*l, gen!(ZInt));
+                msg.exts.authentication = a.clone();
+                ztesth!(msg, OpenAck::read);
             }
         }
     }
@@ -496,10 +462,6 @@ fn codec_join() {
             None,
             Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
         ];
-        let ext_user = [
-            None,
-            Some(ZExt::new(gen_wireproperties(), ZExtPolicy::Ignore)),
-        ];
 
         for v in version.iter() {
             for w in whatami.iter() {
@@ -507,20 +469,11 @@ fn codec_join() {
                     for l in lease.iter() {
                         for q in ext_qos.iter() {
                             for a in ext_auth.iter() {
-                                for u in ext_user.iter() {
-                                    let mut msg = Join::new(
-                                        v.clone(),
-                                        *w,
-                                        gen_zid(),
-                                        *s,
-                                        *l,
-                                        gen_initial_sn(),
-                                    );
-                                    msg.exts.qos = q.clone();
-                                    msg.exts.authentication = a.clone();
-                                    msg.exts.user = u.clone();
-                                    ztesth!(msg, Join::read);
-                                }
+                                let mut msg =
+                                    Join::new(v.clone(), *w, gen_zid(), *s, *l, gen_initial_sn());
+                                msg.exts.qos = q.clone();
+                                msg.exts.authentication = a.clone();
+                                ztesth!(msg, Join::read);
                             }
                         }
                     }
@@ -533,116 +486,71 @@ fn codec_join() {
 #[test]
 fn codec_close() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_zid())];
-        let link_only = [true, false];
-        let attachment = [None, Some(gen_attachment())];
+        let reason = [
+            CloseReason::Generic,
+            CloseReason::Unsupported,
+            CloseReason::default(),
+        ];
 
-        for p in pid.iter() {
-            for k in link_only.iter() {
-                for a in attachment.iter() {
-                    let msg = TransportMessage::make_close(*p, gen!(u8), *k, a.clone());
-                    test_write_read_transport_message(msg);
-                }
-            }
+        for r in reason.iter() {
+            let msg = Close::new(*r);
+            ztesth!(msg, Close::read);
         }
     }
 }
 
-#[test]
-fn codec_sync() {
-    for _ in 0..NUM_ITER {
-        let ch = [Reliability::Reliable, Reliability::BestEffort];
-        let count = [None, Some(gen!(ZInt))];
-        let attachment = [None, Some(gen_attachment())];
+// #[test]
+// fn codec_sync() {
+//     for _ in 0..NUM_ITER {
+//         let ch = [Reliability::Reliable, Reliability::BestEffort];
+//         let count = [None, Some(gen!(ZInt))];
+//         let attachment = [None, Some(gen_attachment())];
 
-        for c in ch.iter() {
-            for n in count.iter() {
-                for a in attachment.iter() {
-                    let msg = TransportMessage::make_sync(*c, gen!(ZInt), *n, a.clone());
-                    test_write_read_transport_message(msg);
-                }
-            }
-        }
-    }
-}
+//         for c in ch.iter() {
+//             for n in count.iter() {
+//                 for a in attachment.iter() {
+//                     let msg = TransportMessage::make_sync(*c, gen!(ZInt), *n, a.clone());
+//                     test_write_read_transport_message(msg);
+//                 }
+//             }
+//         }
+//     }
+// }
 
-#[test]
-fn codec_ack_nack() {
-    for _ in 0..NUM_ITER {
-        let mask = [None, Some(gen!(ZInt))];
-        let attachment = [None, Some(gen_attachment())];
+// #[test]
+// fn codec_ack_nack() {
+//     for _ in 0..NUM_ITER {
+//         let mask = [None, Some(gen!(ZInt))];
+//         let attachment = [None, Some(gen_attachment())];
 
-        for m in mask.iter() {
-            for a in attachment.iter() {
-                let msg = TransportMessage::make_ack_nack(gen!(ZInt), *m, a.clone());
-                test_write_read_transport_message(msg);
-            }
-        }
-    }
-}
+//         for m in mask.iter() {
+//             for a in attachment.iter() {
+//                 let msg = TransportMessage::make_ack_nack(gen!(ZInt), *m, a.clone());
+//                 test_write_read_transport_message(msg);
+//             }
+//         }
+//     }
+// }
 
 #[test]
 fn codec_keep_alive() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_zid())];
-        let attachment = [None, Some(gen_attachment())];
-
-        for p in pid.iter() {
-            for a in attachment.iter() {
-                let msg = TransportMessage::make_keep_alive(*p, a.clone());
-                test_write_read_transport_message(msg);
-            }
-        }
-    }
-}
-
-#[test]
-fn codec_ping() {
-    for _ in 0..NUM_ITER {
-        let attachment = [None, Some(gen_attachment())];
-
-        for a in attachment.iter() {
-            let msg = TransportMessage::make_ping(gen!(ZInt), a.clone());
-            test_write_read_transport_message(msg);
-        }
-    }
-}
-
-#[test]
-fn codec_pong() {
-    for _ in 0..NUM_ITER {
-        let attachment = [None, Some(gen_attachment())];
-
-        for a in attachment.iter() {
-            let msg = TransportMessage::make_pong(gen!(ZInt), a.clone());
-            test_write_read_transport_message(msg);
-        }
+        let msg = KeepAlive::new();
+        ztesth!(msg, KeepAlive::read);
     }
 }
 
 #[test]
 fn codec_frame() {
-    let msg_payload_count = 4;
-
     for _ in 0..NUM_ITER {
-        let channel = [
-            Channel {
-                priority: Priority::default(),
-                reliability: Reliability::Reliable,
-            },
-            Channel {
-                priority: Priority::default(),
-                reliability: Reliability::BestEffort,
-            },
-            Channel {
-                priority: Priority::RealTime,
-                reliability: Reliability::Reliable,
-            },
-            Channel {
-                priority: Priority::RealTime,
-                reliability: Reliability::BestEffort,
-            },
+        let reliabilty = [Reliability::BestEffort, Reliability::Reliable];
+        let ext_qos = [
+            None,
+            Some(ZExt::new(Priority::default(), ZExtPolicy::Ignore)),
+            Some(ZExt::new(Priority::RealTime, ZExtPolicy::Ignore)),
+            Some(ZExt::new(Priority::Background, ZExtPolicy::Ignore)),
         ];
+
         let congestion_control = [CongestionControl::Block, CongestionControl::Drop];
         let data_info = [None, Some(gen_data_info())];
         let routing_context = [None, Some(gen_routing_context())];
@@ -653,139 +561,64 @@ fn codec_frame() {
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        for ch in channel.iter() {
-            for cc in congestion_control.iter() {
-                let mut payload = vec![
-                    FramePayload::Fragment {
-                        buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-                        is_final: false,
-                    },
-                    FramePayload::Fragment {
-                        buffer: gen_buffer(MAX_PAYLOAD_SIZE).into(),
-                        is_final: true,
-                    },
-                ];
+        for r in reliabilty.iter() {
+            for q in ext_qos.iter() {
+                let mut payload = vec![];
 
-                for di in data_info.iter() {
-                    for rec in reply_context.iter() {
-                        for roc in routing_context.iter() {
-                            for a in attachment.iter() {
-                                payload.push(FramePayload::Messages {
-                                    messages: vec![
-                                        ZenohMessage::make_data(
-                                            gen_key(),
-                                            ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
-                                            *ch,
-                                            *cc,
-                                            di.clone(),
-                                            *roc,
-                                            rec.clone(),
-                                            a.clone(),
-                                        );
-                                        msg_payload_count
-                                    ],
-                                });
+                for cc in congestion_control.iter() {
+                    for di in data_info.iter() {
+                        for rec in reply_context.iter() {
+                            for roc in routing_context.iter() {
+                                for a in attachment.iter() {
+                                    payload.push(ZenohMessage::make_data(
+                                        gen_key(),
+                                        ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+                                        Channel {
+                                            reliability: *r,
+                                            priority: Priority::default(),
+                                        },
+                                        *cc,
+                                        di.clone(),
+                                        *roc,
+                                        rec.clone(),
+                                        a.clone(),
+                                    ));
+                                }
                             }
                         }
                     }
                 }
 
-                for p in payload.drain(..) {
-                    for a in attachment.iter() {
-                        let msg =
-                            TransportMessage::make_frame(*ch, gen!(ZInt), p.clone(), a.clone());
-                        test_write_read_transport_message(msg);
-                    }
-                }
+                let mut msg = Frame::new(*r, gen!(ZInt), payload);
+                msg.exts.qos = q.clone();
+                ztesth!(msg, Frame::read);
             }
         }
     }
 }
 
 #[test]
-fn codec_frame_batching() {
+fn codec_fragment() {
     for _ in 0..NUM_ITER {
-        // Contigous batch
-        let mut wbuf = WBuf::new(64, true);
-        // Written messages
-        let mut written: Vec<TransportMessage> = vec![];
+        let reliabilty = [Reliability::BestEffort, Reliability::Reliable];
+        let has_more = [true, false];
+        let ext_qos = [
+            None,
+            Some(ZExt::new(Priority::default(), ZExtPolicy::Ignore)),
+            Some(ZExt::new(Priority::RealTime, ZExtPolicy::Ignore)),
+            Some(ZExt::new(Priority::Background, ZExtPolicy::Ignore)),
+        ];
 
-        // Create empty frame message
-        let channel = Channel::default();
-        let congestion_control = CongestionControl::default();
-        let payload = FramePayload::Messages { messages: vec![] };
-        let sn = gen!(ZInt);
-        let sattachment = None;
-        let mut frame = TransportMessage::make_frame(channel, sn, payload, sattachment.clone());
-
-        // Write the first frame header
-        assert!(wbuf.write_transport_message(&mut frame));
-
-        // Create data message
-        let key = "test".into();
-        let payload = ZBuf::from(vec![0_u8; 1]);
-        let data_info = None;
-        let routing_context = None;
-        let reply_context = None;
-        let zattachment = None;
-        let mut data = ZenohMessage::make_data(
-            key,
-            payload,
-            channel,
-            congestion_control,
-            data_info,
-            routing_context,
-            reply_context,
-            zattachment,
-        );
-
-        // Write the first data message
-        assert!(wbuf.write_zenoh_message(&mut data));
-
-        // Store the first transport message written
-        let payload = FramePayload::Messages {
-            messages: vec![data.clone(); 1],
-        };
-        written.push(TransportMessage::make_frame(
-            channel,
-            sn,
-            payload,
-            sattachment.clone(),
-        ));
-
-        // Write the second frame header
-        assert!(wbuf.write_transport_message(&mut frame));
-
-        // Write until we fill the batch
-        let mut messages: Vec<ZenohMessage> = vec![];
-        loop {
-            wbuf.mark();
-            if wbuf.write_zenoh_message(&mut data) {
-                messages.push(data.clone());
-            } else {
-                wbuf.revert();
-                break;
+        for r in reliabilty.iter() {
+            for m in has_more.iter() {
+                for q in ext_qos.iter() {
+                    let payload = ZSlice::from(gen_buffer(MAX_PAYLOAD_SIZE));
+                    let mut msg = Fragment::new(*r, gen!(ZInt), *m, payload);
+                    msg.exts.qos = q.clone();
+                    ztesth!(msg, Fragment::read);
+                }
             }
         }
-
-        // Store the second transport message written
-        let payload = FramePayload::Messages { messages };
-        written.push(TransportMessage::make_frame(
-            channel,
-            sn,
-            payload,
-            sattachment,
-        ));
-
-        // Deserialize from the buffer
-        let mut zbuf = ZBuf::from(wbuf);
-
-        let mut read: Vec<TransportMessage> = vec![];
-        while let Some(msg) = zbuf.read_transport_message() {
-            read.push(msg);
-        }
-
-        assert_eq!(written, read);
     }
 }
 

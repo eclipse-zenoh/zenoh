@@ -15,7 +15,7 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::message::extension::{ZExt, ZExtPolicy};
+use crate::net::protocol::message::extensions::{ZExt, ZExtPolicy};
 use crate::net::protocol::message::{OpenAck, WireProperties};
 use crate::net::transport::TransportManager;
 

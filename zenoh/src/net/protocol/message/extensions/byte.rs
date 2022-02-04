@@ -12,50 +12,64 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::ZExtension;
-use crate::net::protocol::core::ZInt;
-use crate::net::protocol::io::{zint_len, WBuf, ZBuf};
+use crate::net::protocol::io::{WBuf, ZBuf};
+use std::ops::{Deref, DerefMut};
 
-/// # ZInt extension
+/// # Byte extension
 ///
-/// It is an extension containing a ZInt.
+/// It is an extension containing a Byte.
 ///  
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// %     value     %
+/// |     value     |
 /// +---------------+
 ///
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ZExtZInt<const ID: u8> {
-    pub value: ZInt,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ZExtByte<const ID: u8> {
+    pub value: u8,
 }
 
-impl<const ID: u8> ZExtZInt<{ ID }> {
-    pub fn new(value: ZInt) -> Self {
+impl<const ID: u8> ZExtByte<{ ID }> {
+    pub fn new(value: u8) -> Self {
         Self { value }
     }
 }
 
-impl<const ID: u8> ZExtension for ZExtZInt<{ ID }> {
+impl<const ID: u8> ZExtension for ZExtByte<{ ID }> {
     fn id(&self) -> u8 {
         ID
     }
 
     fn length(&self) -> usize {
-        zint_len(self.value)
+        1
     }
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
-        wbuf.write_zint(self.value)
+        wbuf.write(self.value)
     }
 
     fn read(zbuf: &mut ZBuf, _header: u8, _length: usize) -> Option<Self> {
-        let value = zbuf.read_zint()?;
+        let value = zbuf.read()?;
         Some(Self { value })
     }
 }
 
-impl<const ID: u8> From<ZInt> for ZExtZInt<{ ID }> {
-    fn from(v: ZInt) -> Self {
+impl<const ID: u8> From<u8> for ZExtByte<{ ID }> {
+    fn from(v: u8) -> Self {
         Self::new(v)
+    }
+}
+
+impl<const ID: u8> Deref for ZExtByte<{ ID }> {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<const ID: u8> DerefMut for ZExtByte<{ ID }> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }

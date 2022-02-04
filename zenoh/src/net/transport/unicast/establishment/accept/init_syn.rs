@@ -15,7 +15,7 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::{WhatAmI, ZenohId};
-use crate::net::protocol::message::{Close, InitSyn, SeqNumBytes, WireProperties};
+use crate::net::protocol::message::{CloseReason, InitSyn, SeqNumBytes, WireProperties};
 use crate::net::transport::TransportManager;
 use zenoh_util::zerror;
 
@@ -49,7 +49,7 @@ pub(super) async fn recv(
                     zid,
                     init_syn.zid
                 );
-                return Err((e.into(), Some(Close::INVALID)));
+                return Err((e.into(), Some(CloseReason::Invalid)));
             }
         }
         None => auth_link.zid = Some(init_syn.zid),
@@ -62,7 +62,7 @@ pub(super) async fn recv(
             link,
             init_syn.zid
         );
-        return Err((e.into(), Some(Close::INVALID)));
+        return Err((e.into(), Some(CloseReason::Invalid)));
     }
 
     // Validate the InitSyn with the peer authenticators

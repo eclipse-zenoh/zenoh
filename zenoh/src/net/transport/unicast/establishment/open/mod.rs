@@ -19,11 +19,11 @@ mod open_syn;
 use super::authenticator::AuthenticatedPeerLink;
 use super::*;
 use crate::net::link::{LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::message::Close;
+use crate::net::protocol::message::CloseReason;
 use crate::net::transport::TransportManager;
 use zenoh_util::core::Result as ZResult;
 
-type OError = (zenoh_util::core::Error, Option<u8>);
+type OError = (zenoh_util::core::Error, Option<CloseReason>);
 type OResult<T> = Result<T, OError>;
 
 pub(crate) async fn open_link(
@@ -53,7 +53,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(Close::INVALID)).await;
+                    close_link(link, manager, auth_link, Some(CloseReason::Invalid)).await;
                     return Err(e);
                 }
             }
@@ -88,9 +88,11 @@ pub(crate) async fn open_link(
         };
     }
 
-    let initial_sn = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-        .config
-        .initial_sn_tx;
+    let initial_sn = step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .config
+    .initial_sn_tx;
     let input = open_syn::Input {
         cookie: output.cookie,
         initial_sn,
@@ -101,16 +103,18 @@ pub(crate) async fn open_link(
 
     // Finalize the transport
     // Add the link to the transport
-    let _ = step!(
-        step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-            .add_link(link.clone(), LinkUnicastDirection::Outbound)
-            .map_err(|e| (e, Some(Close::MAX_LINKS)))
-    );
+    let _ = step!(step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .add_link(link.clone(), LinkUnicastDirection::Outbound)
+    .map_err(|e| (e, Some(CloseReason::MaxLinks))));
 
     // Sync the RX sequence number
-    let _ = step!(transport.get_inner().map_err(|e| (e, Some(Close::INVALID))))
-        .sync(output.initial_sn)
-        .await;
+    let _ = step!(transport
+        .get_inner()
+        .map_err(|e| (e, Some(CloseReason::Invalid))))
+    .sync(output.initial_sn)
+    .await;
 
     log::debug!("New transport link established with {}: {}", zid, link);
 

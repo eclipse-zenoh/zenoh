@@ -11,12 +11,12 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{SeqNumBytes, TransportId};
+use super::{SeqNumBytes, TransportId, TransportProto};
 use crate::net::protocol::core::{
     ConduitSn, ConduitSnList, NonZeroZInt, Priority, Version, WhatAmI, ZInt, ZenohId,
 };
 use crate::net::protocol::io::{zint_len, WBuf, ZBuf};
-use crate::net::protocol::message::extension::{
+use crate::net::protocol::message::extensions::{
     eid, has_more, ZExt, ZExtPolicy, ZExtProperties, ZExtUnknown, ZExtZInt, ZExtension,
 };
 use crate::net::protocol::message::{has_flag, ZMessage};
@@ -77,7 +77,9 @@ impl ConduitSn {
 /// +---------------+
 /// %     lease     % -- Lease period of the sender of the JOIN message
 /// +---------------+
-/// ~    next_sn    ~  -- Next conduit sequence number
+/// ~    next_sn    ~ -- Next conduit sequence number
+/// +---------------+
+/// ~   [JoinExts]  ~ if Flag(Z)==1
 /// +---------------+
 /// ```
 ///
@@ -96,7 +98,7 @@ pub struct Join {
 
 impl Join {
     // Header flags
-    // pub const FLAG_Z: u8 = 1 << 5; // Reserved for future use
+    // pub const FLAG_X: u8 = 1 << 5; // Reserved for future use
     pub const FLAG_T: u8 = 1 << 6;
     pub const FLAG_Z: u8 = 1 << 7;
 
@@ -144,6 +146,7 @@ impl Join {
 }
 
 impl ZMessage for Join {
+    type Proto = TransportProto;
     const ID: u8 = TransportId::Join.id();
 
     fn write(&self, wbuf: &mut WBuf) -> bool {
@@ -184,7 +187,7 @@ impl ZMessage for Join {
 
         zcheck!(self.next_sns.write(wbuf));
 
-        // Write options
+        // Write extensions
         if has_exts {
             zcheck!(self.exts.write(wbuf));
         }
@@ -239,10 +242,9 @@ impl ZMessage for Join {
 pub enum JoinExtId {
     // 0x00: Reserved
     Experimental = 0x01,
-    User = 0x02,
-    QoS = 0x03,
-    Authentication = 0x04,
-    // 0x05: Reserved
+    QoS = 0x02,
+    Authentication = 0x03,
+    // 0x04: Reserved
     // ..  : Reserved
     // 0x1f: Reserved
 }
@@ -252,13 +254,11 @@ impl TryFrom<u8> for JoinExtId {
 
     fn try_from(id: u8) -> Result<Self, Self::Error> {
         const EXP: u8 = JoinExtId::Experimental.id();
-        const USR: u8 = JoinExtId::User.id();
         const QOS: u8 = JoinExtId::QoS.id();
         const AUT: u8 = JoinExtId::Authentication.id();
 
         match id {
             EXP => Ok(JoinExtId::Experimental),
-            USR => Ok(JoinExtId::User),
             QOS => Ok(JoinExtId::QoS),
             AUT => Ok(JoinExtId::Authentication),
             _ => Err(()),
@@ -272,91 +272,6 @@ impl JoinExtId {
     }
 }
 
-type JoinExtExp = ZExt<ZExtZInt<{ JoinExtId::Experimental.id() }>>;
-type JoinExtUsr = ZExt<ZExtProperties<{ JoinExtId::User.id() }>>;
-type JoinExtQoS = ZExt<ZExtConduitSN<{ JoinExtId::QoS.id() }, { Priority::NUM }>>;
-type JoinExtAut = ZExt<ZExtProperties<{ JoinExtId::Authentication.id() }>>;
-type JoinExtUnk = ZExt<ZExtUnknown>;
-#[derive(Clone, Default, Debug, PartialEq)]
-pub struct JoinExts {
-    experimental: Option<JoinExtExp>,
-    pub qos: Option<JoinExtQoS>,
-    pub authentication: Option<JoinExtAut>,
-    pub user: Option<JoinExtUsr>,
-}
-
-impl JoinExts {
-    fn is_empty(&self) -> bool {
-        self.experimental.is_none()
-            && self.qos.is_none()
-            && self.authentication.is_none()
-            && self.user.is_none()
-    }
-
-    fn write(&self, wbuf: &mut WBuf) -> bool {
-        if let Some(exp) = self.experimental.as_ref() {
-            let has_more =
-                self.qos.is_some() || self.authentication.is_some() || self.user.is_some();
-            zcheck!(exp.write(wbuf, has_more));
-        }
-
-        if let Some(qos) = self.qos.as_ref() {
-            let has_more = self.authentication.is_some() || self.user.is_some();
-            zcheck!(qos.write(wbuf, has_more));
-        }
-
-        if let Some(aut) = self.authentication.as_ref() {
-            let has_more = self.user.is_some();
-            zcheck!(aut.write(wbuf, has_more));
-        }
-
-        if let Some(usr) = self.user.as_ref() {
-            zcheck!(usr.write(wbuf, false));
-        }
-
-        true
-    }
-
-    fn read(zbuf: &mut ZBuf) -> Option<JoinExts> {
-        let mut exts = JoinExts::default();
-
-        loop {
-            let header = zbuf.read()?;
-
-            match JoinExtId::try_from(eid(header)) {
-                Ok(id) => match id {
-                    JoinExtId::Experimental => {
-                        let e: JoinExtExp = ZExt::read(zbuf, header)?;
-                        exts.experimental = Some(e);
-                    }
-                    JoinExtId::QoS => {
-                        let e: JoinExtQoS = ZExt::read(zbuf, header)?;
-                        exts.qos = Some(e);
-                    }
-                    JoinExtId::Authentication => {
-                        let e: JoinExtAut = ZExt::read(zbuf, header)?;
-                        exts.authentication = Some(e);
-                    }
-                    JoinExtId::User => {
-                        let e: JoinExtUsr = ZExt::read(zbuf, header)?;
-                        exts.user = Some(e);
-                    }
-                },
-                Err(_) => {
-                    let _e: JoinExtUnk = ZExt::read(zbuf, header)?;
-                }
-            }
-
-            if !has_more(header) {
-                break;
-            }
-        }
-
-        Some(exts)
-    }
-}
-
-///
 /// # QoS extension
 ///
 /// It is an extension containing an array of Conduit SN.
@@ -407,5 +322,75 @@ impl<const ID: u8, const NUM: usize> ZExtension for ZExtConduitSN<{ ID }, { NUM 
 impl<const ID: u8, const NUM: usize> From<[ConduitSn; NUM]> for ZExtConduitSN<{ ID }, { NUM }> {
     fn from(array: [ConduitSn; NUM]) -> Self {
         Self::new(array)
+    }
+}
+
+type JoinExtExp = ZExt<ZExtZInt<{ JoinExtId::Experimental.id() }>>;
+type JoinExtQoS = ZExt<ZExtConduitSN<{ JoinExtId::QoS.id() }, { Priority::NUM }>>;
+type JoinExtAut = ZExt<ZExtProperties<{ JoinExtId::Authentication.id() }>>;
+type JoinExtUnk = ZExt<ZExtUnknown>;
+#[derive(Clone, Default, Debug, PartialEq)]
+pub struct JoinExts {
+    experimental: Option<JoinExtExp>,
+    pub qos: Option<JoinExtQoS>,
+    pub authentication: Option<JoinExtAut>,
+}
+
+impl JoinExts {
+    fn is_empty(&self) -> bool {
+        self.experimental.is_none() && self.qos.is_none() && self.authentication.is_none()
+    }
+
+    fn write(&self, wbuf: &mut WBuf) -> bool {
+        if let Some(exp) = self.experimental.as_ref() {
+            let has_more = self.qos.is_some() || self.authentication.is_some();
+            zcheck!(exp.write(wbuf, has_more));
+        }
+
+        if let Some(qos) = self.qos.as_ref() {
+            let has_more = self.authentication.is_some();
+            zcheck!(qos.write(wbuf, has_more));
+        }
+
+        if let Some(aut) = self.authentication.as_ref() {
+            let has_more = false;
+            zcheck!(aut.write(wbuf, has_more));
+        }
+
+        true
+    }
+
+    fn read(zbuf: &mut ZBuf) -> Option<JoinExts> {
+        let mut exts = JoinExts::default();
+
+        loop {
+            let header = zbuf.read()?;
+
+            match JoinExtId::try_from(eid(header)) {
+                Ok(id) => match id {
+                    JoinExtId::Experimental => {
+                        let e: JoinExtExp = ZExt::read(zbuf, header)?;
+                        exts.experimental = Some(e);
+                    }
+                    JoinExtId::QoS => {
+                        let e: JoinExtQoS = ZExt::read(zbuf, header)?;
+                        exts.qos = Some(e);
+                    }
+                    JoinExtId::Authentication => {
+                        let e: JoinExtAut = ZExt::read(zbuf, header)?;
+                        exts.authentication = Some(e);
+                    }
+                },
+                Err(_) => {
+                    let _e: JoinExtUnk = ZExt::read(zbuf, header)?;
+                }
+            }
+
+            if !has_more(header) {
+                break;
+            }
+        }
+
+        Some(exts)
     }
 }

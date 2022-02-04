@@ -28,7 +28,7 @@ use super::batch::SerializationBatch;
 use super::conduit::{TransportChannelTx, TransportConduitTx};
 use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
-use super::protocol::message::{TransportMessage, ZenohMessage};
+use super::protocol::message::{TransportProto, ZMessage, ZenohMessage};
 use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
@@ -300,9 +300,9 @@ impl TransmissionPipeline {
     }
 
     #[inline]
-    pub(crate) fn push_transport_message(
+    pub(crate) fn push_transport_message<T: ZMessage<Proto = TransportProto>>(
         &self,
-        mut message: TransportMessage,
+        mut message: T,
         priority: Priority,
     ) -> bool {
         // Check it is a valid conduit
@@ -313,7 +313,7 @@ impl TransmissionPipeline {
             () => {
                 // Get the current serialization batch
                 let batch = zgetbatch!(self, priority, in_guard, false);
-                if batch.serialize_transport_message(&mut message) {
+                if batch.serialize_message(&mut message) {
                     self.bytes_in[priority].store(batch.len(), Ordering::Release);
                     self.cond_canpull.notify_one();
                     return true;
@@ -633,7 +633,9 @@ mod tests {
     use crate::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
     use crate::net::protocol::io::ZBuf;
     use crate::net::protocol::message::defaults::{BATCH_SIZE, SEQ_NUM_RES};
-    use crate::net::protocol::message::{Frame, FramePayload, TransportBody, ZenohMessage};
+    use crate::net::protocol::message::{
+        Fragment, Frame, TransportBody, TransportMessage, ZenohMessage,
+    };
     use crate::net::transport::defaults::ZN_QUEUE_SIZE_CONTROL;
     use async_std::prelude::*;
     use async_std::task;
@@ -694,24 +696,23 @@ mod tests {
                 // Create a ZBuf for deserialization starting from the batch
                 let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
-                while let Some(msg) = zbuf.read_transport_message() {
+                while let Some(msg) = TransportMessage::read(&mut zbuf) {
                     match msg.body {
-                        TransportBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Messages { messages } => {
-                                msgs += messages.len();
+                        TransportBody::Frame(Frame { payload, .. }) => {
+                            msgs += payload.len();
+                        }
+                        TransportBody::Fragment(Fragment { has_more, .. }) => {
+                            fragments += 1;
+                            if !has_more {
+                                msgs += 1;
                             }
-                            FramePayload::Fragment { is_final, .. } => {
-                                fragments += 1;
-                                if is_final {
-                                    msgs += 1;
-                                }
-                            }
-                        },
+                        }
                         _ => {
                             msgs += 1;
                         }
                     }
                 }
+
                 // Reinsert the batch
                 queue.refill(batch, priority);
             }

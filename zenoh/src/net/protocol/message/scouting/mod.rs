@@ -54,6 +54,9 @@ impl ScoutingId {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ScoutingProto;
+
 /// # Scouting protocol
 ///
 /// In zenoh, scouting is used to discover any other zenoh node in the surroundings when

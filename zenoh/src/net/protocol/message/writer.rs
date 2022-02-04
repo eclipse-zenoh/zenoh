@@ -13,7 +13,6 @@
 //
 use super::core::*;
 use super::io::WBuf;
-use super::transport::*;
 use super::zenoh::*;
 use super::{zenoh, Attachment, Header, Options};
 use zenoh_util::zcheck;
@@ -53,120 +52,6 @@ impl WBuf {
     #[inline(always)]
     fn write_deco_priority(&mut self, priority: Priority) -> bool {
         self.write(priority.header())
-    }
-
-    #[inline(always)]
-    pub fn write_frame_header(
-        &mut self,
-        priority: Priority,
-        reliability: Reliability,
-        sn: ZInt,
-        is_fragment: Option<bool>,
-        attachment: Option<Attachment>,
-    ) -> bool {
-        if let Some(attachment) = attachment {
-            zcheck!(self.write_deco_attachment(&attachment));
-        }
-        if priority != Priority::default() {
-            zcheck!(self.write_deco_priority(priority))
-        }
-
-        let header = Frame::make_header(reliability, is_fragment);
-        self.write(header) && self.write_zint(sn)
-    }
-
-    /*************************************/
-    /*            TRANSPORT              */
-    /*************************************/
-    #[allow(clippy::let_and_return)]
-    pub fn write_transport_message(&mut self, msg: &mut TransportMessage) -> bool {
-        #[cfg(feature = "stats")]
-        let start_written = self.len();
-
-        if let Some(attachment) = msg.attachment.as_ref() {
-            zcheck!(self.write_deco_attachment(attachment));
-        }
-
-        let res = match &mut msg.body {
-            TransportBody::Frame(frame) => self.write_frame(frame),
-            TransportBody::Close(close) => self.write_close(close),
-            TransportBody::Sync(sync) => self.write_sync(sync),
-            TransportBody::AckNack(ack_nack) => self.write_ack_nack(ack_nack),
-            TransportBody::KeepAlive(keep_alive) => self.write_keep_alive(keep_alive),
-            TransportBody::Ping(ping) => self.write_ping(ping),
-            TransportBody::Pong(pong) => self.write_pong(pong),
-            _ => panic!(),
-        };
-
-        #[cfg(feature = "stats")]
-        {
-            let stop_written = self.len();
-            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
-        }
-
-        res
-    }
-
-    fn write_frame(&mut self, frame: &mut Frame) -> bool {
-        if frame.channel.priority != Priority::default() {
-            zcheck!(self.write_deco_priority(frame.channel.priority))
-        }
-
-        zcheck!(self.write(frame.header()));
-        zcheck!(self.write_zint(frame.sn));
-        match &mut frame.payload {
-            FramePayload::Fragment { buffer, .. } => self.write_zslice(buffer.clone()),
-            FramePayload::Messages { messages } => {
-                for m in messages.iter_mut() {
-                    zcheck!(self.write_zenoh_message(m));
-                }
-                true
-            }
-        }
-    }
-
-    fn write_close(&mut self, close: &Close) -> bool {
-        zcheck!(self.write(close.header()));
-        if let Some(p) = close.pid.as_ref() {
-            zcheck!(self.write_zenohid(p));
-        }
-        self.write(close.reason)
-    }
-
-    fn write_sync(&mut self, sync: &Sync) -> bool {
-        zcheck!(self.write(sync.header()));
-        zcheck!(self.write_zint(sync.sn));
-        if let Some(c) = sync.count {
-            zcheck!(self.write_zint(c));
-        }
-        true
-    }
-
-    fn write_ack_nack(&mut self, ack_nack: &AckNack) -> bool {
-        zcheck!(self.write(ack_nack.header()));
-        zcheck!(self.write_zint(ack_nack.sn));
-        if let Some(m) = ack_nack.mask {
-            zcheck!(self.write_zint(m));
-        }
-        true
-    }
-
-    fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
-        zcheck!(self.write(keep_alive.header()));
-        if let Some(p) = keep_alive.pid.as_ref() {
-            zcheck!(self.write_zenohid(p));
-        }
-        true
-    }
-
-    fn write_ping(&mut self, ping: &Ping) -> bool {
-        zcheck!(self.write(ping.header()));
-        self.write_zint(ping.hash)
-    }
-
-    fn write_pong(&mut self, pong: &Pong) -> bool {
-        zcheck!(self.write(pong.header()));
-        self.write_zint(pong.hash)
     }
 
     /*************************************/

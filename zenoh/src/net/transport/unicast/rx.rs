@@ -12,14 +12,15 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
+use super::protocol::core::{Priority, Reliability, ZInt};
 #[cfg(feature = "stats")]
 use super::protocol::message::ZenohBody;
 use super::protocol::message::{
-    Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
+    Close, CloseReason, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;
 use crate::net::link::LinkUnicast;
+use crate::net::protocol::io::ZSlice;
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_util::core::Result as ZResult;
@@ -76,25 +77,13 @@ impl TransportUnicastInner {
         }
     }
 
-    fn handle_close(
-        &self,
-        link: &LinkUnicast,
-        zid: Option<ZenohId>,
-        reason: u8,
-        link_only: bool,
-    ) -> ZResult<()> {
-        // Check if the zid is correct when provided
-        if let Some(zid) = zid {
-            if zid != self.config.zid {
-                log::debug!(
-                    "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
-                    link,
-                    zid,
-                    reason
-                );
-                return Ok(());
-            }
-        }
+    fn handle_close(&self, link: &LinkUnicast, reason: CloseReason) -> ZResult<()> {
+        log::debug!(
+            "Transport: {}. Received close on link: {}. Reason: {:?}",
+            self.config.zid,
+            link,
+            reason
+        );
 
         // Stop now rx and tx tasks before doing the proper cleanup
         let _ = self.stop_rx(link);
@@ -106,11 +95,8 @@ impl TransportUnicastInner {
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
         task::spawn(async move {
-            if link_only {
-                let _ = c_transport.del_link(&c_link).await;
-            } else {
-                let _ = c_transport.delete().await;
-            }
+            let _ = c_transport.del_link(&c_link).await;
+            let _ = c_transport.delete().await;
         });
 
         Ok(())
@@ -119,7 +105,35 @@ impl TransportUnicastInner {
     fn handle_frame(
         &self,
         sn: ZInt,
-        payload: FramePayload,
+        mut payload: Vec<ZenohMessage>,
+        mut guard: MutexGuard<'_, TransportChannelRx>,
+    ) -> ZResult<()> {
+        let precedes = guard.sn.precedes(sn)?;
+        if !precedes {
+            log::debug!(
+                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                self.config.zid,
+                sn,
+                guard.sn.get()
+            );
+            // Keep reading
+            return Ok(());
+        }
+
+        // Set will always return OK because we have already checked
+        // with precedes() that the sn has the right resolution
+        let _ = guard.sn.set(sn);
+        for msg in payload.drain(..) {
+            self.trigger_callback(msg)?;
+        }
+        Ok(())
+    }
+
+    fn handle_fragment(
+        &self,
+        sn: ZInt,
+        payload: ZSlice,
+        has_more: bool,
         mut guard: MutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
@@ -141,28 +155,19 @@ impl TransportUnicastInner {
         // Set will always return OK because we have already checked
         // with precedes() that the sn has the right resolution
         let _ = guard.sn.set(sn);
-        match payload {
-            FramePayload::Fragment { buffer, is_final } => {
-                if guard.defrag.is_empty() {
-                    let _ = guard.defrag.sync(sn);
-                }
-                guard.defrag.push(sn, buffer)?;
-                if is_final {
-                    // When shared-memory feature is disabled, msg does not need to be mutable
-                    let msg = guard.defrag.defragment().ok_or_else(|| {
-                        zerror!("Transport: {}. Defragmentation error.", self.config.zid)
-                    })?;
-                    self.trigger_callback(msg)
-                } else {
-                    Ok(())
-                }
-            }
-            FramePayload::Messages { mut messages } => {
-                for msg in messages.drain(..) {
-                    self.trigger_callback(msg)?;
-                }
-                Ok(())
-            }
+        if guard.defrag.is_empty() {
+            let _ = guard.defrag.sync(sn);
+        }
+        guard.defrag.push(sn, payload)?;
+        if !has_more {
+            // When shared-memory feature is disabled, msg does not need to be mutable
+            let msg = guard
+                .defrag
+                .defragment()
+                .ok_or_else(|| zerror!("Transport: {}. Defragmentation error.", self.config.zid))?;
+            self.trigger_callback(msg)
+        } else {
+            Ok(())
         }
     }
 
@@ -171,34 +176,49 @@ impl TransportUnicastInner {
         // Process the received message
         match msg.body {
             TransportBody::Frame(Frame {
-                channel,
+                reliability,
                 sn,
                 payload,
+                exts,
             }) => {
                 let c = if self.is_qos() {
-                    &self.conduit_rx[channel.priority as usize]
-                } else if channel.priority == Priority::default() {
-                    &self.conduit_rx[0]
+                    match exts.qos.as_ref() {
+                        Some(q) => &self.conduit_rx[q.priority.id() as usize],
+                        None => &self.conduit_rx[Priority::default().id() as usize],
+                    }
                 } else {
-                    bail!(
-                        "Transport: {}. Unknown conduit: {:?}.",
-                        self.config.zid,
-                        channel.priority
-                    );
+                    &self.conduit_rx[0]
                 };
 
-                match channel.reliability {
-                    Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),
-                    Reliability::BestEffort => {
-                        self.handle_frame(sn, payload, zlock!(c.best_effort))
-                    }
-                }
+                let guard = match reliability {
+                    Reliability::Reliable => zlock!(c.reliable),
+                    Reliability::BestEffort => zlock!(c.best_effort),
+                };
+                self.handle_frame(sn, payload, guard)
             }
-            TransportBody::Close(Close {
-                pid,
-                reason,
-                link_only,
-            }) => self.handle_close(link, pid, reason, link_only),
+            TransportBody::Fragment(Fragment {
+                reliability,
+                sn,
+                payload,
+                has_more,
+                exts,
+            }) => {
+                let c = if self.is_qos() {
+                    match exts.qos.as_ref() {
+                        Some(q) => &self.conduit_rx[q.priority.id() as usize],
+                        None => &self.conduit_rx[Priority::default().id() as usize],
+                    }
+                } else {
+                    &self.conduit_rx[0]
+                };
+
+                let guard = match reliability {
+                    Reliability::Reliable => zlock!(c.reliable),
+                    Reliability::BestEffort => zlock!(c.best_effort),
+                };
+                self.handle_fragment(sn, payload, has_more, guard)
+            }
+            TransportBody::Close(Close { reason, .. }) => self.handle_close(link, reason),
             TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
             _ => {
                 log::debug!(

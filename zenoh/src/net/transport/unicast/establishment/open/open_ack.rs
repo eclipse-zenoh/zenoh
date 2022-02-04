@@ -15,7 +15,7 @@ use super::super::authenticator::AuthenticatedPeerLink;
 use super::OResult;
 use crate::net::link::LinkUnicast;
 use crate::net::protocol::core::ZInt;
-use crate::net::protocol::message::{Close, OpenAck, WireProperties};
+use crate::net::protocol::message::{CloseReason, OpenAck, WireProperties};
 use crate::net::transport::TransportManager;
 use std::time::Duration;
 
@@ -41,7 +41,7 @@ pub(super) async fn recv(
         let _ = pa
             .handle_open_ack(auth_link, open_ack_auth_ext.remove(&pa.id().into()))
             .await
-            .map_err(|e| (e, Some(Close::INVALID)))?;
+            .map_err(|e| (e, Some(CloseReason::Invalid)))?;
     }
 
     let output = Output {

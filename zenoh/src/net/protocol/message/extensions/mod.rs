@@ -11,12 +11,14 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+mod byte;
 mod empty;
 mod properties;
 mod unknown;
 mod zint;
 
 use crate::net::protocol::io::{WBuf, ZBuf};
+pub use byte::*;
 pub use empty::*;
 pub use properties::*;
 use std::convert::Into;
@@ -103,6 +105,14 @@ impl<T: ZExtension> ZExt<T> {
 
     pub fn into_inner(self) -> T {
         self.inner
+    }
+
+    pub fn as_inner(&self) -> &T {
+        &self.inner
+    }
+
+    pub fn as_inner_mut(&mut self) -> &mut T {
+        &mut self.inner
     }
 
     pub fn write(&self, wbuf: &mut WBuf, more: bool) -> bool {

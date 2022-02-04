@@ -13,7 +13,10 @@
 //
 use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::io::WBuf;
-use super::protocol::message::{TransportMessage, ZenohMessage};
+use super::protocol::message::extensions::{ZExt, ZExtPolicy};
+use super::protocol::message::{
+    Fragment, FragmentExts, Frame, FrameExts, TransportProto, ZMessage, ZenohMessage,
+};
 use super::seq_num::SeqNumGenerator;
 
 type LengthType = u16;
@@ -190,10 +193,13 @@ impl SerializationBatch {
     /// # Arguments
     /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
     ///
-    pub(crate) fn serialize_transport_message(&mut self, message: &mut TransportMessage) -> bool {
+    pub(crate) fn serialize_message<T: ZMessage<Proto = TransportProto>>(
+        &mut self,
+        message: &mut T,
+    ) -> bool {
         // Mark the write operation
         self.buffer.mark();
-        let res = self.buffer.write_transport_message(message);
+        let res = message.write(&mut self.buffer);
         if res {
             // Reset the current frame value
             self.current_frame = CurrentFrame::None;
@@ -259,13 +265,10 @@ impl SerializationBatch {
             let sn = sn_gen.get();
 
             // Serialize the new frame and the zenoh message
-            let res = self.buffer.write_frame_header(
-                priority,
-                message.channel.reliability,
-                sn,
-                None,
-                None,
-            ) && self.buffer.write_zenoh_message(message);
+            let qos = Some(ZExt::new(priority, ZExtPolicy::Ignore));
+            let exts = FrameExts { qos };
+            let res = Frame::write_header(&mut self.buffer, message.channel.reliability, sn, &exts)
+                && self.buffer.write_zenoh_message(message);
 
             if res {
                 self.current_frame = frame;
@@ -316,28 +319,33 @@ impl SerializationBatch {
         to_fragment: &mut WBuf,
         to_write: usize,
     ) -> usize {
+        // Create fragment extensions
+        let exts = FragmentExts {
+            qos: if priority == Priority::default() {
+                None
+            } else {
+                Some(ZExt::new(priority, ZExtPolicy::Ignore))
+            },
+        };
+
         // Assume first that this is not the final fragment
         let sn = sn_gen.get();
-        let mut is_final = false;
+        let mut has_more = true;
         loop {
             // Mark the buffer for the writing operation
             self.buffer.mark();
-            // Write the frame header
-            let fragment = Some(is_final);
-            let attachment = None;
-            let res =
-                self.buffer
-                    .write_frame_header(priority, reliability, sn, fragment, attachment);
+            // Write the fragment header
+            let res = Fragment::write_header(&mut self.buffer, reliability, sn, has_more, &exts);
 
             if res {
                 // Compute the amount left
                 let space_left = self.buffer.capacity() - self.buffer.len();
                 // Check if it is really the final fragment
-                if !is_final && (to_write <= space_left) {
+                if has_more && (to_write <= space_left) {
                     // Revert the buffer
                     self.buffer.revert();
                     // It is really the finally fragment, reserialize the header
-                    is_final = true;
+                    has_more = false;
                     continue;
                 }
                 // Write the fragment
@@ -383,7 +391,7 @@ mod tests {
     use crate::net::protocol::io::{WBuf, ZBuf};
     use crate::net::protocol::message::defaults::SEQ_NUM_RES;
     use crate::net::protocol::message::{
-        Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
+        Fragment, Frame, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
     };
     use std::convert::TryFrom;
 
@@ -408,17 +416,15 @@ mod tests {
                 // Insert a transport message every 3 ZenohMessage
                 if zenohs_in.len() % 3 == 0 {
                     // Create a TransportMessage
-                    let pid = None;
-                    let attachment = None;
-                    let mut msg = TransportMessage::make_keep_alive(pid, attachment);
+                    let mut msg = KeepAlive::new();
 
                     // Serialize the TransportMessage
-                    let res = batch.serialize_transport_message(&mut msg);
+                    let res = batch.serialize_message(&mut msg);
                     if !res {
                         assert!(!zenohs_in.is_empty());
                         break;
                     }
-                    transports_in.push(msg);
+                    transports_in.push(msg.into());
                 }
 
                 // Create a ZenohMessage
@@ -471,7 +477,7 @@ mod tests {
             // Convert the buffer into an ZBuf
             let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
             // Deserialize the messages
-            while let Some(msg) = zbuf.read_transport_message() {
+            while let Some(msg) = TransportMessage::read(&mut zbuf) {
                 deserialized.push(msg);
             }
             assert!(!deserialized.is_empty());
@@ -480,10 +486,9 @@ mod tests {
             let mut zenohs_out: Vec<ZenohMessage> = vec![];
             for msg in deserialized.drain(..) {
                 match msg.body {
-                    TransportBody::Frame(Frame { payload, .. }) => match payload {
-                        FramePayload::Messages { mut messages } => zenohs_out.append(&mut messages),
-                        _ => panic!(),
-                    },
+                    TransportBody::Frame(Frame { mut payload, .. }) => {
+                        zenohs_out.append(&mut payload)
+                    }
                     _ => transports_out.push(msg),
                 }
             }
@@ -560,16 +565,15 @@ mod tests {
                     // Convert the buffer into an ZBuf
                     let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                     // Deserialize the messages
-                    let msg = zbuf.read_transport_message().unwrap();
+                    let msg = TransportMessage::read(&mut zbuf).unwrap();
 
                     match msg.body {
-                        TransportBody::Frame(Frame {
-                            payload: FramePayload::Fragment { buffer, is_final },
-                            ..
+                        TransportBody::Fragment(Fragment {
+                            payload, has_more, ..
                         }) => {
-                            assert!(!buffer.is_empty());
-                            fragments.write_zslice(buffer.clone());
-                            if is_final {
+                            assert!(!payload.is_empty());
+                            fragments.write_zslice(payload.clone());
+                            if !has_more {
                                 break;
                             }
                         }

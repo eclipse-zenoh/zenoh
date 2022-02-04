@@ -16,7 +16,7 @@ use super::transport::TransportMulticastInner;
 use super::*;
 use crate::config::Config;
 use crate::net::link::*;
-use crate::net::protocol::message::Close;
+use crate::net::protocol::message::CloseReason;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -148,7 +148,7 @@ impl TransportManager {
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportMulticastInner>>>();
         for tm in tm_guard.drain(..) {
-            let _ = tm.close(Close::GENERIC).await;
+            let _ = tm.close(CloseReason::Generic).await;
         }
     }
 
