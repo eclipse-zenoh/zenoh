@@ -147,7 +147,7 @@ async fn transport_init(
     let config = TransportConfigUnicast {
         peer: input.zid,
         whatami: input.whatami,
-        sn_resolution,
+        sn_bytes: input.sn_bytes,
         is_shm: input.is_shm,
         is_qos: input.is_qos,
         initial_sn_tx,

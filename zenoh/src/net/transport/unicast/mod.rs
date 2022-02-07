@@ -23,7 +23,7 @@ use super::common;
 use super::common::stats::stats_struct;
 use super::protocol;
 use super::protocol::core::{WhatAmI, ZInt, ZenohId};
-use super::protocol::message::{CloseReason, ZenohMessage};
+use super::protocol::message::{CloseReason, SeqNumBytes, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 use crate::net::link::Link;
 pub use manager::*;
@@ -81,7 +81,7 @@ stats_struct! {
 pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
+    pub(crate) sn_bytes: SeqNumBytes,
     pub(crate) initial_sn_tx: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
@@ -113,9 +113,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
+    pub fn get_sn_bytes(&self) -> ZResult<SeqNumBytes> {
         let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution())
+        Ok(transport.get_sn_bytes())
     }
 
     #[inline(always)]
@@ -222,7 +222,8 @@ impl fmt::Debug for TransportUnicast {
                 .debug_struct("Transport Unicast")
                 .field("pid", &transport.get_zid())
                 .field("whatami", &transport.get_whatami())
-                .field("sn_resolution", &transport.get_sn_resolution())
+                .field("sn_bytes", &transport.get_sn_bytes())
+                .field("sn_resolution", &transport.get_sn_bytes().resolution())
                 .field("is_qos", &transport.is_qos())
                 .field("is_shm", &transport.is_shm())
                 .field("links", &transport.get_links())

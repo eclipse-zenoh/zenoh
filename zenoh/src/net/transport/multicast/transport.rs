@@ -107,17 +107,19 @@ impl TransportMulticastInner {
     pub(super) fn make(config: TransportMulticastConfig) -> ZResult<TransportMulticastInner> {
         let mut conduit_tx = vec![];
 
-        let sn_resolution = config.manager.config.sn_bytes.resolution();
         match config.initial_sns {
             ConduitSnList::Plain(sn) => {
-                let tct = TransportConduitTx::make(Priority::default(), sn_resolution)?;
+                let tct =
+                    TransportConduitTx::make(Priority::default(), config.manager.config.sn_bytes)?;
                 let _ = tct.sync(sn)?;
                 conduit_tx.push(tct);
             }
             ConduitSnList::QoS(sns) => {
                 for (i, sn) in sns.iter().enumerate() {
-                    let tct =
-                        TransportConduitTx::make((i as u8).try_into().unwrap(), sn_resolution)?;
+                    let tct = TransportConduitTx::make(
+                        (i as u8).try_into().unwrap(),
+                        config.manager.config.sn_bytes,
+                    )?;
                     let _ = tct.sync(*sn)?;
                     conduit_tx.push(tct);
                 }
@@ -351,7 +353,7 @@ impl TransportMulticastInner {
             ConduitSnList::Plain(sn) => {
                 let tcr = TransportConduitRx::make(
                     Priority::default(),
-                    join.sn_bytes.resolution(),
+                    join.sn_bytes,
                     self.manager.config.defrag_buff_size,
                 )?;
                 tcr.sync(sn)?;
@@ -362,7 +364,7 @@ impl TransportMulticastInner {
                 for (prio, sn) in sns.iter().enumerate() {
                     let tcr = TransportConduitRx::make(
                         (prio as u8).try_into().unwrap(),
-                        join.sn_bytes.resolution(),
+                        join.sn_bytes,
                         self.manager.config.defrag_buff_size,
                     )?;
                     tcr.sync(*sn)?;

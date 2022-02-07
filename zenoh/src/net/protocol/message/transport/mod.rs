@@ -34,6 +34,7 @@ pub use join::*;
 pub use keepalive::*;
 pub use open::*;
 use std::convert::TryFrom;
+use std::fmt;
 #[cfg(feature = "stats")]
 use std::num::NonZeroUsize;
 pub use sync::*;
@@ -151,6 +152,12 @@ impl Default for SeqNumBytes {
     fn default() -> Self {
         // 2^28 seq num resolution
         Self::Four
+    }
+}
+
+impl fmt::Display for SeqNumBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value())
     }
 }
 

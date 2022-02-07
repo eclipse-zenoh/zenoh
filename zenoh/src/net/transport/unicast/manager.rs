@@ -389,10 +389,10 @@ impl TransportManager {
                     return Err(e.into());
                 }
 
-                if transport.config.sn_resolution != config.sn_resolution {
+                if transport.config.sn_bytes != config.sn_bytes {
                     let e = zerror!(
                     "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
-                    config.peer, config.sn_resolution, transport.config.sn_resolution
+                    config.peer, config.sn_bytes, transport.config.sn_bytes
                 );
                     log::trace!("{}", e);
                     return Err(e.into());
@@ -440,7 +440,7 @@ impl TransportManager {
                     manager: self.clone(),
                     zid: config.peer,
                     whatami: config.whatami,
-                    sn_resolution: config.sn_resolution,
+                    sn_bytes: config.sn_bytes,
                     initial_sn_tx: config.initial_sn_tx,
                     is_shm: config.is_shm,
                     is_qos: config.is_qos,
@@ -455,7 +455,7 @@ impl TransportManager {
                     "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
                     config.peer,
                     config.whatami,
-                    config.sn_resolution,
+                    config.sn_bytes,
                     config.initial_sn_tx,
                     config.is_shm,
                     config.is_qos

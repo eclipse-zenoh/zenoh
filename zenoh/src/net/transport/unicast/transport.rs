@@ -22,6 +22,7 @@ use super::protocol::message::{Close, CloseReason, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast, LinkUnicastDirection};
+use crate::net::protocol::message::SeqNumBytes;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -54,7 +55,7 @@ pub(crate) struct TransportUnicastConfig {
     pub(crate) manager: TransportManager,
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
+    pub(crate) sn_bytes: SeqNumBytes,
     pub(crate) initial_sn_tx: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
@@ -88,26 +89,26 @@ impl TransportUnicastInner {
             for c in 0..Priority::NUM {
                 conduit_tx.push(TransportConduitTx::make(
                     (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
+                    config.sn_bytes,
                 )?);
             }
 
             for c in 0..Priority::NUM {
                 conduit_rx.push(TransportConduitRx::make(
                     (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
+                    config.sn_bytes,
                     config.manager.config.defrag_buff_size,
                 )?);
             }
         } else {
             conduit_tx.push(TransportConduitTx::make(
                 Priority::default(),
-                config.sn_resolution,
+                config.sn_bytes,
             )?);
 
             conduit_rx.push(TransportConduitRx::make(
                 Priority::default(),
-                config.sn_resolution,
+                config.sn_bytes,
                 config.manager.config.defrag_buff_size,
             )?);
         }
@@ -384,8 +385,8 @@ impl TransportUnicastInner {
         self.config.whatami
     }
 
-    pub(crate) fn get_sn_resolution(&self) -> ZInt {
-        self.config.sn_resolution
+    pub(crate) fn get_sn_bytes(&self) -> SeqNumBytes {
+        self.config.sn_bytes
     }
 
     pub(crate) fn is_shm(&self) -> bool {

@@ -12,14 +12,15 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::ZInt;
+use crate::net::protocol::message::SeqNumBytes;
 
 pub mod defaults {
-    use super::ZInt;
+    use super::SeqNumBytes;
 
     // The default sequence number resolution takes 4 bytes on the wire.
     // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
     // 2^28 = 268_435_456 => Max Seq Num = 268_435_455
-    pub const SEQ_NUM_RES: ZInt = 268_435_456;
+    pub const SEQ_NUM_RES: SeqNumBytes = SeqNumBytes::Four;
 
     /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
     ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.

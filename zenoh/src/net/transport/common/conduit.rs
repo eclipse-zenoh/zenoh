@@ -13,6 +13,7 @@
 //
 use super::defragmentation::DefragBuffer;
 use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
+use super::protocol::message::SeqNumBytes;
 use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
 use zenoh_util::core::zresult::ZResult;
@@ -24,9 +25,9 @@ pub(crate) struct TransportChannelTx {
 }
 
 impl TransportChannelTx {
-    pub(crate) fn make(sn_resolution: ZInt) -> ZResult<TransportChannelTx> {
+    pub(crate) fn make(sn_bytes: SeqNumBytes) -> ZResult<TransportChannelTx> {
         let tch = TransportChannelTx {
-            sn: SeqNumGenerator::make(0, sn_resolution)?,
+            sn: SeqNumGenerator::make(0, sn_bytes)?,
         };
         Ok(tch)
     }
@@ -45,11 +46,11 @@ pub(crate) struct TransportChannelRx {
 impl TransportChannelRx {
     pub(crate) fn make(
         reliability: Reliability,
-        sn_resolution: ZInt,
+        sn_bytes: SeqNumBytes,
         defrag_buff_size: usize,
     ) -> ZResult<TransportChannelRx> {
-        let sn = SeqNum::make(0, sn_resolution)?;
-        let defrag = DefragBuffer::make(reliability, sn_resolution, defrag_buff_size)?;
+        let sn = SeqNum::make(0, sn_bytes)?;
+        let defrag = DefragBuffer::make(reliability, sn_bytes, defrag_buff_size)?;
         let tch = TransportChannelRx { sn, defrag };
         Ok(tch)
     }
@@ -75,9 +76,9 @@ pub(crate) struct TransportConduitTx {
 }
 
 impl TransportConduitTx {
-    pub(crate) fn make(priority: Priority, sn_resolution: ZInt) -> ZResult<TransportConduitTx> {
-        let rch = TransportChannelTx::make(sn_resolution)?;
-        let bch = TransportChannelTx::make(sn_resolution)?;
+    pub(crate) fn make(priority: Priority, sn_bytes: SeqNumBytes) -> ZResult<TransportConduitTx> {
+        let rch = TransportChannelTx::make(sn_bytes)?;
+        let bch = TransportChannelTx::make(sn_bytes)?;
         let ctx = TransportConduitTx {
             priority,
             reliable: Arc::new(Mutex::new(rch)),
@@ -102,12 +103,11 @@ pub(crate) struct TransportConduitRx {
 impl TransportConduitRx {
     pub(crate) fn make(
         priority: Priority,
-        sn_resolution: ZInt,
+        sn_bytes: SeqNumBytes,
         defrag_buff_size: usize,
     ) -> ZResult<TransportConduitRx> {
-        let rch = TransportChannelRx::make(Reliability::Reliable, sn_resolution, defrag_buff_size)?;
-        let bch =
-            TransportChannelRx::make(Reliability::BestEffort, sn_resolution, defrag_buff_size)?;
+        let rch = TransportChannelRx::make(Reliability::Reliable, sn_bytes, defrag_buff_size)?;
+        let bch = TransportChannelRx::make(Reliability::BestEffort, sn_bytes, defrag_buff_size)?;
         let ctr = TransportConduitRx {
             priority,
             reliable: Arc::new(Mutex::new(rch)),

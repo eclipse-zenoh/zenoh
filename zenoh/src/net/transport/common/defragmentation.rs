@@ -13,7 +13,7 @@
 //
 use super::protocol::core::{Reliability, ZInt};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::message::ZenohMessage;
+use super::protocol::message::{SeqNumBytes, ZenohMessage};
 use super::seq_num::SeqNum;
 
 use zenoh_util::core::Result as ZResult;
@@ -29,12 +29,12 @@ pub(crate) struct DefragBuffer {
 impl DefragBuffer {
     pub(crate) fn make(
         reliability: Reliability,
-        sn_resolution: ZInt,
+        bytes: SeqNumBytes,
         capacity: usize,
     ) -> ZResult<DefragBuffer> {
         let db = DefragBuffer {
             reliability,
-            sn: SeqNum::make(0, sn_resolution)?,
+            sn: SeqNum::make(0, bytes)?,
             capacity,
             buffer: ZBuf::new(),
         };
