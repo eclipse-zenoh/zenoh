@@ -45,6 +45,7 @@ use zenoh_util::zparse;
 /// use async_std::sync::Arc;
 /// use std::time::Duration;
 /// use zenoh::net::protocol::core::{ZenohId, WhatAmI, whatami};
+/// use zenoh::net::protocol::message::SeqNumBytes;
 /// use zenoh::net::transport::*;
 /// use zenoh::Result as ZResult;
 ///
@@ -85,7 +86,7 @@ use zenoh_util::zparse;
 ///         .zid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
-///         .sn_bytes(4)                    // Use max 4 bytes for the SN: 2^28 sequence numbers
+///         .sn_bytes(SeqNumBytes::Four)    // Use max 4 bytes for the SN: 2^28 sequence numbers
 ///         .unicast(unicast)               // Configure unicast parameters
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();

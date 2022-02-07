@@ -116,13 +116,12 @@ pub use writer::*;
 /// +--------------+--------------+
 /// |   64 bits    |   10 bytes   |
 /// +--------------+--------------+
-/// ```
 ///
 /// Finally, provided a limit on the maximum number of bytes being used to encode a ZInt,
 /// the maximum representable ZInt value is given by the following formula:
 ///
 ///     Max ZInt Value := 2 ^ (7 * #max bytes)
-///
+/// ```
 ///
 /// # Array field
 ///
