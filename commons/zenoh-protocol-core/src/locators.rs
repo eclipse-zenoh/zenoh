@@ -4,6 +4,8 @@ use std::{
 
 use zenoh_core::bail;
 
+use crate::split_once;
+
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
 pub const METADATA_SEPARATOR: char = '?';
@@ -200,16 +202,6 @@ impl Locator {
     }
     pub fn metadata(&self) -> Option<&ArcProperties> {
         self.metadata.as_ref()
-    }
-}
-
-pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
     }
 }
 
