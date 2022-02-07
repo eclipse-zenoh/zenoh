@@ -123,10 +123,6 @@ name = "rwbuf_bench"
 harness = false
 
 [[bench]]
-name = "key_expr_bench"
-harness = false
-
-[[bench]]
 name = "data_creation"
 harness = false
 

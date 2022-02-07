@@ -1,8 +1,8 @@
 use zenoh_core::bail;
 
 use crate::{
-    locators::{split_once, ArcProperties},
-    Locator,
+    locators::{ArcProperties, Locator},
+    split_once,
 };
 
 use super::locators::{CONFIG_SEPARATOR, FIELD_SEPARATOR, LIST_SEPARATOR, METADATA_SEPARATOR};
