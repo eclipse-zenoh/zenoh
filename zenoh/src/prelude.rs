@@ -32,6 +32,7 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[cfg(feature = "shared-memory")]
 use async_std::sync::Arc;
 use regex::Regex;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
 use zenoh_core::bail;
@@ -552,26 +553,33 @@ pub struct Selector<'a> {
     pub key_selector: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     /// I.e. all characters starting from `?`.
-    pub value_selector: &'a str,
+    pub value_selector: Cow<'a, str>,
 }
 
 impl<'a> Selector<'a> {
+    pub fn to_owned(&self) -> Selector<'static> {
+        Selector {
+            key_selector: self.key_selector.to_owned(),
+            value_selector: self.value_selector.to_string().into(),
+        }
+    }
+
     /// Sets the `value_selector` part of this `Selector`.
     #[inline(always)]
     pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
-        self.value_selector = value_selector;
+        self.value_selector = value_selector.into();
         self
     }
 
     /// Parses the `value_selector` part of this `Selector`.
-    pub fn parse_value_selector(&self) -> crate::Result<ValueSelector<'a>> {
-        ValueSelector::try_from(self.value_selector)
+    pub fn parse_value_selector(&'a self) -> crate::Result<ValueSelector<'a>> {
+        ValueSelector::try_from(self.value_selector.as_ref())
     }
 
     /// Returns true if the `Selector` specifies a time-range in its properties
     /// (i.e. using `"starttime"` or `"stoptime"`)
     pub fn has_time_range(&self) -> bool {
-        match ValueSelector::try_from(self.value_selector) {
+        match ValueSelector::try_from(self.value_selector.as_ref()) {
             Ok(value_selector) => value_selector.has_time_range(),
             _ => false,
         }
@@ -590,13 +598,25 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
     }
 }
 
+impl From<String> for Selector<'_> {
+    fn from(s: String) -> Self {
+        let (key_selector, value_selector) = s
+            .find(|c| c == '?')
+            .map_or((s.as_str(), ""), |i| s.split_at(i));
+        Selector {
+            key_selector: key_selector.to_string().into(),
+            value_selector: value_selector.to_string().into(),
+        }
+    }
+}
+
 impl<'a> From<&'a str> for Selector<'a> {
     fn from(s: &'a str) -> Self {
         let (key_selector, value_selector) =
             s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
         Selector {
             key_selector: key_selector.into(),
-            value_selector,
+            value_selector: value_selector.into(),
         }
     }
 }
@@ -611,7 +631,7 @@ impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
             key_selector: q.key_selector.clone(),
-            value_selector: &q.value_selector,
+            value_selector: (&q.value_selector).into(),
         }
     }
 }
@@ -620,7 +640,7 @@ impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
             key_selector: key_selector.clone(),
-            value_selector: "",
+            value_selector: "".into(),
         }
     }
 }
@@ -629,7 +649,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {
             key_selector,
-            value_selector: "",
+            value_selector: "".into(),
         }
     }
 }
@@ -657,7 +677,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// let mut queryable = session.queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.next().await {
-///     let value_selector = query.selector().parse_value_selector().unwrap();
+///     let selector = query.selector();
+///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
 ///     println!("fragment: {}", value_selector.fragment);

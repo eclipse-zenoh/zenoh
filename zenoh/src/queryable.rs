@@ -52,7 +52,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_selector: self.key_selector.clone(),
-            value_selector: &self.value_selector,
+            value_selector: (&self.value_selector).into(),
         }
     }
 
