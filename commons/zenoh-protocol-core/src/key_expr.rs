@@ -14,7 +14,7 @@
 
 use crate::ExprId;
 use core::fmt;
-use std::{borrow::Cow, convert::TryInto};
+use std::{borrow::Cow, convert::TryInto, os::unix::prelude::OsStrExt};
 use zenoh_core::{bail, Result as ZResult};
 
 #[inline(always)]
@@ -63,10 +63,10 @@ macro_rules! DEFINE_INTERSECT {
                 if ($end($next(c2))) {
                     return true;
                 }
-                if ($name($next(c1), c2)) {
+                if ($name(c2, $next(c1))) {
                     return true;
                 } else {
-                    return $name(c1, $next(c2));
+                    return $name($next(c2), c1);
                 }
             }
             if ($end(c1) || $end(c2)) {
@@ -115,12 +115,62 @@ macro_rules! DEFINE_INCLUDE {
 
 DEFINE_INTERSECT!(sub_chunk_intersect, cend, cwild, cnext, cequal);
 
+fn chunk_it_intersect(mut it1: &[u8], mut it2: &[u8]) -> bool {
+    fn next(s: &[u8]) -> (u8, &[u8]) {
+        (s[0], &s[1..])
+    }
+    while !it1.is_empty() && !it2.is_empty() {
+        let (current1, advanced1) = next(it1);
+        let (current2, advanced2) = next(it2);
+        match (current1, current2) {
+            (b'*', b'*') => {
+                if advanced1.is_empty() || advanced2.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(advanced1, it2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(it1, advanced2);
+                };
+            }
+            (b'*', _) => {
+                if advanced1.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(advanced1, it2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(it1, advanced2);
+                }
+            }
+            (_, b'*') => {
+                if advanced2.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(it1, advanced2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(advanced1, it2);
+                }
+            }
+            (sub1, sub2) if sub1 == sub2 => {
+                it1 = advanced1;
+                it2 = advanced2;
+            }
+            (_, _) => return false,
+        }
+    }
+    it1.is_empty() && it2.is_empty() || it1 == b"*" || it2 == b"*"
+}
 #[inline(always)]
 fn chunk_intersect(c1: &str, c2: &str) -> bool {
-    if (cend(c1) && !cend(c2)) || (!cend(c1) && cend(c2)) {
+    if c1 == c2 {
+        return true;
+    }
+    if c1.is_empty() != c2.is_empty() {
         return false;
     }
-    sub_chunk_intersect(c1, c2)
+    chunk_it_intersect(c1.as_bytes(), c2.as_bytes())
 }
 
 DEFINE_INCLUDE!(chunk_include, cend, cwild, cnext, cequal);
@@ -145,13 +195,65 @@ fn next(s: &str) -> &str {
 
 DEFINE_INTERSECT!(res_intersect, end, wild, next, chunk_intersect);
 
+fn it_intersect<'a>(mut it1: &'a str, mut it2: &'a str) -> bool {
+    fn next(s: &str) -> (&str, &str) {
+        crate::split_once(s, '/')
+    }
+    while !it1.is_empty() && !it2.is_empty() {
+        let (current1, advanced1) = next(it1);
+        let (current2, advanced2) = next(it2);
+        match (current1, current2) {
+            // ("**", "**") => {
+            //     if advanced1.is_empty() || advanced2.is_empty() {
+            //         return true;
+            //     }
+            //     if it_intersect(advanced1, it2) {
+            //         return true;
+            //     } else {
+            //         return it_intersect(it1, advanced2);
+            //     };
+            // }
+            ("**", _) => {
+                return advanced1.is_empty()
+                    || it_intersect(advanced1, it2)
+                    || it_intersect(it1, advanced2);
+            }
+            (_, "**") => {
+                return advanced2.is_empty()
+                    || it_intersect(it1, advanced2)
+                    || it_intersect(advanced1, it2);
+            }
+            (sub1, sub2) if chunk_intersect(sub1, sub2) => {
+                it1 = advanced1;
+                it2 = advanced2;
+            }
+            (_, _) => return false,
+        }
+    }
+    (it1.is_empty() || it1 == "**") && (it2.is_empty() || it2 == "**")
+}
 /// Retruns `true` if the given key expressions intersect.
 ///
 /// I.e. if it exists a resource key (with no wildcards) that matches
 /// both given key expressions.
 #[inline(always)]
-pub fn intersect(s1: &str, s2: &str) -> bool {
-    res_intersect(s1, s2)
+pub fn intersect(mut s1: &str, mut s2: &str) -> bool {
+    if s1.as_bytes().ends_with(b"/") && s1.len() > 1 {
+        s1 = &s1[..(s1.len() - 1)]
+    }
+    if s2.as_bytes().ends_with(b"/") && s2.len() > 1 {
+        s2 = &s2[..(s2.len() - 1)]
+    }
+    if s1 == s2 {
+        return true;
+    }
+    if !s1.contains('*') && !s2.contains('*') {
+        return false;
+    }
+    if s1.is_empty() || s2.is_empty() {
+        return false;
+    }
+    it_intersect(s1, s2)
 }
 
 DEFINE_INCLUDE!(res_include, end, wild, next, chunk_include);
