@@ -597,7 +597,7 @@ pub async fn plugins_status(
 ) -> Vec<crate::plugins::Response> {
     let selector = Selector {
         key_selector: key.clone(),
-        value_selector: args,
+        value_selector: args.into(),
     };
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);

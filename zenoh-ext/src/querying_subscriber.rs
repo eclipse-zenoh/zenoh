@@ -135,7 +135,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     {
         let selector = query_selector.into();
         self.query_key_expr = selector.key_selector.to_owned();
-        self.query_value_selector = selector.value_selector.to_owned();
+        self.query_value_selector = selector.value_selector.to_string();
         self
     }
 
@@ -243,7 +243,7 @@ impl<'a> QueryingSubscriber<'a> {
         self.query_on_selector(
             Selector {
                 key_selector: self.conf.query_key_expr.clone(),
-                value_selector: &self.conf.query_value_selector.clone(),
+                value_selector: self.conf.query_value_selector.clone().into(),
             },
             self.conf.query_target.clone(),
             self.conf.query_consolidation.clone(),
