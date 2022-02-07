@@ -131,14 +131,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         routes.push("/**/site_9/**".to_owned());
         for _ in 0..100 {
             let selected_route_id: usize = rng.gen_range(0..all_existing.len());
-            let selected_route_components = all_existing[selected_route_id];
+            let mut selected_route_components = all_existing[selected_route_id];
             routes.push(mk_route(selected_route_components));
-            for i in 0..selected_route_components.len() {
-                let mut with_star = selected_route_components;
-                with_star[i] = "*";
-                routes.push(mk_route(with_star));
-            }
+            selected_route_components[4] = "*";
+            routes.push(mk_route(selected_route_components));
         }
+        let all_existing = all_existing.into_iter().map(mk_route).collect::<Vec<_>>();
         b.iter(move || {
             fn count_matches(routes: &[String], matching: &str) -> usize {
                 routes
@@ -150,9 +148,8 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
             count_matches(&routes, "/**");
             count_matches(&routes, "**/room_7/**");
-            for components in &all_existing {
-                let route = mk_route(*components);
-                count_matches(&routes, &route);
+            for route in &all_existing {
+                count_matches(&routes, route);
             }
         });
     });
