@@ -11,11 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#[macro_use]
-extern crate criterion;
+use criterion::{criterion_group, criterion_main, Criterion};
 
-use criterion::Criterion;
-
+use rand::SeedableRng;
 use zenoh_protocol_core::key_expr::intersect;
 fn run_intersections<const N: usize>(pool: [(&str, &str); N]) {
     for (l, r) in pool {
@@ -104,6 +102,59 @@ fn criterion_benchmark(c: &mut Criterion) {
             ("/x/*d", "/x/*e"),
         ];
         b.iter(|| run_intersections(data))
+    });
+    c.bench_function("bench_keyexpr_matching", |b| {
+        use rand::Rng;
+        let tlds = ["com", "org", "fr"];
+        let sites = (1..10).map(|n| format!("site_{}", n)).collect::<Vec<_>>();
+        let rooms = (1..10).map(|n| format!("room_{}", n)).collect::<Vec<_>>();
+        let robots = (1..10).map(|n| format!("robot_{}", n)).collect::<Vec<_>>();
+        let sensors = [
+            "temperature",
+            "positition_X",
+            "positition_Y",
+            "position_Z",
+            "battery",
+        ];
+        use itertools::iproduct;
+        let all_existing = iproduct!(tlds, &sites, &rooms, &robots, sensors)
+            .map(|(tld, site, room, robot, sensor)| [tld, site, room, robot, sensor])
+            .collect::<Vec<_>>();
+        fn mk_route([tld, site, room, robot, sensor]: [&str; 5]) -> String {
+            format!("/{}/{}/{}/{}/{}", tld, site, room, robot, sensor)
+        }
+        let mut rng = rand::rngs::StdRng::from_seed([32; 32]);
+        let mut routes = vec!["/**".to_owned(), "/*/**".to_owned()];
+        routes.push("/**/site_0/**".to_owned());
+        routes.push("/**/site_1/**".to_owned());
+        routes.push("/**/site_5/**".to_owned());
+        routes.push("/**/site_9/**".to_owned());
+        for _ in 0..100 {
+            let selected_route_id: usize = rng.gen_range(0..all_existing.len());
+            let selected_route_components = all_existing[selected_route_id];
+            routes.push(mk_route(selected_route_components));
+            for i in 0..selected_route_components.len() {
+                let mut with_star = selected_route_components;
+                with_star[i] = "*";
+                routes.push(mk_route(with_star));
+            }
+        }
+        b.iter(move || {
+            fn count_matches(routes: &[String], matching: &str) -> usize {
+                routes
+                    .iter()
+                    .filter_map(|r| {
+                        zenoh_protocol_core::key_expr::intersect(r, matching).then(|| ())
+                    })
+                    .count()
+            }
+            count_matches(&routes, "/**");
+            count_matches(&routes, "**/room_7/**");
+            for components in &all_existing {
+                let route = mk_route(*components);
+                count_matches(&routes, &route);
+            }
+        });
     });
 }
 

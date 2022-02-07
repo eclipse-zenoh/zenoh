@@ -3559,7 +3559,9 @@ version = "0.6.0-dev.0"
 dependencies = [
  "criterion",
  "hex",
+ "itertools",
  "lazy_static",
+ "rand 0.8.4",
  "serde",
  "uhlc",
  "uuid",
