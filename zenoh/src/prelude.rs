@@ -677,7 +677,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// let mut queryable = session.queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.next().await {
-///     let value_selector = query.selector().parse_value_selector().unwrap();
+///     let selector = query.selector();
+///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
 ///     println!("fragment: {}", value_selector.fragment);
