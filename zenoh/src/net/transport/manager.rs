@@ -27,7 +27,7 @@ use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use crate::config::Config;
 use crate::net::link::{EndPoint, Locator, LocatorConfig, LocatorProtocol};
-use crate::net::protocol::message::SeqNumBytes;
+use crate::net::protocol::core::SeqNumBytes;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -44,8 +44,7 @@ use zenoh_util::zparse;
 /// ```
 /// use async_std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh::net::protocol::core::{ZenohId, WhatAmI, whatami};
-/// use zenoh::net::protocol::message::SeqNumBytes;
+/// use zenoh::net::protocol::core::{SeqNumBytes, ZenohId, WhatAmI, whatami};
 /// use zenoh::net::transport::*;
 /// use zenoh::Result as ZResult;
 ///

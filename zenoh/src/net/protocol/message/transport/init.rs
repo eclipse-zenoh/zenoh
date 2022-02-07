@@ -11,8 +11,8 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{SeqNumBytes, TransportId, TransportProto};
-use crate::net::protocol::core::{NonZeroZInt, Version, WhatAmI, ZenohId};
+use super::{TransportId, TransportProto};
+use crate::net::protocol::core::{NonZeroZInt, SeqNumBytes, Version, WhatAmI, ZenohId};
 use crate::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use crate::net::protocol::message::extensions::{
     eid, has_more, ZExt, ZExtEmpty, ZExtPolicy, ZExtProperties, ZExtUnknown, ZExtZInt,

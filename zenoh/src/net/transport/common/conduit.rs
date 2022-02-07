@@ -12,8 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defragmentation::DefragBuffer;
-use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
-use super::protocol::message::SeqNumBytes;
+use super::protocol::core::{ConduitSn, Priority, Reliability, SeqNumBytes, ZInt};
 use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
 use zenoh_util::core::zresult::ZResult;

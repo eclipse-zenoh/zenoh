@@ -20,10 +20,10 @@ mod userpassword;
 
 use crate::config::Config;
 use crate::net::link::{Link, Locator};
+use crate::net::protocol::core::SeqNumBytes;
 use crate::net::protocol::core::{ZInt, ZenohId};
 #[cfg(feature = "auth_usrpwd")]
 use crate::net::protocol::io::{WBuf, ZBuf};
-use crate::net::protocol::message::SeqNumBytes;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::Arc;
 use async_trait::async_trait;

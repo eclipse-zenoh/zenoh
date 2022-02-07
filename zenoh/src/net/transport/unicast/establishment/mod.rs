@@ -16,11 +16,11 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{WhatAmI, ZInt, ZenohId};
+use super::protocol::core::{SeqNumBytes, WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use crate::net::link::{Link, LinkUnicast};
-use crate::net::protocol::message::{Close, CloseReason, SeqNumBytes, WireProperties};
+use crate::net::protocol::message::{Close, CloseReason, WireProperties};
 use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::convert::TryFrom;

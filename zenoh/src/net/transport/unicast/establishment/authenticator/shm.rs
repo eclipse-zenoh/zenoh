@@ -15,11 +15,11 @@ use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
 use crate::config::Config;
+use crate::net::protocol::core::SeqNumBytes;
 use crate::net::protocol::core::{ZInt, ZenohId};
 use crate::net::protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, ZBuf, ZSlice,
 };
-use crate::net::protocol::message::SeqNumBytes;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::core::ZInt;
-use crate::net::protocol::message::SeqNumBytes;
+use crate::net::protocol::core::SeqNumBytes;
 
 pub mod defaults {
     use super::SeqNumBytes;

@@ -14,8 +14,8 @@
 use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{WhatAmI, ZenohId};
-use crate::net::protocol::message::{CloseReason, InitSyn, SeqNumBytes, WireProperties};
+use crate::net::protocol::core::{SeqNumBytes, WhatAmI, ZenohId};
+use crate::net::protocol::message::{CloseReason, InitSyn, WireProperties};
 use crate::net::transport::TransportManager;
 use zenoh_util::zerror;
 

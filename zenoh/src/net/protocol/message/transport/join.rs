@@ -11,9 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::{SeqNumBytes, TransportId, TransportProto};
+use super::{TransportId, TransportProto};
 use crate::net::protocol::core::{
-    ConduitSn, ConduitSnList, NonZeroZInt, Priority, Version, WhatAmI, ZInt, ZenohId,
+    ConduitSn, ConduitSnList, NonZeroZInt, Priority, SeqNumBytes, Version, WhatAmI, ZInt, ZenohId,
 };
 use crate::net::protocol::io::{zint_len, WBuf, ZBuf};
 use crate::net::protocol::message::extensions::{

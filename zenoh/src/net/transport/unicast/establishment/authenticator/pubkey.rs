@@ -16,7 +16,7 @@ use super::{
 };
 use super::{WBuf, ZBuf, ZInt, ZenohId};
 use crate::config::Config;
-use crate::net::protocol::message::SeqNumBytes;
+use crate::net::protocol::core::SeqNumBytes;
 use crate::net::transport::unicast::establishment::Cookie;
 use async_std::sync::{Arc, Mutex};
 use async_trait::async_trait;

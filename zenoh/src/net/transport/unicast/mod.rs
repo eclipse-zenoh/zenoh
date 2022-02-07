@@ -22,8 +22,8 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::protocol;
-use super::protocol::core::{WhatAmI, ZInt, ZenohId};
-use super::protocol::message::{CloseReason, SeqNumBytes, ZenohMessage};
+use super::protocol::core::{SeqNumBytes, WhatAmI, ZInt, ZenohId};
+use super::protocol::message::{CloseReason, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 use crate::net::link::Link;
 pub use manager::*;

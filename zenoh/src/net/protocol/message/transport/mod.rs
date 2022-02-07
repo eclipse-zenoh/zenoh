@@ -23,7 +23,6 @@ mod sync;
 
 use super::flag as iflag;
 use super::ZMessage;
-use crate::net::protocol::core::*;
 use crate::net::protocol::io::{WBuf, ZBuf};
 pub use acknack::*;
 pub use close::*;
@@ -34,7 +33,6 @@ pub use join::*;
 pub use keepalive::*;
 pub use open::*;
 use std::convert::TryFrom;
-use std::fmt;
 #[cfg(feature = "stats")]
 use std::num::NonZeroUsize;
 pub use sync::*;
@@ -94,73 +92,6 @@ pub mod flag {
 /*************************************/
 /*       TRANSPORT MESSAGES          */
 /*************************************/
-#[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum SeqNumBytes {
-    One = 1,   // SeqNum max value: 2^7
-    Two = 2,   // SeqNum max value: 2^14
-    Three = 3, // SeqNum max value: 2^21
-    Four = 4,  // SeqNum max value: 2^28
-    Five = 5,  // SeqNum max value: 2^35
-    Six = 6,   // SeqNum max value: 2^42
-    Seven = 7, // SeqNum max value: 2^49
-    Eight = 8, // SeqNum max value: 2^56
-}
-
-impl SeqNumBytes {
-    pub const MIN: SeqNumBytes = SeqNumBytes::One;
-    pub const MAX: SeqNumBytes = SeqNumBytes::Eight;
-
-    pub const fn value(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn resolution(&self) -> ZInt {
-        const BASE: ZInt = 2;
-        BASE.pow(7 * self.value() as u32)
-    }
-}
-
-impl TryFrom<u8> for SeqNumBytes {
-    type Error = ();
-
-    fn try_from(b: u8) -> Result<Self, Self::Error> {
-        const ONE: u8 = SeqNumBytes::One.value();
-        const TWO: u8 = SeqNumBytes::Two.value();
-        const THREE: u8 = SeqNumBytes::Three.value();
-        const FOUR: u8 = SeqNumBytes::Four.value();
-        const FIVE: u8 = SeqNumBytes::Five.value();
-        const SIX: u8 = SeqNumBytes::Six.value();
-        const SEVEN: u8 = SeqNumBytes::Seven.value();
-        const EIGHT: u8 = SeqNumBytes::Eight.value();
-
-        match b {
-            ONE => Ok(Self::One),
-            TWO => Ok(Self::Two),
-            THREE => Ok(Self::Three),
-            FOUR => Ok(Self::Four),
-            FIVE => Ok(Self::Five),
-            SIX => Ok(Self::Six),
-            SEVEN => Ok(Self::Seven),
-            EIGHT => Ok(Self::Eight),
-            _ => Err(()),
-        }
-    }
-}
-
-impl Default for SeqNumBytes {
-    fn default() -> Self {
-        // 2^28 seq num resolution
-        Self::Four
-    }
-}
-
-impl fmt::Display for SeqNumBytes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value())
-    }
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum TransportBody {
     InitSyn(InitSyn),

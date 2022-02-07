@@ -13,9 +13,9 @@
 //
 use super::OResult;
 use crate::net::link::LinkUnicast;
-use crate::net::protocol::core::{WhatAmI, ZenohId};
+use crate::net::protocol::core::{SeqNumBytes, WhatAmI, ZenohId};
 use crate::net::protocol::io::ZSlice;
-use crate::net::protocol::message::{CloseReason, InitAck, SeqNumBytes, WireProperties};
+use crate::net::protocol::message::{CloseReason, InitAck, WireProperties};
 use crate::net::transport::unicast::establishment::authenticator::AuthenticatedPeerLink;
 use crate::net::transport::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::net::transport::TransportManager;

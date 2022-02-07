@@ -13,8 +13,10 @@
 //
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
-use super::protocol::core::{ConduitSnList, Priority, Version, WhatAmI, ZInt, ZenohId};
-use super::protocol::message::{Close, CloseReason, Join, SeqNumBytes, ZenohMessage};
+use super::protocol::core::{
+    ConduitSnList, Priority, SeqNumBytes, Version, WhatAmI, ZInt, ZenohId,
+};
+use super::protocol::message::{Close, CloseReason, Join, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{Link, LinkMulticast, Locator};

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::protocol::core::ZInt;
-use crate::net::protocol::message::SeqNumBytes;
+use crate::net::protocol::core::SeqNumBytes;
 use zenoh_util::core::Result as ZResult;
 
 /// Sequence Number
@@ -27,7 +27,6 @@ use zenoh_util::core::Result as ZResult;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SeqNum {
     value: ZInt,
-    semi_int: ZInt,
     mask: ZInt,
 }
 
@@ -49,12 +48,8 @@ impl SeqNum {
     /// `value` is greater or equal than `resolution`.
     ///
     pub(crate) fn make(value: ZInt, sn_bytes: SeqNumBytes) -> ZResult<SeqNum> {
-        let mask = !sn_bytes.resolution();
-        let mut sn = SeqNum {
-            value: 0,
-            semi_int: sn_bytes.resolution() >> 1,
-            mask,
-        };
+        let mask = sn_bytes.resolution() - 1;
+        let mut sn = SeqNum { value: 0, mask };
         sn.set(value)?;
         Ok(sn)
     }
@@ -66,7 +61,7 @@ impl SeqNum {
 
     #[inline(always)]
     pub(crate) fn resolution(&self) -> ZInt {
-        self.semi_int << 1
+        self.mask + 1
     }
 
     #[inline(always)]
@@ -108,10 +103,11 @@ impl SeqNum {
             bail!("The sequence number value must be smaller than the resolution");
         }
 
+        let semi_int = self.resolution() >> 1;
         let res = if value > self.value {
-            value - self.value <= self.semi_int
+            value - self.value <= semi_int
         } else {
-            self.value - value > self.semi_int
+            self.value - value > semi_int
         };
 
         Ok(res)
@@ -258,34 +254,47 @@ mod tests {
         let sn_bytes = SeqNumBytes::One;
         let mut sn0a = SeqNum::make(0, sn_bytes).unwrap();
         let sn1a: ZInt = 1;
+        println!("{} precedes {}: true", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 0 < 1
         assert!(res.unwrap());
 
         let sn1a: ZInt = 0;
+        println!("{} precedes {}: false", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 0 < 0
         assert!(!res.unwrap());
 
-        let sn1a: ZInt = sn_bytes.resolution() >> 1;
+        let sn1a: ZInt = (sn0a.resolution() >> 1) - 1;
+        println!("{} precedes {}: true", sn0a.get(), sn1a);
+        let res = sn0a.precedes(sn1a); // 0 < 63
+        assert!(res.unwrap());
+
+        let sn1a: ZInt = sn0a.resolution() >> 1;
+        println!("{} precedes {}: false", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 0 < 64
         assert!(res.unwrap());
 
-        let sn1a: ZInt = (sn_bytes.resolution() >> 1) + 1;
+        let sn1a: ZInt = (sn0a.resolution() >> 1) + 1;
+        println!("{} precedes {}: false", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 0 < 65
         assert!(!res.unwrap());
 
-        let sn1a: ZInt = sn_bytes.resolution() - 1;
+        let sn1a: ZInt = sn0a.resolution() - 1;
+        println!("{} precedes {}: true", sn0a.get(), sn1a);
         let res = sn0a.set(sn1a);
         assert!(res.is_ok());
 
         let sn1a: ZInt = 0;
+        println!("{} precedes {}: true", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 127 < 0
         assert!(res.unwrap());
 
-        let sn1a: ZInt = (sn_bytes.resolution() >> 1) - 2;
+        let sn1a: ZInt = (sn0a.resolution() >> 1) - 2;
+        println!("{} precedes {}: true", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 127 < 62
         assert!(res.unwrap());
 
-        let sn1a: ZInt = (sn_bytes.resolution() >> 1) - 1;
+        let sn1a: ZInt = (sn0a.resolution() >> 1) - 1;
+        println!("{} precedes {}: false", sn0a.get(), sn1a);
         let res = sn0a.precedes(sn1a); // 127 < 63
         assert!(!res.unwrap());
     }

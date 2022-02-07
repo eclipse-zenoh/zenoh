@@ -22,7 +22,7 @@ use super::protocol::message::{Close, CloseReason, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::net::link::{Link, LinkUnicast, LinkUnicastDirection};
-use crate::net::protocol::message::SeqNumBytes;
+use crate::net::protocol::core::SeqNumBytes;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};

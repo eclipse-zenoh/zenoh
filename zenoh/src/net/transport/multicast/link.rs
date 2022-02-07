@@ -14,12 +14,12 @@
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
 use super::protocol::io::{WBuf, ZBuf, ZSlice};
 use super::protocol::message::extensions::{ZExt, ZExtPolicy};
-use super::protocol::message::{Join, SeqNumBytes, TransportProto, ZMessage};
+use super::protocol::message::{Join, TransportProto, ZMessage};
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::net::link::{LinkMulticast, Locator};
-use crate::net::protocol::core::{ConduitSn, Priority, WhatAmI, ZenohId};
+use crate::net::protocol::core::{ConduitSn, Priority, SeqNumBytes, WhatAmI, ZenohId};
 use crate::net::protocol::message::KeepAlive;
 use crate::net::protocol::VERSION;
 use crate::net::transport::common::batch::SerializationBatch;

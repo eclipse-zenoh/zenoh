@@ -11,9 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::protocol::core::{Reliability, ZInt};
+use super::protocol::core::{Reliability, SeqNumBytes, ZInt};
 use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::message::{SeqNumBytes, ZenohMessage};
+use super::protocol::message::ZenohMessage;
 use super::seq_num::SeqNum;
 
 use zenoh_util::core::Result as ZResult;
