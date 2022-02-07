@@ -44,6 +44,8 @@ serde = "1.0.123"
 
 [dev-dependencies]
 criterion = "0.3.4"
+rand = "0.8.4"
+itertools = "0.10.3"
 
 [[bench]]
 name = "key_expr_bench"
