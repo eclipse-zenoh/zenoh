@@ -49,7 +49,7 @@ impl Backend for MemoryBackend {
         // None
         // To test interceptors, uncomment this line:
         Some(Arc::new(|sample| {
-            println!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+            trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
             sample
         }))
     }
@@ -59,7 +59,7 @@ impl Backend for MemoryBackend {
         // None
         // To test interceptors, uncomment this line:
         Some(Arc::new(|sample| {
-            println!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
+            trace!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
             sample
         }))
     }
@@ -68,7 +68,7 @@ impl Backend for MemoryBackend {
 impl Drop for MemoryBackend {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
-        log::trace!("MemoryBackend::drop()");
+        trace!("MemoryBackend::drop()");
     }
 }
 
