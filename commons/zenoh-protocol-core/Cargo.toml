@@ -41,3 +41,12 @@ lazy_static = "1.4.0"
 uhlc = "0.4.0"
 uuid = { version = "0.8.2", features = ["v4"] }
 serde = "1.0.123"
+
+[dev-dependencies]
+criterion = "0.3.4"
+rand = "0.8.4"
+itertools = "0.10.3"
+
+[[bench]]
+name = "key_expr_bench"
+harness = false

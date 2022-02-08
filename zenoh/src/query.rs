@@ -185,7 +185,7 @@ impl Runnable for Getter<'_, '_> {
         drop(state);
         primitives.send_query(
             &self.selector.key_selector,
-            self.selector.value_selector,
+            self.selector.value_selector.as_ref(),
             qid,
             target.clone(),
             consolidation.clone(),
@@ -195,7 +195,7 @@ impl Runnable for Getter<'_, '_> {
             self.session.handle_query(
                 true,
                 &self.selector.key_selector,
-                self.selector.value_selector,
+                self.selector.value_selector.as_ref(),
                 qid,
                 target,
                 consolidation,
