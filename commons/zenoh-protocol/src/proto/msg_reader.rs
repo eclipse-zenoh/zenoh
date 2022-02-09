@@ -18,6 +18,7 @@ use super::msg::*;
 use crate::io::ZBufCodec;
 use std::convert::TryInto;
 use std::time::Duration;
+use zenoh_buffers::reader::Reader;
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, *};
 
 pub trait MessageReader {
@@ -98,7 +99,7 @@ impl MessageReader for ZBuf {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read()?;
+            let header = self.read_byte()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -238,7 +239,7 @@ impl MessageReader for ZBuf {
         } else {
             0
         };
-        let version = self.read()?;
+        let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peeexpr_id()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
@@ -317,7 +318,7 @@ impl MessageReader for ZBuf {
         } else {
             0
         };
-        let version = self.read()?;
+        let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peeexpr_id()?;
         let lease = self.read_zint()?;
@@ -363,7 +364,7 @@ impl MessageReader for ZBuf {
         } else {
             None
         };
-        let reason = self.read()?;
+        let reason = self.read_byte()?;
 
         Some(TransportBody::Close(Close {
             pid,
@@ -462,7 +463,7 @@ impl MessageReader for ZBuf {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read()?;
+            let header = self.read_byte()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -658,7 +659,7 @@ impl MessageReader for ZBuf {
     fn read_declaration(&mut self) -> Option<Declaration> {
         use super::zmsg::declaration::id::*;
 
-        let header = self.read()?;
+        let header = self.read_byte()?;
         match imsg::mid(header) {
             RESOURCE => {
                 let expr_id = self.read_zint()?;
@@ -792,7 +793,7 @@ impl MessageReader for ZBuf {
         use super::zmsg::declaration::flag::*;
         use super::zmsg::declaration::id::*;
 
-        let mode_flag = self.read()?;
+        let mode_flag = self.read_byte()?;
         let mode = match mode_flag & !PERIOD {
             MODE_PUSH => SubMode::Push,
             MODE_PULL => SubMode::Pull,

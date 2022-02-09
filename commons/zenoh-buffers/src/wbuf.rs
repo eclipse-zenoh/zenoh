@@ -451,6 +451,88 @@ impl fmt::Debug for WBuf {
     }
 }
 
+pub trait ByteSliceExactIter<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator {}
+impl<'a, T: Iterator<Item = &'a [u8]> + ExactSizeIterator> ByteSliceExactIter<'a> for T {}
+impl<'a> crate::traits::SplitBuffer<'a> for WBuf {
+    type Slices = Box<dyn ByteSliceExactIter<'a> + 'a>;
+
+    fn slices(&'a self) -> Self::Slices {
+        if self.contiguous {
+            Box::new(Some(self.buf.as_slice()).into_iter())
+        } else {
+            Box::new(self.slices.iter().map(move |s| match s {
+                Slice::External(arcs) => arcs.as_slice(),
+                Slice::Internal(start, Some(end)) => &self.buf[*start..*end],
+                Slice::Internal(start, None) => &self.buf[*start..],
+            }))
+        }
+    }
+}
+impl crate::traits::writer::HasWriter for WBuf {
+    type Writer = Self;
+    fn writer(self) -> Self::Writer {
+        self
+    }
+}
+impl crate::traits::buffer::CopyBuffer for WBuf {
+    fn write(&mut self, bytes: &[u8]) -> Option<std::num::NonZeroUsize> {
+        if self.write_bytes(bytes) {
+            std::num::NonZeroUsize::new(bytes.len())
+        } else {
+            None
+        }
+    }
+    fn write_byte(&mut self, byte: u8) -> Option<std::num::NonZeroUsize> {
+        self.write(byte)
+            .then(|| unsafe { std::num::NonZeroUsize::new_unchecked(1) })
+    }
+}
+impl crate::traits::buffer::ConstructibleBuffer for WBuf {
+    fn with_capacities(slice_capacity: usize, cache_capacity: usize) -> Self {
+        let buf = Vec::with_capacity(cache_capacity);
+        let mut slices = Vec::with_capacity(slice_capacity);
+        slices.push(Slice::Internal(0, None));
+        WBuf {
+            mark: WBufMark {
+                slices: slices.clone(),
+                buf_idx: 0,
+            },
+            slices,
+            buf,
+            contiguous: true,
+            copy_pos: (0, 0),
+        }
+    }
+}
+impl crate::traits::buffer::Indexable for WBuf {
+    type Index = usize;
+    fn get_index(&self) -> Self::Index {
+        self.len()
+    }
+
+    fn replace(&mut self, _from: &Self::Index, _with: &[u8]) -> bool {
+        todo!()
+    }
+}
+impl AsRef<WBuf> for WBuf {
+    fn as_ref(&self) -> &WBuf {
+        self
+    }
+}
+impl AsMut<WBuf> for WBuf {
+    fn as_mut(&mut self) -> &mut WBuf {
+        self
+    }
+}
+impl crate::traits::writer::Writer for WBuf {
+    type Buffer = Self;
+}
+impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
+    fn append(&mut self, slice: T) {
+        self.write_zslice(slice.into());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

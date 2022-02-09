@@ -24,6 +24,7 @@ use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
+use zenoh_buffers::reader::Reader;
 use zenoh_core::{bail, zerror};
 use zenoh_core::{zasynclock, zasyncread, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
@@ -151,7 +152,7 @@ impl Cookie {
             WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| zerror!("Invalid Cookie"))?;
         let pid = zread!(zbuf.read_peeexpr_id());
         let sn_resolution = zread!(zbuf.read_zint());
-        let is_qos = zread!(zbuf.read()) == 1;
+        let is_qos = zread!(zbuf.read_byte()) == 1;
         let nonce = zread!(zbuf.read_zint());
 
         let mut ps = zread!(zbuf.read_properties());

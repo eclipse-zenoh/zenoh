@@ -15,6 +15,7 @@
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use std::{convert::TryFrom, io::Write};
+use zenoh_buffers::reader::Reader;
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
 use zenoh_protocol_core::{Locator, PeerId, Property, Timestamp, ZInt};
 
@@ -229,13 +230,13 @@ pub trait ZBufCodec {
 macro_rules! read_zint {
     ($buf:expr, $res:ty) => {
         let mut v: $res = 0;
-        let mut b = $buf.read()?;
+        let mut b = $buf.read_byte()?;
         let mut i = 0;
         let mut k = 10;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as $res) << i;
             i += 7;
-            b = $buf.read()?;
+            b = $buf.read_byte()?;
             k -= 1;
         }
         if k > 0 {
@@ -302,7 +303,7 @@ impl ZBufCodec for ZBuf {
     fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
         let len = self.read_zint_as_usize()?;
         let mut buf = vec![0; len];
-        if self.read_bytes(buf.as_mut_slice()) {
+        if self.read_exact(buf.as_mut_slice()) {
             Some(buf)
         } else {
             None
@@ -323,7 +324,7 @@ impl ZBufCodec for ZBuf {
             return None;
         }
         let mut id = [0_u8; PeerId::MAX_SIZE];
-        if self.read_bytes(&mut id[..size]) {
+        if self.read_exact(&mut id[..size]) {
             Some(PeerId::new(size, id))
         } else {
             None
@@ -356,7 +357,7 @@ impl ZBufCodec for ZBuf {
     fn read_shminfo(&mut self) -> Option<ZSlice> {
         let len = self.read_zint_as_usize()?;
         let mut info = vec![0; len];
-        if !self.read_bytes(&mut info) {
+        if !self.read_exact(&mut info) {
             return None;
         }
         Some(ZSliceBuffer::ShmInfo(info.into()).into())
@@ -379,7 +380,7 @@ impl ZBufCodec for ZBuf {
         let num = self.read_zint_as_usize()?;
         let mut zbuf = ZBuf::new();
         for _ in 0..num {
-            let kind = self.read()?;
+            let kind = self.read_byte()?;
             match kind {
                 zslice::kind::RAW => {
                     let len = self.read_zint_as_usize()?;
@@ -441,7 +442,7 @@ impl ZBufCodec for ZBuf {
             return None;
         }
         let mut id = [0_u8; PeerId::MAX_SIZE];
-        if self.read_bytes(&mut id[..size]) {
+        if self.read_exact(&mut id[..size]) {
             Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
         } else {
             None

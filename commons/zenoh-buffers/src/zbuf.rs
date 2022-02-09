@@ -350,11 +350,8 @@ impl ZBuf {
     }
 
     // same than read_bytes() but not moving read position (allow non-mutable self)
-    fn copy_bytes(&self, bs: &mut [u8], mut pos: (usize, usize)) -> bool {
+    fn copy_bytes(&self, bs: &mut [u8], mut pos: (usize, usize)) -> usize {
         let len = bs.len();
-        if self.readable() < len {
-            return false;
-        }
 
         let mut written = 0;
         while written < len {
@@ -366,17 +363,17 @@ impl ZBuf {
             written += to_read;
             pos = (pos.0 + 1, 0);
         }
-        true
+        written
     }
 
     // same than read() but not moving read position (allow not mutable self)
     #[inline(always)]
-    pub fn get(&self) -> Option<u8> {
+    fn get(&self) -> Option<u8> {
         self.curr_slice().map(|current| current[self.pos.byte])
     }
 
     #[inline(always)]
-    pub fn read(&mut self) -> Option<u8> {
+    fn read(&mut self) -> Option<u8> {
         let res = self.get();
         if res.is_some() {
             self.skip_bytes_no_check(1);
@@ -385,19 +382,12 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn read_bytes(&mut self, bs: &mut [u8]) -> bool {
-        if !self.copy_bytes(bs, (self.pos.slice, self.pos.byte)) {
+    fn read_exact(&mut self, bs: &mut [u8]) -> bool {
+        if self.copy_bytes(bs, (self.pos.slice, self.pos.byte)) < bs.len() {
             return false;
         }
         self.skip_bytes_no_check(bs.len());
         true
-    }
-
-    #[inline(always)]
-    pub fn read_vec(&mut self) -> Vec<u8> {
-        let mut vec = vec![0_u8; self.readable()];
-        self.read_bytes(&mut vec);
-        vec
     }
 
     // returns a Vec<u8> containing a copy of ZBuf content (not considering read position)
@@ -626,10 +616,10 @@ impl io::Read for ZBuf {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let remaining = self.readable();
         if remaining > buf.len() {
-            self.read_bytes(buf);
+            self.read_exact(buf);
             Ok(buf.len())
         } else {
-            self.read_bytes(&mut buf[0..remaining]);
+            self.read_exact(&mut buf[0..remaining]);
             Ok(remaining)
         }
     }
@@ -753,6 +743,33 @@ impl From<SharedMemoryBuf> for ZBuf {
     }
 }
 
+type ZSliceIter<'a> = std::slice::Iter<'a, ZSlice>;
+impl<'a> crate::traits::SplitBuffer<'a> for ZBuf {
+    type Slices = std::iter::Map<ZSliceIter<'a>, fn(&'a ZSlice) -> &'a [u8]>;
+    fn slices(&'a self) -> Self::Slices {
+        match &self.slices {
+            ZBufInner::Single(s) => std::slice::from_ref(s),
+            ZBufInner::Multiple(s) => s.as_slice(),
+            ZBufInner::Empty => &[],
+        }
+        .iter()
+        .map(ZSlice::as_slice)
+    }
+}
+impl crate::traits::reader::Reader for ZBuf {
+    fn read(&mut self, into: &mut [u8]) -> usize {
+        let read = self.copy_bytes(into, (self.pos.slice, self.pos.byte));
+        self.skip_bytes_no_check(read);
+        read
+    }
+    fn read_exact(&mut self, into: &mut [u8]) -> bool {
+        ZBuf::read_exact(self, into)
+    }
+    fn read_byte(&mut self) -> Option<u8> {
+        ZBuf::read(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -838,16 +855,16 @@ mod tests {
         println!("[05] {:?}", buf1);
         assert_eq!(30, buf1.readable());
         let mut bytes = [0_u8; 10];
-        assert!(buf1.read_bytes(&mut bytes));
+        assert!(buf1.read_exact(&mut bytes));
         assert_eq!(20, buf1.readable());
         let pos = buf1.get_pos();
-        assert!(buf1.read_bytes(&mut bytes));
+        assert!(buf1.read_exact(&mut bytes));
         assert_eq!(10, buf1.readable());
         assert!(buf1.set_pos(pos));
         assert_eq!(20, buf1.readable());
-        assert!(buf1.read_bytes(&mut bytes));
+        assert!(buf1.read_exact(&mut bytes));
         assert_eq!(10, buf1.readable());
-        assert!(buf1.read_bytes(&mut bytes));
+        assert!(buf1.read_exact(&mut bytes));
         assert_eq!(0, buf1.readable());
         let pos = buf1.get_pos();
         assert!(buf1.set_pos(pos));
@@ -864,7 +881,7 @@ mod tests {
         println!("[06] {:?}", buf1);
         let mut bytes = [0_u8; 3];
         for i in 0..10 {
-            assert!(buf1.read_bytes(&mut bytes));
+            assert!(buf1.read_exact(&mut bytes));
             println!(
                 "[06][{}] {:?} Bytes: {:?}",
                 i,
