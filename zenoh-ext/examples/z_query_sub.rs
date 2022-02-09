@@ -17,6 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::net::protocol::io::SplitBuffer;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -52,7 +53,7 @@ async fn main() {
             sample = subscriber.next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.to_vec()));
+                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

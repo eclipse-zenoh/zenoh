@@ -24,6 +24,7 @@ use async_std::task::JoinHandle;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_buffers::buffer::InsertBuffer;
 use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
@@ -255,7 +256,7 @@ async fn rx_task_stream(
     }
 
     // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::new();
+    let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
@@ -277,7 +278,7 @@ async fn rx_task_stream(
             Action::Read(n) => {
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.add_zslice(zs);
+                zbuf.append(zs);
 
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
@@ -326,7 +327,7 @@ async fn rx_task_dgram(
     }
 
     // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::new();
+    let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
@@ -356,7 +357,7 @@ async fn rx_task_dgram(
                 // Add the received bytes to the ZBuf for deserialization
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.add_zslice(zs);
+                zbuf.append(zs);
 
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {

@@ -20,6 +20,7 @@ use futures::select;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;

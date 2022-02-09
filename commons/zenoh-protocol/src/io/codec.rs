@@ -15,7 +15,11 @@
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use std::{convert::TryFrom, io::Write};
-use zenoh_buffers::reader::Reader;
+use zenoh_buffers::{
+    buffer::{ConstructibleBuffer, InsertBuffer},
+    reader::Reader,
+    SplitBuffer,
+};
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
 use zenoh_protocol_core::{Locator, PeerId, Property, Timestamp, ZInt};
 
@@ -158,7 +162,7 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
     type Err = zenoh_core::Error;
     fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<SlicedZBuf, Self::Err> {
         let n_slices: usize = self.read(reader)?;
-        let mut result = ZBuf::with_slice_capacity(n_slices);
+        let mut result = ZBuf::with_capacities(n_slices, 0);
         let mut buffer: Vec<u8> = Vec::new();
         let mut slice_kind = zslice::kind::RAW;
         for _ in 0..n_slices {
@@ -172,12 +176,11 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
                         let mut slice = Vec::with_capacity(slice_len);
                         std::mem::swap(&mut buffer, &mut slice);
                         match previous_kind {
-                            zslice::kind::RAW => result.add_zslice(
-                                zenoh_buffers::ZSliceBuffer::NetOwnedBuffer(slice.into()).into(),
-                            ),
-                            zslice::kind::SHM_INFO => result.add_zslice(
-                                zenoh_buffers::ZSliceBuffer::ShmInfo(slice.into()).into(),
-                            ),
+                            zslice::kind::RAW => result
+                                .append(zenoh_buffers::ZSliceBuffer::NetOwnedBuffer(slice.into())),
+                            zslice::kind::SHM_INFO => {
+                                result.append(zenoh_buffers::ZSliceBuffer::ShmInfo(slice.into()))
+                            }
                             _ => bail!("Invalid zslice kind: {}", previous_kind),
                         }
                     }
@@ -188,10 +191,11 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
         }
         if !buffer.is_empty() {
             match slice_kind {
-                zslice::kind::RAW => result
-                    .add_zslice(zenoh_buffers::ZSliceBuffer::NetOwnedBuffer(buffer.into()).into()),
+                zslice::kind::RAW => {
+                    result.append(zenoh_buffers::ZSliceBuffer::NetOwnedBuffer(buffer.into()))
+                }
                 zslice::kind::SHM_INFO => {
-                    result.add_zslice(zenoh_buffers::ZSliceBuffer::ShmInfo(buffer.into()).into())
+                    result.append(zenoh_buffers::ZSliceBuffer::ShmInfo(buffer.into()))
                 }
                 _ => bail!("Invalid zslice kind: {}", slice_kind),
             }
@@ -366,7 +370,7 @@ impl ZBufCodec for ZBuf {
     #[inline(always)]
     fn read_zbuf_flat(&mut self) -> Option<ZBuf> {
         let len = self.read_zint_as_usize()?;
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_capacities(1, 0);
         if self.read_into_zbuf(&mut zbuf, len) {
             Some(zbuf)
         } else {
@@ -378,7 +382,7 @@ impl ZBufCodec for ZBuf {
     #[inline(always)]
     fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
         let num = self.read_zint_as_usize()?;
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_capacities(num, 0);
         for _ in 0..num {
             let kind = self.read_byte()?;
             match kind {
@@ -390,7 +394,7 @@ impl ZBufCodec for ZBuf {
                 }
                 zslice::kind::SHM_INFO => {
                     let slice = self.read_shminfo()?;
-                    zbuf.add_zslice(slice);
+                    zbuf.append(slice);
                 }
                 _ => return None,
             }

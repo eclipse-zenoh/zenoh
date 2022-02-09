@@ -16,6 +16,8 @@ use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
 
+use zenoh_buffers::buffer::InsertBuffer;
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_protocol::proto::MessageReader;
 
@@ -37,7 +39,7 @@ impl DefragBuffer {
             reliability,
             sn: SeqNum::make(0, sn_resolution)?,
             capacity,
-            buffer: ZBuf::new(),
+            buffer: ZBuf::default(),
         };
         Ok(db)
     }
@@ -73,7 +75,7 @@ impl DefragBuffer {
             )
         }
 
-        self.buffer.add_zslice(zslice);
+        self.buffer.append(zslice);
         self.sn.increment();
 
         Ok(())

@@ -84,6 +84,7 @@ pub trait SplitBuffer<'a> {
 pub mod reader {
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> usize;
+        #[must_use = "returns true upon success"]
         fn read_exact(&mut self, into: &mut [u8]) -> bool;
         fn read_byte(&mut self) -> Option<u8> {
             let mut byte = 0;

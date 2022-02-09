@@ -17,6 +17,7 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
@@ -520,10 +521,7 @@ impl Runtime {
                             .local_addr()
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
-                    if let Err(err) = socket
-                        .send_to(zslice.as_slice(), mcast_addr.to_string())
-                        .await
-                    {
+                    if let Err(err) = socket.send_to(&zslice, mcast_addr.to_string()).await {
                         log::warn!(
                             "Unable to send {:?} to {} on interface {} : {}",
                             scout.body,
@@ -732,7 +730,7 @@ impl Runtime {
                         wbuf.write_transport_message(&mut hello);
                         let zbuf: ZBuf = wbuf.into();
                         let zslice = zbuf.contiguous();
-                        if let Err(err) = socket.send_to(zslice.as_slice(), peer).await {
+                        if let Err(err) = socket.send_to(&zslice, peer).await {
                             log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }
                     }

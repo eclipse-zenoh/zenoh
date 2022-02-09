@@ -25,6 +25,7 @@ use rand::Rng;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 use zenoh_buffers::reader::Reader;
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror};
 use zenoh_core::{zasynclock, zasyncread, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
@@ -129,7 +130,7 @@ impl Cookie {
         zwrite!(wbuf.write_zint(self.nonce));
         zwrite!(wbuf.write_properties(properties.as_slice()));
 
-        let serialized = ZBuf::from(wbuf).to_vec();
+        let serialized = ZBuf::from(wbuf).contiguous().into_owned();
         let encrypted = cipher.encrypt(serialized, prng);
         Ok(encrypted)
     }

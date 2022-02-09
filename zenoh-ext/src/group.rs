@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, Instant};
+use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::prelude::*;
 use zenoh::query::{ConsolidationMode, QueryConsolidation};
 use zenoh::queryable::EVAL;
@@ -194,7 +195,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let mut sub = z.subscribe(&state.event_expr).await.unwrap();
     while let Some(s) = sub.next().await {
         log::debug!("Handling Network Event...");
-        match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.to_vec())) {
+        match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.contiguous())) {
             Ok(evt) => match evt {
                 GroupNetEvent::Join(je) => {
                     log::debug!("Member joining the group:\n{:?}", &je.member);
@@ -250,7 +251,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
                                 while let Some(sample) = receiver.next().await {
                                     match bincode::deserialize::<Member>(
-                                        &sample.data.value.payload.to_vec(),
+                                        &sample.data.value.payload.contiguous(),
                                     ) {
                                         Ok(m) => {
                                             let mut expiry = Instant::now();

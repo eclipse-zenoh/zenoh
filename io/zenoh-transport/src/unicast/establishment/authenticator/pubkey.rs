@@ -23,6 +23,7 @@ use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::HashMap;
 use std::path::Path;
+use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_config::Config;
 use zenoh_core::{bail, zparse, Result as ZResult};
@@ -309,7 +310,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         }
 
         let attachment: ZBuf = wbuf.into();
-        Ok(Some(attachment.to_vec()))
+        Ok(Some(attachment.contiguous().into_owned()))
     }
 
     async fn handle_init_syn(
@@ -379,7 +380,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
                     &mut guard.prng,
                     PaddingScheme::PKCS1v15Encrypt,
-                    nonce_bytes.contiguous().as_slice(),
+                    &nonce_bytes.contiguous(),
                 )?;
 
                 let init_ack_property = InitAckProperty {
@@ -403,7 +404,10 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 }
                 let attachment: ZBuf = wbuf.into();
 
-                Ok((Some(attachment.to_vec()), Some(cookie.to_vec())))
+                Ok((
+                    Some(attachment.contiguous().into_owned()),
+                    Some(cookie.contiguous().into_owned()),
+                ))
             }
             // The connecting zenoh peer does not want to do multilink
             None => {
@@ -466,7 +470,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
         let attachment: ZBuf = wbuf.into();
 
-        Ok(Some(attachment.to_vec()))
+        Ok(Some(attachment.contiguous().into_owned()))
     }
 
     async fn handle_open_syn(

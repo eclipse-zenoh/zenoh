@@ -16,6 +16,7 @@ use super::shm::{SharedMemoryBuf, SharedMemoryReader};
 use super::ZSlice;
 #[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
+use crate::SplitBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
@@ -92,50 +93,50 @@ impl Default for ZBufInner {
 /// both network and shared memory operations through a simple API.
 ///
 /// By storing a set of [`ZSlice`][ZSlice], it is possible to compose the target payload
-/// starting from a set of non-contigous memory regions. This provides a twofold benefit:
+/// starting from a set of non-contiguous memory regions. This provides a twofold benefit:
 /// (1) the user can compose the payload in an incremental manner without requiring reallocations
 /// and (2) the payload is received and recomposed as it arrives from the network without reallocating
 /// any receiving buffer.
 ///
 /// Example for creating a data buffer:
 /// ```
-/// use zenoh_buffers::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice, traits::SplitBuffer, traits::buffer::InsertBuffer};
 ///
 /// // Create a ZBuf containing a newly allocated vector of bytes.
 /// let zbuf: ZBuf = vec![0_u8; 16].into();
-/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_ref());
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// // Allocate first a vectore of bytes and convert it into a ZSlice.
 /// let zslice: ZSlice = vec![0_u8; 16].into();
-/// let mut zbuf = ZBuf::new();
-/// zbuf.add_zslice(zslice.clone()); // Cloning a ZSlice does not allocate
-/// zbuf.add_zslice(zslice);
+/// let mut zbuf = ZBuf::default();
+/// zbuf.append(zslice.clone()); // Cloning a ZSlice does not allocate
+/// zbuf.append(zslice);
 ///
-/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_ref());
 /// ```
 ///
-/// Calling [`contiguous()`][ZBuf::contiguous] allows to acces to the whole payload as a contigous `&[u8]` via the
+/// Calling [`contiguous()`][ZBuf::contiguous] allows to acces to the whole payload as a contiguous `&[u8]` via the
 /// [`ZSlice`][ZSlice] type. However, this operation has a drawback when the original message was large
 /// enough to cause network fragmentation. Because of that, the actual message payload may have
-/// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contigous in memory.
+/// been received in multiple fragments (i.e. [`ZSlice`][ZSlice]) which are non-contiguous in memory.
 ///
 /// ```
-/// use zenoh_buffers::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice, traits::SplitBuffer, traits::buffer::InsertBuffer};
 ///
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// let zslice: ZSlice = vec![0_u8; 16].into();
-/// let mut zbuf = ZBuf::new();
-/// zbuf.add_zslice(zslice.clone());
+/// let mut zbuf = ZBuf::default();
+/// zbuf.append(zslice.clone());
 ///
 /// // contiguous() does not allocate since zbuf contains only one slice
-/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 16], zbuf.contiguous().as_ref());
 ///
 /// // Add a second slice to zbuf
-/// zbuf.add_zslice(zslice.clone());
+/// zbuf.append(zslice.clone());
 ///
 /// // contiguous() allocates since zbuf contains two slices
-/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_slice());
+/// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_ref());
 /// ```
 ///
 /// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice]s the [`ZBuf`][ZBuf] is composed of. If
@@ -145,14 +146,14 @@ impl Default for ZBufInner {
 /// dealing with shared memory access or with large data that has been likely fragmented on the network.
 ///
 /// ```
-/// use zenoh_buffers::{ZBuf, ZSlice};
+/// use zenoh_buffers::{ZBuf, ZSlice, traits::buffer::InsertBuffer};
 ///
 /// let zslice: ZSlice = vec![0_u8; 16].into();
 ///
-/// let mut zbuf = ZBuf::new();
-/// zbuf.add_zslice(zslice.clone());
-/// zbuf.add_zslice(zslice.clone());
-/// zbuf.add_zslice(zslice);
+/// let mut zbuf = ZBuf::default();
+/// zbuf.append(zslice.clone());
+/// zbuf.append(zslice.clone());
+/// zbuf.append(zslice);
 ///
 /// assert_eq!(zbuf.zslices_num(), 3);
 /// for z in zbuf.next() {
@@ -170,23 +171,7 @@ pub struct ZBuf {
 }
 
 impl ZBuf {
-    pub fn new() -> ZBuf {
-        ZBuf {
-            slices: ZBufInner::default(),
-            pos: ZBufPos::default(),
-            #[cfg(feature = "shared-memory")]
-            has_shminfo: false,
-            #[cfg(feature = "shared-memory")]
-            has_shmbuf: false,
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn with_slice_capacity(n: usize) -> ZBuf {
+    fn with_slice_capacity(n: usize) -> ZBuf {
         ZBuf {
             slices: match n {
                 0 | 1 => ZBufInner::Empty,
@@ -201,7 +186,7 @@ impl ZBuf {
     }
 
     #[inline]
-    pub fn add_zslice(&mut self, slice: ZSlice) {
+    fn add_zslice(&mut self, slice: ZSlice) {
         #[cfg(feature = "shared-memory")]
         match &slice.buf {
             ZSliceBuffer::ShmInfo(_) => self.has_shminfo = true,
@@ -265,23 +250,10 @@ impl ZBuf {
         }
     }
 
-    pub fn as_ioslices(&self) -> Vec<IoSlice> {
-        match &self.slices {
-            ZBufInner::Single(s) => vec![s.as_ioslice()],
-            ZBufInner::Multiple(m) => m.iter().map(|s| s.as_ioslice()).collect(),
-            ZBufInner::Empty => vec![],
-        }
-    }
-
     #[inline(always)]
     pub fn clear(&mut self) {
         self.pos.clear();
         self.slices = ZBufInner::Empty;
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.pos.len
     }
 
     #[inline(always)]
@@ -370,44 +342,6 @@ impl ZBuf {
     #[inline(always)]
     fn get(&self) -> Option<u8> {
         self.curr_slice().map(|current| current[self.pos.byte])
-    }
-
-    #[inline(always)]
-    fn read(&mut self) -> Option<u8> {
-        let res = self.get();
-        if res.is_some() {
-            self.skip_bytes_no_check(1);
-        }
-        res
-    }
-
-    #[inline(always)]
-    fn read_exact(&mut self, bs: &mut [u8]) -> bool {
-        if self.copy_bytes(bs, (self.pos.slice, self.pos.byte)) < bs.len() {
-            return false;
-        }
-        self.skip_bytes_no_check(bs.len());
-        true
-    }
-
-    // returns a Vec<u8> containing a copy of ZBuf content (not considering read position)
-    #[inline(always)]
-    pub fn to_vec(&self) -> Vec<u8> {
-        let mut vec = vec![0_u8; self.len()];
-        self.copy_bytes(&mut vec[..], (0, 0));
-        vec
-    }
-
-    /// Returns a [`ZSlice`][ZSlice].
-    /// This operation will allocate in case the [`ZBuf`][ZBuf] is composed of multiple [`ZSlice`][ZSlice]s.
-    /// [`zslices_num()`][ZBuf::zslices_num] returns the number of [`ZSlice`][ZSlice] in the [`ZBuf`][ZBuf].
-    #[inline]
-    pub fn contiguous(&self) -> ZSlice {
-        match &self.slices {
-            ZBufInner::Single(s) => s.clone(),
-            ZBufInner::Multiple(_) => self.to_vec().into(),
-            ZBufInner::Empty => vec![].into(),
-        }
     }
 
     // Read 'len' bytes from 'self' and add those to 'dest'
@@ -614,44 +548,19 @@ impl Iterator for ZBuf {
 impl io::Read for ZBuf {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let remaining = self.readable();
-        if remaining > buf.len() {
-            self.read_exact(buf);
-            Ok(buf.len())
-        } else {
-            self.read_exact(&mut buf[0..remaining]);
-            Ok(remaining)
-        }
+        Ok(crate::reader::Reader::read(self, buf))
     }
 
     #[inline]
-    fn read_exact(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
-        let fallback = self.pos;
-        while !buf.is_empty() && !self.is_empty() {
-            let len = io::Read::read(self, buf)?;
-            buf = &mut buf[len..];
-        }
-        if buf.is_empty() {
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        if crate::reader::Reader::read_exact(self, buf) {
             Ok(())
         } else {
-            self.pos = fallback;
             Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
             ))
         }
-    }
-
-    #[inline]
-    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-        let mut nread = 0;
-        for buf in bufs {
-            nread += (self as &mut dyn io::Read).read(buf)?;
-            if self.is_empty() {
-                break;
-            }
-        }
-        Ok(nread)
     }
 }
 
@@ -660,7 +569,7 @@ impl io::Read for ZBuf {
 /*************************************/
 impl From<ZSlice> for ZBuf {
     fn from(slice: ZSlice) -> ZBuf {
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_slice_capacity(1);
         zbuf.add_zslice(slice);
         zbuf
     }
@@ -674,7 +583,7 @@ impl From<Vec<u8>> for ZBuf {
 
 impl From<Vec<ZSlice>> for ZBuf {
     fn from(mut slices: Vec<ZSlice>) -> ZBuf {
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_slice_capacity(slices.len());
         for slice in slices.drain(..) {
             zbuf.add_zslice(slice);
         }
@@ -697,29 +606,39 @@ impl From<super::WBuf> for ZBuf {
 
 impl PartialEq for ZBuf {
     fn eq(&self, other: &Self) -> bool {
-        let mut zbuf1 = self.clone();
-        zbuf1.reset();
-        let mut zbuf2 = other.clone();
-        zbuf2.reset();
-
-        while let Some(b1) = zbuf1.read() {
-            if let Some(b2) = zbuf2.read() {
-                if b1 != b2 {
-                    return false;
+        let mut self_slices = self.slices();
+        let mut other_slices = other.slices();
+        let mut current_self = self_slices.next();
+        let mut current_other = other_slices.next();
+        loop {
+            match (current_self, current_other) {
+                (None, None) => return true,
+                (None, _) | (_, None) => return false,
+                (Some(l), Some(r)) => {
+                    let cmp_len = l.len().min(r.len());
+                    if l[..cmp_len] != r[..cmp_len] {
+                        return false;
+                    }
+                    if cmp_len == l.len() {
+                        current_self = self_slices.next()
+                    } else {
+                        current_self = Some(&l[cmp_len..])
+                    }
+                    if cmp_len == r.len() {
+                        current_other = other_slices.next()
+                    } else {
+                        current_other = Some(&r[cmp_len..])
+                    }
                 }
-            } else {
-                return false;
             }
         }
-        // Check there are no bytes left in zbuf2
-        zbuf2.read().is_none()
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Arc<SharedMemoryBuf>) -> ZBuf {
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_slice_capacity(1);
         zbuf.add_zslice(smb.into());
         zbuf
     }
@@ -728,7 +647,7 @@ impl From<Arc<SharedMemoryBuf>> for ZBuf {
 #[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for ZBuf {
     fn from(smb: Box<SharedMemoryBuf>) -> ZBuf {
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_slice_capacity(1);
         zbuf.add_zslice(smb.into());
         zbuf
     }
@@ -737,7 +656,7 @@ impl From<Box<SharedMemoryBuf>> for ZBuf {
 #[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for ZBuf {
     fn from(smb: SharedMemoryBuf) -> ZBuf {
-        let mut zbuf = ZBuf::new();
+        let mut zbuf = ZBuf::with_slice_capacity(1);
         zbuf.add_zslice(smb.into());
         zbuf
     }
@@ -755,6 +674,15 @@ impl<'a> crate::traits::SplitBuffer<'a> for ZBuf {
         .iter()
         .map(ZSlice::as_slice)
     }
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.pos.len
+    }
 }
 impl crate::traits::reader::Reader for ZBuf {
     fn read(&mut self, into: &mut [u8]) -> usize {
@@ -763,15 +691,35 @@ impl crate::traits::reader::Reader for ZBuf {
         read
     }
     fn read_exact(&mut self, into: &mut [u8]) -> bool {
-        ZBuf::read_exact(self, into)
+        if self.copy_bytes(into, (self.pos.slice, self.pos.byte)) < into.len() {
+            return false;
+        }
+        self.skip_bytes_no_check(into.len());
+        true
     }
     fn read_byte(&mut self) -> Option<u8> {
-        ZBuf::read(self)
+        let res = self.get();
+        if res.is_some() {
+            self.skip_bytes_no_check(1);
+        }
+        res
+    }
+}
+impl crate::traits::buffer::ConstructibleBuffer for ZBuf {
+    fn with_capacities(slice_capacity: usize, _cache_capacity: usize) -> Self {
+        ZBuf::with_slice_capacity(slice_capacity)
+    }
+}
+impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
+    fn append(&mut self, slice: T) {
+        self.add_zslice(slice.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{buffer::ConstructibleBuffer, reader::Reader, SplitBuffer};
+
     use super::*;
 
     #[test]
@@ -781,13 +729,13 @@ mod tests {
         let v3 = ZSlice::from(vec![20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
 
         // test a 1st buffer
-        let mut buf1 = ZBuf::new();
+        let mut buf1 = ZBuf::with_capacities(0, 0);
         assert!(buf1.is_empty());
         assert!(!buf1.can_read());
         assert_eq!(0, buf1.get_pos().read);
         assert_eq!(0, buf1.readable());
         assert_eq!(0, buf1.len());
-        assert_eq!(0, buf1.as_ioslices().len());
+        assert_eq!(0, buf1.slices().len());
 
         buf1.add_zslice(v1.clone());
         println!("[01] {:?}", buf1);
@@ -796,10 +744,10 @@ mod tests {
         assert_eq!(0, buf1.get_pos().read);
         assert_eq!(10, buf1.readable());
         assert_eq!(10, buf1.len());
-        assert_eq!(1, buf1.as_ioslices().len());
+        assert_eq!(1, buf1.slices().len());
         assert_eq!(
             Some(&[0_u8, 1, 2, 3, 4, 5, 6, 7, 8, 9][..]),
-            buf1.as_ioslices()[0].get(0..10)
+            buf1.slices().collect::<Vec<_>>()[0].get(0..10)
         );
 
         buf1.add_zslice(v2.clone());
@@ -809,10 +757,10 @@ mod tests {
         assert_eq!(0, buf1.get_pos().read);
         assert_eq!(20, buf1.readable());
         assert_eq!(20, buf1.len());
-        assert_eq!(2, buf1.as_ioslices().len());
+        assert_eq!(2, buf1.slices().len());
         assert_eq!(
             Some(&[10_u8, 11, 12, 13, 14, 15, 16, 17, 18, 19][..]),
-            buf1.as_ioslices()[1].get(0..10)
+            buf1.slices().collect::<Vec<_>>()[1].get(0..10)
         );
 
         buf1.add_zslice(v3);
@@ -822,10 +770,10 @@ mod tests {
         assert_eq!(0, buf1.get_pos().read);
         assert_eq!(30, buf1.readable());
         assert_eq!(30, buf1.len());
-        assert_eq!(3, buf1.as_ioslices().len());
+        assert_eq!(3, buf1.slices().len());
         assert_eq!(
             Some(&[20_u8, 21, 22, 23, 24, 25, 26, 27, 28, 29][..]),
-            buf1.as_ioslices()[2].get(0..10)
+            buf1.slices().collect::<Vec<_>>()[2].get(0..10)
         );
 
         // test PartialEq
@@ -837,7 +785,7 @@ mod tests {
 
         // test read
         for i in 0..buf1.len() - 1 {
-            assert_eq!(i as u8, buf1.read().unwrap());
+            assert_eq!(i as u8, buf1.read_byte().unwrap());
         }
         assert!(buf1.can_read());
 
@@ -848,7 +796,7 @@ mod tests {
         assert!(buf1.can_read());
         assert_eq!(30, buf1.readable());
         assert_eq!(30, buf1.len());
-        assert_eq!(3, buf1.as_ioslices().len());
+        assert_eq!(3, buf1.slices().len());
 
         // test set_pos / get_pos
         buf1.reset();
@@ -900,9 +848,9 @@ mod tests {
         assert_eq!(0, buf2.get_pos().read);
         assert_eq!(20, buf2.readable());
         assert_eq!(20, buf2.len());
-        assert_eq!(2, buf2.as_ioslices().len());
+        assert_eq!(2, buf2.slices().len());
         for i in 0..buf2.len() - 1 {
-            assert_eq!(i as u8, buf2.read().unwrap());
+            assert_eq!(i as u8, buf2.read_byte().unwrap());
         }
 
         let mut buf3 = ZBuf::from(v1);
@@ -912,18 +860,18 @@ mod tests {
         assert_eq!(0, buf3.get_pos().read);
         assert_eq!(10, buf3.readable());
         assert_eq!(10, buf3.len());
-        assert_eq!(1, buf3.as_ioslices().len());
+        assert_eq!(1, buf3.slices().len());
         for i in 0..buf3.len() - 1 {
-            assert_eq!(i as u8, buf3.read().unwrap());
+            assert_eq!(i as u8, buf3.read_byte().unwrap());
         }
 
         // test read_into_zbuf
         buf1.reset();
         println!("[09] {:?}", buf1);
-        let _ = buf1.read();
-        let mut dest = ZBuf::new();
+        let _ = buf1.read_byte();
+        let mut dest = ZBuf::with_capacities(0, 0);
         assert!(buf1.read_into_zbuf(&mut dest, 24));
-        let dest_slices = dest.as_ioslices();
+        let dest_slices = dest.slices().collect::<Vec<_>>();
         assert_eq!(3, dest_slices.len());
         assert_eq!(
             Some(&[1_u8, 2, 3, 4, 5, 6, 7, 8, 9][..]),
@@ -938,7 +886,7 @@ mod tests {
         // test drain_into_zbuf
         // buf1.reset();
         // println!("[10] {:?}", buf1);
-        // let mut dest = ZBuf::new();
+        // let mut dest = ZBuf::default();
         // assert!(buf1.drain_into_zbuf(&mut dest));
         // assert_eq!(buf1.readable(), 0);
         // assert_eq!(buf1.len(), dest.readable());

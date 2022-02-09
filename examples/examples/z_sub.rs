@@ -17,6 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::net::protocol::io::SplitBuffer;
 
 #[async_std::main]
 async fn main() {

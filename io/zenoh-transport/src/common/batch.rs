@@ -384,7 +384,7 @@ mod tests {
 
     use super::*;
     use std::convert::TryFrom;
-    use zenoh_buffers::{WBuf, ZBuf};
+    use zenoh_buffers::{SplitBuffer, WBuf, ZBuf};
     use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
     use zenoh_protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,

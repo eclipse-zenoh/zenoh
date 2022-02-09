@@ -20,6 +20,7 @@ use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
+use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
 use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror};
@@ -237,7 +238,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_init_syn_property_usrpwd(&init_syn_property);
         let attachment: ZBuf = wbuf.into();
 
-        Ok(Some(attachment.to_vec()))
+        Ok(Some(attachment.contiguous().into_owned()))
     }
 
     async fn handle_init_syn(
@@ -268,7 +269,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
         let attachment: ZBuf = wbuf.into();
 
-        Ok((Some(attachment.to_vec()), None))
+        Ok((Some(attachment.contiguous().into_owned()), None))
     }
 
     async fn handle_init_ack(
@@ -306,7 +307,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         wbuf.write_open_syn_property_usrpwd(&open_syn_property);
         let attachment: ZBuf = wbuf.into();
 
-        Ok(Some(attachment.to_vec()))
+        Ok(Some(attachment.contiguous().into_owned()))
     }
 
     async fn handle_open_syn(
