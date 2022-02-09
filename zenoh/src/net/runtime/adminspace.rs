@@ -194,7 +194,11 @@ impl AdminSpace {
             }
         });
 
-        let primitives = runtime.router.new_primitives(admin.clone());
+        let primitives = runtime
+            .router
+            .as_ref()
+            .unwrap()
+            .new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.decl_queryable(
@@ -554,7 +558,7 @@ pub async fn linkstate_routers_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    let tables = zread!(context.runtime.router.tables);
+    let tables = zread!(context.runtime.router.as_ref().unwrap().tables);
 
     let res = (
         ZBuf::from(
@@ -579,6 +583,8 @@ pub async fn linkstate_peers_data(
     let data: Vec<u8> = context
         .runtime
         .router
+        .as_ref()
+        .unwrap()
         .tables
         .read()
         .unwrap()

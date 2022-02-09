@@ -22,6 +22,7 @@ use zenoh::config::PluginLoad;
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::Locator;
+use zenoh::Result as ZResult;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -121,7 +122,13 @@ r#"--rest-http-port=[PORT | IP:PORT | none] \
             }
         }
 
-        let runtime = match Runtime::new(0, config).await {
+        async fn start_runtime(config: Config) -> ZResult<Runtime> {
+            let mut runtime = Runtime::new(0, config).await?;
+            runtime.start().await?;
+            Ok(runtime)
+        }
+
+        let runtime = match start_runtime(config).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);

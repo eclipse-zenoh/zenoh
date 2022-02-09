@@ -15,9 +15,15 @@ mod adminspace;
 pub mod orchestrator;
 
 use super::routing;
+use super::routing::face::Face;
 use super::routing::pubsub::full_reentrant_route_data;
-use super::routing::router::{LinkStateInterceptor, Router};
+use super::routing::router::Router;
+use super::transport::{
+    DeMux, Mux, TransportEventHandler, TransportManager, TransportMulticast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+};
 use crate::config::{Config, Notifier};
+use crate::Session;
 pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
 use async_std::sync::Arc;
@@ -35,16 +41,12 @@ use zenoh_protocol;
 use zenoh_protocol::core::{PeerId, WhatAmI};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_sync::get_mut_unchecked;
-use zenoh_transport;
-use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
-};
 
 pub struct RuntimeState {
     pub pid: PeerId,
     pub whatami: WhatAmI,
-    pub router: Arc<Router>,
+    pub router: Option<Arc<Router>>,
+    pub(crate) handler: Arc<RuntimeTransportEventHandler>,
     pub config: Notifier<Config>,
     pub manager: TransportManager,
     pub hlc: Option<Arc<HLC>>,
@@ -104,15 +106,18 @@ impl Runtime {
                 .unwrap()
         });
 
-        let router = Arc::new(Router::new(
-            pid,
-            whatami,
-            hlc.clone(),
-            Duration::from_millis(queries_default_timeout),
-        ));
+        let router = (whatami != WhatAmI::Client).then(|| {
+            Arc::new(Router::new(
+                pid,
+                whatami,
+                hlc.clone(),
+                Duration::from_millis(queries_default_timeout),
+            ))
+        });
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
+            api: std::sync::RwLock::new(None),
         });
 
         let transport_manager = TransportManager::builder()
@@ -125,11 +130,12 @@ impl Runtime {
 
         let config = Notifier::new(config);
 
-        let mut runtime = Runtime {
+        let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 pid,
                 whatami,
                 router,
+                handler: handler.clone(),
                 config: config.clone(),
                 manager: transport_manager,
                 hlc,
@@ -138,7 +144,7 @@ impl Runtime {
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
         if use_link_state {
-            get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
+            get_mut_unchecked(&mut runtime.router.as_ref().unwrap().clone()).init_link_state(
                 runtime.clone(),
                 peers_autoconnect,
                 routers_autoconnect_gossip,
@@ -160,10 +166,7 @@ impl Runtime {
             }
         });
 
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
+        Ok(runtime)
     }
 
     #[inline(always)]
@@ -199,8 +202,9 @@ impl Runtime {
     }
 }
 
-struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+pub(crate) struct RuntimeTransportEventHandler {
+    pub(crate) runtime: std::sync::RwLock<Option<Runtime>>,
+    pub(crate) api: std::sync::RwLock<Option<Session>>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -210,11 +214,27 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).as_ref() {
-            Some(runtime) => Ok(Arc::new(RuntimeSession {
-                runtime: runtime.clone(),
-                locator: std::sync::RwLock::new(None),
-                sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
-            })),
+            Some(runtime) => {
+                if let Some(router) = runtime.router.as_ref() {
+                    let sub_event_handler = router.new_transport_unicast(transport).unwrap();
+                    let face = Some(sub_event_handler.face.clone());
+                    Ok(Arc::new(RuntimeSession {
+                        runtime: runtime.clone(),
+                        locator: std::sync::RwLock::new(None),
+                        sub_event_handler,
+                        face,
+                    }))
+                } else {
+                    let api = zread!(self.api).as_ref().unwrap().clone();
+                    zwrite!(api.state).primitives = Some(Arc::new(Mux::new(transport)));
+                    Ok(Arc::new(RuntimeSession {
+                        runtime: runtime.clone(),
+                        locator: std::sync::RwLock::new(None),
+                        sub_event_handler: Arc::new(DeMux::new(api)),
+                        face: None,
+                    }))
+                }
+            }
             None => bail!("Runtime not yet ready!"),
         }
     }
@@ -231,28 +251,30 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
     pub(super) locator: std::sync::RwLock<Option<Locator>>,
-    pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
+    pub(super) sub_event_handler: Arc<dyn TransportPeerEventHandler>,
+    pub(super) face: Option<Face>,
 }
 
 impl TransportPeerEventHandler for RuntimeSession {
     fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
         // critical path shortcut
-        if let ZenohBody::Data(data) = msg.body {
-            if data.reply_context.is_none() {
-                let face = &self.sub_event_handler.face.state;
-                full_reentrant_route_data(
-                    &self.sub_event_handler.tables,
-                    face,
-                    &data.key,
-                    msg.channel,
-                    data.congestion_control,
-                    data.data_info,
-                    data.payload,
-                    msg.routing_context,
-                );
-                return Ok(());
-            } else {
-                msg.body = ZenohBody::Data(data);
+        if let Some(face) = &self.face.as_ref() {
+            if let ZenohBody::Data(data) = msg.body {
+                if data.reply_context.is_none() {
+                    full_reentrant_route_data(
+                        &self.runtime.router.as_ref().unwrap().tables,
+                        &face.state,
+                        &data.key,
+                        msg.channel,
+                        data.congestion_control,
+                        data.data_info,
+                        data.payload,
+                        msg.routing_context,
+                    );
+                    return Ok(());
+                } else {
+                    msg.body = ZenohBody::Data(data);
+                }
             }
         }
 

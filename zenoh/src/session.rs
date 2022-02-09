@@ -15,7 +15,6 @@ use crate::config::Config;
 use crate::config::Notifier;
 use crate::data_kind;
 use crate::info::*;
-use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
 use crate::prelude::EntityFactory;
@@ -66,8 +65,8 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicUsize,  // @TODO: manage rollover and uniqueness
+    pub(crate) primitives: Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
+    pub(crate) expr_id_counter: AtomicUsize, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicZInt,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
@@ -262,21 +261,18 @@ impl Session {
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.join_on_startup().subscriptions().clone();
             let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(0, config).await {
-                Ok(runtime) => {
-                    let session = Self::init(
-                        runtime,
-                        local_routing,
-                        join_subscriptions,
-                        join_publications,
-                    )
-                    .await;
-                    // Workaround for the declare_and_shoot problem
-                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                    Ok(session)
-                }
-                Err(err) => Err(err),
-            }
+            let runtime = Runtime::new(0, config).await?;
+            let mut session = Self::init(
+                runtime,
+                local_routing,
+                join_subscriptions,
+                join_publications,
+            )
+            .await;
+            session.runtime.start().await?;
+            // Workaround for the declare_and_shoot problem
+            task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+            Ok(session)
         })
     }
 
@@ -362,19 +358,22 @@ impl Session {
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
     ) -> impl ZFuture<Output = Session> {
-        let router = runtime.router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
             join_subscriptions,
             join_publications,
         )));
         let session = Session {
-            runtime,
+            runtime: runtime.clone(),
             state: state.clone(),
             alive: true,
         };
-        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-        zwrite!(state).primitives = primitives;
+        if runtime.whatami != WhatAmI::Client {
+            let router = runtime.router.as_ref().unwrap().clone();
+            zwrite!(state).primitives = Some(router.new_primitives(Arc::new(session.clone())));
+        } else {
+            *runtime.handler.api.write().unwrap() = Some(session.clone());
+        }
         zready(session)
     }
 

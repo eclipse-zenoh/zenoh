@@ -14,7 +14,6 @@
 
 //! Queryable primitives.
 
-use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
