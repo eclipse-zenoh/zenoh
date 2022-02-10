@@ -14,6 +14,7 @@
 use rand::*;
 use std::time::Duration;
 use uhlc::Timestamp;
+use zenoh_buffers::reader::HasReader;
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
@@ -267,10 +268,10 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_transport_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(buf).read_transport_message().unwrap();
+    let mut result = ZBuf::from(buf).reader().read_transport_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
-        let properties = attachment.buffer.read_properties();
+        let properties = attachment.buffer.reader().read_properties();
         println!("Properties read: {:?}", properties);
     }
     assert_eq!(msg, result);
@@ -282,11 +283,12 @@ fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
     buf.write_zenoh_message(&mut msg);
     println!("Read message from: {:?}", buf);
     let mut result = ZBuf::from(buf)
+        .reader()
         .read_zenoh_message(msg.channel.reliability)
         .unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
-        let properties = attachment.buffer.read_properties();
+        let properties = attachment.buffer.reader().read_properties();
         println!("Properties read: {:?}", properties);
     }
     assert_eq!(msg, result);
@@ -707,7 +709,8 @@ fn codec_frame_batching() {
         ));
 
         // Deserialize from the buffer
-        let mut zbuf = ZBuf::from(wbuf);
+        let zbuf = ZBuf::from(wbuf);
+        let mut zbuf = zbuf.reader();
 
         let mut read: Vec<TransportMessage> = vec![];
         while let Some(msg) = zbuf.read_transport_message() {

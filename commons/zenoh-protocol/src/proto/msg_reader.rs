@@ -12,13 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defaults::SEQ_NUM_RES;
-use super::io::ZBuf;
 use super::msg::*;
 #[allow(deprecated)]
 use crate::io::ZBufCodec;
 use std::convert::TryInto;
 use std::time::Duration;
-use zenoh_buffers::reader::Reader;
+use zenoh_buffers::{reader::Reader, ZBufReader};
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, *};
 
 pub trait MessageReader {
@@ -61,7 +60,7 @@ pub trait MessageReader {
     fn read_consolidation(&mut self) -> Option<QueryConsolidation>;
 }
 #[allow(deprecated)]
-impl MessageReader for ZBuf {
+impl MessageReader for ZBufReader<'_> {
     #[allow(unused_variables)]
     #[inline(always)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
@@ -182,10 +181,9 @@ impl MessageReader for ZBuf {
                 let pos = self.get_pos();
                 if let Some(msg) = self.read_zenoh_message(reliability) {
                     messages.push(msg);
-                } else if self.set_pos(pos) {
-                    break;
                 } else {
-                    return None;
+                    self.set_pos(pos);
+                    break;
                 }
             }
 
@@ -854,9 +852,9 @@ impl MessageReader for ZBuf {
     fn read_consolidation(&mut self) -> Option<QueryConsolidation> {
         let modes = self.read_zint()?;
         Some(QueryConsolidation {
-            first_routers: ZBuf::read_consolidation_mode((modes >> 4) & 0x03)?,
-            last_router: ZBuf::read_consolidation_mode((modes >> 2) & 0x03)?,
-            reception: ZBuf::read_consolidation_mode(modes & 0x03)?,
+            first_routers: ZBufReader::read_consolidation_mode((modes >> 4) & 0x03)?,
+            last_router: ZBufReader::read_consolidation_mode((modes >> 2) & 0x03)?,
+            reception: ZBufReader::read_consolidation_mode(modes & 0x03)?,
         })
     }
 }

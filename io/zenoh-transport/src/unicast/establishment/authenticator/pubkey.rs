@@ -23,7 +23,8 @@ use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::HashMap;
 use std::path::Path;
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::{SplitBuffer, ZBufReader};
 use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_config::Config;
 use zenoh_core::{bail, zparse, Result as ZResult};
@@ -132,7 +133,7 @@ trait ZPubKey {
     fn read_open_syn_property_multilink(&mut self) -> Option<OpenSynProperty>;
     fn read_rsa_pub_key(&mut self) -> Option<RsaPublicKey>;
 }
-impl ZPubKey for ZBuf {
+impl ZPubKey for ZBufReader<'_> {
     fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         let alice_pubkey = self.read_rsa_pub_key()?;
@@ -323,9 +324,10 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             // The connecting zenoh peer wants to do multilink
             Some(pk) => {
                 // Decode the multilink attachment
-                let mut zbuf: ZBuf = pk.into();
+                let zbuf: ZBuf = pk.into();
 
                 let init_syn_property = zbuf
+                    .reader()
                     .read_init_syn_property_multilink()
                     .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
@@ -436,8 +438,9 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             None => return Ok(None),
         };
 
-        let mut zbuf: ZBuf = pk.into();
+        let zbuf: ZBuf = pk.into();
         let init_ack_property = zbuf
+            .reader()
             .read_init_ack_property_multilink()
             .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
@@ -481,12 +484,13 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     ) -> ZResult<Option<Vec<u8>>> {
         match property {
             (Some(att), Some(cke)) => {
-                let mut zbuf: ZBuf = att.into();
+                let zbuf: ZBuf = att.into();
                 let open_syn_property = zbuf
+                    .reader()
                     .read_open_syn_property_multilink()
                     .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-                let mut nonce_bytes: ZBuf = self
+                let nonce_bytes: ZBuf = self
                     .pri_key
                     .decrypt(
                         PaddingScheme::PKCS1v15Encrypt,
@@ -494,6 +498,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     )?
                     .into();
                 let nonce = nonce_bytes
+                    .reader()
                     .read_zint()
                     .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
@@ -501,8 +506,9 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     bail!("Received invalid nonce on link: {}", link);
                 }
 
-                let mut zbuf: ZBuf = cke.into();
+                let zbuf: ZBuf = cke.into();
                 let alice_pubkey = zbuf
+                    .reader()
                     .read_rsa_pub_key()
                     .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 

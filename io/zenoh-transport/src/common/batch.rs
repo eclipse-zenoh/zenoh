@@ -380,6 +380,7 @@ impl SerializationBatch {
 
 #[cfg(test)]
 mod tests {
+    use zenoh_buffers::reader::HasReader;
     use zenoh_protocol::proto::MessageReader;
 
     use super::*;
@@ -473,7 +474,8 @@ mod tests {
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
-            let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+            let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+            let mut zbuf = zbuf.reader();
             // Deserialize the messages
             while let Some(msg) = zbuf.read_transport_message() {
                 deserialized.push(msg);
@@ -562,9 +564,9 @@ mod tests {
                 let mut fragments = WBuf::new(0, false);
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+                    let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                     // Deserialize the messages
-                    let msg = zbuf.read_transport_message().unwrap();
+                    let msg = zbuf.reader().read_transport_message().unwrap();
 
                     match msg.body {
                         TransportBody::Frame(Frame {
@@ -580,12 +582,12 @@ mod tests {
                         _ => panic!(),
                     }
                 }
-                let mut fragments: ZBuf = fragments.into();
+                let fragments: ZBuf = fragments.into();
 
                 assert!(!fragments.is_empty());
 
                 // Deserialize the message
-                let msg_out = fragments.read_zenoh_message(*reliability);
+                let msg_out = fragments.reader().read_zenoh_message(*reliability);
                 assert!(msg_out.is_some());
                 assert_eq!(msg_in, msg_out.unwrap());
 

@@ -17,6 +17,7 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
@@ -544,8 +545,8 @@ impl Runtime {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
-                    let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-                    if let Some(msg) = zbuf.read_transport_message() {
+                    let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
+                    if let Some(msg) = zbuf.reader().read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
                         if let TransportBody::Hello(hello) = &msg.body {
                             let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
@@ -697,8 +698,8 @@ impl Runtime {
                 continue;
             }
 
-            let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-            if let Some(msg) = zbuf.read_transport_message() {
+            let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
+            if let Some(msg) = zbuf.reader().read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let TransportBody::Scout(Scout {
                     what, pid_request, ..

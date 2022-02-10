@@ -15,7 +15,6 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
-use zenoh_buffers::reader::Reader;
 use zenoh_core::zread;
 
 impl TransportMulticastInner {
@@ -53,17 +52,18 @@ impl TransportMulticastInner {
     #[inline(always)]
     pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
         #[cfg(feature = "stats")]
+        use zenoh_buffers::SplitBuffer;
+        #[cfg(feature = "stats")]
         match &msg.body {
             ZenohBody::Data(data) => match data.reply_context {
                 Some(_) => {
                     self.stats.inc_tx_z_data_reply_msgs(1);
                     self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.remaining());
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.len());
                 }
                 None => {
                     self.stats.inc_tx_z_data_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_payload_bytes(data.payload.remaining());
+                    self.stats.inc_tx_z_data_payload_bytes(data.payload.len());
                 }
             },
             ZenohBody::Unit(unit) => match unit.reply_context {

@@ -17,6 +17,7 @@ use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
 
 use zenoh_buffers::buffer::InsertBuffer;
+use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_protocol::proto::MessageReader;
@@ -83,8 +84,6 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
-        let res = self.buffer.read_zenoh_message(self.reliability);
-        self.clear();
-        res
+        self.buffer.reader().read_zenoh_message(self.reliability)
     }
 }

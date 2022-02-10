@@ -24,6 +24,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::buffer::InsertBuffer;
+use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, Result as ZResult};
@@ -366,8 +367,9 @@ async fn rx_task(
                 zbuf.append(zs);
 
                 // Deserialize all the messages from the current ZBuf
-                while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
+                let mut reader = zbuf.reader();
+                while reader.can_read() {
+                    match reader.read_transport_message() {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);

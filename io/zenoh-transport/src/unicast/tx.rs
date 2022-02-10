@@ -15,7 +15,8 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportUnicastInner;
-use zenoh_buffers::reader::Reader;
+#[cfg(feature = "stats")]
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
 
 impl TransportUnicastInner {
@@ -69,12 +70,11 @@ impl TransportUnicastInner {
                 Some(_) => {
                     self.stats.inc_tx_z_data_reply_msgs(1);
                     self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.remaining());
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.len());
                 }
                 None => {
                     self.stats.inc_tx_z_data_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_payload_bytes(data.payload.remaining());
+                    self.stats.inc_tx_z_data_payload_bytes(data.payload.len());
                 }
             },
             ZenohBody::Unit(unit) => match unit.reply_context {

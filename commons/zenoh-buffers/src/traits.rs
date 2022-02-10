@@ -91,5 +91,13 @@ pub mod reader {
             (self.read(std::slice::from_mut(&mut byte)) != 0).then(|| byte)
         }
         fn remaining(&self) -> usize;
+        fn can_read(&self) -> bool {
+            self.remaining() != 0
+        }
+    }
+    pub trait HasReader {
+        type Reader: Reader;
+        /// Returns the most appropriate reader for `self`
+        fn reader(self) -> Self::Reader;
     }
 }

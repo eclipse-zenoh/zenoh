@@ -20,7 +20,8 @@ use async_std::fs;
 use async_std::sync::{Arc, Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::{SplitBuffer, ZBufReader};
 use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
 use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror};
@@ -115,7 +116,7 @@ trait ZUsrPw {
     fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty>;
     fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty>;
 }
-impl ZUsrPw for ZBuf {
+impl ZUsrPw for ZBufReader<'_> {
     fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         Some(InitSynProperty { version })
@@ -247,11 +248,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        let mut zbuf: ZBuf = match property {
+        let zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => bail!("Received InitSyn with no attachment on link: {}", link),
         };
-        let init_syn_property = match zbuf.read_init_syn_property_usrpwd() {
+        let init_syn_property = match zbuf.reader().read_init_syn_property_usrpwd() {
             Some(isa) => isa,
             None => bail!("Received InitSyn with invalid attachment on link: {}", link),
         };
@@ -285,11 +286,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             None => return Ok(None),
         };
 
-        let mut zbuf: ZBuf = match property {
+        let zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => bail!("Received InitAck with no attachment on link: {}", link),
         };
-        let init_ack_property = match zbuf.read_init_ack_property_usrpwd() {
+        let init_ack_property = match zbuf.reader().read_init_ack_property_usrpwd() {
             Some(isa) => isa,
             None => bail!("Received InitAck with invalid attachment on link: {}", link),
         };
@@ -317,11 +318,11 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
         let (attachment, _cookie) = property;
-        let mut zbuf: ZBuf = match attachment {
+        let zbuf: ZBuf = match attachment {
             Some(p) => p.into(),
             None => bail!("Received OpenSyn with no attachment on link: {}", link),
         };
-        let open_syn_property = match zbuf.read_open_syn_property_usrpwd() {
+        let open_syn_property = match zbuf.reader().read_open_syn_property_usrpwd() {
             Some(osp) => osp,
             None => bail!("Received InitAck with invalid attachment on link: {}", link),
         };

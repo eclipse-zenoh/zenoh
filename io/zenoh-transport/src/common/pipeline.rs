@@ -638,6 +638,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use zenoh_buffers::reader::HasReader;
     use zenoh_protocol::io::ZBuf;
     use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
     use zenoh_protocol::proto::MessageReader;
@@ -694,9 +695,10 @@ mod tests {
                 batches += 1;
                 bytes += batch.len();
                 // Create a ZBuf for deserialization starting from the batch
-                let mut zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+                let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
-                while let Some(msg) = zbuf.read_transport_message() {
+                let mut reader = zbuf.reader();
+                while let Some(msg) = reader.read_transport_message() {
                     match msg.body {
                         TransportBody::Frame(Frame { payload, .. }) => match payload {
                             FramePayload::Messages { messages } => {

@@ -19,6 +19,7 @@ use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, Priority, 
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
 use zenoh::net::protocol::proto::ZenohMessage;
+use zenoh_buffers::reader::HasReader;
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -164,7 +165,8 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&mut msg);
                     }
 
-                    let mut zbuf = ZBuf::from(wbuf);
+                    let zbuf = ZBuf::from(wbuf);
+                    let mut zbuf = zbuf.reader();
                     b.iter(|| {
                         zbuf.reset();
                         let _ = zbuf.read_transport_message().unwrap();
@@ -186,7 +188,8 @@ fn criterion_benchmark(c: &mut Criterion) {
                         wbuf.write_zenoh_message(&mut msg);
                     }
 
-                    let mut zbuf = ZBuf::from(wbuf);
+                    let zbuf = ZBuf::from(wbuf);
+                    let mut zbuf = zbuf.reader();
                     b.iter(|| {
                         zbuf.reset();
                         let _ = zbuf.read_transport_message().unwrap();

@@ -25,6 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::buffer::InsertBuffer;
+use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
@@ -280,6 +281,7 @@ async fn rx_task_stream(
                     .map_err(|_| zerror!("{}: decoding error", link))?;
                 zbuf.append(zs);
 
+                let mut zbuf = zbuf.reader();
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
 
@@ -358,7 +360,7 @@ async fn rx_task_dgram(
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
                 zbuf.append(zs);
-
+                let mut zbuf = zbuf.reader();
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {
                     match zbuf.read_transport_message() {

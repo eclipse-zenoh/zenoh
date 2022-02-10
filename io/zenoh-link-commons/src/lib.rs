@@ -19,6 +19,7 @@ use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{WBuf, ZBuf};
 use zenoh_cfg_properties::Properties;
 use zenoh_core::{bail, Result as ZResult};
@@ -179,10 +180,11 @@ impl LinkUnicast {
             buffer
         };
 
-        let mut zbuf = ZBuf::from(buffer);
+        let zbuf = ZBuf::from(buffer);
         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
-        while zbuf.can_read() {
-            match zbuf.read_transport_message() {
+        let mut zbuf_reader = zbuf.reader();
+        while zbuf_reader.can_read() {
+            match zbuf_reader.read_transport_message() {
                 Some(msg) => messages.push(msg),
                 None => {
                     bail!("Invalid Message: Decoding error on link: {}", self);

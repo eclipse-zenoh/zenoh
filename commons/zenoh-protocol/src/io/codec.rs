@@ -15,11 +15,7 @@
 use super::ZSliceBuffer;
 use super::{WBuf, ZBuf, ZSlice};
 use std::{convert::TryFrom, io::Write};
-use zenoh_buffers::{
-    buffer::{ConstructibleBuffer, InsertBuffer},
-    reader::Reader,
-    SplitBuffer,
-};
+use zenoh_buffers::{buffer::ConstructibleBuffer, reader::Reader, SplitBuffer, ZBufReader};
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
 use zenoh_protocol_core::{Locator, PeerId, Property, Timestamp, ZInt};
 
@@ -161,6 +157,7 @@ struct SlicedZBuf(pub ZBuf);
 impl Decoder<SlicedZBuf> for ZenohCodec {
     type Err = zenoh_core::Error;
     fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<SlicedZBuf, Self::Err> {
+        use zenoh_buffers::traits::buffer::InsertBuffer;
         let n_slices: usize = self.read(reader)?;
         let mut result = ZBuf::with_capacities(n_slices, 0);
         let mut buffer: Vec<u8> = Vec::new();
@@ -286,7 +283,7 @@ macro_rules! read_zint {
 // ~  slice bytes  ~
 // +---------------+
 #[allow(deprecated)]
-impl ZBufCodec for ZBuf {
+impl ZBufCodec for ZBufReader<'_> {
     #[inline(always)]
     fn read_zint(&mut self) -> Option<ZInt> {
         read_zint!(self, ZInt);
@@ -381,6 +378,7 @@ impl ZBufCodec for ZBuf {
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
     fn read_zbuf_sliced(&mut self) -> Option<ZBuf> {
+        use zenoh_buffers::traits::buffer::InsertBuffer;
         let num = self.read_zint_as_usize()?;
         let mut zbuf = ZBuf::with_capacities(num, 0);
         for _ in 0..num {
