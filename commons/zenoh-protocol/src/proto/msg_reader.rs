@@ -173,7 +173,7 @@ impl MessageReader for ZBuf {
         let payload = if imsg::has_flag(header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by
             // any other frame in the same batch. Read all the bytes.
-            let buffer = self.read_zslice(self.readable())?;
+            let buffer = self.read_zslice(self.remaining())?;
             let is_final = imsg::has_flag(header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {

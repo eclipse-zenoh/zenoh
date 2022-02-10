@@ -262,7 +262,7 @@ impl ZBuf {
     }
 
     #[inline(always)]
-    pub fn readable(&self) -> usize {
+    fn readable(&self) -> usize {
         self.pos.len - self.pos.read
     }
 
@@ -703,6 +703,9 @@ impl crate::traits::reader::Reader for ZBuf {
             self.skip_bytes_no_check(1);
         }
         res
+    }
+    fn remaining(&self) -> usize {
+        self.readable()
     }
 }
 impl crate::traits::buffer::ConstructibleBuffer for ZBuf {

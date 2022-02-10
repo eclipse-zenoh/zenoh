@@ -21,6 +21,7 @@ use super::protocol::proto::{
 use super::transport::TransportUnicastInner;
 use async_std::task;
 use std::sync::MutexGuard;
+use zenoh_buffers::reader::Reader;
 use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
 use zenoh_link::LinkUnicast;
 
@@ -41,12 +42,12 @@ impl TransportUnicastInner {
                     Some(_) => {
                         self.stats.inc_rx_z_data_reply_msgs(1);
                         self.stats
-                            .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                            .inc_rx_z_data_reply_payload_bytes(data.payload.remaining());
                     }
                     None => {
                         self.stats.inc_rx_z_data_msgs(1);
                         self.stats
-                            .inc_rx_z_data_payload_bytes(data.payload.readable());
+                            .inc_rx_z_data_payload_bytes(data.payload.remaining());
                     }
                 },
                 ZenohBody::Unit(unit) => match unit.reply_context {

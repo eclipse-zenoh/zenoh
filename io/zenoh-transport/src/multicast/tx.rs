@@ -15,6 +15,7 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
+use zenoh_buffers::reader::Reader;
 use zenoh_core::zread;
 
 impl TransportMulticastInner {
@@ -57,12 +58,12 @@ impl TransportMulticastInner {
                 Some(_) => {
                     self.stats.inc_tx_z_data_reply_msgs(1);
                     self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.readable());
+                        .inc_tx_z_data_reply_payload_bytes(data.payload.remaining());
                 }
                 None => {
                     self.stats.inc_tx_z_data_msgs(1);
                     self.stats
-                        .inc_tx_z_data_payload_bytes(data.payload.readable());
+                        .inc_tx_z_data_payload_bytes(data.payload.remaining());
                 }
             },
             ZenohBody::Unit(unit) => match unit.reply_context {

@@ -90,5 +90,6 @@ pub mod reader {
             let mut byte = 0;
             (self.read(std::slice::from_mut(&mut byte)) != 0).then(|| byte)
         }
+        fn remaining(&self) -> usize;
     }
 }
