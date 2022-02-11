@@ -16,6 +16,7 @@ use async_std::sync::Arc;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+use std::num::NonZeroUsize;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::RangeBounds;
 
@@ -528,8 +529,15 @@ impl crate::traits::writer::Writer for WBuf {
     type Buffer = Self;
 }
 impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
-    fn append(&mut self, slice: T) {
-        self.write_zslice(slice.into());
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        let slice = slice.into();
+        let len = slice.len();
+        if len == 0 {
+            self.write_zslice(slice)
+                .then(|| unsafe { NonZeroUsize::new_unchecked(len) })
+        } else {
+            None
+        }
     }
 }
 

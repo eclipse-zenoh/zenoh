@@ -21,6 +21,7 @@ use crate::SplitBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+use std::num::NonZeroUsize;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
 #[cfg(feature = "shared-memory")]
@@ -193,26 +194,6 @@ impl ZBuf {
             ZBufInner::Single(_) => 1,
             ZBufInner::Multiple(m) => m.len(),
             ZBufInner::Empty => 0,
-        }
-    }
-
-    #[inline(always)]
-    pub fn get_zslice_mut(&mut self, index: usize) -> Option<&mut ZSlice> {
-        match &mut self.slices {
-            ZBufInner::Single(s) => match index {
-                0 => Some(s),
-                _ => None,
-            },
-            ZBufInner::Multiple(m) => m.get_mut(index),
-            ZBufInner::Empty => None,
-        }
-    }
-
-    pub fn as_zslices(&self) -> Vec<ZSlice> {
-        match &self.slices {
-            ZBufInner::Single(s) => vec![s.clone()],
-            ZBufInner::Multiple(m) => m.clone(),
-            ZBufInner::Empty => vec![],
         }
     }
 
@@ -672,8 +653,15 @@ impl crate::traits::buffer::ConstructibleBuffer for ZBuf {
     }
 }
 impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
-    fn append(&mut self, slice: T) {
-        self.add_zslice(slice.into())
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        let slice = slice.into();
+        let len = slice.len();
+        if len == 0 {
+            self.add_zslice(slice);
+            Some(unsafe { NonZeroUsize::new_unchecked(len) })
+        } else {
+            None
+        }
     }
 }
 

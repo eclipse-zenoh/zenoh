@@ -27,58 +27,77 @@ mod zslice {
     }
 }
 
-pub trait Decoder<T: Sized> {
+pub trait Decoder<T: Sized, R> {
     type Err: Sized;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<T, Self::Err>;
+    fn read(&self, reader: &mut R) -> Result<T, Self::Err>;
 }
+
 pub struct ZenohCodec;
-impl Decoder<u64> for ZenohCodec {
-    type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> ZResult<u64> {
+#[derive(Debug, Clone, Copy)]
+pub struct InsufficientDataErr;
+impl std::fmt::Display for InsufficientDataErr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+impl std::error::Error for InsufficientDataErr {}
+impl<R: Reader> Decoder<u64, R> for ZenohCodec {
+    type Err = InsufficientDataErr;
+    fn read(&self, reader: &mut R) -> Result<u64, InsufficientDataErr> {
         let mut v = 0;
-        let mut b = 0;
-        reader.read_exact(std::slice::from_mut(&mut b))?;
+        let mut b = match reader.read_byte() {
+            Some(b) => b,
+            None => return Err(InsufficientDataErr),
+        };
         let mut i = 0;
         let mut k = 10;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as u64) << i;
             i += 7;
-            reader.read_exact(std::slice::from_mut(&mut b))?;
+            b = match reader.read_byte() {
+                Some(b) => b,
+                None => return Err(InsufficientDataErr),
+            };
             k -= 1;
         }
         if k > 0 {
             v |= ((b & 0x7f) as u64) << i;
             Ok(v)
         } else {
-            bail!("Invalid u64 (larget than u64 max value: {})", u64::MAX);
+            Err(InsufficientDataErr)
         }
     }
 }
-impl Decoder<usize> for ZenohCodec {
-    type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> ZResult<usize> {
+impl<R: Reader> Decoder<usize, R> for ZenohCodec {
+    type Err = InsufficientDataErr;
+    fn read(&self, reader: &mut R) -> Result<usize, InsufficientDataErr> {
         let mut v = 0;
-        let mut b = 0;
-        reader.read_exact(std::slice::from_mut(&mut b))?;
+        let mut b = match reader.read_byte() {
+            Some(b) => b,
+            None => return Err(InsufficientDataErr),
+        };
         let mut i = 0;
         let mut k = 10;
         while b > 0x7f && k > 0 {
             v |= ((b & 0x7f) as usize) << i;
             i += 7;
-            reader.read_exact(std::slice::from_mut(&mut b))?;
+            b = match reader.read_byte() {
+                Some(b) => b,
+                None => return Err(InsufficientDataErr),
+            };
             k -= 1;
         }
         if k > 0 {
             v |= ((b & 0x7f) as usize) << i;
             Ok(v)
         } else {
-            bail!("Invalid u64 (larget than u64 max value: {})", u64::MAX);
+            Err(InsufficientDataErr)
         }
     }
 }
-impl Decoder<Vec<u8>> for ZenohCodec {
-    type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> ZResult<Vec<u8>> {
+impl<R: Reader> Decoder<Vec<u8>, R> for ZenohCodec {
+    type Err = InsufficientDataErr;
+    fn read(&self, reader: &mut R) -> Result<Vec<u8>, InsufficientDataErr> {
         let len: usize = self.read(reader)?;
         let mut result = Vec::with_capacity(len);
         // Safety: `u8` is a Copy type (no Drop), and a read_exact is about to occur, ensuring exact length
@@ -86,20 +105,22 @@ impl Decoder<Vec<u8>> for ZenohCodec {
         unsafe {
             result.set_len(len)
         };
-        reader.read_exact(&mut result)?;
+        if !reader.read_exact(&mut result) {
+            return Err(InsufficientDataErr);
+        }
         Ok(result)
     }
 }
-impl Decoder<String> for ZenohCodec {
+impl<R: Reader> Decoder<String, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> ZResult<String> {
+    fn read(&self, reader: &mut R) -> ZResult<String> {
         let vec = self.read(reader)?;
         String::from_utf8(vec).map_err(|e| zerror!("{}", e).into())
     }
 }
-impl Decoder<PeerId> for ZenohCodec {
+impl<R: Reader> Decoder<PeerId, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<PeerId, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<PeerId, Self::Err> {
         let size: usize = self.read(reader)?;
         if size > PeerId::MAX_SIZE {
             bail!(
@@ -109,13 +130,15 @@ impl Decoder<PeerId> for ZenohCodec {
             )
         }
         let mut id = [0; PeerId::MAX_SIZE];
-        reader.read_exact(&mut id)?;
+        if !reader.read_exact(&mut id) {
+            return Err(InsufficientDataErr.into());
+        }
         Ok(PeerId::new(size, id))
     }
 }
-impl Decoder<Timestamp> for ZenohCodec {
+impl<R: Reader> Decoder<Timestamp, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<Timestamp, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<Timestamp, Self::Err> {
         let time = self.read(reader)?;
         let size = self.read(reader)?;
         if size > (uhlc::ID::MAX_SIZE) {
@@ -126,21 +149,23 @@ impl Decoder<Timestamp> for ZenohCodec {
             );
         }
         let mut id = [0_u8; PeerId::MAX_SIZE];
-        reader.read_exact(&mut id[..size])?;
+        if !reader.read_exact(&mut id[..size]) {
+            return Err(InsufficientDataErr.into());
+        }
         Ok(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
     }
 }
-impl Decoder<Property> for ZenohCodec {
+impl<R: Reader> Decoder<Property, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<Property, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<Property, Self::Err> {
         let key = self.read(reader)?;
         let value = self.read(reader)?;
         Ok(Property { key, value })
     }
 }
-impl Decoder<Locator> for ZenohCodec {
+impl<R: Reader> Decoder<Locator, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<Locator, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<Locator, Self::Err> {
         let candidate: String = self.read(reader)?;
         Locator::try_from(candidate).map_err(|e| {
             zerror!(
@@ -151,12 +176,23 @@ impl Decoder<Locator> for ZenohCodec {
         })
     }
 }
+impl<R: Reader> Decoder<Vec<Locator>, R> for ZenohCodec {
+    type Err = zenoh_core::Error;
+    fn read(&self, reader: &mut R) -> Result<Vec<Locator>, Self::Err> {
+        let len = self.read(reader)?;
+        let mut vec: Vec<Locator> = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(self.read(reader)?);
+        }
+        Ok(vec)
+    }
+}
 #[cfg(feature = "shared-memory")]
 struct SlicedZBuf(pub ZBuf);
 #[cfg(feature = "shared-memory")]
-impl Decoder<SlicedZBuf> for ZenohCodec {
+impl<R: Reader> Decoder<SlicedZBuf, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read<R: std::io::Read>(&self, reader: &mut R) -> Result<SlicedZBuf, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<SlicedZBuf, Self::Err> {
         use zenoh_buffers::traits::buffer::InsertBuffer;
         let n_slices: usize = self.read(reader)?;
         let mut result = ZBuf::with_capacities(n_slices, 0);
@@ -164,7 +200,9 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
         let mut slice_kind = zslice::kind::RAW;
         for _ in 0..n_slices {
             let previous_kind = slice_kind;
-            reader.read_exact(std::slice::from_mut(&mut slice_kind))?;
+            if !reader.read_exact(std::slice::from_mut(&mut slice_kind)) {
+                return Err(InsufficientDataErr.into());
+            }
             let slice_len = self.read(reader)?;
             match (previous_kind, slice_kind) {
                 (zslice::kind::RAW, zslice::kind::RAW) => {}
@@ -179,12 +217,14 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
                                 result.append(zenoh_buffers::ZSliceBuffer::ShmInfo(slice.into()))
                             }
                             _ => bail!("Invalid zslice kind: {}", previous_kind),
-                        }
+                        };
                     }
                 }
             }
             unsafe { buffer.set_len(slice_len) };
-            reader.read_exact(&mut buffer)?;
+            if !reader.read_exact(&mut buffer) {
+                return Err(InsufficientDataErr.into());
+            }
         }
         if !buffer.is_empty() {
             match slice_kind {
@@ -195,7 +235,7 @@ impl Decoder<SlicedZBuf> for ZenohCodec {
                     result.append(zenoh_buffers::ZSliceBuffer::ShmInfo(buffer.into()))
                 }
                 _ => bail!("Invalid zslice kind: {}", slice_kind),
-            }
+            };
         }
         Ok(SlicedZBuf(result))
     }
@@ -226,28 +266,6 @@ pub trait ZBufCodec {
     fn read_properties(&mut self) -> Option<Vec<Property>>;
     fn read_property(&mut self) -> Option<Property>;
     fn read_timestamp(&mut self) -> Option<Timestamp>;
-}
-
-macro_rules! read_zint {
-    ($buf:expr, $res:ty) => {
-        let mut v: $res = 0;
-        let mut b = $buf.read_byte()?;
-        let mut i = 0;
-        let mut k = 10;
-        while b > 0x7f && k > 0 {
-            v |= ((b & 0x7f) as $res) << i;
-            i += 7;
-            b = $buf.read_byte()?;
-            k -= 1;
-        }
-        if k > 0 {
-            v |= ((b & 0x7f) as $res) << i;
-            return Some(v);
-        } else {
-            log::trace!("Invalid ZInt (larget than ZInt max value: {})", ZInt::MAX);
-            return None;
-        }
-    };
 }
 
 // ZBuf encoding
@@ -286,65 +304,36 @@ macro_rules! read_zint {
 impl ZBufCodec for ZBufReader<'_> {
     #[inline(always)]
     fn read_zint(&mut self) -> Option<ZInt> {
-        read_zint!(self, ZInt);
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_zint_as_u64(&mut self) -> Option<u64> {
-        read_zint!(self, u64);
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_zint_as_usize(&mut self) -> Option<usize> {
-        read_zint!(self, usize);
+        ZenohCodec.read(self).ok()
     }
-
     // Same as read_bytes but with array length before the bytes.
     #[inline(always)]
     fn read_bytes_array(&mut self) -> Option<Vec<u8>> {
-        let len = self.read_zint_as_usize()?;
-        let mut buf = vec![0; len];
-        if self.read_exact(buf.as_mut_slice()) {
-            Some(buf)
-        } else {
-            None
-        }
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_string(&mut self) -> Option<String> {
-        let bytes = self.read_bytes_array()?;
-        Some(String::from(String::from_utf8_lossy(&bytes)))
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_peeexpr_id(&mut self) -> Option<PeerId> {
-        let size = self.read_zint_as_usize()?;
-        if size > PeerId::MAX_SIZE {
-            log::trace!("Reading a PeerId size that exceed 16 bytes: {}", size);
-            return None;
-        }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
-        if self.read_exact(&mut id[..size]) {
-            Some(PeerId::new(size, id))
-        } else {
-            None
-        }
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_locator(&mut self) -> Option<Locator> {
-        self.read_string()?.parse().ok()
+        ZenohCodec.read(self).ok()
     }
-
     #[inline(always)]
     fn read_locators(&mut self) -> Option<Vec<Locator>> {
-        let len = self.read_zint()?;
-        let mut vec: Vec<Locator> = Vec::with_capacity(len as usize);
-        for _ in 0..len {
-            vec.push(self.read_locator()?);
-        }
-        Some(vec)
+        ZenohCodec.read(self).ok()
     }
 
     #[inline(always)]

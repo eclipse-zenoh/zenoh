@@ -31,21 +31,13 @@ pub mod buffer {
     }
     pub trait InsertBuffer<T> {
         /// Appends a slice to the buffer without copying its data.
-        fn append(&mut self, slice: T);
+        fn append(&mut self, slice: T) -> Option<NonZeroUsize>;
     }
 }
 
 pub mod writer {
-    use crate::buffer::InsertBuffer;
-
     pub trait Writer: AsRef<Self::Buffer> + AsMut<Self::Buffer> {
         type Buffer;
-        fn copyless_write<T>(&mut self, slice: T)
-        where
-            Self::Buffer: InsertBuffer<T>,
-        {
-            self.as_mut().append(slice)
-        }
     }
     pub trait BacktrackableWriter {
         fn mark(&mut self);
