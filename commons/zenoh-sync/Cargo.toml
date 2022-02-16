@@ -29,7 +29,7 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 zenoh-core = { path = "../zenoh-core/" }
-async-std = { version = "=1.9.0", features = ["unstable"] }
+async-std = { version = "=1.10.0", features = ["unstable"] }
 event-listener = "2.5.1"
 flume = "0.10.5"
 futures-lite = "1.11.3"
