@@ -422,6 +422,7 @@ impl TransmissionPipeline {
 
         // Fragment the whole message
         let mut to_write = fragbuf.len();
+        let mut fragbuf_reader = fragbuf.reader();
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
@@ -432,7 +433,7 @@ impl TransmissionPipeline {
                 message.channel.reliability,
                 message.channel.priority,
                 &mut ch_guard.sn,
-                &mut fragbuf,
+                &mut fragbuf_reader,
                 to_write,
             );
 

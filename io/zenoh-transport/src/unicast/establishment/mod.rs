@@ -24,6 +24,7 @@ use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
+use zenoh_buffers::buffer::CopyBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror};
@@ -127,7 +128,7 @@ impl Cookie {
         zwrite!(wbuf.write_zint(self.whatami.into()));
         zwrite!(wbuf.write_peeexpr_id(&self.pid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
-        zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
+        zwrite!(wbuf.write_byte(if self.is_qos { 1 } else { 0 }).is_some());
         zwrite!(wbuf.write_zint(self.nonce));
         zwrite!(wbuf.write_properties(properties.as_slice()));
 

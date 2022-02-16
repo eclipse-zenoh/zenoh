@@ -79,9 +79,10 @@ impl Default for ZBufInner {
 /// // Create a ZBuf containing twice a newly allocated vector of bytes.
 /// // Allocate first a vectore of bytes and convert it into a ZSlice.
 /// let zslice: ZSlice = vec![0_u8; 16].into();
+///
 /// let mut zbuf = ZBuf::default();
-/// zbuf.append(zslice.clone()); // Cloning a ZSlice does not allocate
-/// zbuf.append(zslice);
+/// zbuf.append(zslice.clone()).unwrap(); // Cloning a ZSlice does not allocate
+/// zbuf.append(zslice).unwrap();
 ///
 /// assert_eq!(&vec![0_u8; 32], zbuf.contiguous().as_ref());
 /// ```
@@ -209,13 +210,16 @@ impl ZBuf {
 
         let mut written = 0;
         while written < len {
-            let slice = self.get_zslice(pos.0).unwrap();
-            let remaining = slice.len() - pos.1;
-            let to_read = remaining.min(bs.len() - written);
-            bs[written..written + to_read]
-                .copy_from_slice(&slice.as_slice()[pos.1..pos.1 + to_read]);
-            written += to_read;
-            pos = (pos.0 + 1, 0);
+            if let Some(slice) = self.get_zslice(pos.0) {
+                let remaining = slice.len() - pos.1;
+                let to_read = remaining.min(bs.len() - written);
+                bs[written..written + to_read]
+                    .copy_from_slice(&slice.as_slice()[pos.1..pos.1 + to_read]);
+                written += to_read;
+                pos = (pos.0 + 1, 0);
+            } else {
+                return written;
+            }
         }
         written
     }
@@ -656,7 +660,7 @@ impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
     fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
         let slice = slice.into();
         let len = slice.len();
-        if len == 0 {
+        if len > 0 {
             self.add_zslice(slice);
             Some(unsafe { NonZeroUsize::new_unchecked(len) })
         } else {

@@ -24,6 +24,7 @@ use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
 };
+use zenoh_buffers::buffer::CopyBuffer;
 use zenoh_buffers::reader::HasReader;
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::MessageWriter;
@@ -117,16 +118,16 @@ fn bench_write_frame_frag(buf: &mut WBuf, data: &mut TransportMessage) {
 }
 
 fn bench_write_10bytes1((v, buf): (u8, &mut WBuf)) {
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
