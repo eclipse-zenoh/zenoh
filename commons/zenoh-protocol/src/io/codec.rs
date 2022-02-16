@@ -134,7 +134,7 @@ impl<R: Reader> Decoder<PeerId, R> for ZenohCodec {
             )
         }
         let mut id = [0; PeerId::MAX_SIZE];
-        if !reader.read_exact(&mut id) {
+        if !reader.read_exact(&mut id[..size]) {
             return Err(InsufficientDataErr.into());
         }
         Ok(PeerId::new(size, id))

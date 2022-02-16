@@ -140,7 +140,7 @@ impl MessageReader for ZBufReader<'_> {
                     }
                 }
                 unknown => {
-                    log::trace!("Transport message with unknown ID: {}", unknown);
+                    log::error!("Transport message with unknown ID: {}", unknown);
                     return None;
                 }
             }

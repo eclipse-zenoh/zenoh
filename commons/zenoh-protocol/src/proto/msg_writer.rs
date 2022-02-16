@@ -151,7 +151,7 @@ impl MessageWriter for WBuf {
             FramePayload::Fragment { buffer, .. } => self.append(buffer.clone()).is_some(),
             FramePayload::Messages { messages } => {
                 for m in messages.iter_mut() {
-                    zcheck!(dbg!(self.write_zenoh_message(m)));
+                    zcheck!(self.write_zenoh_message(m));
                 }
                 true
             }

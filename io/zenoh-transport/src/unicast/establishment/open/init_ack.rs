@@ -1,4 +1,3 @@
-use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -12,6 +11,7 @@ use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::unicast::establishment::open::OResult;
 use crate::unicast::establishment::{attachment_from_properties, properties_from_attachment};
 use crate::unicast::establishment::{

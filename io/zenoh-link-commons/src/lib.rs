@@ -155,9 +155,20 @@ impl LinkUnicast {
         }
         let contiguous = wbuf.contiguous();
         // Send the message on the link
-        let _ = self.0.write_all(&contiguous).await?;
-
-        Ok(contiguous.len())
+        self.0.write_all(&contiguous).await.unwrap();
+        let len = contiguous.len();
+        #[cfg(test)]
+        {
+            let zbuf = ZBuf::from(contiguous.into_owned());
+            dbg!(&zbuf);
+            let mut reader = zbuf.reader();
+            if self.is_streamed() {
+                let mut lenbuf = [0; 2];
+                assert!(reader.read_exact(&mut lenbuf));
+            }
+            assert_eq!(reader.read_transport_message().as_ref(), Some(&*msg));
+        }
+        Ok(len)
     }
 
     pub async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
