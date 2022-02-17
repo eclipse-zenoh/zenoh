@@ -14,6 +14,8 @@
 use rand::*;
 use std::time::Duration;
 use uhlc::Timestamp;
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::writer::{BacktrackableWriter, HasWriter};
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
@@ -267,10 +269,10 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
     println!("\nWrite message: {:?}", msg);
     buf.write_transport_message(&mut msg);
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(buf).read_transport_message().unwrap();
+    let mut result = ZBuf::from(buf).reader().read_transport_message().unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = result.attachment.as_mut() {
-        let properties = attachment.buffer.read_properties();
+        let properties = attachment.buffer.reader().read_properties();
         println!("Properties read: {:?}", properties);
     }
     assert_eq!(msg, result);
@@ -279,14 +281,17 @@ fn test_write_read_transport_message(mut msg: TransportMessage) {
 fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
     let mut buf = WBuf::new(164, false);
     println!("\nWrite message: {:?}", msg);
-    buf.write_zenoh_message(&mut msg);
+    assert!(buf.write_zenoh_message(&mut msg));
     println!("Read message from: {:?}", buf);
-    let mut result = ZBuf::from(buf)
+    let buf = ZBuf::from(buf);
+    println!("Converted into   : {:?}", buf);
+    let mut result = buf
+        .reader()
         .read_zenoh_message(msg.channel.reliability)
         .unwrap();
     println!("Message read: {:?}", result);
     if let Some(attachment) = &mut result.attachment {
-        let properties = attachment.buffer.read_properties();
+        let properties = attachment.buffer.reader().read_properties();
         println!("Properties read: {:?}", properties);
     }
     assert_eq!(msg, result);
@@ -635,7 +640,7 @@ fn codec_frame() {
 fn codec_frame_batching() {
     for _ in 0..NUM_ITER {
         // Contigous batch
-        let mut wbuf = WBuf::new(64, true);
+        let mut wbuf = WBuf::new(64, true).writer();
         // Written messages
         let mut written: Vec<TransportMessage> = vec![];
 
@@ -648,7 +653,7 @@ fn codec_frame_batching() {
         let mut frame = TransportMessage::make_frame(channel, sn, payload, sattachment.clone());
 
         // Write the first frame header
-        assert!(wbuf.write_transport_message(&mut frame));
+        assert!(wbuf.as_mut().write_transport_message(&mut frame));
 
         // Create data message
         let key = "test".into();
@@ -669,7 +674,7 @@ fn codec_frame_batching() {
         );
 
         // Write the first data message
-        assert!(wbuf.write_zenoh_message(&mut data));
+        assert!(wbuf.as_mut().write_zenoh_message(&mut data));
 
         // Store the first transport message written
         let payload = FramePayload::Messages {
@@ -683,13 +688,13 @@ fn codec_frame_batching() {
         ));
 
         // Write the second frame header
-        assert!(wbuf.write_transport_message(&mut frame));
+        assert!(wbuf.as_mut().write_transport_message(&mut frame));
 
         // Write until we fill the batch
         let mut messages: Vec<ZenohMessage> = vec![];
         loop {
             wbuf.mark();
-            if wbuf.write_zenoh_message(&mut data) {
+            if wbuf.as_mut().write_zenoh_message(&mut data) {
                 messages.push(data.clone());
             } else {
                 wbuf.revert();
@@ -707,7 +712,8 @@ fn codec_frame_batching() {
         ));
 
         // Deserialize from the buffer
-        let mut zbuf = ZBuf::from(wbuf);
+        let zbuf = ZBuf::from(wbuf.into_inner());
+        let mut zbuf = zbuf.reader();
 
         let mut read: Vec<TransportMessage> = vec![];
         while let Some(msg) = zbuf.read_transport_message() {

@@ -24,6 +24,9 @@ use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
+use zenoh_buffers::buffer::CopyBuffer;
+use zenoh_buffers::reader::{HasReader, Reader};
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror};
 use zenoh_core::{zasynclock, zasyncread, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
@@ -84,9 +87,10 @@ pub(super) fn attachment_from_properties(ps: &EstablishmentProperties) -> ZResul
     Ok(attachment)
 }
 
-pub(super) fn properties_from_attachment(mut att: Attachment) -> ZResult<EstablishmentProperties> {
+pub(super) fn properties_from_attachment(att: Attachment) -> ZResult<EstablishmentProperties> {
     let ps = att
         .buffer
+        .reader()
         .read_properties()
         .ok_or_else(|| zerror!("Error while decoding attachment properties"))?;
     Ok(EstablishmentProperties(ps))
@@ -124,11 +128,11 @@ impl Cookie {
         zwrite!(wbuf.write_zint(self.whatami.into()));
         zwrite!(wbuf.write_peeexpr_id(&self.pid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
-        zwrite!(wbuf.write(if self.is_qos { 1 } else { 0 }));
+        zwrite!(wbuf.write_byte(if self.is_qos { 1 } else { 0 }).is_some());
         zwrite!(wbuf.write_zint(self.nonce));
         zwrite!(wbuf.write_properties(properties.as_slice()));
 
-        let serialized = ZBuf::from(wbuf).to_vec();
+        let serialized = ZBuf::from(wbuf).contiguous().into_owned();
         let encrypted = cipher.encrypt(serialized, prng);
         Ok(encrypted)
     }
@@ -145,16 +149,17 @@ impl Cookie {
 
         let decrypted = cipher.decrypt(bytes)?;
 
-        let mut zbuf = ZBuf::from(decrypted);
+        let zbuf = ZBuf::from(decrypted);
+        let mut reader = zbuf.reader();
 
-        let whatami =
-            WhatAmI::try_from(zread!(zbuf.read_zint())).ok_or_else(|| zerror!("Invalid Cookie"))?;
-        let pid = zread!(zbuf.read_peeexpr_id());
-        let sn_resolution = zread!(zbuf.read_zint());
-        let is_qos = zread!(zbuf.read()) == 1;
-        let nonce = zread!(zbuf.read_zint());
+        let whatami = WhatAmI::try_from(zread!(reader.read_zint()))
+            .ok_or_else(|| zerror!("Invalid Cookie"))?;
+        let pid = zread!(reader.read_peeexpr_id());
+        let sn_resolution = zread!(reader.read_zint());
+        let is_qos = zread!(reader.read_byte()) == 1;
+        let nonce = zread!(reader.read_zint());
 
-        let mut ps = zread!(zbuf.read_properties());
+        let mut ps = zread!(reader.read_properties());
         let mut properties = EstablishmentProperties::new();
         for p in ps.drain(..) {
             properties.insert(p)?;

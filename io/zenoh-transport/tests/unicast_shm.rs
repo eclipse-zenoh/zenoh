@@ -21,6 +21,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
+    use zenoh_buffers::SplitBuffer;
     use zenoh_core::zasync_executor_init;
     use zenoh_core::Result as ZResult;
     use zenoh_link::{EndPoint, Link};
@@ -104,7 +105,7 @@ mod tests {
                 print!("n");
             }
             let payload = match message.body {
-                ZenohBody::Data(Data { payload, .. }) => payload.contiguous(),
+                ZenohBody::Data(Data { payload, .. }) => payload.contiguous().into_owned(),
                 _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);
@@ -344,7 +345,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+        let endpoint: EndPoint = "tcp/127.0.0.1:16447".parse().unwrap();
         task::block_on(run(&endpoint));
     }
 }

@@ -90,6 +90,7 @@ pub struct LinkConfigurator {
     tls_inspector: TlsConfigurator,
 }
 impl LinkConfigurator {
+    #[allow(unused_variables, unused_mut)]
     pub async fn configurations(
         &self,
         config: &Config,

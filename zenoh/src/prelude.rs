@@ -35,6 +35,7 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
@@ -87,7 +88,7 @@ impl Value {
     /// Creates an empty Value.
     pub fn empty() -> Self {
         Value {
-            payload: ZBuf::new(),
+            payload: ZBuf::default(),
             encoding: Encoding::APP_OCTET_STREAM,
         }
     }
@@ -102,7 +103,7 @@ impl Value {
     pub fn as_json(&self) -> Option<serde_json::Value> {
         if [Encoding::APP_JSON.prefix, Encoding::TEXT_JSON.prefix].contains(&self.encoding.prefix) {
             serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
-                self.payload.contiguous().as_slice(),
+                &self.payload.contiguous(),
             ))
             .ok()
         } else {
@@ -112,7 +113,7 @@ impl Value {
 
     pub fn as_integer(&self) -> Option<i64> {
         if self.encoding.prefix == Encoding::APP_INTEGER.prefix {
-            std::str::from_utf8(self.payload.contiguous().as_slice())
+            std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
                 .ok()
@@ -123,7 +124,7 @@ impl Value {
 
     pub fn as_float(&self) -> Option<f64> {
         if self.encoding.prefix == Encoding::APP_FLOAT.prefix {
-            std::str::from_utf8(self.payload.contiguous().as_slice())
+            std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
                 .ok()
@@ -135,7 +136,7 @@ impl Value {
     pub fn as_properties(&self) -> Option<Properties> {
         if self.encoding.prefix == Encoding::APP_PROPERTIES.prefix {
             Some(Properties::from(
-                std::str::from_utf8(self.payload.contiguous().as_slice()).ok()?,
+                std::str::from_utf8(&self.payload.contiguous()).ok()?,
             ))
         } else {
             None
@@ -155,11 +156,12 @@ impl fmt::Debug for Value {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let payload = self.payload.contiguous();
         write!(
             f,
             "{}",
-            String::from_utf8(self.payload.to_vec())
-                .unwrap_or_else(|_| base64::encode(self.payload.to_vec()))
+            String::from_utf8(payload.clone().into_owned())
+                .unwrap_or_else(|_| base64::encode(payload))
         )
     }
 }

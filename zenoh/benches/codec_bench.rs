@@ -24,6 +24,8 @@ use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh::net::protocol::proto::{
     Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
 };
+use zenoh_buffers::buffer::CopyBuffer;
+use zenoh_buffers::reader::HasReader;
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::MessageWriter;
 
@@ -44,13 +46,14 @@ fn _bench_zint_write_three((v, buf): (&[ZInt; 3], &mut WBuf)) {
 
 fn bench_one_zint_codec((v, buf): (ZInt, &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v);
-    ZBuf::from(buf.clone()).read_zint()
+    ZBuf::from(buf.clone()).reader().read_zint()
 }
 
 fn bench_two_zint_codec((v, buf): (&[ZInt; 2], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
-    let mut zbuf = ZBuf::from(buf.clone());
+    let zbuf = ZBuf::from(buf.clone());
+    let mut zbuf = zbuf.reader();
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
 }
@@ -59,7 +62,8 @@ fn bench_three_zint_codec((v, buf): (&[ZInt; 3], &mut WBuf)) -> Option<ZInt> {
     buf.write_zint(v[0]);
     buf.write_zint(v[1]);
     buf.write_zint(v[2]);
-    let mut zbuf = ZBuf::from(buf.clone());
+    let zbuf = ZBuf::from(buf.clone());
+    let mut zbuf = zbuf.reader();
     let _ = zbuf.read_zint()?;
     let _ = zbuf.read_zint()?;
     zbuf.read_zint()
@@ -114,16 +118,16 @@ fn bench_write_frame_frag(buf: &mut WBuf, data: &mut TransportMessage) {
 }
 
 fn bench_write_10bytes1((v, buf): (u8, &mut WBuf)) {
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
-    buf.write(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
+    buf.write_byte(v);
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

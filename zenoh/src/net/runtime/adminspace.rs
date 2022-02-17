@@ -21,7 +21,7 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
@@ -318,7 +318,7 @@ impl Primitives for AdminSpace {
                     log::error!("Error deleting conf value {}: {}", key_expr, e)
                 }
             } else {
-                match std::str::from_utf8(payload.contiguous().as_slice()) {
+                match std::str::from_utf8(&payload.contiguous()) {
                     Ok(json) => {
                         log::trace!(
                             "Insert conf value /@/router/{}/config/{}:{}",

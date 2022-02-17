@@ -1,3 +1,11 @@
+use crate::buffer::CopyBuffer;
+use crate::buffer::InsertBuffer;
+use crate::reader::HasReader;
+use crate::writer::BacktrackableWriter;
+use crate::writer::HasWriter;
+use crate::writer::Writer;
+use crate::SplitBuffer;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -16,6 +24,7 @@ use async_std::sync::Arc;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
+use std::num::NonZeroUsize;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::RangeBounds;
 
@@ -59,20 +68,24 @@ impl fmt::Debug for Slice {
     }
 }
 
-#[derive(Clone)]
-struct WBufMark {
-    slices: Vec<Slice>,
-    buf_idx: usize,
-}
-
 /// A writable zenoh buffer.
 #[derive(Clone)]
 pub struct WBuf {
     slices: Vec<Slice>,
     buf: Vec<u8>,
     contiguous: bool,
-    copy_pos: (usize, usize), // (index in slices, index in the slice)
-    mark: WBufMark,
+}
+#[derive(Debug, Clone)]
+pub struct WBufWriter {
+    inner: WBuf,
+    mark_slice: usize,
+    mark_byte: usize,
+}
+#[derive(Clone)]
+pub struct WBufReader<'a> {
+    inner: &'a WBuf,
+    slice: usize,
+    byte: usize,
 }
 
 impl WBuf {
@@ -80,14 +93,9 @@ impl WBuf {
         let buf = Vec::with_capacity(capacity);
         let slices = vec![Slice::Internal(0, None)];
         WBuf {
-            mark: WBufMark {
-                slices: slices.clone(),
-                buf_idx: 0,
-            },
             slices,
             buf,
             contiguous,
-            copy_pos: (0, 0),
         }
     }
 
@@ -120,12 +128,9 @@ impl WBuf {
         self.buf.clear();
         self.slices.clear();
         self.slices.push(Slice::Internal(0, None));
-        self.copy_pos = (0, 0);
-        self.mark.slices.clear();
-        self.mark.buf_idx = 0;
     }
 
-    pub fn to_zslices(self) -> Vec<ZSlice> {
+    pub(crate) fn to_zslices(self) -> Vec<ZSlice> {
         let arc_buf = Arc::new(self.buf);
         if self.contiguous {
             if !arc_buf.is_empty() {
@@ -144,26 +149,6 @@ impl WBuf {
                     Slice::Internal(start, None) => {
                         ZSlice::make(arc_buf.clone().into(), *start, arc_buf.len()).unwrap()
                     }
-                })
-                .filter(|s| !s.is_empty())
-                .collect()
-        }
-    }
-
-    pub fn as_ioslices(&self) -> Vec<IoSlice> {
-        if self.contiguous {
-            if !self.buf.is_empty() {
-                vec![IoSlice::new(&self.buf[..])]
-            } else {
-                vec![]
-            }
-        } else {
-            self.slices
-                .iter()
-                .map(|s| match s {
-                    Slice::External(arcs) => arcs.as_ioslice(),
-                    Slice::Internal(start, Some(end)) => IoSlice::new(&self.buf[*start..*end]),
-                    Slice::Internal(start, None) => IoSlice::new(&self.buf[*start..]),
                 })
                 .filter(|s| !s.is_empty())
                 .collect()
@@ -216,85 +201,6 @@ impl WBuf {
         }
     }
 
-    fn get_zslice_to_copy(&self) -> &[u8] {
-        match self.slices.get(self.copy_pos.0) {
-            Some(Slice::External(ref s)) => s.as_slice(),
-            Some(Slice::Internal(start, Some(end))) => &self.buf[*start..*end],
-            Some(Slice::Internal(start, None)) => &self.buf[*start..],
-            None => panic!("Shouln't happen: copy_pos.0 is out of bound in {:?}", self),
-        }
-    }
-
-    pub fn copy_into_slice(&mut self, dest: &mut [u8]) {
-        if self.copy_pos.0 >= self.slices.len() {
-            panic!("Not enough bytes to copy into dest");
-        }
-        let src = self.get_zslice_to_copy();
-        let dest_len = dest.len();
-        if src.len() - self.copy_pos.1 >= dest_len {
-            // Copy a sub-part of src into dest
-            let end_pos = self.copy_pos.1 + dest_len;
-            dest.copy_from_slice(&src[self.copy_pos.1..end_pos]);
-            // Move copy_pos
-            if end_pos < src.len() {
-                self.copy_pos.1 = end_pos
-            } else {
-                self.copy_pos = (self.copy_pos.0 + 1, 0);
-            }
-        } else {
-            // Copy the remaining of src into dest
-            let copy_len = src.len() - self.copy_pos.1;
-            dest[..copy_len].copy_from_slice(&src[self.copy_pos.1..]);
-            // Move copy_pos to next slice and recurse
-            self.copy_pos = (self.copy_pos.0 + 1, 0);
-            self.copy_into_slice(&mut dest[copy_len..]);
-        }
-    }
-
-    pub fn copy_into_wbuf(&mut self, dest: &mut WBuf, dest_len: usize) {
-        if self.copy_pos.0 >= self.slices.len() {
-            panic!("Not enough bytes to copy into dest");
-        }
-        let src = self.get_zslice_to_copy();
-        if src.len() - self.copy_pos.1 >= dest_len {
-            // Copy a sub-part of src into dest
-            let end_pos = self.copy_pos.1 + dest_len;
-            if !(dest.write_bytes(&src[self.copy_pos.1..end_pos])) {
-                panic!("Failed to copy bytes into wbuf: destination is probably not big enough");
-            };
-            // Move copy_pos
-            if end_pos < src.len() {
-                self.copy_pos.1 = end_pos
-            } else {
-                self.copy_pos = (self.copy_pos.0 + 1, 0);
-            }
-        } else {
-            // Copy the remaining of src into dest
-            let copy_len = src.len() - self.copy_pos.1;
-            if !(dest.write_bytes(&src[self.copy_pos.1..])) {
-                panic!("Failed to copy bytes into wbuf: destination is probably not big enough");
-            };
-            // Move copy_pos to next slice and recurse
-            self.copy_pos = (self.copy_pos.0 + 1, 0);
-            self.copy_into_wbuf(dest, dest_len - copy_len);
-        }
-    }
-
-    #[inline]
-    pub fn mark(&mut self) {
-        self.mark.slices.clear();
-        self.mark.slices.extend_from_slice(self.slices.as_slice());
-        self.mark.buf_idx = self.buf.len();
-    }
-
-    #[inline]
-    pub fn revert(&mut self) {
-        // restaure slices and truncate buf to saved len
-        self.slices.clear();
-        self.slices.extend_from_slice(self.mark.slices.as_slice());
-        self.buf.truncate(self.mark.buf_idx);
-    }
-
     #[inline]
     fn can_write_in_buf(&self, size: usize) -> bool {
         // We can write in buf if
@@ -303,7 +209,7 @@ impl WBuf {
         !self.contiguous || self.buf.len() + size <= self.buf.capacity()
     }
 
-    pub fn write(&mut self, b: u8) -> bool {
+    fn write(&mut self, b: u8) -> bool {
         if self.can_write_in_buf(1) {
             self.buf.push(b);
             true
@@ -313,7 +219,7 @@ impl WBuf {
     }
 
     // NOTE: this is different from write_zslice() as this makes a copy of bytes into WBuf.
-    pub fn write_bytes(&mut self, s: &[u8]) -> bool {
+    fn write_bytes(&mut self, s: &[u8]) -> bool {
         if self.can_write_in_buf(s.len()) {
             self.buf.extend_from_slice(s);
             true
@@ -324,7 +230,7 @@ impl WBuf {
 
     // NOTE: if not-contiguous, this is 0-copy (the slice is just added to slices list)
     //       otherwise, it's a copy into buf, if doesn't exceed the capacity.
-    pub fn write_zslice(&mut self, zslice: ZSlice) -> bool {
+    fn write_zslice(&mut self, zslice: ZSlice) -> bool {
         if !self.contiguous {
             // If last slice was an internal without end, set it
             if let Some(&mut Slice::Internal(start, None)) = self.slices.last_mut() {
@@ -345,8 +251,148 @@ impl WBuf {
             false
         }
     }
+    pub fn reader(&self) -> WBufReader {
+        HasReader::reader(self)
+    }
 }
+impl<'a> WBufReader<'a> {
+    fn get_zslice_to_copy(&self) -> &[u8] {
+        match self.inner.slices.get(self.slice) {
+            Some(Slice::External(s)) => s.as_slice(),
+            Some(Slice::Internal(start, Some(end))) => &self.inner.buf[*start..*end],
+            Some(Slice::Internal(start, None)) => &self.inner.buf[*start..],
+            None => panic!(
+                "Shouln't happen: copy_pos.0 is out of bound in {:?}",
+                self.inner
+            ),
+        }
+    }
 
+    pub fn copy_into_slice(&mut self, dest: &mut [u8]) {
+        if self.slice >= self.inner.slices.len() {
+            panic!("Not enough bytes to copy into dest");
+        }
+        let src = self.get_zslice_to_copy();
+        let dest_len = dest.len();
+        if src.len() - self.byte >= dest_len {
+            // Copy a sub-part of src into dest
+            let end_pos = self.byte + dest_len;
+            dest.copy_from_slice(&src[self.byte..end_pos]);
+            // Move copy_pos
+            if end_pos < src.len() {
+                self.byte = end_pos
+            } else {
+                self.slice += 1;
+                self.byte = 0;
+            }
+        } else {
+            // Copy the remaining of src into dest
+            let copy_len = src.len() - self.byte;
+            dest[..copy_len].copy_from_slice(&src[self.byte..]);
+            // Move copy_pos to next slice and recurse
+            self.slice += 1;
+            self.byte = 0;
+            self.copy_into_slice(&mut dest[copy_len..]);
+        }
+    }
+
+    pub fn copy_into_wbuf(&mut self, dest: &mut WBuf, dest_len: usize) {
+        if self.slice >= self.inner.slices.len() {
+            panic!("Not enough bytes to copy into dest");
+        }
+        let src = self.get_zslice_to_copy();
+        if src.len() - self.byte >= dest_len {
+            // Copy a sub-part of src into dest
+            let end_pos = self.byte + dest_len;
+            if !(dest.write_bytes(&src[self.byte..end_pos])) {
+                panic!("Failed to copy bytes into wbuf: destination is probably not big enough");
+            };
+            // Move copy_pos
+            if end_pos < src.len() {
+                self.byte = end_pos
+            } else {
+                self.slice += 1;
+                self.byte = 0;
+            }
+        } else {
+            // Copy the remaining of src into dest
+            let copy_len = src.len() - self.byte;
+            if !(dest.write_bytes(&src[self.byte..])) {
+                panic!("Failed to copy bytes into wbuf: destination is probably not big enough");
+            };
+            // Move copy_pos to next slice and recurse
+            self.slice += 1;
+            self.byte = 0;
+            self.copy_into_wbuf(dest, dest_len - copy_len);
+        }
+    }
+}
+impl HasWriter for WBuf {
+    type Writer = WBufWriter;
+    fn writer(self) -> Self::Writer {
+        self.into()
+    }
+}
+impl Writer for WBufWriter {
+    type Buffer = WBuf;
+}
+impl AsRef<WBuf> for WBufWriter {
+    fn as_ref(&self) -> &WBuf {
+        &self.inner
+    }
+}
+impl AsMut<WBuf> for WBufWriter {
+    fn as_mut(&mut self) -> &mut WBuf {
+        &mut self.inner
+    }
+}
+impl WBufWriter {
+    pub fn into_inner(self) -> WBuf {
+        self.inner
+    }
+    pub fn clear(&mut self) {
+        self.inner.clear();
+        self.mark_slice = 1;
+        self.mark_byte = 0;
+    }
+}
+impl CopyBuffer for WBufWriter {
+    fn write(&mut self, bytes: &[u8]) -> Option<NonZeroUsize> {
+        CopyBuffer::write(&mut self.inner, bytes)
+    }
+    fn write_byte(&mut self, byte: u8) -> Option<NonZeroUsize> {
+        CopyBuffer::write_byte(&mut self.inner, byte)
+    }
+}
+impl<T: Into<ZSlice>> InsertBuffer<T> for WBufWriter {
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        self.inner.append(slice.into())
+    }
+}
+impl BacktrackableWriter for WBufWriter {
+    fn mark(&mut self) {
+        self.mark_slice = self.inner.slices.len();
+        self.mark_byte = self.inner.buf.len();
+    }
+    fn revert(&mut self) -> bool {
+        self.inner.slices.truncate(self.mark_slice);
+        match self.inner.slices.last_mut() {
+            Some(Slice::Internal(_, end)) => *end = None,
+            _ => unreachable!(),
+        }
+        self.inner.buf.truncate(self.mark_byte);
+        true
+    }
+}
+impl From<WBuf> for WBufWriter {
+    fn from(inner: WBuf) -> Self {
+        WBufWriter {
+            inner,
+            mark_slice: 1,
+            mark_byte: 0,
+        }
+    }
+}
 impl io::Write for WBuf {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if self.write_bytes(buf) {
@@ -451,15 +497,200 @@ impl fmt::Debug for WBuf {
     }
 }
 
+struct SizedIter<I> {
+    iter: I,
+    remaining: usize,
+}
+impl<I: Iterator + Clone> SizedIter<I> {
+    fn new(iter: I) -> Self {
+        let remaining = iter.clone().count();
+        SizedIter { iter, remaining }
+    }
+}
+impl<I: Iterator> Iterator for SizedIter<I>
+where
+    I::Item: std::fmt::Debug,
+{
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining > 0 {
+            self.remaining -= 1;
+            self.iter.next()
+        } else {
+            None
+        }
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
+}
+impl<I: Iterator> ExactSizeIterator for SizedIter<I>
+where
+    I::Item: std::fmt::Debug,
+{
+    fn len(&self) -> usize {
+        self.remaining
+    }
+}
+pub trait ByteSliceExactIter<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator {}
+impl<'a, T: Iterator<Item = &'a [u8]> + ExactSizeIterator> ByteSliceExactIter<'a> for T {}
+impl<'a> crate::traits::SplitBuffer<'a> for WBuf {
+    type Slices = Box<dyn ByteSliceExactIter<'a> + 'a>;
+
+    fn slices(&'a self) -> Self::Slices {
+        if self.contiguous {
+            let slice = self.buf.as_slice();
+            Box::new(if slice.is_empty() { None } else { Some(slice) }.into_iter())
+        } else {
+            let iter = SizedIter::new(self.slices.iter().filter_map(move |s| {
+                let slice = match s {
+                    Slice::External(arcs) => arcs.as_slice(),
+                    Slice::Internal(start, Some(end)) => &self.buf[*start..*end],
+                    Slice::Internal(start, None) => &self.buf[*start..],
+                };
+                if slice.is_empty() {
+                    None
+                } else {
+                    Some(slice)
+                }
+            }));
+            Box::new(iter)
+        }
+    }
+}
+impl<'a> crate::traits::reader::HasReader for &'a WBuf {
+    type Reader = WBufReader<'a>;
+    fn reader(self) -> Self::Reader {
+        WBufReader {
+            inner: self,
+            slice: 0,
+            byte: 0,
+        }
+    }
+}
+impl<'a> crate::traits::reader::Reader for WBufReader<'a> {
+    fn read(&mut self, mut into: &mut [u8]) -> usize {
+        let mut read = 0;
+        for slice in self.inner.slices().skip(self.slice) {
+            let subslice = &slice[self.byte..];
+            let copy_len = subslice.len();
+            if copy_len <= into.len() {
+                let (l, r) = into.split_at_mut(copy_len);
+                l.copy_from_slice(subslice);
+                self.slice += 1;
+                self.byte = 0;
+                into = r;
+                read += copy_len;
+            } else {
+                let copy_len = into.len();
+                into.copy_from_slice(&subslice[..copy_len]);
+                read += copy_len;
+                self.byte += copy_len;
+                break;
+            }
+        }
+        read
+    }
+    fn read_exact(&mut self, into: &mut [u8]) -> bool {
+        let fork = self.clone();
+        if self.read(into) != into.len() {
+            *self = fork;
+            return false;
+        }
+        true
+    }
+    fn remaining(&self) -> usize {
+        let mut slices = self.inner.slices().skip(self.slice);
+        let mut len = match slices.next() {
+            Some(s) => s.len() - self.byte,
+            None => 0,
+        };
+        for slice in slices {
+            len += slice.len()
+        }
+        len
+    }
+    fn can_read(&self) -> bool {
+        self.inner.slices().nth(self.slice).is_some()
+    }
+    fn read_byte(&mut self) -> Option<u8> {
+        let mut byte = 0;
+        (self.read(std::slice::from_mut(&mut byte)) != 0).then(|| byte)
+    }
+}
+impl crate::traits::buffer::CopyBuffer for WBuf {
+    fn write(&mut self, bytes: &[u8]) -> Option<std::num::NonZeroUsize> {
+        if self.write_bytes(bytes) {
+            std::num::NonZeroUsize::new(bytes.len())
+        } else {
+            None
+        }
+    }
+    fn write_byte(&mut self, byte: u8) -> Option<std::num::NonZeroUsize> {
+        self.write(byte)
+            .then(|| unsafe { std::num::NonZeroUsize::new_unchecked(1) })
+    }
+}
+impl crate::traits::buffer::ConstructibleBuffer for WBuf {
+    fn with_capacities(slice_capacity: usize, cache_capacity: usize) -> Self {
+        let buf = Vec::with_capacity(cache_capacity);
+        let mut slices = Vec::with_capacity(slice_capacity);
+        slices.push(Slice::Internal(0, None));
+        WBuf {
+            slices,
+            buf,
+            contiguous: true,
+        }
+    }
+}
+impl crate::traits::buffer::Indexable for WBuf {
+    type Index = usize;
+    fn get_index(&self) -> Self::Index {
+        self.len()
+    }
+
+    fn replace(&mut self, _from: &Self::Index, _with: &[u8]) -> bool {
+        todo!()
+    }
+}
+impl AsRef<WBuf> for WBuf {
+    fn as_ref(&self) -> &WBuf {
+        self
+    }
+}
+impl AsMut<WBuf> for WBuf {
+    fn as_mut(&mut self) -> &mut WBuf {
+        self
+    }
+}
+impl crate::traits::writer::Writer for WBuf {
+    type Buffer = Self;
+}
+impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        let slice = slice.into();
+        let len = slice.len();
+        if len > 0 {
+            self.write_zslice(slice)
+                .then(|| unsafe { NonZeroUsize::new_unchecked(len) })
+        } else {
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::reader::Reader;
+    use crate::traits::SplitBuffer;
+
     use super::*;
 
     macro_rules! to_vec_vec {
         ($wbuf:ident) => {
             $wbuf
-                .as_ioslices()
-                .iter()
+                .as_ref()
+                .slices()
                 .map(|s| s.to_vec())
                 .collect::<Vec<Vec<u8>>>()
         };
@@ -467,12 +698,7 @@ mod tests {
 
     macro_rules! vec_vec_is_empty {
         ($wbuf:ident) => {
-            $wbuf
-                .as_ioslices()
-                .iter()
-                .map(|s| s.to_vec())
-                .next()
-                .is_none()
+            $wbuf.as_ref().slices().next().is_none()
         };
     }
 
@@ -589,25 +815,25 @@ mod tests {
 
     #[test]
     fn wbuf_contiguous_mark_reset() {
-        let mut buf = WBuf::new(6, true);
-        assert!(buf.write_bytes(&[0, 1, 2]));
+        let mut buf = WBuf::new(6, true).writer();
+        assert!(buf.write(&[0, 1, 2]).is_some());
         buf.revert();
         assert!(vec_vec_is_empty!(buf));
 
-        assert!(buf.write_bytes(&[0, 1, 2]));
+        assert!(buf.write(&[0, 1, 2]).is_some());
         buf.mark();
-        assert!(buf.write_bytes(&[3, 4]));
+        assert!(buf.write(&[3, 4]).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
-        assert!(buf.write_bytes(&[3, 4]));
-        assert!(!buf.write_bytes(&[5, 6]));
+        assert!(buf.write(&[3, 4]).is_some());
+        assert!(!buf.write(&[5, 6]).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
-        assert!(buf.write_bytes(&[3, 4]));
+        assert!(buf.write(&[3, 4]).is_some());
         buf.mark();
-        assert!(!buf.write_bytes(&[5, 6]));
+        assert!(!buf.write(&[5, 6]).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
     }
@@ -616,11 +842,11 @@ mod tests {
     fn wbuf_contiguous_copy_into_slice() {
         let mut buf = WBuf::new(6, true);
         assert!(buf.write_zslice(ZSlice::from(vec![0_u8, 1, 2, 3, 4, 5])));
-
+        let mut reader = buf.reader();
         let mut copy = vec![0; 10];
-        buf.copy_into_slice(&mut copy[0..3]);
+        assert!(reader.read_exact(&mut copy[0..3]));
         assert_eq!(copy, &[0, 1, 2, 0, 0, 0, 0, 0, 0, 0]);
-        buf.copy_into_slice(&mut copy[3..6]);
+        assert!(reader.read_exact(&mut copy[3..6]));
         assert_eq!(copy, &[0, 1, 2, 3, 4, 5, 0, 0, 0, 0]);
     }
 
@@ -628,11 +854,11 @@ mod tests {
     fn wbuf_contiguous_copy_into_wbuf() {
         let mut buf = WBuf::new(6, true);
         assert!(buf.write_zslice(ZSlice::from(vec![0_u8, 1, 2, 3, 4, 5])));
-
+        let mut reader = buf.reader();
         let mut copy = WBuf::new(10, true);
-        buf.copy_into_wbuf(&mut copy, 3);
+        reader.copy_into_wbuf(&mut copy, 3);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2,]]);
-        buf.copy_into_wbuf(&mut copy, 3);
+        reader.copy_into_wbuf(&mut copy, 3);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2, 3, 4, 5]]);
     }
 
@@ -777,53 +1003,55 @@ mod tests {
 
     #[test]
     fn wbuf_noncontiguous_mark_reset() {
-        let mut buf = WBuf::new(6, false);
-        assert!(buf.write(0));
-        assert!(buf.write(1));
+        let mut buf = WBuf::new(6, false).writer();
+        assert!(buf.write_byte(0).is_some());
+        assert!(buf.write_byte(1).is_some());
+        dbg!(&buf);
         buf.revert();
         assert!(vec_vec_is_empty!(buf));
 
-        assert!(buf.write_bytes(&[0, 1]));
+        assert!(buf.write(&[2, 3]).is_some());
+        dbg!(&buf);
         buf.revert();
         assert!(vec_vec_is_empty!(buf));
 
-        assert!(buf.write_zslice(ZSlice::from(vec![0_u8, 1])));
+        assert!(buf.append(ZSlice::from(vec![0_u8, 1])).is_some());
         buf.revert();
         assert!(vec_vec_is_empty!(buf));
 
-        assert!(buf.write_bytes(&[0, 1, 2]));
+        assert!(buf.write(&[0, 1, 2]).is_some());
         buf.mark();
-        assert!(buf.write_bytes(&[3, 4]));
-        assert!(buf.write_zslice(ZSlice::from(vec![5_u8, 6])));
-        assert!(buf.write(7));
-        assert!(buf.write_zslice(ZSlice::from(vec![8_u8, 9])));
+        assert!(buf.write(&[3, 4]).is_some());
+        assert!(buf.append(ZSlice::from(vec![5_u8, 6])).is_some());
+        assert!(buf.write_byte(7).is_some());
+        assert!(buf.append(ZSlice::from(vec![8_u8, 9])).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
-        assert!(buf.write_bytes(&[3, 4]));
+        assert!(buf.write(&[3, 4]).is_some());
         buf.mark();
-        assert!(buf.write_zslice(ZSlice::from(vec![5_u8, 6])));
-        assert!(buf.write(7));
-        assert!(buf.write_zslice(ZSlice::from(vec![8_u8, 9])));
+        assert!(buf.append(ZSlice::from(vec![5_u8, 6])).is_some());
+        assert!(buf.write_byte(7).is_some());
+        assert!(buf.append(ZSlice::from(vec![8_u8, 9])).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(buf.write_zslice(ZSlice::from(vec![5_u8, 6])));
+        assert!(buf.append(ZSlice::from(vec![5_u8, 6])).is_some());
         buf.mark();
-        assert!(buf.write(7));
-        assert!(buf.write_zslice(ZSlice::from(vec![8_u8, 9])));
+        assert!(buf.write_byte(7).is_some());
+        assert!(buf.append(ZSlice::from(vec![8_u8, 9])).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2, 3, 4], vec![5, 6]]);
 
-        assert!(buf.write(7));
+        assert!(buf.write_byte(7).is_some());
         buf.mark();
-        assert!(buf.write_zslice(ZSlice::from(vec![8_u8, 9])));
+        assert!(buf.append(ZSlice::from(vec![8_u8, 9])).is_some());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [vec![0, 1, 2, 3, 4], vec![5, 6], vec![7]]);
 
-        assert!(buf.write_zslice(ZSlice::from(vec![8_u8, 9])));
+        assert!(buf.append(ZSlice::from(vec![8_u8, 9])).is_some());
         buf.mark();
-        assert!(buf.write_zslice(ZSlice::from(vec![10_u8, 11])));
+        assert!(buf.append(ZSlice::from(vec![10_u8, 11])).is_some());
         buf.revert();
         assert_eq!(
             to_vec_vec!(buf),
@@ -846,14 +1074,15 @@ mod tests {
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
         );
 
+        let mut reader = buf.reader();
         let mut copy = vec![0; 12];
-        buf.copy_into_slice(&mut copy[0..1]);
+        reader.copy_into_slice(&mut copy[0..1]);
         assert_eq!(copy, &[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        buf.copy_into_slice(&mut copy[1..6]);
+        reader.copy_into_slice(&mut copy[1..6]);
         assert_eq!(copy, &[0, 1, 2, 3, 4, 5, 0, 0, 0, 0, 0, 0]);
-        buf.copy_into_slice(&mut copy[6..8]);
+        reader.copy_into_slice(&mut copy[6..8]);
         assert_eq!(copy, &[0, 1, 2, 3, 4, 5, 6, 7, 0, 0, 0, 0]);
-        buf.copy_into_slice(&mut copy[8..12]);
+        reader.copy_into_slice(&mut copy[8..12]);
         assert_eq!(copy, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     }
 
@@ -872,14 +1101,15 @@ mod tests {
             [vec![0, 1], vec![2, 3, 4], vec![5, 6, 7, 8], vec![9, 10, 11]]
         );
 
+        let mut reader = buf.reader();
         let mut copy = WBuf::new(12, true);
-        buf.copy_into_wbuf(&mut copy, 1);
+        reader.copy_into_wbuf(&mut copy, 1);
         assert_eq!(to_vec_vec!(copy), &[[0]]);
-        buf.copy_into_wbuf(&mut copy, 5);
+        reader.copy_into_wbuf(&mut copy, 5);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2, 3, 4, 5]]);
-        buf.copy_into_wbuf(&mut copy, 2);
+        reader.copy_into_wbuf(&mut copy, 2);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2, 3, 4, 5, 6, 7]]);
-        buf.copy_into_wbuf(&mut copy, 4);
+        reader.copy_into_wbuf(&mut copy, 4);
         assert_eq!(to_vec_vec!(copy), &[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]]);
     }
 }

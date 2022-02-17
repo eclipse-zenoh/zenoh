@@ -22,6 +22,8 @@ use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zenoh_buffers::buffer::InsertBuffer;
+use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, Result as ZResult};
@@ -328,7 +330,7 @@ async fn rx_task(
     }
 
     // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::new();
+    let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
@@ -354,11 +356,12 @@ async fn rx_task(
                 // Add the received bytes to the ZBuf for deserialization
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.add_zslice(zs);
+                zbuf.append(zs);
 
                 // Deserialize all the messages from the current ZBuf
-                while zbuf.can_read() {
-                    match zbuf.read_transport_message() {
+                let mut reader = zbuf.reader();
+                while reader.can_read() {
+                    match reader.read_transport_message() {
                         Some(msg) => {
                             #[cfg(feature = "stats")]
                             transport.stats.inc_rx_t_msgs(1);
