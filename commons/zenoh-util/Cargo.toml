@@ -44,7 +44,7 @@ zenoh-cfg-properties = { path = "../zenoh-cfg-properties", optional = true }
 zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
 zenoh-sync = { path = "../zenoh-sync/", optional = true }
 zenoh-collections = { path = "../zenoh-collections/", optional = true }
-async-std = { version = "=1.9.0" }
+async-std = { version = "=1.10.0" }
 clap = "2.33.3"
 futures = "0.3.12"
 hex = "0.4.2"

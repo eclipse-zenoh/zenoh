@@ -1077,6 +1077,7 @@ impl Session {
             kind: None,
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         }
     }
 
@@ -1101,6 +1102,7 @@ impl Session {
             kind: None,
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         })
     }
 
@@ -1131,6 +1133,7 @@ impl Session {
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         }
     }
 
@@ -1161,8 +1164,10 @@ impl Session {
         key_expr: &KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
+        local_routing: Option<bool>,
     ) {
         let state = zread!(self.state);
+        let local_routing = local_routing.unwrap_or(state.local_routing);
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, local) {
                 Some(res) => {
@@ -1170,7 +1175,7 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
                     } else {
-                        if !local || state.local_routing {
+                        if !local || local_routing {
                             for sub in &res.subscribers {
                                 Session::invoke_subscriber(
                                     &sub.invoker,
@@ -1199,7 +1204,7 @@ impl Session {
         } else {
             match state.key_expr_to_expr(key_expr, local) {
                 Ok(key_expr) => {
-                    if !local || state.local_routing {
+                    if !local || local_routing {
                         for sub in state.subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
@@ -1275,6 +1280,7 @@ impl Session {
             selector,
             target: Some(QueryTarget::default()),
             consolidation,
+            local_routing: None,
         }
     }
 
@@ -1539,7 +1545,7 @@ impl Primitives for Session {
             congestion_control,
             info,
         );
-        self.handle_data(false, key_expr, info, payload)
+        self.handle_data(false, key_expr, info, payload, None)
     }
 
     fn send_query(

@@ -130,6 +130,7 @@ derive_zfuture! {
         pub(crate) selector: Selector<'b>,
         pub(crate) target: Option<QueryTarget>,
         pub(crate) consolidation: Option<QueryConsolidation>,
+        pub(crate) local_routing: Option<bool>,
     }
 }
 
@@ -147,6 +148,13 @@ impl<'a, 'b> Getter<'a, 'b> {
         self.consolidation = Some(consolidation);
         self
     }
+
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
+        self
+    }
 }
 
 impl Runnable for Getter<'_, '_> {
@@ -162,9 +170,10 @@ impl Runnable for Getter<'_, '_> {
         let mut state = zwrite!(self.session.state);
         let target = self.target.take().unwrap();
         let consolidation = self.consolidation.take().unwrap();
+        let local_routing = self.local_routing.unwrap_or(state.local_routing);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
-        let nb_final = if state.local_routing { 2 } else { 1 };
+        let nb_final = if local_routing { 2 } else { 1 };
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
@@ -181,7 +190,7 @@ impl Runnable for Getter<'_, '_> {
         );
 
         let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
+
         drop(state);
         primitives.send_query(
             &self.selector.key_selector,
