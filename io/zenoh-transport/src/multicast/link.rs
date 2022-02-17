@@ -20,7 +20,6 @@ use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
 use std::convert::TryInto;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::{ZBuf, ZSlice};
@@ -53,7 +52,6 @@ pub(super) struct TransportLinkMulticast {
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
     handle_tx: Option<Arc<JoinHandle<()>>>,
-    active_rx: Arc<AtomicBool>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
@@ -68,7 +66,6 @@ impl TransportLinkMulticast {
             link,
             pipeline: None,
             handle_tx: None,
-            active_rx: Arc::new(AtomicBool::new(false)),
             signal_rx: Signal::new(),
             handle_rx: None,
         }
@@ -131,12 +128,10 @@ impl TransportLinkMulticast {
 
     pub(super) fn start_rx(&mut self) {
         if self.handle_rx.is_none() {
-            self.active_rx.store(true, Ordering::Release);
             // Spawn the RX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_active = self.active_rx.clone();
             let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
 
             let handle = task::spawn(async move {
@@ -145,11 +140,10 @@ impl TransportLinkMulticast {
                     c_link.clone(),
                     c_transport.clone(),
                     c_signal.clone(),
-                    c_active.clone(),
                     c_rx_buff_size,
                 )
                 .await;
-                c_active.store(false, Ordering::Release);
+                c_signal.trigger();
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -162,7 +156,6 @@ impl TransportLinkMulticast {
     }
 
     pub(super) fn stop_rx(&mut self) {
-        self.active_rx.store(false, Ordering::Release);
         self.signal_rx.trigger();
     }
 
@@ -317,7 +310,6 @@ async fn rx_task(
     link: LinkMulticast,
     transport: TransportMulticastInner,
     signal: Signal,
-    active: Arc<AtomicBool>,
     rx_buff_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -341,7 +333,7 @@ async fn rx_task(
     let mtu = link.get_mtu() as usize;
     let n = 1 + (rx_buff_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-    while active.load(Ordering::Acquire) {
+    while !signal.is_triggered() {
         // Clear the zbuf
         zbuf.clear();
         // Retrieve one buffer
