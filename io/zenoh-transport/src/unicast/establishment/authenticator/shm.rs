@@ -207,9 +207,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
-        let attachment: ZBuf = wbuf.into();
 
-        Ok(Some(attachment.contiguous().into_owned()))
+        Ok(Some(wbuf.contiguous().into_owned()))
     }
 
     async fn handle_init_syn(
@@ -268,9 +267,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_shm(&init_ack_property);
-        let attachment: ZBuf = wbuf.into();
 
-        Ok((Some(attachment.contiguous().into_owned()), None))
+        Ok((Some(wbuf.contiguous().into_owned()), None))
     }
 
     async fn handle_init_ack(
@@ -318,9 +316,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             // Encode the OpenSyn property
             let mut wbuf = WBuf::new(WBUF_SIZE, false);
             wbuf.write_open_syn_property_shm(&open_syn_property);
-            let attachment: ZBuf = wbuf.into();
 
-            Ok(Some(attachment.contiguous().into_owned()))
+            Ok(Some(wbuf.contiguous().into_owned()))
         } else {
             Err(ShmError(zerror!(
                 "Received OpenSyn with invalid attachment on link: {}",

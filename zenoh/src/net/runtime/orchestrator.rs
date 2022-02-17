@@ -510,7 +510,7 @@ impl Runtime {
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             let mut scout = TransportMessage::make_scout(Some(matcher), true, None);
             wbuf.write_transport_message(&mut scout);
-            let zbuf: ZBuf = wbuf.into();
+            let zbuf = wbuf;
             let zslice = zbuf.contiguous();
             loop {
                 for socket in sockets {
@@ -729,7 +729,7 @@ impl Runtime {
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
                         wbuf.write_transport_message(&mut hello);
-                        let zbuf: ZBuf = wbuf.into();
+                        let zbuf = wbuf;
                         let zslice = zbuf.contiguous();
                         if let Err(err) = socket.send_to(&zslice, peer).await {
                             log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);

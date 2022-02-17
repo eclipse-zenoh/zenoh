@@ -237,7 +237,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_usrpwd(&init_syn_property);
-        let attachment: ZBuf = wbuf.into();
+        let attachment = wbuf;
 
         Ok(Some(attachment.contiguous().into_owned()))
     }
@@ -268,7 +268,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_usrpwd(&init_ack_property);
-        let attachment: ZBuf = wbuf.into();
+        let attachment = wbuf;
 
         Ok((Some(attachment.contiguous().into_owned()), None))
     }
@@ -306,7 +306,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         // Encode the InitAck attachment
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_open_syn_property_usrpwd(&open_syn_property);
-        let attachment: ZBuf = wbuf.into();
+        let attachment = wbuf;
 
         Ok(Some(attachment.contiguous().into_owned()))
     }

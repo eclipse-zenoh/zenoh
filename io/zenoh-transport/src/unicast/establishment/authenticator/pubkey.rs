@@ -310,8 +310,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             bail!("Failed to serialize InitSyn on link: {}", link);
         }
 
-        let attachment: ZBuf = wbuf.into();
-        Ok(Some(attachment.contiguous().into_owned()))
+        Ok(Some(wbuf.contiguous().into_owned()))
     }
 
     async fn handle_init_syn(
@@ -378,7 +377,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                     bail!("Failed to serialize InitAck on link: {}", link);
                 }
 
-                let nonce_bytes: ZBuf = wbuf.into();
+                let nonce_bytes = wbuf;
                 let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
                     &mut guard.prng,
                     PaddingScheme::PKCS1v15Encrypt,
@@ -396,7 +395,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 if !res {
                     bail!("Failed to serialize InitAck on link: {}", link);
                 }
-                let cookie: ZBuf = wbuf.into();
+                let cookie = wbuf;
 
                 // Encode the InitAck property
                 let mut wbuf = WBuf::new(WBUF_SIZE, false);
@@ -404,7 +403,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 if !res {
                     bail!("Failed to serialize InitAck on link: {}", link);
                 }
-                let attachment: ZBuf = wbuf.into();
+                let attachment = wbuf;
 
                 Ok((
                     Some(attachment.contiguous().into_owned()),
@@ -471,7 +470,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             bail!("Failed to serialize OpenSyn on link: {}", link);
         }
 
-        let attachment: ZBuf = wbuf.into();
+        let attachment = wbuf;
 
         Ok(Some(attachment.contiguous().into_owned()))
     }
