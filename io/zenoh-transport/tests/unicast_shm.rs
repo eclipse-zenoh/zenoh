@@ -345,7 +345,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+        let endpoint: EndPoint = "tcp/127.0.0.1:16447".parse().unwrap();
         task::block_on(run(&endpoint));
     }
 }

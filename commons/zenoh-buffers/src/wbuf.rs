@@ -130,7 +130,7 @@ impl WBuf {
         self.slices.push(Slice::Internal(0, None));
     }
 
-    pub fn to_zslices(self) -> Vec<ZSlice> {
+    pub(crate) fn to_zslices(self) -> Vec<ZSlice> {
         let arc_buf = Arc::new(self.buf);
         if self.contiguous {
             if !arc_buf.is_empty() {
@@ -149,26 +149,6 @@ impl WBuf {
                     Slice::Internal(start, None) => {
                         ZSlice::make(arc_buf.clone().into(), *start, arc_buf.len()).unwrap()
                     }
-                })
-                .filter(|s| !s.is_empty())
-                .collect()
-        }
-    }
-
-    pub fn as_ioslices(&self) -> Vec<IoSlice> {
-        if self.contiguous {
-            if !self.buf.is_empty() {
-                vec![IoSlice::new(&self.buf[..])]
-            } else {
-                vec![]
-            }
-        } else {
-            self.slices
-                .iter()
-                .map(|s| match s {
-                    Slice::External(arcs) => arcs.as_ioslice(),
-                    Slice::Internal(start, Some(end)) => IoSlice::new(&self.buf[*start..*end]),
-                    Slice::Internal(start, None) => IoSlice::new(&self.buf[*start..]),
                 })
                 .filter(|s| !s.is_empty())
                 .collect()
