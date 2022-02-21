@@ -46,8 +46,8 @@ use uhlc::HLC;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
+        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
+        KeyExpr, QueryTarget, QueryableInfo, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -1270,16 +1270,11 @@ impl Session {
         IntoSelector: Into<Selector<'b>>,
     {
         let selector = selector.into();
-        let consolidation = if selector.has_time_range() {
-            Some(QueryConsolidation::none())
-        } else {
-            Some(QueryConsolidation::default())
-        };
         Getter {
             session: self,
             selector,
             target: Some(QueryTarget::default()),
-            consolidation,
+            consolidation: Some(QueryConsolidation::default()),
             local_routing: None,
         }
     }
@@ -1291,7 +1286,7 @@ impl Session {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
             let state = zread!(self.state);
@@ -1554,7 +1549,7 @@ impl Primitives for Session {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(

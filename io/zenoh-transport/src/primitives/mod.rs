@@ -16,7 +16,7 @@ mod mux;
 
 use super::protocol;
 use super::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
     SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -69,7 +69,7 @@ pub trait Primitives: Send + Sync {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         routing_context: Option<RoutingContext>,
     );
 
@@ -153,7 +153,7 @@ impl Primitives for DummyPrimitives {
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
     }

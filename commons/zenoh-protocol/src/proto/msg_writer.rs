@@ -62,7 +62,7 @@ pub trait MessageWriter {
     fn write_query_target(&mut self, target: &QueryTarget) -> bool;
     fn write_target(&mut self, target: &Target) -> bool;
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt;
-    fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool;
+    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool;
 }
 
 impl MessageWriter for WBuf {
@@ -601,7 +601,7 @@ impl MessageWriter for WBuf {
         }
     }
 
-    fn write_consolidation(&mut self, consolidation: &QueryConsolidation) -> bool {
+    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool {
         self.write_zint(
             (WBuf::write_consolidation_mode(consolidation.first_routers) << 4)
                 | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)

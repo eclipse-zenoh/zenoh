@@ -24,8 +24,8 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-    QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
+    KeyExpr, PeerId, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -348,7 +348,7 @@ impl Primitives for AdminSpace {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(

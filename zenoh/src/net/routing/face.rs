@@ -19,7 +19,7 @@ use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
     SubInfo, WhatAmI, ZInt,
 };
 use zenoh_transport::Primitives;
@@ -351,7 +351,7 @@ impl Primitives for Face {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         routing_context: Option<RoutingContext>,
     ) {
         route_query(
