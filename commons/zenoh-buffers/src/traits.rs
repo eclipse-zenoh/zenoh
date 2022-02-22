@@ -36,7 +36,7 @@ pub mod buffer {
 }
 
 pub mod writer {
-    pub trait Writer: AsRef<Self::Buffer> + AsMut<Self::Buffer> {
+    pub trait Writer {
         type Buffer;
     }
     pub trait BacktrackableWriter {
