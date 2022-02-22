@@ -84,6 +84,8 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
-        self.buffer.reader().read_zenoh_message(self.reliability)
+        let res = self.buffer.reader().read_zenoh_message(self.reliability);
+        self.buffer.clear();
+        res
     }
 }
