@@ -3582,7 +3582,9 @@ dependencies = [
  "async-std",
  "event-listener",
  "flume",
+ "futures",
  "futures-lite",
+ "tokio",
  "zenoh-core",
 ]
 
