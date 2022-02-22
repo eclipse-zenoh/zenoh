@@ -988,7 +988,7 @@ pub struct Query {
     pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
-    pub consolidation: QueryConsolidation,
+    pub consolidation: ConsolidationStrategy,
 }
 
 impl Header for Query {
@@ -1208,7 +1208,7 @@ impl ZenohMessage {
         value_selector: String,
         qid: ZInt,
         target: Option<QueryTarget>,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {

@@ -228,8 +228,8 @@ fn gen_consolidation_mode() -> ConsolidationMode {
     }
 }
 
-fn gen_consolidation() -> QueryConsolidation {
-    QueryConsolidation {
+fn gen_consolidation() -> ConsolidationStrategy {
+    ConsolidationStrategy {
         first_routers: gen_consolidation_mode(),
         last_router: gen_consolidation_mode(),
         reception: gen_consolidation_mode(),

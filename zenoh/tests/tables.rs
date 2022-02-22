@@ -22,7 +22,7 @@ use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::intersect;
 use zenoh_protocol_core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
     Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
@@ -466,7 +466,7 @@ impl Primitives for ClientPrimitives {
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
     }
