@@ -1,4 +1,5 @@
 use super::{NonZeroZInt, ZInt};
+use zenoh_core::{bail, zresult::ZError};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -9,14 +10,14 @@ pub enum WhatAmI {
 }
 
 impl std::str::FromStr for WhatAmI {
-    type Err = ();
+    type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "router" => Ok(WhatAmI::Router),
             "peer" => Ok(WhatAmI::Peer),
             "client" => Ok(WhatAmI::Client),
-            _ => Err(()),
+            _ => bail!("{} is not a valid WhatAmI value. Valid values are: [\"router\", \"peer\", \"client\"].", s),
         }
     }
 }
