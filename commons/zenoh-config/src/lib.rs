@@ -75,6 +75,16 @@ fn config_keys() {
     let c = Config::default();
     dbg!(c.keys());
 }
+
+fn treat_error_as_none<'a, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: serde::de::Deserialize<'a>,
+    D: serde::de::Deserializer<'a>,
+{
+    let value: Value = serde::de::Deserialize::deserialize(deserializer)?;
+    Ok(T::deserialize(value).ok())
+}
+
 validated_struct::validator! {
     /// The main configuration structure for Zenoh.
     ///
@@ -84,6 +94,7 @@ validated_struct::validator! {
     #[recursive_attrs]
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
     #[serde(default)]
+    #[serde(deny_unknown_fields)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
         id: Option<String>,
@@ -114,12 +125,14 @@ validated_struct::validator! {
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through multicast scouting.
+                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             },
             pub gossip: GossipConf {
                 /// Whether the link state protocol (gossip scouting) should be enabled. Defaults to `true` if left empty.
                 enabled: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
+                #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             },
             /// If set to `false`, peers will never automatically establish sessions between each-other.
@@ -252,19 +265,14 @@ fn config_deser() {
             .map(|s| s.as_ref()),
         Some("file")
     );
-    let config = Config::from_deserializer(
+    std::mem::drop(Config::from_deserializer(
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, user_password_dictionary: "file" }}}}"#,
         )
         .unwrap(),
     )
-    .unwrap();
-    assert!(config
-        .transport()
-        .auth()
-        .usrpwd()
-        .dictionary_file()
-        .is_none())
+    .unwrap_err());
+    dbg!(Config::from_file("../../EXAMPLE_CONFIG.json5").unwrap());
 }
 
 impl Config {
