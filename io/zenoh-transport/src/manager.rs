@@ -75,8 +75,8 @@ use zenoh_protocol_core::{EndPoint, Locator};
 /// let unicast = TransportManager::config_unicast()
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(Duration::from_millis(100))
-///         .open_timeout(Duration::from_secs(1))
-///         .open_pending(10)   // Set to 10 the number of simultanous pending incoming transports        
+///         .accept_timeout(Duration::from_secs(1))
+///         .accept_pending(10)   // Set to 10 the number of simultanous pending incoming transports        
 ///         .max_links(1)    // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
@@ -96,7 +96,7 @@ pub struct TransportManagerConfig {
     pub sn_resolution: ZInt,
     pub batch_size: u16,
     pub defrag_buff_size: usize,
-    pub link_rx_buff_size: usize,
+    pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
     pub endpoint: HashMap<String, Properties>,
@@ -120,7 +120,7 @@ pub struct TransportManagerBuilder {
     sn_resolution: ZInt,
     batch_size: u16,
     defrag_buff_size: usize,
-    link_rx_buff_size: usize,
+    link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
     endpoint: HashMap<String, Properties>,
@@ -152,8 +152,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn link_rx_buff_size(mut self, link_rx_buff_size: usize) -> Self {
-        self.link_rx_buff_size = link_rx_buff_size;
+    pub fn link_rx_buffer_size(mut self, link_rx_buffer_size: usize) -> Self {
+        self.link_rx_buffer_size = link_rx_buffer_size;
         self
     }
 
@@ -188,8 +188,8 @@ impl TransportManagerBuilder {
         if let Some(v) = properties.transport().link().defrag_buffer_size() {
             self = self.defrag_buff_size(*v);
         }
-        if let Some(v) = properties.transport().link().rx_buff_size() {
-            self = self.link_rx_buff_size(*v);
+        if let Some(v) = properties.transport().link().rx_buffer_size() {
+            self = self.link_rx_buffer_size(*v);
         }
         let (config, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(properties)
@@ -228,7 +228,7 @@ impl TransportManagerBuilder {
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
             defrag_buff_size: self.defrag_buff_size,
-            link_rx_buff_size: self.link_rx_buff_size,
+            link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
             multicast: multicast.config,
             endpoint: self.endpoint,
@@ -255,7 +255,7 @@ impl Default for TransportManagerBuilder {
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
-            link_rx_buff_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
+            link_rx_buffer_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             endpoint: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),

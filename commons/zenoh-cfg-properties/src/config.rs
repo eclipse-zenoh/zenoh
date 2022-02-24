@@ -229,7 +229,7 @@ mod consts {
     /// Default value : `1024`.
     pub const ZN_OPEN_INCOMING_PENDING_KEY: u64 = 0x67;
     pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_pending";
-    pub const ZN_OPEN_INCOMING_PENDING_DEFAULT: &str = "1024";
+    pub const ZN_OPEN_INCOMING_PENDING_DEFAULT: &str = "100";
 
     /// Configures the peer ID.
     /// String key : `"peer_id"`.

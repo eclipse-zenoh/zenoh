@@ -101,10 +101,10 @@ validated_struct::validator! {
             declare_publications: Vec<String>,
         },
         pub scouting: ScoutingConf {
-            /// In client mode, the period dedicated to scouting for a router before failing.
-            timeout: Option<f64>,
-            /// In peer mode, the period dedicated to scouting remote peers before attempting other operations.
-            delay: Option<f64>,
+            /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
+            timeout: Option<u64>,
+            /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
+            delay: Option<u64>,
             /// How multicast should behave.
             pub multicast: ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
@@ -141,9 +141,9 @@ validated_struct::validator! {
             qos: Option<bool>,
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
-                open_timeout: Option<ZInt>, // TODO sed /open/accept/g
-                /// Number of links that may stay pending during accept phase (default: 100). // TODO actually change the default
-                open_pending: Option<usize>, // TODO sed /open/accept/g
+                accept_timeout: Option<ZInt>,
+                /// Number of links that may stay pending during accept phase (default: 100).
+                accept_pending: Option<usize>,
                 /// Maximum number of unicast sessions (default: 1024)
                 max_sessions: Option<usize>,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
@@ -163,7 +163,7 @@ validated_struct::validator! {
                 /// Link keep-alive duration in milliseconds (default: 2500)
                 keep_alive: Option<ZInt>,
                 /// Receiving buffer size for each link (default: 16MiB, this default is currently under investigation)
-                rx_buff_size: Option<usize>, // TODO sed /buff/buffer/g
+                rx_buffer_size: Option<usize>,
                 /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                 /// Fragmented messages that are larger than the configured size will be dropped.
                 defrag_buffer_size: Option<usize>,

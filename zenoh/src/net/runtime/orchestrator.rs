@@ -73,7 +73,7 @@ impl Runtime {
                     .map(AsRef::as_ref)
                     .unwrap_or("auto")
                     .to_owned(),
-                std::time::Duration::from_secs_f64(guard.scouting().timeout().unwrap_or(3.)),
+                std::time::Duration::from_millis(guard.scouting().timeout().unwrap_or(3000)),
             )
         };
         match peers.len() {
@@ -145,7 +145,7 @@ impl Runtime {
                     .map(AsRef::as_ref)
                     .unwrap_or_else(|| ZN_MULTICAST_INTERFACE_DEFAULT)
                     .to_string(),
-                std::time::Duration::from_secs_f64(guard.scouting().delay().unwrap_or(0.2)),
+                std::time::Duration::from_millis(guard.scouting().delay().unwrap_or(200)),
             )
         };
 
