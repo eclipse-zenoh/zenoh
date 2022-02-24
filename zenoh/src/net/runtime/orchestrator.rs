@@ -58,7 +58,7 @@ impl Runtime {
         let (peers, scouting, addr, ifaces, timeout) = {
             let guard = self.config.lock();
             (
-                guard.peers().clone(),
+                guard.startup().connect().clone(),
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -116,12 +116,12 @@ impl Runtime {
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
-            let listeners = if guard.listeners().is_empty() {
+            let listeners = if guard.startup().listen().is_empty() {
                 vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.listeners().clone()
+                guard.startup().listen().clone()
             };
-            let peers = guard.peers().clone();
+            let peers = guard.startup().connect().clone();
             (
                 listeners,
                 peers,
@@ -191,12 +191,12 @@ impl Runtime {
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
             let guard = self.config.lock();
-            let listeners = if guard.listeners().is_empty() {
+            let listeners = if guard.startup().listen().is_empty() {
                 vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.listeners().clone()
+                guard.startup().listen().clone()
             };
-            let peers = guard.peers().clone();
+            let peers = guard.startup().connect().clone();
             (
                 listeners,
                 peers,
@@ -261,7 +261,7 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = { self.config.lock().peers().clone() };
+        let peers = { self.config.lock().startup().connect().clone() };
         let tranports = self.manager().get_transports();
 
         if self.whatami == WhatAmI::Client {
@@ -759,7 +759,7 @@ impl Runtime {
             }
             _ => {
                 if let Some(locator) = &*zread!(session.locator) {
-                    let peers = { session.runtime.config.lock().peers().clone() };
+                    let peers = { session.runtime.config.lock().startup().connect().clone() };
                     if peers.contains(locator) {
                         let locator = locator.clone();
                         let runtime = session.runtime.clone();

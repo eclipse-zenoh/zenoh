@@ -127,11 +127,6 @@ pub struct TransportManagerBuilder {
 }
 
 impl TransportManagerBuilder {
-    pub fn version(mut self, version: u8) -> Self {
-        self.version = version;
-        self
-    }
-
     pub fn pid(mut self, pid: PeerId) -> Self {
         self.pid = pid;
         self
@@ -178,9 +173,6 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, properties: &Config) -> ZResult<TransportManagerBuilder> {
-        if let Some(v) = properties.version() {
-            self = self.version(*v);
-        }
         if let Some(v) = properties.id() {
             self = self.pid(zparse!(v)?);
         }

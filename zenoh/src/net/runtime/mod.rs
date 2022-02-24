@@ -28,8 +28,8 @@ use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
+use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zerror};
 use zenoh_link::{Link, Locator};
 use zenoh_protocol;
 use zenoh_protocol::core::{PeerId, WhatAmI};
@@ -65,13 +65,9 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config) -> ZResult<Runtime> {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
-
-        config
-            .set_version(Some(version))
-            .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
         let pid = if let Some(s) = config.id() {
             s.parse()?
@@ -90,7 +86,7 @@ impl Runtime {
             None
         };
 
-        let peers_autoconnect = config.peers_autoconnect().unwrap_or(true);
+        let peers_autoconnect = config.scouting().peers_autoconnect().unwrap_or(true);
         let routers_autoconnect_gossip = config
             .scouting()
             .gossip()
@@ -119,7 +115,6 @@ impl Runtime {
         let transport_manager = TransportManager::builder()
             .from_config(&config)
             .await?
-            .version(version)
             .whatami(whatami)
             .pid(pid)
             .build(handler.clone())?;

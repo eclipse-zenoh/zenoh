@@ -62,7 +62,10 @@ pub fn peer() -> Config {
 pub fn client<I: IntoIterator<Item = T>, T: Into<Locator>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config.peers.extend(peers.into_iter().map(|t| t.into()));
+    config
+        .startup
+        .connect
+        .extend(peers.into_iter().map(|t| t.into()));
     config
 }
 
@@ -82,15 +85,21 @@ validated_struct::validator! {
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
     #[serde(default)]
     Config {
-        version: Option<u8>,
-        /// The Zenoh ID of the instance. This ID must be of the UUIDv4 format and unique throughout your Zenoh infrastructure. If left unset, a random UUIDv4 will be generated.
+        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
         id: Option<String>,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
-        /// Which locators to connect to on session startup.
-        pub peers: Vec<Locator>,
-        /// Which locators to listen on on session startup. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
-        pub listeners: Vec<Locator>,
+        /// Actions taken by the Zenoh instance upon startup.
+        pub startup: JoinConfig {
+            /// Which zenoh nodes to connect to on session startup.
+            pub connect: Vec<Locator>,
+            /// Which locators to listen on on session startup. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
+            pub listen: Vec<Locator>,
+            /// A list of key-expressions to subscribe to upon startup.
+            subscribe: Vec<String>,
+            /// A list of key-expressions to declare publications onto upon startup.
+            declare_publications: Vec<String>,
+        },
         pub scouting: ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing.
             timeout: Option<f64>,
@@ -112,49 +121,50 @@ validated_struct::validator! {
                 enabled: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
                 autoconnect: Option<whatami::WhatAmIMatcher>,
-            }
+            },
+            /// If set to `false`, peers will never automatically establish sessions between each-other.
+            peers_autoconnect: Option<bool>,
         },
         /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
         add_timestamp: Option<bool>,
-        /// If set to `false`, peers will never automatically establish sessions between each-other.
-        peers_autoconnect: Option<bool>,
         /// Whether local writes/queries should reach local subscribers/queryables.
         local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
-        pub join_on_startup: JoinConfig {
-            /// A list of key-expressions to subscribe to upon startup.
-            subscriptions: Vec<String>,
-            /// A list of key-expressions to declare publications onto upon startup.
-            publications: Vec<String>,
-        },
         pub transport: TransportConf {
-            /// If set to `false`, the shared-memory transports will be disabled.
+            /// If set to `false`, the shared-memory transports will be disabled. (default `true`).
             shared_memory: Option<bool>,
             /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
+            /// Defaults to 2^28.
             sequence_number_resolution: Option<ZInt>,
+            /// Enables QOS (traffic priorities) (default false).
             qos: Option<bool>,
             pub unicast: TransportUnicastConf {
-                /// Timeout in milliseconds when opening a link
-                open_timeout: Option<ZInt>,
-                open_pending: Option<usize>,
+                /// Timeout in milliseconds when opening a link (default: 10000).
+                open_timeout: Option<ZInt>, // TODO sed /open/accept/g
+                /// Number of links that may stay pending during accept phase (default: 100). // TODO actually change the default
+                open_pending: Option<usize>, // TODO sed /open/accept/g
+                /// Maximum number of unicast sessions (default: 1024)
                 max_sessions: Option<usize>,
+                /// Maximum number of unicast incoming links per transport session (default: 1)
                 max_links: Option<usize>,
             },
             pub multicast: TransportMulticastConf {
-                /// Link keep-alive duration in milliseconds
+                /// Link keep-alive duration in milliseconds (default: 2500)
                 join_interval: Option<ZInt>,
+                /// Maximum number of multicast sessions (default: 1024)
                 max_sessions: Option<usize>,
             },
             pub link: TransportLinkConf {
+                /// Zenoh's MTU equivalent (default: 2^16-1)
                 batch_size: Option<u16>,
-                /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
+                /// Link lease duration in milliseconds (default: 10000)
                 lease: Option<ZInt>,
-                /// Link keep-alive duration in milliseconds
+                /// Link keep-alive duration in milliseconds (default: 2500)
                 keep_alive: Option<ZInt>,
-                /// Receiving buffer size for each link
-                rx_buff_size: Option<usize>,
-                /// Maximum size of the defragmentation buffer at receiver end.
+                /// Receiving buffer size for each link (default: 16MiB, this default is currently under investigation)
+                rx_buff_size: Option<usize>, // TODO sed /buff/buffer/g
+                /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                 /// Fragmented messages that are larger than the configured size will be dropped.
                 defrag_buffer_size: Option<usize>,
                 pub tls: TLSConf {
@@ -172,7 +182,7 @@ validated_struct::validator! {
                 pub usrpwd: UserConf {
                     user: Option<String>,
                     password: Option<String>,
-                    /// The path to a file containing the user password dictionary
+                    /// The path to a file containing the user password dictionary, a file containing "<user>:<password>"
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
                 pub pubkey: PubKeyConf {
@@ -187,7 +197,7 @@ validated_struct::validator! {
         },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
-        plugins_search_dirs: Vec<String>,
+        plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
         #[validated(recursive_accessors)]
         /// The configuration for plugins.
         ///

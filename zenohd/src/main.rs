@@ -121,7 +121,7 @@ r#"--rest-http-port=[PORT | IP:PORT | none] \
             }
         }
 
-        let runtime = match Runtime::new(0, config).await {
+        let runtime = match Runtime::new(config).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);
@@ -211,7 +211,8 @@ fn config_from_args(args: &ArgMatches) -> Config {
     }
     if let Some(peers) = args.values_of("peer") {
         config
-            .set_peers(
+            .startup
+            .set_connect(
                 peers
                     .map(|v| match v.parse::<Locator>() {
                         Ok(v) => v,
@@ -225,7 +226,8 @@ fn config_from_args(args: &ArgMatches) -> Config {
     }
     if let Some(listeners) = args.values_of("listener") {
         config
-            .set_listeners(
+            .startup
+            .set_listen(
                 listeners
                     .map(|v| match v.parse::<Locator>() {
                         Ok(v) => v,
@@ -237,8 +239,11 @@ fn config_from_args(args: &ArgMatches) -> Config {
             )
             .unwrap();
     }
-    if config.listeners.is_empty() {
-        config.listeners.push(DEFAULT_LISTENER.parse().unwrap())
+    if config.startup.listen.is_empty() {
+        config
+            .startup
+            .listen
+            .push(DEFAULT_LISTENER.parse().unwrap())
     }
     match (
         config.add_timestamp().is_none(),

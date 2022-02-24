@@ -260,9 +260,9 @@ impl Session {
             };
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.join_on_startup().subscriptions().clone();
-            let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(0, config).await {
+            let join_subscriptions = config.startup().subscribe().clone();
+            let join_publications = config.startup().declare_publications().clone();
+            match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,

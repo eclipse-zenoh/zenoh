@@ -70,10 +70,16 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
         config.set_mode(Some(mode)).unwrap();
     }
     if let Some(values) = args.values_of("peer") {
-        config.peers.extend(values.map(|v| v.parse().unwrap()))
+        config
+            .startup
+            .connect
+            .extend(values.map(|v| v.parse().unwrap()))
     }
     if let Some(values) = args.values_of("listeners") {
-        config.listeners.extend(values.map(|v| v.parse().unwrap()))
+        config
+            .startup
+            .listen
+            .extend(values.map(|v| v.parse().unwrap()))
     }
 
     let group = args.value_of("group").unwrap().to_string();
