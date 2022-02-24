@@ -163,7 +163,7 @@ impl TransportManagerBuilderUnicast {
             self = self.qos(*v);
         }
         #[cfg(feature = "shared-memory")]
-        if let Some(v) = properties.shared_memory() {
+        if let Some(v) = properties.transport().shared_memory() {
             self = self.shm(*v);
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);

@@ -18,7 +18,6 @@
 use serde_json::Value;
 use std::{
     any::Any,
-    borrow::Cow,
     collections::HashMap,
     io::Read,
     net::SocketAddr,
@@ -41,14 +40,6 @@ pub type ValidationFunction = std::sync::Arc<
         + Sync,
 >;
 type ZInt = u64;
-
-/// A set of Key/Value (`u64`/`String`) pairs to pass to [`open`](zenoh::open)  
-/// to configure the zenoh [`Session`](zenoh::Session).
-///
-/// Multiple values are coma separated.
-///
-/// The [`IntKeyProperties`](zenoh_cfg_properties::IntKeyProperties) can be built from (`String`/`String`)
-/// [`Properties`](zenoh_cfg_properties::Properties) and reverse.
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {
@@ -79,181 +70,128 @@ pub fn client<I: IntoIterator<Item = T>, T: Into<Locator>>(peers: I) -> Config {
 fn config_keys() {
     use validated_struct::ValidatedMap;
     let c = Config::default();
-    dbg!(c.ikeys());
     dbg!(c.keys());
 }
 validated_struct::validator! {
+    /// The main configuration structure for Zenoh.
+    ///
+    /// Most fields are optional as a way to keep defaults flexible. Some of the fields have different default values depending on the rest of the configuration.
+    ///
+    /// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML are currently supported, please use the proper extension for your format as the deserializer will be picked according to it).
     #[recursive_attrs]
-    #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, IntKeyMapLike)]
+    #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
+    #[serde(default)]
     Config {
-        #[intkey(ZN_VERSION_KEY, into = u8_to_cowstr, from = u8_from_str)]
         version: Option<u8>,
-        #[intkey(ZN_PEER_ID_KEY, into = string_to_cowstr, from = string_from_str)]
+        /// The Zenoh ID of the instance. This ID must be of the UUIDv4 format and unique throughout your Zenoh infrastructure. If left unset, a random UUIDv4 will be generated.
         id: Option<String>,
-        /// The node's mode (router, peer or client)
-        #[intkey(ZN_MODE_KEY, into = whatami_to_cowstr, from = whatami_from_str)]
+        /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
-        /// Which locators to connect to.
-        #[serde(default)]
-        #[intkey(ZN_PEER_KEY, into = locvec_to_cowstr, from = locvec_from_str)]
+        /// Which locators to connect to on session startup.
         pub peers: Vec<Locator>,
-        /// Which locators to listen on.
-        #[serde(default)]
-        #[intkey(ZN_LISTENER_KEY, into = locvec_to_cowstr, from = locvec_from_str)]
+        /// Which locators to listen on on session startup. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
         pub listeners: Vec<Locator>,
-        #[serde(default)]
         pub scouting: ScoutingConf {
-            /// In client mode, the period dedicated to scouting for a router before failing
-            #[intkey(ZN_SCOUTING_TIMEOUT_KEY, into = f64_to_cowstr, from = f64_from_str)]
+            /// In client mode, the period dedicated to scouting for a router before failing.
             timeout: Option<f64>,
-            /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-            #[intkey(ZN_SCOUTING_DELAY_KEY, into = f64_to_cowstr, from = f64_from_str)]
+            /// In peer mode, the period dedicated to scouting remote peers before attempting other operations.
             delay: Option<f64>,
-            /// How multicast should behave
-            #[serde(default)]
+            /// How multicast should behave.
             pub multicast: ScoutingMulticastConf {
-                /// Whether multicast scouting is enabled or not
-                #[intkey(ZN_MULTICAST_SCOUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
+                /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
                 enabled: Option<bool>,
-                /// The socket which should be used for multicast scouting
-                #[intkey(ZN_MULTICAST_IPV4_ADDRESS_KEY, into = addr_to_cowstr, from = addr_from_str)]
+                /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7447` by default if none is provided.
                 address: Option<SocketAddr>,
-                /// The network interface which should be used for multicast scouting
-                #[intkey(ZN_MULTICAST_INTERFACE_KEY, into = string_to_cowstr, from = string_from_str)]
+                /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
-                #[intkey(ZN_ROUTERS_AUTOCONNECT_MULTICAST_KEY, into = whatamimatcher_to_cowstr, from = whatamimatcher_from_str)]
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through multicast scouting.
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             },
-            #[serde(default)]
             pub gossip: GossipConf {
-                #[intkey(skip)]
+                /// Whether the link state protocol (gossip scouting) should be enabled. Defaults to `true` if left empty.
                 enabled: Option<bool>,
-                #[intkey(ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY, into = whatamimatcher_to_cowstr, from = whatamimatcher_from_str)]
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             }
         },
-        /// Whether data messages should be timestamped
-        #[intkey(ZN_ADD_TIMESTAMP_KEY, into = bool_to_cowstr, from = bool_from_str)]
+        /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
         add_timestamp: Option<bool>,
-        /// Whether the link state protocol should be enabled
-        #[intkey(ZN_LINK_STATE_KEY, into = bool_to_cowstr, from = bool_from_str)]
-        link_state: Option<bool>,
-        /// Whether peers should connect to each other upon discovery (through multicast or gossip)
-        #[intkey(ZN_PEERS_AUTOCONNECT_KEY, into = bool_to_cowstr, from = bool_from_str)]
+        /// If set to `false`, peers will never automatically establish sessions between each-other.
         peers_autoconnect: Option<bool>,
-        /// Whether local writes/queries should reach local subscribers/queryables
-        #[intkey(ZN_LOCAL_ROUTING_KEY, into = bool_to_cowstr, from = bool_from_str)]
+        /// Whether local writes/queries should reach local subscribers/queryables.
         local_routing: Option<bool>,
-        /// The default timeout to apply to queries in milliseconds
-        #[intkey(ZN_QUERIES_DEFAULT_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
+        /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
-        #[serde(default)]
         pub join_on_startup: JoinConfig {
-            #[serde(default)]
-            #[intkey(ZN_JOIN_SUBSCRIPTIONS_KEY, into = commastringvec_to_cowstr, from = commastringvec_from_str)]
+            /// A list of key-expressions to subscribe to upon startup.
             subscriptions: Vec<String>,
-            #[serde(default)]
-            #[intkey(ZN_JOIN_PUBLICATIONS_KEY, into = commastringvec_to_cowstr, from = commastringvec_from_str)]
+            /// A list of key-expressions to declare publications onto upon startup.
             publications: Vec<String>,
         },
-        #[intkey(ZN_SHM_KEY, into = bool_to_cowstr, from = bool_from_str)]
-        shared_memory: Option<bool>,
-        #[serde(default)]
         pub transport: TransportConf {
-            #[intkey(ZN_SEQ_NUM_RESOLUTION_KEY, into = u64_to_cowstr, from = u64_from_str)]
+            /// If set to `false`, the shared-memory transports will be disabled.
+            shared_memory: Option<bool>,
+            /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
             sequence_number_resolution: Option<ZInt>,
-            #[intkey(ZN_QOS_KEY, into = bool_to_cowstr, from = bool_from_str)]
             qos: Option<bool>,
-            #[serde(default)]
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link
-                #[intkey(ZN_OPEN_TIMEOUT_KEY, into = u64_to_cowstr, from = u64_from_str)]
                 open_timeout: Option<ZInt>,
-                #[intkey(ZN_OPEN_INCOMING_PENDING_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 open_pending: Option<usize>,
-                #[intkey(ZN_MAX_SESSIONS_UNICAST_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 max_sessions: Option<usize>,
-                #[intkey(ZN_MAX_LINKS_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 max_links: Option<usize>,
             },
-            #[serde(default)]
             pub multicast: TransportMulticastConf {
                 /// Link keep-alive duration in milliseconds
-                #[intkey(ZN_JOIN_INTERVAL_KEY, into = u64_to_cowstr, from = u64_from_str)]
                 join_interval: Option<ZInt>,
-                #[intkey(ZN_MAX_SESSIONS_MULTICAST_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 max_sessions: Option<usize>,
             },
-            #[serde(default)]
             pub link: TransportLinkConf {
-                #[intkey(ZN_BATCH_SIZE_KEY, into = u16_to_cowstr, from = u16_from_str)]
                 batch_size: Option<u16>,
                 /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
-                #[intkey(ZN_LINK_LEASE_KEY, into = u64_to_cowstr, from = u64_from_str)]
                 lease: Option<ZInt>,
                 /// Link keep-alive duration in milliseconds
-                #[intkey(ZN_LINK_KEEP_ALIVE_KEY, into = u64_to_cowstr, from = u64_from_str)]
                 keep_alive: Option<ZInt>,
                 /// Receiving buffer size for each link
-                #[intkey(ZN_LINK_RX_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 rx_buff_size: Option<usize>,
                 /// Maximum size of the defragmentation buffer at receiver end.
                 /// Fragmented messages that are larger than the configured size will be dropped.
-                #[intkey(ZN_DEFRAG_BUFF_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
                 defrag_buffer_size: Option<usize>,
-                #[serde(default)]
                 pub tls: TLSConf {
-                    #[intkey(ZN_TLS_ROOT_CA_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
                     root_ca_certificate: Option<String>,
-                    #[intkey(ZN_TLS_SERVER_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
                     server_private_key: Option<String>,
-                    #[intkey(ZN_TLS_SERVER_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
                     server_certificate: Option<String>,
-                    #[intkey(ZN_TLS_CLIENT_AUTH_KEY, into = bool_to_cowstr, from = bool_from_str)]
                     client_auth: Option<bool>,
-                    #[intkey(ZN_TLS_CLIENT_PRIVATE_KEY_KEY, into = string_to_cowstr, from = string_from_str)]
                     client_private_key: Option<String>,
-                    #[intkey(ZN_TLS_CLIENT_CERTIFICATE_KEY, into = string_to_cowstr, from = string_from_str)]
                     client_certificate: Option<String>,
                 },
             },
-            #[serde(default)]
             pub auth: AuthConf {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
-                #[serde(default)]
                 pub usrpwd: UserConf {
-                    #[intkey(ZN_USER_KEY, into = string_to_cowstr, from = string_from_str)]
                     user: Option<String>,
-                    #[intkey(ZN_PASSWORD_KEY, into = string_to_cowstr, from = string_from_str)]
                     password: Option<String>,
                     /// The path to a file containing the user password dictionary
-                    #[intkey(ZN_USER_PASSWORD_DICTIONARY_KEY, into = string_to_cowstr, from = string_from_str)]
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
-                #[serde(default)]
                 pub pubkey: PubKeyConf {
-                    #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
                     public_key_pem: Option<String>,
-                    #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_PEM_KEY, into = string_to_cowstr, from = string_from_str)]
                     private_key_pem: Option<String>,
-                    #[intkey(ZN_AUTH_RSA_PUBLIC_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
                     public_key_file: Option<String>,
-                    #[intkey(ZN_AUTH_RSA_PRIVATE_KEY_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
                     private_key_file: Option<String>,
-                    #[intkey(ZN_AUTH_RSA_KEY_SIZE_KEY, into = usize_to_cowstr, from = usize_from_str)]
                     key_size: Option<usize>,
-                    #[intkey(ZN_AUTH_RSA_KNOWN_KEYS_FILE_KEY, into = string_to_cowstr, from = string_from_str)]
                     known_keys_file: Option<String>,
                 },
             },
         },
-        #[serde(default)]
-        #[intkey(skip)]
+        /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
+        /// The executable's current directory will be added to the search paths.
         plugins_search_dirs: Vec<String>,
-        #[intkey(skip)]
-        #[serde(default)]
         #[validated(recursive_accessors)]
+        /// The configuration for plugins.
+        ///
+        /// Please refer to [`PluginsConfig`]'s documentation for further details.
         plugins: PluginsConfig,
     }
 }
@@ -286,7 +224,37 @@ fn config_deser() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(*config.scouting().multicast().enabled(), Some(false))
+    assert_eq!(*config.scouting().multicast().enabled(), Some(false));
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{transport: { auth: { usrpwd: { user: null, password: null, dictionary_file: "file" }}}}"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .transport()
+            .auth()
+            .usrpwd()
+            .dictionary_file()
+            .as_ref()
+            .map(|s| s.as_ref()),
+        Some("file")
+    );
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{transport: { auth: { usrpwd: { user: null, password: null, user_password_dictionary: "file" }}}}"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(config
+        .transport()
+        .auth()
+        .usrpwd()
+        .dictionary_file()
+        .is_none())
 }
 
 impl Config {
@@ -556,165 +524,32 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     }
 }
 
-impl<'a> From<&'a Config> for ConfigProperties {
-    fn from(c: &'a Config) -> Self {
-        let mut result = ConfigProperties::default();
-        for key in c.ikeys() {
-            if let Some(v) = c.iget(key) {
-                result.insert(key, v.into_owned());
-            }
-        }
-        result
-    }
-}
-
-impl From<Config> for ConfigProperties {
-    fn from(c: Config) -> Self {
-        let mut result = ConfigProperties::default();
-        for key in c.ikeys() {
-            if let Some(v) = c.iget(key) {
-                result.insert(key, v.into_owned());
-            }
-        }
-        result
-    }
-}
-
 fn user_conf_validator(u: &UserConf) -> bool {
     (u.password().is_none() && u.user().is_none()) || (u.password().is_some() && u.user().is_some())
 }
 
-fn whatami_to_cowstr(w: &Option<whatami::WhatAmI>) -> Option<Cow<str>> {
-    w.map(|f| {
-        match f {
-            whatami::WhatAmI::Router => "router",
-            whatami::WhatAmI::Peer => "peer",
-            whatami::WhatAmI::Client => "client",
-        }
-        .into()
-    })
-}
-
-fn whatami_from_str(w: &str) -> Option<Option<whatami::WhatAmI>> {
-    match w {
-        "router" => Some(Some(whatami::WhatAmI::Router)),
-        "peer" => Some(Some(whatami::WhatAmI::Peer)),
-        "client" => Some(Some(whatami::WhatAmI::Client)),
-        "" => Some(None),
-        _ => None,
-    }
-}
-
-fn whatamimatcher_to_cowstr(w: &Option<whatami::WhatAmIMatcher>) -> Option<Cow<str>> {
-    w.map(|f| f.to_str().into())
-}
-
-fn whatamimatcher_from_str(w: &str) -> Option<Option<whatami::WhatAmIMatcher>> {
-    if w.is_empty() {
-        Some(None)
-    } else {
-        match w.parse() {
-            Ok(w) => Some(Some(w)),
-            Err(_) => None,
-        }
-    }
-}
-
-fn locvec_to_cowstr(w: &[Locator]) -> Option<Cow<str>> {
-    Some(
-        w.iter()
-            .map(|l| l.to_string())
-            .collect::<Vec<_>>()
-            .as_slice()
-            .join(",")
-            .into(),
-    )
-}
-
-fn locvec_from_str(w: &str) -> Option<Vec<Locator>> {
-    let mut result = Vec::new();
-    for f in w.split(',') {
-        result.push(f.parse().ok()?);
-    }
-    Some(result)
-}
-
-fn commastringvec_to_cowstr(w: &[String]) -> Option<Cow<str>> {
-    Some(w.join(",").into())
-}
-
-fn commastringvec_from_str(w: &str) -> Option<Vec<String>> {
-    Some(w.split(',').map(str::to_string).collect())
-}
-
-fn string_to_cowstr(s: &Option<String>) -> Option<Cow<str>> {
-    s.as_ref().map(|s| Cow::Owned(s.clone()))
-}
-
-fn string_from_str(s: &str) -> Option<Option<String>> {
-    Some(Some(s.to_string()))
-}
-
-fn bool_to_cowstr(s: &Option<bool>) -> Option<Cow<str>> {
-    s.map(|s| Cow::Borrowed(if s { "true" } else { "false" }))
-}
-
-fn bool_from_str(s: &str) -> Option<Option<bool>> {
-    match s {
-        "true" => Some(Some(true)),
-        "false" => Some(Some(false)),
-        _ => None,
-    }
-}
-
-fn usize_to_cowstr(s: &Option<usize>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn usize_from_str(s: &str) -> Option<Option<usize>> {
-    s.parse().ok().map(Some)
-}
-
-fn u64_to_cowstr(s: &Option<u64>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn u64_from_str(s: &str) -> Option<Option<u64>> {
-    s.parse().ok().map(Some)
-}
-
-fn u8_to_cowstr(s: &Option<u8>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn u8_from_str(s: &str) -> Option<Option<u8>> {
-    s.parse().ok().map(Some)
-}
-
-fn u16_to_cowstr(s: &Option<u16>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn u16_from_str(s: &str) -> Option<Option<u16>> {
-    s.parse().ok().map(Some)
-}
-
-fn f64_to_cowstr(s: &Option<f64>) -> Option<Cow<str>> {
-    s.map(|s| format!("{:?}", s).into())
-}
-
-fn f64_from_str(s: &str) -> Option<Option<f64>> {
-    s.parse().ok().map(Some)
-}
-
-fn addr_to_cowstr(s: &Option<SocketAddr>) -> Option<Cow<str>> {
-    s.map(|s| format!("{}", s).into())
-}
-
-fn addr_from_str(s: &str) -> Option<Option<SocketAddr>> {
-    s.parse().ok().map(Some)
-}
-
+/// This part of the configuration is highly dynamic (any [`serde_json::Value`] may be put in there), but should follow this scheme:
+/// ```javascript
+/// plugins: {
+///     // `plugin_name` must be unique per configuration, and will be used to find the appropriate
+///     // dynamic library to load if no `__path__` is specified
+///     [plugin_name]: {
+///         // Defaults to `false`. Setting this to `true` does 2 things:
+///         // * If `zenohd` fails to locate the requested plugin, it will crash instead of logging an error.
+///         // * Plugins are expected to check this value to set their panic-behaviour: plugins are encouraged
+///         //   to panic upon non-recoverable errors if their `__required__` flag is set to `true`, and to
+///         //   simply log them otherwise
+///         __required__: bool,
+///         // The path(s) where the plugin is expected to be located.
+///         // If none is specified, `zenohd` will search for a `<dylib_prefix>zplugin_<plugin_name>.<dylib_suffix>` file in the search directories.
+///         // If any path is specified, file-search will be disabled, and the first path leading to
+///         // an existing file will be used
+///         __path__: string | [string],
+///         // [plugin_name] may require additional configuration
+///         ...
+///     }
+/// }
+/// ```
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
@@ -862,18 +697,7 @@ impl std::fmt::Debug for PluginsConfig {
         write!(f, "{:?}", &self.values)
     }
 }
-impl IntKeyMapLike for PluginsConfig {
-    type Keys = Option<u64>;
-    fn iget(&self, _: u64) -> Option<Cow<'_, str>> {
-        None
-    }
-    fn iset<S: Into<String> + AsRef<str>>(&mut self, _: u64, _: S) -> Result<(), ()> {
-        Err(())
-    }
-    fn ikeys(&self) -> Self::Keys {
-        None
-    }
-}
+
 trait PartialMerge: Sized {
     fn merge(self, path: &str, value: Self) -> Result<Self, validated_struct::InsertionError>;
 }
