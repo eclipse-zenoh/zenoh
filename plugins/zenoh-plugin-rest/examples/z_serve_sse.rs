@@ -109,14 +109,11 @@ fn parse_args() -> Config {
     } else {
         Config::default()
     };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
-    }
     match args.value_of("mode").map(|m| m.parse()) {
         Some(Ok(mode)) => {
             config.set_mode(Some(mode)).unwrap();
         }
-        Some(Err(())) => panic!("Invalid mode"),
+        Some(Err(e)) => panic!("Invalid mode: {}", e),
         None => {}
     };
     if let Some(values) = args.values_of("connect") {

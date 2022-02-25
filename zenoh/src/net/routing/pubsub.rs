@@ -752,8 +752,7 @@ fn compute_data_route(
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
-        .map(|res| res.context.as_ref())
-        .flatten()
+        .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
         .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
@@ -840,8 +839,7 @@ fn compute_matching_pulls(
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
-        .map(|res| res.context.as_ref())
-        .flatten()
+        .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
         .unwrap_or_else(|| {
             Cow::from(Resource::get_matches(
@@ -985,8 +983,7 @@ fn get_data_route(
                 let local_context = routers_net
                     .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
-                    .map(|res| res.routers_data_route(local_context))
-                    .flatten()
+                    .and_then(|res| res.routers_data_route(local_context))
                     .unwrap_or_else(|| {
                         compute_data_route(
                             tables,
@@ -1002,8 +999,7 @@ fn get_data_route(
                 let local_context =
                     peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
-                    .map(|res| res.peers_data_route(local_context))
-                    .flatten()
+                    .and_then(|res| res.peers_data_route(local_context))
                     .unwrap_or_else(|| {
                         compute_data_route(
                             tables,
@@ -1016,8 +1012,7 @@ fn get_data_route(
             }
             _ => res
                 .as_ref()
-                .map(|res| res.routers_data_route(0))
-                .flatten()
+                .and_then(|res| res.routers_data_route(0))
                 .unwrap_or_else(|| {
                     compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)
                 }),
@@ -1028,8 +1023,7 @@ fn get_data_route(
                 let local_context =
                     peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                 res.as_ref()
-                    .map(|res| res.peers_data_route(local_context))
-                    .flatten()
+                    .and_then(|res| res.peers_data_route(local_context))
                     .unwrap_or_else(|| {
                         compute_data_route(
                             tables,
@@ -1042,16 +1036,14 @@ fn get_data_route(
             }
             _ => res
                 .as_ref()
-                .map(|res| res.peers_data_route(0))
-                .flatten()
+                .and_then(|res| res.peers_data_route(0))
                 .unwrap_or_else(|| {
                     compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)
                 }),
         },
         _ => res
             .as_ref()
-            .map(|res| res.client_data_route())
-            .flatten()
+            .and_then(|res| res.client_data_route())
             .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)),
     }
 }
@@ -1064,8 +1056,7 @@ fn get_matching_pulls(
     suffix: &str,
 ) -> Arc<PullCaches> {
     res.as_ref()
-        .map(|res| res.context.as_ref())
-        .flatten()
+        .and_then(|res| res.context.as_ref())
         .map(|ctx| ctx.matching_pulls.clone())
         .unwrap_or_else(|| compute_matching_pulls(tables, prefix, suffix))
 }

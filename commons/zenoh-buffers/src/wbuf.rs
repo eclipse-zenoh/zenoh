@@ -827,13 +827,13 @@ mod tests {
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
         assert!(buf.write(&[3, 4]).is_some());
-        assert!(!buf.write(&[5, 6]).is_some());
+        assert!(buf.write(&[5, 6]).is_none());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2]]);
 
         assert!(buf.write(&[3, 4]).is_some());
         buf.mark();
-        assert!(!buf.write(&[5, 6]).is_some());
+        assert!(buf.write(&[5, 6]).is_none());
         buf.revert();
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
     }

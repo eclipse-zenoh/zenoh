@@ -318,8 +318,7 @@ impl PrivacyTransparentGet<serde_json::Value> for serde_json::Map<String, serde_
         match (
             self.get(key),
             self.get("private")
-                .map(|f| f.as_object().map(|f| f.get(key)).flatten())
-                .flatten(),
+                .and_then(|f| f.as_object().and_then(|f| f.get(key))),
         ) {
             (None, None) => NotFound,
             (Some(a), None) => Public(a),

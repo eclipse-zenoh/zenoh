@@ -102,7 +102,7 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().open_transport(locator.clone().into()).await {
+                    match self.manager().open_transport(locator.clone()).await {
                         Ok(_) => return Ok(()),
                         Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
                     }
@@ -313,7 +313,7 @@ impl Runtime {
 
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
         for listener in listeners {
-            let endpoint = listener.clone().into();
+            let endpoint = listener.clone();
             match self.manager().add_listener(endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
@@ -469,7 +469,7 @@ impl Runtime {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
-            let endpoint = peer.clone().into();
+            let endpoint = peer.clone();
             if let Ok(transport) = self.manager().open_transport(endpoint).await {
                 log::debug!("Successfully connected to configured peer {}", peer);
                 if let Some(orch_transport) = transport
