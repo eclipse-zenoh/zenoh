@@ -31,20 +31,20 @@ mod consts {
     pub const ZN_MODE_DEFAULT: &str = "peer";
 
     /// The locator of a peer to connect to.
-    /// String key : `"peer"`.
-    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
+    /// String key : `"connect"`.
+    /// Accepted values : `<endpoint>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
-    pub const ZN_PEER_KEY: u64 = 0x41;
-    pub const ZN_PEER_STR: &str = "peer";
+    pub const ZN_CONNECT_KEY: u64 = 0x41;
+    pub const ZN_CONNECT_STR: &str = "connect";
 
     /// A locator to listen on.
-    /// String key : `"listener"`.
-    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
+    /// String key : `"listen"`.
+    /// Accepted values : `<endpoint>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
-    pub const ZN_LISTENER_KEY: u64 = 0x42;
-    pub const ZN_LISTENER_STR: &str = "listener";
+    pub const ZN_LISTEN_KEY: u64 = 0x42;
+    pub const ZN_LISTEN_STR: &str = "listen";
 
     /// The user name to use for authentication.
     /// String key : `"user"`.
@@ -396,8 +396,8 @@ impl KeyTranscoder for ConfigTranscoder {
     fn encode(key: &str) -> Option<u64> {
         match &key.to_lowercase()[..] {
             ZN_MODE_STR => Some(ZN_MODE_KEY),
-            ZN_PEER_STR => Some(ZN_PEER_KEY),
-            ZN_LISTENER_STR => Some(ZN_LISTENER_KEY),
+            ZN_CONNECT_STR => Some(ZN_CONNECT_KEY),
+            ZN_LISTEN_STR => Some(ZN_LISTEN_KEY),
             ZN_USER_STR => Some(ZN_USER_KEY),
             ZN_PASSWORD_STR => Some(ZN_PASSWORD_KEY),
             ZN_MULTICAST_SCOUTING_STR => Some(ZN_MULTICAST_SCOUTING_KEY),
@@ -450,8 +450,8 @@ impl KeyTranscoder for ConfigTranscoder {
     fn decode(key: u64) -> Option<String> {
         match key {
             ZN_MODE_KEY => Some(ZN_MODE_STR.to_string()),
-            ZN_PEER_KEY => Some(ZN_PEER_STR.to_string()),
-            ZN_LISTENER_KEY => Some(ZN_LISTENER_STR.to_string()),
+            ZN_CONNECT_KEY => Some(ZN_CONNECT_STR.to_string()),
+            ZN_LISTEN_KEY => Some(ZN_LISTEN_STR.to_string()),
             ZN_USER_KEY => Some(ZN_USER_STR.to_string()),
             ZN_PASSWORD_KEY => Some(ZN_PASSWORD_STR.to_string()),
             ZN_MULTICAST_SCOUTING_KEY => Some(ZN_MULTICAST_SCOUTING_STR.to_string()),
