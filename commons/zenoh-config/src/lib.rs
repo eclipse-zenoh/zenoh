@@ -845,8 +845,38 @@ impl validated_struct::ValidatedMap for PluginsConfig {
         }
         Ok(value)
     }
+
     type Keys = Vec<String>;
     fn keys(&self) -> Self::Keys {
         self.values.as_object().unwrap().keys().cloned().collect()
+    }
+
+    fn get_json(&self, mut key: &str) -> Result<String, GetError> {
+        let (current, new_key) = validated_struct::split_once(key, '/');
+        key = new_key;
+        let mut value = match self.values.get(current) {
+            Some(matched) => matched,
+            None => return Err(GetError::NoMatchingKey),
+        };
+        while !key.is_empty() {
+            let (current, new_key) = validated_struct::split_once(key, '/');
+            key = new_key;
+            let matched = match value {
+                serde_json::Value::Null
+                | serde_json::Value::Bool(_)
+                | serde_json::Value::Number(_)
+                | serde_json::Value::String(_) => return Err(GetError::NoMatchingKey),
+                serde_json::Value::Array(a) => a.get(match current.parse::<usize>() {
+                    Ok(i) => i,
+                    Err(_) => return Err(GetError::NoMatchingKey),
+                }),
+                serde_json::Value::Object(v) => v.get(current),
+            };
+            value = match matched {
+                Some(matched) => matched,
+                None => return Err(GetError::NoMatchingKey),
+            }
+        }
+        Ok(serde_json::to_string(value).unwrap())
     }
 }
