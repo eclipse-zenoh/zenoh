@@ -232,8 +232,7 @@ impl From<&str> for Properties {
         for sep in PROP_SEPS {
             props = props
                 .into_iter()
-                .map(|s| s.split(sep))
-                .flatten()
+                .flat_map(|s| s.split(sep))
                 .collect::<Vec<&str>>();
         }
         props = props.into_iter().map(|s| s.trim()).collect::<Vec<&str>>();
