@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let (config, path, value) = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Shared Memory Manager...");

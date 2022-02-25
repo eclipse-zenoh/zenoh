@@ -41,7 +41,7 @@ async fn main() {
     let key = "/demo/sse";
     let value = "Pub from sse server!";
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);

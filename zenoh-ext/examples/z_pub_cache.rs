@@ -24,7 +24,7 @@ async fn main() {
 
     let (config, key_expr, value, history, prefix) = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     print!("Declare key expression {}", key_expr);

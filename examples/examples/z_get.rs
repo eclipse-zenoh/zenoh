@@ -25,7 +25,7 @@ async fn main() {
 
     let (config, selector, target) = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Query '{}'...", selector);

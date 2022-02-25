@@ -21,7 +21,7 @@ async fn main() {
 
     let config = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     let info: Properties = session.info().await.into();

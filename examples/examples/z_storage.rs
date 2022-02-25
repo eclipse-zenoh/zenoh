@@ -34,7 +34,7 @@ async fn main() {
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
