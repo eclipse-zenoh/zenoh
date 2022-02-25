@@ -27,7 +27,7 @@ use std::{
 use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-pub use zenoh_protocol_core::{whatami, Locator, WhatAmI};
+pub use zenoh_protocol_core::{whatami, EndPoint, Locator, WhatAmI};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -59,12 +59,12 @@ pub fn peer() -> Config {
 }
 
 /// Creates a default `'client'` mode zenoh net Session configuration.
-pub fn client<I: IntoIterator<Item = T>, T: Into<Locator>>(peers: I) -> Config {
+pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
-        .startup
         .connect
+        .endpoints
         .extend(peers.into_iter().map(|t| t.into()));
     config
 }
@@ -100,12 +100,16 @@ validated_struct::validator! {
         id: Option<String>,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
+        /// Which zenoh nodes to connect to.
+        pub connect: ConnectConfig {
+            pub endpoints: Vec<EndPoint>,
+        },
+        /// Which endpoints to listen on. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
+        pub listen: ListenConfig {
+            pub endpoints: Vec<EndPoint>,
+        },
         /// Actions taken by the Zenoh instance upon startup.
         pub startup: JoinConfig {
-            /// Which zenoh nodes to connect to on session startup.
-            pub connect: Vec<Locator>,
-            /// Which locators to listen on on session startup. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
-            pub listen: Vec<Locator>,
             /// A list of key-expressions to subscribe to upon startup.
             subscribe: Vec<String>,
             /// A list of key-expressions to declare publications onto upon startup.
@@ -218,6 +222,7 @@ validated_struct::validator! {
         plugins: PluginsConfig,
     }
 }
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginSearchDirs(Vec<String>);
 impl Default for PluginSearchDirs {

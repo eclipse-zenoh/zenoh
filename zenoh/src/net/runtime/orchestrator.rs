@@ -20,6 +20,7 @@ use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
+use zenoh_config::EndPoint;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
@@ -58,7 +59,7 @@ impl Runtime {
         let (peers, scouting, addr, ifaces, timeout) = {
             let guard = self.config.lock();
             (
-                guard.startup().connect().clone(),
+                guard.connect().endpoints().clone(),
                 guard.scouting().multicast().enabled().unwrap_or(true),
                 guard
                     .scouting()
@@ -116,12 +117,12 @@ impl Runtime {
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
-            let listeners = if guard.startup().listen().is_empty() {
+            let listeners = if guard.listen().endpoints().is_empty() {
                 vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.startup().listen().clone()
+                guard.listen().endpoints().clone()
             };
-            let peers = guard.startup().connect().clone();
+            let peers = guard.connect().endpoints().clone();
             (
                 listeners,
                 peers,
@@ -191,12 +192,12 @@ impl Runtime {
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
             let guard = self.config.lock();
-            let listeners = if guard.startup().listen().is_empty() {
+            let listeners = if guard.listen().endpoints().is_empty() {
                 vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
             } else {
-                guard.startup().listen().clone()
+                guard.listen().endpoints().clone()
             };
-            let peers = guard.startup().connect().clone();
+            let peers = guard.connect().endpoints().clone();
             (
                 listeners,
                 peers,
@@ -261,7 +262,7 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = { self.config.lock().startup().connect().clone() };
+        let peers = { self.config.lock().connect().endpoints().clone() };
         let tranports = self.manager().get_transports();
 
         if self.whatami == WhatAmI::Client {
@@ -273,8 +274,8 @@ impl Runtime {
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                 {
-                    if let Some(locator) = &*zread!(orch_transport.locator) {
-                        !peers.contains(locator)
+                    if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                        !peers.contains(endpoint)
                     } else {
                         true
                     }
@@ -295,8 +296,8 @@ impl Runtime {
                         .as_any()
                         .downcast_ref::<super::RuntimeSession>()
                     {
-                        if let Some(locator) = &*zread!(orch_transport.locator) {
-                            return *locator == peer;
+                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                            return *endpoint == peer;
                         }
                     }
                     false
@@ -310,7 +311,7 @@ impl Runtime {
         Ok(())
     }
 
-    async fn bind_listeners(&self, listeners: &[Locator]) -> ZResult<()> {
+    async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
         for listener in listeners {
             let endpoint = listener.clone().into();
             match self.manager().add_listener(endpoint).await {
@@ -464,7 +465,7 @@ impl Runtime {
         Ok(std::net::UdpSocket::from(socket).into())
     }
 
-    async fn peer_connector(&self, peer: Locator) {
+    async fn peer_connector(&self, peer: EndPoint) {
         let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
@@ -478,7 +479,7 @@ impl Runtime {
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                 {
-                    *zwrite!(orch_transport.locator) = Some(peer);
+                    *zwrite!(orch_transport.endpoint) = Some(peer);
                 }
                 break;
             }
@@ -758,14 +759,14 @@ impl Runtime {
                 });
             }
             _ => {
-                if let Some(locator) = &*zread!(session.locator) {
-                    let peers = { session.runtime.config.lock().startup().connect().clone() };
-                    if peers.contains(locator) {
-                        let locator = locator.clone();
+                if let Some(endpoint) = &*zread!(session.endpoint) {
+                    let peers = { session.runtime.config.lock().connect().endpoints().clone() };
+                    if peers.contains(endpoint) {
+                        let endpoint = endpoint.clone();
                         let runtime = session.runtime.clone();
                         session
                             .runtime
-                            .spawn(async move { runtime.peer_connector(locator).await });
+                            .spawn(async move { runtime.peer_connector(endpoint).await });
                     }
                 }
             }

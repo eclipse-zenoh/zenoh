@@ -17,11 +17,9 @@ use clap::ArgMatches;
 use clap::{App, Arg};
 use git_version::git_version;
 use validated_struct::ValidatedMap;
-use zenoh::config::Config;
-use zenoh::config::PluginLoad;
+use zenoh::config::{Config, EndPoint, PluginLoad};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
-use zenoh::prelude::Locator;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -44,17 +42,17 @@ fn main() {
             .version(GIT_VERSION)
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
-r#"-c, --config=[FILE] \
+r#"-f, --config=[FILE] \
 'The configuration file. Currently, this file must be a valid JSON5 file.'"#,
             ))
             .arg(Arg::from_usage(
-r#"-l, --listener=[LOCATOR]... \
+r#"-l, --listen=[ENDPOINT]... \
 'A locator on which this router will listen for incoming sessions.
 Repeat this option to open several listeners.'"#,
                 ),
             )
             .arg(Arg::from_usage(
-r#"-e, --peer=[LOCATOR]... \
+r#"-c, --connect=[ENDPOINT]... \
 'A peer locator this router will try to connect to.
 Repeat this option to connect to several peers.'"#,
             ))
@@ -209,12 +207,12 @@ fn config_from_args(args: &ArgMatches) -> Config {
             }
         }
     }
-    if let Some(peers) = args.values_of("peer") {
+    if let Some(peers) = args.values_of("connect") {
         config
-            .startup
-            .set_connect(
+            .connect
+            .set_endpoints(
                 peers
-                    .map(|v| match v.parse::<Locator>() {
+                    .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
                         Err(e) => {
                             panic!("Couldn't parse option --peer={} into Locator: {}", v, e);
@@ -224,25 +222,25 @@ fn config_from_args(args: &ArgMatches) -> Config {
             )
             .unwrap();
     }
-    if let Some(listeners) = args.values_of("listener") {
+    if let Some(listeners) = args.values_of("listen") {
         config
-            .startup
-            .set_listen(
+            .listen
+            .set_endpoints(
                 listeners
-                    .map(|v| match v.parse::<Locator>() {
+                    .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
                         Err(e) => {
-                            panic!("Couldn't parse option --listener={} into Locator: {}", v, e);
+                            panic!("Couldn't parse option --listen={} into Locator: {}", v, e);
                         }
                     })
                     .collect(),
             )
             .unwrap();
     }
-    if config.startup.listen.is_empty() {
+    if config.listen.endpoints.is_empty() {
         config
-            .startup
             .listen
+            .endpoints
             .push(DEFAULT_LISTENER.parse().unwrap())
     }
     match (

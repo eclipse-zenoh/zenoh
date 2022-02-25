@@ -30,7 +30,7 @@ use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
-use zenoh_link::{Link, Locator};
+use zenoh_link::{EndPoint, Link};
 use zenoh_protocol;
 use zenoh_protocol::core::{PeerId, WhatAmI};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
@@ -208,7 +208,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         match zread!(self.runtime).as_ref() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
-                locator: std::sync::RwLock::new(None),
+                endpoint: std::sync::RwLock::new(None),
                 sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
             None => bail!("Runtime not yet ready!"),
@@ -226,7 +226,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
-    pub(super) locator: std::sync::RwLock<Option<Locator>>,
+    pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 

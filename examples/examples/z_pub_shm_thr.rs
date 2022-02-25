@@ -49,10 +49,10 @@ fn parse_args() -> (Config, usize, usize) {
                 .default_value("32"),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+            "-c, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
+            "-f, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>           'Sets the size of the payload to publish'",
