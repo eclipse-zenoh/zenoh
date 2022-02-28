@@ -158,7 +158,7 @@ fn local_qabl_info(
             .context()
             .peer_qabls
             .iter()
-            .fold(None, |accu, ((pid, k), info)| {
+            .fold(info, |accu, ((pid, k), info)| {
                 if *pid != *local_pid && *k == kind {
                     Some(match accu {
                         Some(accu) => merge_qabl_infos(accu, info),
