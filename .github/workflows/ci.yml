@@ -22,7 +22,7 @@ on:
     - cron: "0 6 * * 1-5"
 
 jobs:
-  build:
+  check:
     name: Run checks on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -50,8 +50,7 @@ jobs:
           command: clippy
           args: --all-targets -- -D warnings
 
-jobs:
-  build:
+  test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
