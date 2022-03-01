@@ -42,8 +42,8 @@ fn main() {
             .version(GIT_VERSION)
             .long_version(LONG_VERSION.as_str())
             .arg(Arg::from_usage(
-r#"-f, --config=[FILE] \
-'The configuration file. Currently, this file must be a valid JSON5 file.'"#,
+r#"-c, --config=[FILE] \
+'The configuration file. Currently, this file must be a valid JSON5 or YAML file.'"#,
             ))
             .arg(Arg::from_usage(
 r#"-l, --listen=[ENDPOINT]... \
@@ -52,7 +52,7 @@ Repeat this option to open several listeners.'"#,
                 ),
             )
             .arg(Arg::from_usage(
-r#"-c, --connect=[ENDPOINT]... \
+r#"-e, --connect=[ENDPOINT]... \
 'A peer locator this router will try to connect to.
 Repeat this option to connect to several peers.'"#,
             ))
