@@ -32,8 +32,10 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[cfg(feature = "shared-memory")]
 use async_std::sync::Arc;
 use regex::Regex;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
+use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
@@ -86,7 +88,7 @@ impl Value {
     /// Creates an empty Value.
     pub fn empty() -> Self {
         Value {
-            payload: ZBuf::new(),
+            payload: ZBuf::default(),
             encoding: Encoding::APP_OCTET_STREAM,
         }
     }
@@ -101,7 +103,7 @@ impl Value {
     pub fn as_json(&self) -> Option<serde_json::Value> {
         match self.encoding.prefix() {
             KnownEncoding::AppJson | KnownEncoding::TextJson => serde::Deserialize::deserialize(
-                &mut serde_json::Deserializer::from_slice(self.payload.contiguous().as_slice()),
+                &mut serde_json::Deserializer::from_slice(&self.payload.contiguous()),
             )
             .ok(),
             _ => None,
@@ -110,7 +112,7 @@ impl Value {
 
     pub fn as_integer(&self) -> Option<i64> {
         if *self.encoding.prefix() == KnownEncoding::AppInteger {
-            std::str::from_utf8(self.payload.contiguous().as_slice())
+            std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
                 .ok()
@@ -121,7 +123,7 @@ impl Value {
 
     pub fn as_float(&self) -> Option<f64> {
         if *self.encoding.prefix() == KnownEncoding::AppFloat {
-            std::str::from_utf8(self.payload.contiguous().as_slice())
+            std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
                 .ok()
@@ -133,7 +135,7 @@ impl Value {
     pub fn as_properties(&self) -> Option<Properties> {
         if *self.encoding.prefix() == KnownEncoding::AppProperties {
             Some(Properties::from(
-                std::str::from_utf8(self.payload.contiguous().as_slice()).ok()?,
+                std::str::from_utf8(&self.payload.contiguous()).ok()?,
             ))
         } else {
             None
@@ -153,11 +155,12 @@ impl fmt::Debug for Value {
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let payload = self.payload.contiguous();
         write!(
             f,
             "{}",
-            String::from_utf8(self.payload.to_vec())
-                .unwrap_or_else(|_| base64::encode(self.payload.to_vec()))
+            String::from_utf8(payload.clone().into_owned())
+                .unwrap_or_else(|_| base64::encode(payload))
         )
     }
 }
@@ -551,26 +554,33 @@ pub struct Selector<'a> {
     pub key_selector: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     /// I.e. all characters starting from `?`.
-    pub value_selector: &'a str,
+    pub value_selector: Cow<'a, str>,
 }
 
 impl<'a> Selector<'a> {
+    pub fn to_owned(&self) -> Selector<'static> {
+        Selector {
+            key_selector: self.key_selector.to_owned(),
+            value_selector: self.value_selector.to_string().into(),
+        }
+    }
+
     /// Sets the `value_selector` part of this `Selector`.
     #[inline(always)]
     pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
-        self.value_selector = value_selector;
+        self.value_selector = value_selector.into();
         self
     }
 
     /// Parses the `value_selector` part of this `Selector`.
-    pub fn parse_value_selector(&self) -> crate::Result<ValueSelector<'a>> {
-        ValueSelector::try_from(self.value_selector)
+    pub fn parse_value_selector(&'a self) -> crate::Result<ValueSelector<'a>> {
+        ValueSelector::try_from(self.value_selector.as_ref())
     }
 
     /// Returns true if the `Selector` specifies a time-range in its properties
     /// (i.e. using `"starttime"` or `"stoptime"`)
     pub fn has_time_range(&self) -> bool {
-        match ValueSelector::try_from(self.value_selector) {
+        match ValueSelector::try_from(self.value_selector.as_ref()) {
             Ok(value_selector) => value_selector.has_time_range(),
             _ => false,
         }
@@ -589,13 +599,25 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
     }
 }
 
+impl From<String> for Selector<'_> {
+    fn from(s: String) -> Self {
+        let (key_selector, value_selector) = s
+            .find(|c| c == '?')
+            .map_or((s.as_str(), ""), |i| s.split_at(i));
+        Selector {
+            key_selector: key_selector.to_string().into(),
+            value_selector: value_selector.to_string().into(),
+        }
+    }
+}
+
 impl<'a> From<&'a str> for Selector<'a> {
     fn from(s: &'a str) -> Self {
         let (key_selector, value_selector) =
             s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
         Selector {
             key_selector: key_selector.into(),
-            value_selector,
+            value_selector: value_selector.into(),
         }
     }
 }
@@ -610,7 +632,7 @@ impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
             key_selector: q.key_selector.clone(),
-            value_selector: &q.value_selector,
+            value_selector: (&q.value_selector).into(),
         }
     }
 }
@@ -619,7 +641,7 @@ impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
             key_selector: key_selector.clone(),
-            value_selector: "",
+            value_selector: "".into(),
         }
     }
 }
@@ -628,7 +650,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {
             key_selector,
-            value_selector: "",
+            value_selector: "".into(),
         }
     }
 }
@@ -656,7 +678,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// let mut queryable = session.queryable("/key/expression").await.unwrap();
 /// while let Some(query) = queryable.next().await {
-///     let value_selector = query.selector().parse_value_selector().unwrap();
+///     let selector = query.selector();
+///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
 ///     println!("fragment: {}", value_selector.fragment);

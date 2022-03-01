@@ -580,8 +580,7 @@ impl Network {
 
         if let Some((edge, _)) = self
             .get_idx(pid)
-            .map(|idx| self.graph.find_edge_undirected(self.idx, idx))
-            .flatten()
+            .and_then(|idx| self.graph.find_edge_undirected(self.idx, idx))
         {
             self.graph.remove_edge(edge);
         }

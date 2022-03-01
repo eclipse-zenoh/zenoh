@@ -46,8 +46,8 @@ use uhlc::HLC;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ExprId, KeyExpr,
-        QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt,
+        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
+        KeyExpr, QueryTarget, QueryableInfo, SubInfo, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -858,7 +858,7 @@ impl Session {
     pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
         let mut state = zwrite!(self.state);
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
-            println!("unsubscribe({:?})", sub_state);
+            trace!("unsubscribe({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
@@ -1077,6 +1077,7 @@ impl Session {
             kind: None,
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         }
     }
 
@@ -1101,6 +1102,7 @@ impl Session {
             kind: None,
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         })
     }
 
@@ -1131,6 +1133,7 @@ impl Session {
             kind: Some(data_kind::DELETE),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            local_routing: None,
         }
     }
 
@@ -1161,8 +1164,10 @@ impl Session {
         key_expr: &KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
+        local_routing: Option<bool>,
     ) {
         let state = zread!(self.state);
+        let local_routing = local_routing.unwrap_or(state.local_routing);
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, local) {
                 Some(res) => {
@@ -1170,7 +1175,7 @@ impl Session {
                         let sub = res.subscribers.get(0).unwrap();
                         Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
                     } else {
-                        if !local || state.local_routing {
+                        if !local || local_routing {
                             for sub in &res.subscribers {
                                 Session::invoke_subscriber(
                                     &sub.invoker,
@@ -1199,7 +1204,7 @@ impl Session {
         } else {
             match state.key_expr_to_expr(key_expr, local) {
                 Ok(key_expr) => {
-                    if !local || state.local_routing {
+                    if !local || local_routing {
                         for sub in state.subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
@@ -1265,16 +1270,12 @@ impl Session {
         IntoSelector: Into<Selector<'b>>,
     {
         let selector = selector.into();
-        let consolidation = if selector.has_time_range() {
-            Some(QueryConsolidation::none())
-        } else {
-            Some(QueryConsolidation::default())
-        };
         Getter {
             session: self,
             selector,
             target: Some(QueryTarget::default()),
-            consolidation,
+            consolidation: Some(QueryConsolidation::default()),
+            local_routing: None,
         }
     }
 
@@ -1285,7 +1286,7 @@ impl Session {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
             let state = zread!(self.state);
@@ -1539,7 +1540,7 @@ impl Primitives for Session {
             congestion_control,
             info,
         );
-        self.handle_data(false, key_expr, info, payload)
+        self.handle_data(false, key_expr, info, payload, None)
     }
 
     fn send_query(
@@ -1548,7 +1549,7 @@ impl Primitives for Session {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(

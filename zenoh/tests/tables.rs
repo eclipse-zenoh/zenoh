@@ -22,7 +22,7 @@ use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::intersect;
 use zenoh_protocol_core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
     Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
@@ -205,14 +205,14 @@ fn clean_test() {
     assert!(res3.upgrade().is_some());
 
     unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 2);
-    assert!(!res1.upgrade().is_some());
-    assert!(!res2.upgrade().is_some());
+    assert!(res1.upgrade().is_none());
+    assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_some());
 
     unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 3);
-    assert!(!res1.upgrade().is_some());
-    assert!(!res2.upgrade().is_some());
-    assert!(!res3.upgrade().is_some());
+    assert!(res1.upgrade().is_none());
+    assert!(res2.upgrade().is_none());
+    assert!(res3.upgrade().is_none());
 
     // --------------
     register_expr(
@@ -264,7 +264,7 @@ fn clean_test() {
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
-    assert!(!res3.upgrade().is_some());
+    assert!(res3.upgrade().is_none());
 
     forget_client_subscription(
         &mut tables,
@@ -272,13 +272,13 @@ fn clean_test() {
         &"/todrop1/todrop11".into(),
     );
     assert!(res1.upgrade().is_some());
-    assert!(!res2.upgrade().is_some());
-    assert!(!res3.upgrade().is_some());
+    assert!(res2.upgrade().is_none());
+    assert!(res3.upgrade().is_none());
 
     unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 1);
-    assert!(!res1.upgrade().is_some());
-    assert!(!res2.upgrade().is_some());
-    assert!(!res3.upgrade().is_some());
+    assert!(res1.upgrade().is_none());
+    assert!(res2.upgrade().is_none());
+    assert!(res3.upgrade().is_none());
 
     // --------------
     register_expr(
@@ -307,7 +307,7 @@ fn clean_test() {
     assert!(res1.upgrade().is_some());
 
     unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 2);
-    assert!(!res1.upgrade().is_some());
+    assert!(res1.upgrade().is_none());
 
     // --------------
     register_expr(
@@ -353,10 +353,10 @@ fn clean_test() {
     assert!(res3.upgrade().is_some());
 
     tables.close_face(&face0);
-    assert!(!face0.upgrade().is_some());
-    assert!(!res1.upgrade().is_some());
-    assert!(!res2.upgrade().is_some());
-    assert!(!res3.upgrade().is_some());
+    assert!(face0.upgrade().is_none());
+    assert!(res1.upgrade().is_none());
+    assert!(res2.upgrade().is_none());
+    assert!(res3.upgrade().is_none());
 }
 
 pub struct ClientPrimitives {
@@ -466,7 +466,7 @@ impl Primitives for ClientPrimitives {
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
     }
@@ -593,7 +593,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::new(),
+        ZBuf::default(),
         None,
     );
 
@@ -619,7 +619,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::new(),
+        ZBuf::default(),
         None,
     );
 
@@ -645,7 +645,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::new(),
+        ZBuf::default(),
         None,
     );
 
@@ -671,7 +671,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::new(),
+        ZBuf::default(),
         None,
     );
 
@@ -697,7 +697,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::new(),
+        ZBuf::default(),
         None,
     );
 

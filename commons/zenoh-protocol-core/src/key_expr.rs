@@ -18,71 +18,28 @@ use std::{borrow::Cow, convert::TryInto};
 use zenoh_core::{bail, Result as ZResult};
 
 #[inline(always)]
-fn cend(s: &str) -> bool {
-    s.is_empty() || s.starts_with('/')
+fn cend(s: &[u8]) -> bool {
+    s.is_empty() || s[0] == b'/'
 }
 
 #[inline(always)]
-fn cwild(s: &str) -> bool {
-    s.starts_with('*')
+fn cwild(s: &[u8]) -> bool {
+    s.get(0) == Some(&b'*')
 }
 
 #[inline(always)]
-fn cnext(s: &str) -> &str {
+fn cnext(s: &[u8]) -> &[u8] {
     &s[1..]
 }
 
 #[inline(always)]
-fn cequal(s1: &str, s2: &str) -> bool {
+fn cequal(s1: &[u8], s2: &[u8]) -> bool {
     s1.starts_with(&s2[0..1])
-}
-
-macro_rules! DEFINE_INTERSECT {
-    ($name:ident, $end:ident, $wild:ident, $next:ident, $elem_intersect:ident) => {
-        fn $name(c1: &str, c2: &str) -> bool {
-            if ($end(c1) && $end(c2)) {
-                return true;
-            }
-            if ($wild(c1) && $end(c2)) {
-                return $name($next(c1), c2);
-            }
-            if ($end(c1) && $wild(c2)) {
-                return $name(c1, $next(c2));
-            }
-            if ($wild(c1)) {
-                if ($end($next(c1))) {
-                    return true;
-                }
-                if ($name($next(c1), c2)) {
-                    return true;
-                } else {
-                    return $name(c1, $next(c2));
-                }
-            }
-            if ($wild(c2)) {
-                if ($end($next(c2))) {
-                    return true;
-                }
-                if ($name($next(c1), c2)) {
-                    return true;
-                } else {
-                    return $name(c1, $next(c2));
-                }
-            }
-            if ($end(c1) || $end(c2)) {
-                return false;
-            }
-            if ($elem_intersect(c1, c2)) {
-                return $name($next(c1), $next(c2));
-            }
-            return false;
-        }
-    };
 }
 
 macro_rules! DEFINE_INCLUDE {
     ($name:ident, $end:ident, $wild:ident, $next:ident, $elem_include:ident) => {
-        fn $name(this: &str, sub: &str) -> bool {
+        fn $name(this: &[u8], sub: &[u8]) -> bool {
             if ($end(this) && $end(sub)) {
                 return true;
             }
@@ -113,48 +70,146 @@ macro_rules! DEFINE_INCLUDE {
     };
 }
 
-DEFINE_INTERSECT!(sub_chunk_intersect, cend, cwild, cnext, cequal);
-
+fn chunk_it_intersect(mut it1: &[u8], mut it2: &[u8]) -> bool {
+    fn next(s: &[u8]) -> (u8, &[u8]) {
+        (s[0], &s[1..])
+    }
+    while !it1.is_empty() && !it2.is_empty() {
+        let (current1, advanced1) = next(it1);
+        let (current2, advanced2) = next(it2);
+        match (current1, current2) {
+            (b'*', b'*') => {
+                if advanced1.is_empty() || advanced2.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(advanced1, it2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(it1, advanced2);
+                };
+            }
+            (b'*', _) => {
+                if advanced1.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(advanced1, it2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(it1, advanced2);
+                }
+            }
+            (_, b'*') => {
+                if advanced2.is_empty() {
+                    return true;
+                }
+                if chunk_it_intersect(it1, advanced2) {
+                    return true;
+                } else {
+                    return chunk_it_intersect(advanced1, it2);
+                }
+            }
+            (sub1, sub2) if sub1 == sub2 => {
+                it1 = advanced1;
+                it2 = advanced2;
+            }
+            (_, _) => return false,
+        }
+    }
+    it1.is_empty() && it2.is_empty() || it1 == b"*" || it2 == b"*"
+}
 #[inline(always)]
-fn chunk_intersect(c1: &str, c2: &str) -> bool {
-    if (cend(c1) && !cend(c2)) || (!cend(c1) && cend(c2)) {
+fn chunk_intersect(c1: &[u8], c2: &[u8]) -> bool {
+    if c1 == c2 {
+        return true;
+    }
+    if c1.is_empty() != c2.is_empty() {
         return false;
     }
-    sub_chunk_intersect(c1, c2)
+    chunk_it_intersect(c1, c2)
 }
 
 DEFINE_INCLUDE!(chunk_include, cend, cwild, cnext, cequal);
 
 #[inline(always)]
-fn end(s: &str) -> bool {
+fn end(s: &[u8]) -> bool {
     s.is_empty()
 }
 
 #[inline(always)]
-fn wild(s: &str) -> bool {
-    s.starts_with("**/") || s == "**"
+fn wild(s: &[u8]) -> bool {
+    s.starts_with(b"**/") || s == b"**"
 }
 
-#[inline(always)]
-fn next(s: &str) -> &str {
-    match s.find('/') {
-        Some(idx) => &s[(idx + 1)..],
-        None => "",
+fn next(s: &[u8]) -> (&[u8], &[u8]) {
+    match s.iter().position(|c| *c == b'/') {
+        Some(i) => (&s[..i], &s[(i + 1)..]),
+        None => (s, b""),
     }
 }
-
-DEFINE_INTERSECT!(res_intersect, end, wild, next, chunk_intersect);
-
+fn it_intersect<'a>(mut it1: &'a [u8], mut it2: &'a [u8]) -> bool {
+    while !it1.is_empty() && !it2.is_empty() {
+        let (current1, advanced1) = next(it1);
+        let (current2, advanced2) = next(it2);
+        match (current1, current2) {
+            // ("**", "**") => {
+            //     if advanced1.is_empty() || advanced2.is_empty() {
+            //         return true;
+            //     }
+            //     if it_intersect(advanced1, it2) {
+            //         return true;
+            //     } else {
+            //         return it_intersect(it1, advanced2);
+            //     };
+            // }
+            (b"**", _) => {
+                return advanced1.is_empty()
+                    || it_intersect(advanced1, it2)
+                    || it_intersect(it1, advanced2);
+            }
+            (_, b"**") => {
+                return advanced2.is_empty()
+                    || it_intersect(it1, advanced2)
+                    || it_intersect(advanced1, it2);
+            }
+            (sub1, sub2) if chunk_intersect(sub1, sub2) => {
+                it1 = advanced1;
+                it2 = advanced2;
+            }
+            (_, _) => return false,
+        }
+    }
+    (it1.is_empty() || it1 == b"**") && (it2.is_empty() || it2 == b"**")
+}
 /// Retruns `true` if the given key expressions intersect.
 ///
 /// I.e. if it exists a resource key (with no wildcards) that matches
 /// both given key expressions.
 #[inline(always)]
 pub fn intersect(s1: &str, s2: &str) -> bool {
-    res_intersect(s1, s2)
+    let mut s1 = s1.as_bytes();
+    let mut s2 = s2.as_bytes();
+    if s1.ends_with(b"/") && s1.len() > 1 {
+        s1 = &s1[..(s1.len() - 1)]
+    }
+    if s2.ends_with(b"/") && s2.len() > 1 {
+        s2 = &s2[..(s2.len() - 1)]
+    }
+    if s1 == s2 {
+        return true;
+    }
+    if !s1.contains(&b'*') && !s2.contains(&b'*') {
+        return false;
+    }
+    if s1.is_empty() || s2.is_empty() {
+        return false;
+    }
+    it_intersect(s1, s2)
 }
 
-DEFINE_INCLUDE!(res_include, end, wild, next, chunk_include);
+fn advance(s: &[u8]) -> &[u8] {
+    next(s).1
+}
+DEFINE_INCLUDE!(res_include, end, wild, advance, chunk_include);
 
 /// Retruns `true` if the first key expression (`this`) includes the second key expression (`sub`).
 ///
@@ -162,7 +217,7 @@ DEFINE_INCLUDE!(res_include, end, wild, next, chunk_include);
 /// `sub` but does not match `this`.
 #[inline(always)]
 pub fn include(this: &str, sub: &str) -> bool {
-    res_include(this, sub)
+    res_include(this.as_bytes(), sub.as_bytes())
 }
 
 pub const ADMIN_PREFIX: &str = "/@/";

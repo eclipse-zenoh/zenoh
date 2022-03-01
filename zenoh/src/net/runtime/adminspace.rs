@@ -21,11 +21,11 @@ use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable::EVAL, Channel, CongestionControl, Encoding, KeyExpr, PeerId,
-    QueryConsolidation, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
+    KeyExpr, PeerId, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -318,7 +318,7 @@ impl Primitives for AdminSpace {
                     log::error!("Error deleting conf value {}: {}", key_expr, e)
                 }
             } else {
-                match std::str::from_utf8(payload.contiguous().as_slice()) {
+                match std::str::from_utf8(&payload.contiguous()) {
                     Ok(json) => {
                         log::trace!(
                             "Insert conf value /@/router/{}/config/{}:{}",
@@ -348,7 +348,7 @@ impl Primitives for AdminSpace {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        _consolidation: QueryConsolidation,
+        _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
@@ -515,8 +515,7 @@ pub async fn router_data(
             use std::convert::TryFrom;
             let stats = crate::prelude::ValueSelector::try_from(selector)
                 .ok()
-                .map(|s| s.properties.get("stats").map(|v| v == "true"))
-                .flatten()
+                .and_then(|s| s.properties.get("stats").map(|v| v == "true"))
                 .unwrap_or(false);
             if stats {
                 json.as_object_mut().unwrap().insert(
@@ -597,7 +596,7 @@ pub async fn plugins_status(
 ) -> Vec<crate::plugins::Response> {
     let selector = Selector {
         key_selector: key.clone(),
-        value_selector: args,
+        value_selector: args.into(),
     };
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);

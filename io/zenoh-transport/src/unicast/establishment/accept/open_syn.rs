@@ -11,7 +11,7 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::authenticator::{AuthenticatedPeerLink, PeerAuthenticatorId};
+use super::super::authenticator::AuthenticatedPeerLink;
 use super::super::{attachment_from_properties, properties_from_attachment};
 use super::super::{Cookie, EstablishmentProperties};
 use super::AResult;
@@ -35,6 +35,7 @@ pub(super) struct Output {
     pub(super) is_shm: bool,
     pub(super) open_ack_attachment: Option<Attachment>,
 }
+#[allow(unused_mut)]
 pub(super) async fn recv(
     link: &LinkUnicast,
     manager: &TransportManager,
@@ -107,7 +108,7 @@ pub(super) async fn recv(
             .await;
 
         #[cfg(feature = "shared-memory")]
-        if pa.id() == PeerAuthenticatorId::Shm {
+        if pa.id() == super::super::authenticator::PeerAuthenticatorId::Shm {
             // Check if SHM has been validated from the other side
             att = match att {
                 Ok(att) => {

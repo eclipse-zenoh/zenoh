@@ -12,12 +12,12 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defaults::SEQ_NUM_RES;
-use super::io::ZBuf;
 use super::msg::*;
 #[allow(deprecated)]
 use crate::io::ZBufCodec;
 use std::convert::TryInto;
 use std::time::Duration;
+use zenoh_buffers::{reader::Reader, ZBufReader};
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, *};
 
 pub trait MessageReader {
@@ -57,10 +57,10 @@ pub trait MessageReader {
     fn read_query_target(&mut self) -> Option<QueryTarget>;
     fn read_target(&mut self) -> Option<Target>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
-    fn read_consolidation(&mut self) -> Option<QueryConsolidation>;
+    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy>;
 }
 #[allow(deprecated)]
-impl MessageReader for ZBuf {
+impl MessageReader for ZBufReader<'_> {
     #[allow(unused_variables)]
     #[inline(always)]
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment> {
@@ -98,7 +98,7 @@ impl MessageReader for ZBuf {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read()?;
+            let header = self.read_byte()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -140,7 +140,7 @@ impl MessageReader for ZBuf {
                     }
                 }
                 unknown => {
-                    log::trace!("Transport message with unknown ID: {}", unknown);
+                    log::error!("Transport message with unknown ID: {}", unknown);
                     return None;
                 }
             }
@@ -172,7 +172,7 @@ impl MessageReader for ZBuf {
         let payload = if imsg::has_flag(header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by
             // any other frame in the same batch. Read all the bytes.
-            let buffer = self.read_zslice(self.readable())?;
+            let buffer = self.read_zslice(self.remaining())?;
             let is_final = imsg::has_flag(header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {
@@ -181,10 +181,9 @@ impl MessageReader for ZBuf {
                 let pos = self.get_pos();
                 if let Some(msg) = self.read_zenoh_message(reliability) {
                     messages.push(msg);
-                } else if self.set_pos(pos) {
-                    break;
                 } else {
-                    return None;
+                    self.set_pos(pos);
+                    break;
                 }
             }
 
@@ -238,7 +237,7 @@ impl MessageReader for ZBuf {
         } else {
             0
         };
-        let version = self.read()?;
+        let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peeexpr_id()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
@@ -317,7 +316,7 @@ impl MessageReader for ZBuf {
         } else {
             0
         };
-        let version = self.read()?;
+        let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let pid = self.read_peeexpr_id()?;
         let lease = self.read_zint()?;
@@ -363,7 +362,7 @@ impl MessageReader for ZBuf {
         } else {
             None
         };
-        let reason = self.read()?;
+        let reason = self.read_byte()?;
 
         Some(TransportBody::Close(Close {
             pid,
@@ -462,7 +461,7 @@ impl MessageReader for ZBuf {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read()?;
+            let header = self.read_byte()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -657,7 +656,7 @@ impl MessageReader for ZBuf {
     fn read_declaration(&mut self) -> Option<Declaration> {
         use super::zmsg::declaration::id::*;
 
-        let header = self.read()?;
+        let header = self.read_byte()?;
         match imsg::mid(header) {
             RESOURCE => {
                 let expr_id = self.read_zint()?;
@@ -791,7 +790,7 @@ impl MessageReader for ZBuf {
         use super::zmsg::declaration::flag::*;
         use super::zmsg::declaration::id::*;
 
-        let mode_flag = self.read()?;
+        let mode_flag = self.read_byte()?;
         let mode = match mode_flag & !PERIOD {
             MODE_PUSH => SubMode::Push,
             MODE_PULL => SubMode::Pull,
@@ -849,12 +848,12 @@ impl MessageReader for ZBuf {
         }
     }
 
-    fn read_consolidation(&mut self) -> Option<QueryConsolidation> {
+    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy> {
         let modes = self.read_zint()?;
-        Some(QueryConsolidation {
-            first_routers: ZBuf::read_consolidation_mode((modes >> 4) & 0x03)?,
-            last_router: ZBuf::read_consolidation_mode((modes >> 2) & 0x03)?,
-            reception: ZBuf::read_consolidation_mode(modes & 0x03)?,
+        Some(ConsolidationStrategy {
+            first_routers: ZBufReader::read_consolidation_mode((modes >> 4) & 0x03)?,
+            last_router: ZBufReader::read_consolidation_mode((modes >> 2) & 0x03)?,
+            reception: ZBufReader::read_consolidation_mode(modes & 0x03)?,
         })
     }
 }

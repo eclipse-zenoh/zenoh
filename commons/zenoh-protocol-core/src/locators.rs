@@ -4,6 +4,8 @@ use std::{
 
 use zenoh_core::bail;
 
+use crate::split_once;
+
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
 pub const METADATA_SEPARATOR: char = '?';
@@ -152,7 +154,7 @@ impl Locator {
         let addr_end = self
             .inner
             .find(METADATA_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+            .unwrap_or(self.inner.len());
         self.inner.replace_range(addr_start..addr_end, addr);
         true
     }
@@ -177,19 +179,13 @@ impl Locator {
         )
     }
     pub fn protocol(&self) -> &str {
-        let index = self
-            .inner
-            .find(PROTO_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+        let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         &self.inner[..index]
     }
     pub fn address(&self) -> &str {
-        let index = self
-            .inner
-            .find(PROTO_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+        let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         let rest = &self.inner[index + 1..];
-        let index = rest.find(METADATA_SEPARATOR).unwrap_or_else(|| rest.len());
+        let index = rest.find(METADATA_SEPARATOR).unwrap_or(rest.len());
         &rest[..index]
     }
     pub fn clone_without_meta(&self) -> Self {
@@ -200,16 +196,6 @@ impl Locator {
     }
     pub fn metadata(&self) -> Option<&ArcProperties> {
         self.metadata.as_ref()
-    }
-}
-
-pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
     }
 }
 

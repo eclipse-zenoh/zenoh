@@ -38,7 +38,80 @@ pub use zenoh_protocol_core::ConsolidationMode;
 
 /// The kind of consolidation that should be applied on replies to a [`get`](Session::get)
 /// at different stages of the reply process.
-pub use zenoh_protocol_core::QueryConsolidation;
+pub use zenoh_protocol_core::ConsolidationStrategy;
+
+/// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
+#[derive(Clone, Debug)]
+pub enum QueryConsolidation {
+    Auto,
+    Manual(ConsolidationStrategy),
+}
+
+impl QueryConsolidation {
+    /// Automatic query consolidation strategy selection.
+    ///
+    /// A query consolidation strategy will automatically be selected depending
+    /// the query selector. If the selector contains time range properties,
+    /// no consolidation is performed. Otherwise the [`reception`](QueryConsolidation::reception) strategy is used.
+    #[inline]
+    pub fn auto() -> Self {
+        QueryConsolidation::Auto
+    }
+
+    /// No consolidation performed.
+    ///
+    /// This is usefull when querying timeseries data bases or
+    /// when using quorums.
+    #[inline]
+    pub fn none() -> Self {
+        QueryConsolidation::Manual(ConsolidationStrategy::none())
+    }
+
+    /// Lazy consolidation performed at all stages.
+    ///
+    /// This strategy offers the best latency. Replies are directly
+    /// transmitted to the application when received without needing
+    /// to wait for all replies.
+    ///
+    /// This mode does not garantie that there will be no duplicates.
+    #[inline]
+    pub fn lazy() -> Self {
+        QueryConsolidation::Manual(ConsolidationStrategy::lazy())
+    }
+
+    /// Full consolidation performed at reception.
+    ///
+    /// This is the default strategy. It offers the best latency while
+    /// garantying that there will be no duplicates.
+    #[inline]
+    pub fn reception() -> Self {
+        QueryConsolidation::Manual(ConsolidationStrategy::reception())
+    }
+
+    /// Full consolidation performed on last router and at reception.
+    ///
+    /// This mode offers a good latency while optimizing bandwidth on
+    /// the last transport link between the router and the application.
+    #[inline]
+    pub fn last_router() -> Self {
+        QueryConsolidation::Manual(ConsolidationStrategy::last_router())
+    }
+
+    /// Full consolidation performed everywhere.
+    ///
+    /// This mode optimizes bandwidth on all links in the system
+    /// but will provide a very poor latency.
+    #[inline]
+    pub fn full() -> Self {
+        QueryConsolidation::Manual(ConsolidationStrategy::full())
+    }
+}
+
+impl Default for QueryConsolidation {
+    fn default() -> Self {
+        QueryConsolidation::Auto
+    }
+}
 
 /// Structs returned by a [`get`](Session::get).
 #[derive(Clone, Debug)]
@@ -130,6 +203,7 @@ derive_zfuture! {
         pub(crate) selector: Selector<'b>,
         pub(crate) target: Option<QueryTarget>,
         pub(crate) consolidation: Option<QueryConsolidation>,
+        pub(crate) local_routing: Option<bool>,
     }
 }
 
@@ -147,6 +221,13 @@ impl<'a, 'b> Getter<'a, 'b> {
         self.consolidation = Some(consolidation);
         self
     }
+
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
+        self
+    }
 }
 
 impl Runnable for Getter<'_, '_> {
@@ -161,10 +242,20 @@ impl Runnable for Getter<'_, '_> {
         );
         let mut state = zwrite!(self.session.state);
         let target = self.target.take().unwrap();
-        let consolidation = self.consolidation.take().unwrap();
+        let consolidation = match self.consolidation.take().unwrap() {
+            QueryConsolidation::Auto => {
+                if self.selector.has_time_range() {
+                    ConsolidationStrategy::none()
+                } else {
+                    ConsolidationStrategy::default()
+                }
+            }
+            QueryConsolidation::Manual(strategy) => strategy,
+        };
+        let local_routing = self.local_routing.unwrap_or(state.local_routing);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE);
-        let nb_final = if state.local_routing { 2 } else { 1 };
+        let nb_final = if local_routing { 2 } else { 1 };
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
@@ -181,11 +272,11 @@ impl Runnable for Getter<'_, '_> {
         );
 
         let primitives = state.primitives.as_ref().unwrap().clone();
-        let local_routing = state.local_routing;
+
         drop(state);
         primitives.send_query(
             &self.selector.key_selector,
-            self.selector.value_selector,
+            self.selector.value_selector.as_ref(),
             qid,
             target.clone(),
             consolidation.clone(),
@@ -195,7 +286,7 @@ impl Runnable for Getter<'_, '_> {
             self.session.handle_query(
                 true,
                 &self.selector.key_selector,
-                self.selector.value_selector,
+                self.selector.value_selector.as_ref(),
                 qid,
                 target,
                 consolidation,

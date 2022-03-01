@@ -76,7 +76,7 @@ fn tables_bench(c: &mut Criterion) {
         }
 
         let face0 = face0.upgrade().unwrap();
-        let payload = ZBuf::new();
+        let payload = ZBuf::default();
 
         tables_bench.bench_function(BenchmarkId::new("direct_route", p), |b| {
             b.iter(|| {

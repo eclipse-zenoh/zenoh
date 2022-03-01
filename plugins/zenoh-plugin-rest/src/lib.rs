@@ -19,6 +19,7 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
@@ -48,7 +49,7 @@ fn value_to_json(value: Value) -> String {
             value.to_string()
         }
         _ => {
-            format!(r#""{}""#, base64::encode(value.payload.to_vec()))
+            format!(r#""{}""#, base64::encode(value.payload.contiguous()))
         }
     }
 }

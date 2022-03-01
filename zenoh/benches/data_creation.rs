@@ -121,7 +121,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         None,
     ));
 
-    c.bench_function(&"arc_msg_clone".to_string(), |b| {
+    c.bench_function("arc_msg_clone", |b| {
         b.iter(|| {
             consume_message_arc(msg.clone());
         })

@@ -26,8 +26,8 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo, Target,
-    WhatAmI, ZInt,
+    key_expr, queryable, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
+    Target, WhatAmI, ZInt,
 };
 
 use super::face::FaceState;
@@ -63,22 +63,18 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 }
 
 fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> QueryableInfo {
-    let info = res
-        .context
-        .as_ref()
-        .map(|ctx| {
-            ctx.peer_qabls.iter().fold(None, |accu, ((pid, k), info)| {
-                if *pid != tables.pid && *k == kind {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => info.clone(),
-                    })
-                } else {
-                    accu
-                }
-            })
+    let info = res.context.as_ref().and_then(|ctx| {
+        ctx.peer_qabls.iter().fold(None, |accu, ((pid, k), info)| {
+            if *pid != tables.pid && *k == kind {
+                Some(match accu {
+                    Some(accu) => merge_qabl_infos(accu, info),
+                    None => info.clone(),
+                })
+            } else {
+                accu
+            }
         })
-        .flatten();
+    });
     res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
@@ -162,7 +158,7 @@ fn local_qabl_info(
             .context()
             .peer_qabls
             .iter()
-            .fold(None, |accu, ((pid, k), info)| {
+            .fold(info, |accu, ((pid, k), info)| {
                 if *pid != *local_pid && *k == kind {
                     Some(match accu {
                         Some(accu) => merge_qabl_infos(accu, info),
@@ -1068,8 +1064,7 @@ fn compute_query_route(
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
-        .map(|res| res.context.as_ref())
-        .flatten()
+        .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
         .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
@@ -1363,7 +1358,7 @@ pub fn route_query(
     value_selector: &str,
     qid: ZInt,
     target: QueryTarget,
-    consolidation: QueryConsolidation,
+    consolidation: ConsolidationStrategy,
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zwrite!(tables_ref);
@@ -1384,8 +1379,7 @@ pub fn route_query(
                         let local_context = routers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .map(|res| res.routers_query_route(local_context))
-                            .flatten()
+                            .and_then(|res| res.routers_query_route(local_context))
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
@@ -1401,8 +1395,7 @@ pub fn route_query(
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .map(|res| res.peers_query_route(local_context))
-                            .flatten()
+                            .and_then(|res| res.peers_query_route(local_context))
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
@@ -1414,8 +1407,7 @@ pub fn route_query(
                             })
                     }
                     _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .map(|res| res.routers_query_route(0))
-                        .flatten()
+                        .and_then(|res| res.routers_query_route(0))
                         .unwrap_or_else(|| {
                             compute_query_route(
                                 &tables,
@@ -1432,8 +1424,7 @@ pub fn route_query(
                         let local_context = peers_net
                             .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .map(|res| res.peers_query_route(local_context))
-                            .flatten()
+                            .and_then(|res| res.peers_query_route(local_context))
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
@@ -1445,8 +1436,7 @@ pub fn route_query(
                             })
                     }
                     _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .map(|res| res.peers_query_route(0))
-                        .flatten()
+                        .and_then(|res| res.peers_query_route(0))
                         .unwrap_or_else(|| {
                             compute_query_route(
                                 &tables,
@@ -1458,8 +1448,7 @@ pub fn route_query(
                         }),
                 },
                 _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                    .map(|res| res.client_query_route())
-                    .flatten()
+                    .and_then(|res| res.client_query_route())
                     .unwrap_or_else(|| {
                         compute_query_route(
                             &tables,

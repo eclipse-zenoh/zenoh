@@ -193,25 +193,22 @@ impl LibLoader {
     where
         P: AsRef<std::path::Path>,
     {
-        path.as_ref()
-            .file_name()
-            .map(|f| {
-                f.to_str().map(|s| {
-                    let start = if s.starts_with(LIB_PREFIX.as_str()) {
-                        LIB_PREFIX.len()
+        path.as_ref().file_name().and_then(|f| {
+            f.to_str().map(|s| {
+                let start = if s.starts_with(LIB_PREFIX.as_str()) {
+                    LIB_PREFIX.len()
+                } else {
+                    0
+                };
+                let end = s.len()
+                    - if s.ends_with(LIB_SUFFIX.as_str()) {
+                        LIB_SUFFIX.len()
                     } else {
                         0
                     };
-                    let end = s.len()
-                        - if s.ends_with(LIB_SUFFIX.as_str()) {
-                            LIB_SUFFIX.len()
-                        } else {
-                            0
-                        };
-                    &s[start..end]
-                })
+                &s[start..end]
             })
-            .flatten()
+        })
     }
 
     fn str_to_canonical_path(s: &str) -> ZResult<PathBuf> {

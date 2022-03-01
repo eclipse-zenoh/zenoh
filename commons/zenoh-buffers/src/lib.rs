@@ -11,6 +11,9 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
+pub mod traits;
+pub use traits::*;
+
 mod zslice;
 pub use zslice::*;
 

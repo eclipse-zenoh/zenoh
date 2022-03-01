@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-use zenoh_buffers::{WBuf, ZBuf};
+use zenoh_buffers::{reader::HasReader, WBuf, ZBuf};
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol_core::{ZInt, ZINT_MAX_BYTES};
 
@@ -20,7 +20,7 @@ fn test_zint(v: ZInt) {
     let mut buf = WBuf::new(32, true);
     buf.write_zint(v);
     dbg!(&buf);
-    assert_eq!(v, ZBuf::from(buf).read_zint().unwrap());
+    assert_eq!(v, ZBuf::from(buf).reader().read_zint().unwrap());
 }
 
 #[test]

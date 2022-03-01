@@ -36,18 +36,18 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         #[cfg(feature = "stats")]
         {
+            use zenoh_buffers::SplitBuffer;
             self.stats.inc_rx_z_msgs(1);
             match &msg.body {
                 ZenohBody::Data(data) => match data.reply_context {
                     Some(_) => {
                         self.stats.inc_rx_z_data_reply_msgs(1);
                         self.stats
-                            .inc_rx_z_data_reply_payload_bytes(data.payload.readable());
+                            .inc_rx_z_data_reply_payload_bytes(data.payload.len());
                     }
                     None => {
                         self.stats.inc_rx_z_data_msgs(1);
-                        self.stats
-                            .inc_rx_z_data_payload_bytes(data.payload.readable());
+                        self.stats.inc_rx_z_data_payload_bytes(data.payload.len());
                     }
                 },
                 ZenohBody::Unit(unit) => match unit.reply_context {

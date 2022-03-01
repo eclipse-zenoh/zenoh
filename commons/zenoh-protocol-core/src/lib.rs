@@ -331,13 +331,18 @@ pub enum ConsolidationMode {
 /// The kind of consolidation that should be applied on replies to a [`get`](zenoh::Session::get)
 /// at different stages of the reply process.
 #[derive(Debug, Clone, PartialEq)]
-pub struct QueryConsolidation {
+pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
     pub reception: ConsolidationMode,
 }
 
-impl QueryConsolidation {
+impl ConsolidationStrategy {
+    /// No consolidation performed.
+    ///
+    /// This is usefull when querying timeseries data bases or
+    /// when using quorums.
+    #[inline]
     pub fn none() -> Self {
         Self {
             first_routers: ConsolidationMode::None,
@@ -345,15 +350,67 @@ impl QueryConsolidation {
             reception: ConsolidationMode::None,
         }
     }
-}
 
-impl Default for QueryConsolidation {
-    fn default() -> Self {
+    /// Lazy consolidation performed at all stages.
+    ///
+    /// This strategy offers the best latency. Replies are directly
+    /// transmitted to the application when received without needing
+    /// to wait for all replies.
+    ///
+    /// This mode does not garantie that there will be no duplicates.
+    #[inline]
+    pub fn lazy() -> Self {
+        Self {
+            first_routers: ConsolidationMode::Lazy,
+            last_router: ConsolidationMode::Lazy,
+            reception: ConsolidationMode::Lazy,
+        }
+    }
+
+    /// Full consolidation performed at reception.
+    ///
+    /// This is the default strategy. It offers the best latency while
+    /// garantying that there will be no duplicates.
+    #[inline]
+    pub fn reception() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Lazy,
             reception: ConsolidationMode::Full,
         }
+    }
+
+    /// Full consolidation performed on last router and at reception.
+    ///
+    /// This mode offers a good latency while optimizing bandwidth on
+    /// the last transport link between the router and the application.
+    #[inline]
+    pub fn last_router() -> Self {
+        Self {
+            first_routers: ConsolidationMode::Lazy,
+            last_router: ConsolidationMode::Full,
+            reception: ConsolidationMode::Full,
+        }
+    }
+
+    /// Full consolidation performed everywhere.
+    ///
+    /// This mode optimizes bandwidth on all links in the system
+    /// but will provide a very poor latency.
+    #[inline]
+    pub fn full() -> Self {
+        Self {
+            first_routers: ConsolidationMode::Full,
+            last_router: ConsolidationMode::Full,
+            reception: ConsolidationMode::Full,
+        }
+    }
+}
+
+impl Default for ConsolidationStrategy {
+    #[inline]
+    fn default() -> Self {
+        ConsolidationStrategy::reception()
     }
 }
 
@@ -387,5 +444,15 @@ impl Default for QueryTarget {
             kind: queryable::ALL_KINDS,
             target: Target::default(),
         }
+    }
+}
+
+pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s, ""),
     }
 }

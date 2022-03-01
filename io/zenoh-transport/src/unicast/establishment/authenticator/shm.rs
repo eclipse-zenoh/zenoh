@@ -19,6 +19,8 @@ use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::{SplitBuffer, ZBufReader};
 use zenoh_config::Config;
 use zenoh_core::zresult::ShmError;
 use zenoh_core::{bail, zcheck};
@@ -105,7 +107,7 @@ trait ZShm {
     fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty>;
     fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty>;
 }
-impl ZShm for ZBuf {
+impl ZShm for ZBufReader<'_> {
     fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
         let version = self.read_zint()?;
         let shm = self.read_shminfo()?;
@@ -205,9 +207,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_syn_property_shm(&init_syn_property);
-        let attachment: ZBuf = wbuf.into();
 
-        Ok(Some(attachment.to_vec()))
+        Ok(Some(wbuf.contiguous().into_owned()))
     }
 
     async fn handle_init_syn(
@@ -216,14 +217,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        let mut zbuf: ZBuf = match property {
+        let zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => {
                 log::debug!("Peer {} did not express interest in SHM", cookie.pid);
                 return Ok((None, None));
             }
         };
-        let mut init_syn_property = match zbuf.read_init_syn_property_shm() {
+        let mut init_syn_property = match zbuf.reader().read_init_syn_property_shm() {
             Some(isa) => isa,
             None => bail!("Received InitSyn with invalid attachment on link: {}", link),
         };
@@ -266,9 +267,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         // Encode the InitAck property
         let mut wbuf = WBuf::new(WBUF_SIZE, false);
         wbuf.write_init_ack_property_shm(&init_ack_property);
-        let attachment: ZBuf = wbuf.into();
 
-        Ok((Some(attachment.to_vec()), None))
+        Ok((Some(wbuf.contiguous().into_owned()), None))
     }
 
     async fn handle_init_ack(
@@ -278,7 +278,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
-        let mut zbuf: ZBuf = match property {
+        let zbuf: ZBuf = match property {
             Some(p) => p.into(),
             None => {
                 log::debug!("Peer {} did not express interest in shared memory", peer_id);
@@ -287,6 +287,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         };
 
         let mut init_ack_property = zbuf
+            .reader()
             .read_init_ack_property_shm()
             .ok_or_else(|| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
 
@@ -315,9 +316,8 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             // Encode the OpenSyn property
             let mut wbuf = WBuf::new(WBUF_SIZE, false);
             wbuf.write_open_syn_property_shm(&open_syn_property);
-            let attachment: ZBuf = wbuf.into();
 
-            Ok(Some(attachment.to_vec()))
+            Ok(Some(wbuf.contiguous().into_owned()))
         } else {
             Err(ShmError(zerror!(
                 "Received OpenSyn with invalid attachment on link: {}",
@@ -334,7 +334,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
         let (attachment, _cookie) = property;
-        let mut zbuf: ZBuf = match attachment {
+        let zbuf: ZBuf = match attachment {
             Some(p) => p.into(),
             None => {
                 log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
@@ -342,6 +342,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
         let open_syn_property = zbuf
+            .reader()
             .read_open_syn_property_shm()
             .ok_or_else(|| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
 

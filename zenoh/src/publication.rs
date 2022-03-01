@@ -55,6 +55,7 @@ derive_zfuture! {
         pub(crate) kind: Option<ZInt>,
         pub(crate) congestion_control: CongestionControl,
         pub(crate) priority: Priority,
+        pub(crate) local_routing: Option<bool>,
     }
 }
 
@@ -94,6 +95,13 @@ impl<'a> Writer<'a> {
         self
     }
 
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
+        self
+    }
+
     fn write(&self, value: Value) -> zenoh_core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
         let state = zread!(self.session.state);
@@ -124,8 +132,13 @@ impl<'a> Writer<'a> {
             data_info.clone(),
             None,
         );
-        self.session
-            .handle_data(true, &self.key_expr, data_info, value.payload);
+        self.session.handle_data(
+            true,
+            &self.key_expr,
+            data_info,
+            value.payload,
+            self.local_routing,
+        );
         Ok(())
     }
 }

@@ -13,7 +13,7 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, KeyExpr, PeerId, QueryConsolidation, QueryTarget, QueryableInfo,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
     SubInfo, ZInt,
 };
 use super::protocol::io::ZBuf;
@@ -161,7 +161,7 @@ impl Primitives for Mux {
         value_selector: &str,
         qid: ZInt,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: ConsolidationStrategy,
         routing_context: Option<RoutingContext>,
     ) {
         let target_opt = if target == QueryTarget::default() {

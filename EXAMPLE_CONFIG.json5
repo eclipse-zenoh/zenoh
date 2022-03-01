@@ -9,7 +9,7 @@
     rest: {
       /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
       __required__: true, // defaults to false
-      port: 8000,
+      http_port: 8000,
     },
     storages: {
       /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.

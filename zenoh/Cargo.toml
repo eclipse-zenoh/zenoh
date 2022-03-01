@@ -53,7 +53,6 @@ default = [
     "auth_pubkey",
     "auth_usrpwd",
     "shared-memory",
-    "transport_quic",
     "transport_tcp",
     "transport_tls",
     "transport_udp",
@@ -78,7 +77,7 @@ zenoh-transport = { path = "../io/zenoh-transport/" }
 zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
 
 async-global-executor = "2.0.2"
-async-std = { version = "=1.9.0", default-features = false, features = [
+async-std = { version = "=1.10.0", default-features = false, features = [
     "attributes",
 ] }
 async-trait = "0.1.42"
@@ -120,10 +119,6 @@ harness = false
 
 [[bench]]
 name = "rwbuf_bench"
-harness = false
-
-[[bench]]
-name = "key_expr_bench"
 harness = false
 
 [[bench]]

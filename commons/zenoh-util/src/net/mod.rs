@@ -205,8 +205,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
     {
         Ok(pnet::datalink::interfaces()
             .into_iter()
-            .map(|iface| iface.ips)
-            .flatten()
+            .flat_map(|iface| iface.ips)
             .map(|ipnet| ipnet.ip())
             .collect())
     }
@@ -268,7 +267,7 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
         pnet::datalink::interfaces()
             .iter()
             .filter(|iface| iface.is_up() && iface.is_multicast())
-            .map(|iface| {
+            .flat_map(|iface| {
                 iface
                     .ips
                     .iter()
@@ -276,7 +275,6 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
                     .map(|x| x.ip())
                     .collect::<Vec<IpAddr>>()
             })
-            .flatten()
             .collect()
     }
     #[cfg(windows)]
@@ -292,7 +290,7 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
         let addrs = pnet::datalink::interfaces()
             .into_iter()
             .filter(|iface| iface.is_up() && iface.name == name)
-            .map(|iface| {
+            .flat_map(|iface| {
                 iface
                     .ips
                     .iter()
@@ -300,7 +298,6 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
                     .map(|x| x.ip())
                     .collect::<Vec<IpAddr>>()
             })
-            .flatten()
             .collect();
         Ok(addrs)
     }

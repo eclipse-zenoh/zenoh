@@ -17,6 +17,8 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
@@ -508,7 +510,7 @@ impl Runtime {
             let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
             let mut scout = TransportMessage::make_scout(Some(matcher), true, None);
             wbuf.write_transport_message(&mut scout);
-            let zbuf: ZBuf = wbuf.into();
+            let zbuf = wbuf;
             let zslice = zbuf.contiguous();
             loop {
                 for socket in sockets {
@@ -520,10 +522,7 @@ impl Runtime {
                             .local_addr()
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
-                    if let Err(err) = socket
-                        .send_to(zslice.as_slice(), mcast_addr.to_string())
-                        .await
-                    {
+                    if let Err(err) = socket.send_to(&zslice, mcast_addr.to_string()).await {
                         log::warn!(
                             "Unable to send {:?} to {} on interface {} : {}",
                             scout.body,
@@ -546,8 +545,8 @@ impl Runtime {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
                     let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
-                    let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-                    if let Some(msg) = zbuf.read_transport_message() {
+                    let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
+                    if let Some(msg) = zbuf.reader().read_transport_message() {
                         log::trace!("Received {:?} from {}", msg.body, peer);
                         if let TransportBody::Hello(hello) = &msg.body {
                             let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
@@ -699,8 +698,8 @@ impl Runtime {
                 continue;
             }
 
-            let mut zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-            if let Some(msg) = zbuf.read_transport_message() {
+            let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
+            if let Some(msg) = zbuf.reader().read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let TransportBody::Scout(Scout {
                     what, pid_request, ..
@@ -730,9 +729,9 @@ impl Runtime {
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
                         wbuf.write_transport_message(&mut hello);
-                        let zbuf: ZBuf = wbuf.into();
+                        let zbuf = wbuf;
                         let zslice = zbuf.contiguous();
-                        if let Err(err) = socket.send_to(zslice.as_slice(), peer).await {
+                        if let Err(err) = socket.send_to(&zslice, peer).await {
                             log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
                         }
                     }
