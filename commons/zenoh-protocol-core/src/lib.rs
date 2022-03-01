@@ -47,7 +47,7 @@ pub mod key_expr;
 pub use crate::key_expr::KeyExpr;
 
 mod encoding;
-pub use encoding::Encoding;
+pub use encoding::{Encoding, KnownEncoding};
 
 pub mod locators;
 pub use locators::Locator;

@@ -12,6 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use rand::*;
+use std::convert::TryFrom;
 use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh_buffers::reader::HasReader;
@@ -243,10 +244,7 @@ fn gen_timestamp() -> Timestamp {
 fn gen_data_info() -> DataInfo {
     DataInfo {
         kind: option_gen!(gen!(ZInt)),
-        encoding: option_gen!(Encoding {
-            prefix: gen!(ZInt),
-            suffix: "".into()
-        }),
+        encoding: option_gen!(Encoding::Exact(TryFrom::try_from(gen!(u8) % 21).unwrap())),
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
