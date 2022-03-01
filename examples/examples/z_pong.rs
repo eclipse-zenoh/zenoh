@@ -49,7 +49,7 @@ fn parse_args() -> Config {
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-c, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
+            "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",

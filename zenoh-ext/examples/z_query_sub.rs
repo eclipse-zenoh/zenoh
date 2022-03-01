@@ -78,7 +78,7 @@ fn parse_args() -> (Config, String, Option<String>) {
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-c, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
+            "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
@@ -91,7 +91,7 @@ fn parse_args() -> (Config, String, Option<String>) {
             Arg::from_usage("-q, --query=[SELECTOR] 'The selector to use for queries (by default it's same than 'selector' option)'"),
         )
         .arg(Arg::from_usage(
-            "-f, --config=[FILE]      'A configuration file.'",
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",

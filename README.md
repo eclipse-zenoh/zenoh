@@ -89,7 +89,7 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
 ## zenoh router command line arguments
 `zenohd` accepts the following arguments:
 
-  * `-f, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
   * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
   * `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions. 
     Repeat this option to open several listeners. By default, `tcp/0.0.0.0:7447` is used. The following endpoints are currently supported:
@@ -97,7 +97,7 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
       - UDP: `udp/<host_name_or_IPv4_or_IPv6>:<port>`
       - [TCP+TLS](https://zenoh.io/docs/manual/tls/): `tls/<host_name>:<port>`
       - [QUIC](https://zenoh.io/docs/manual/quic/): `quic/<host_name>:<port>`
-  * `-c, --connect <ENDPOINT>...`: An endpoint this router will try to connect to. Repeat this option to connect to several peers or routers.
+  * `-e, --connect <ENDPOINT>...`: An endpoint this router will try to connect to. Repeat this option to connect to several peers or routers.
   * `--no-multicast-scouting`: By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
     This option disables this feature.
   * `-i, --id <hex_string>`: The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use.

@@ -91,13 +91,13 @@ fn parse_args() -> Config {
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-c, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
+            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(Arg::from_usage(
-            "-f, --config=[FILE]      'A configuration file.'",
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",

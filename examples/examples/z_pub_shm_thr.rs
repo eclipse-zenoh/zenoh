@@ -49,10 +49,10 @@ fn parse_args() -> (Config, usize, usize) {
                 .default_value("32"),
         )
         .arg(Arg::from_usage(
-            "-c, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
+            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
-            "-f, --config=[FILE]      'A configuration file.'",
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>           'Sets the size of the payload to publish'",
