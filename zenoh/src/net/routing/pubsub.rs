@@ -148,11 +148,6 @@ fn register_router_subscription(
 
         // Propagate subscription to routers
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &router);
-
-        // Propagate subscription to peers
-        // if face.whatami != WhatAmI::Peer {
-        //     register_peer_subscription(tables, face, res, sub_info, tables.pid)
-        // }
     }
 
     // Propagate subscription to clients
@@ -180,54 +175,6 @@ pub fn declare_router_subscription(
         ),
     }
 }
-
-// fn register_peer_subscription(
-//     tables: &mut Tables,
-//     face: &mut Arc<FaceState>,
-//     res: &mut Arc<Resource>,
-//     sub_info: &SubInfo,
-//     peer: PeerId,
-// ) {
-//     if !res.context().peer_subs.contains(&peer) {
-//         // Register peer subscription
-//         {
-//             log::debug!("Register peer subscription {} (peer: {})", res.expr(), peer);
-//             get_mut_unchecked(res).context_mut().peer_subs.insert(peer);
-//             tables.peer_subs.insert(res.clone());
-//         }
-
-//         // Propagate subscription to peers
-//         propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, WhatAmI::Peer);
-//     }
-// }
-
-// pub fn declare_peer_subscription(
-//     tables: &mut Tables,
-//     face: &mut Arc<FaceState>,
-//     expr: &KeyExpr,
-//     sub_info: &SubInfo,
-//     peer: PeerId,
-// ) {
-//     match tables.get_mapping(face, &expr.scope).cloned() {
-//         Some(mut prefix) => {
-//             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-//             Resource::match_resource(tables, &mut res);
-//             register_peer_subscription(tables, face, &mut res, sub_info, peer);
-
-//             if tables.whatami == WhatAmI::Router {
-//                 let mut propa_sub_info = sub_info.clone();
-//                 propa_sub_info.mode = SubMode::Push;
-//                 register_router_subscription(tables, face, &mut res, &propa_sub_info, tables.pid);
-//             }
-
-//             compute_matches_data_routes(tables, &mut res);
-//         }
-//         None => log::error!(
-//             "Declare router subscription for unknown scope {}!",
-//             expr.scope
-//         ),
-//     }
-// }
 
 fn register_client_subscription(
     _tables: &mut Tables,
@@ -452,62 +399,6 @@ pub fn forget_router_subscription(
         None => log::error!("Undeclare router subscription with unknown scope!"),
     }
 }
-
-// fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
-//     log::debug!(
-//         "Unregister peer subscription {} (peer: {})",
-//         res.expr(),
-//         peer
-//     );
-//     get_mut_unchecked(res)
-//         .context_mut()
-//         .peer_subs
-//         .retain(|sub| sub != peer);
-
-//     if res.context().peer_subs.is_empty() {
-//         tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, res));
-//     }
-// }
-
-// fn undeclare_peer_subscription(
-//     tables: &mut Tables,
-//     face: Option<&Arc<FaceState>>,
-//     res: &mut Arc<Resource>,
-//     peer: &PeerId,
-// ) {
-//     if res.context().peer_subs.contains(peer) {
-//         unregister_peer_subscription(tables, res, peer);
-//         propagate_forget_sourced_subscription(tables, res, face, peer, WhatAmI::Peer);
-//     }
-// }
-
-// pub fn forget_peer_subscription(
-//     tables: &mut Tables,
-//     face: &mut Arc<FaceState>,
-//     expr: &KeyExpr,
-//     peer: &PeerId,
-// ) {
-//     match tables.get_mapping(face, &expr.scope) {
-//         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-//             Some(mut res) => {
-//                 undeclare_peer_subscription(tables, Some(face), &mut res, peer);
-
-//                 if tables.whatami == WhatAmI::Router {
-//                     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
-//                     let peer_subs = remote_peer_subs(tables, &res);
-//                     if !client_subs && !peer_subs {
-//                         undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
-//                     }
-//                 }
-
-//                 compute_matches_data_routes(tables, &mut res);
-//                 Resource::clean(&mut res)
-//             }
-//             None => log::error!("Undeclare unknown peer subscription!"),
-//         },
-//         None => log::error!("Undeclare peer subscription with unknown scope!"),
-//     }
-// }
 
 pub(crate) fn undeclare_client_subscription(
     tables: &mut Tables,

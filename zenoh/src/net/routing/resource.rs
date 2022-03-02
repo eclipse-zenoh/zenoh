@@ -160,15 +160,6 @@ impl Resource {
         }
     }
 
-    // #[inline(always)]
-    // pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
-    //     match &self.context {
-    //         Some(ctx) => (ctx.peers_data_routes.len() > context)
-    //             .then(|| ctx.peers_data_routes[context].clone()),
-    //         None => None,
-    //     }
-    // }
-
     #[inline(always)]
     pub fn client_data_route(&self) -> Option<Arc<Route>> {
         match &self.context {
