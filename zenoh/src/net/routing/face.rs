@@ -115,40 +115,6 @@ impl FaceState {
             }
         }
     }
-
-    pub(super) fn get_peer(
-        &self,
-        tables: &Tables,
-        routing_context: Option<RoutingContext>,
-    ) -> Option<PeerId> {
-        match routing_context {
-            Some(routing_context) => {
-                match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_pid(&routing_context.tree_id) {
-                        Some(router) => Some(*router),
-                        None => {
-                            log::error!(
-                                "Received peer declaration with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            None
-                        }
-                    },
-                    None => {
-                        log::error!(
-                            "Could not find corresponding link in peers network for {}",
-                            self
-                        );
-                        None
-                    }
-                }
-            }
-            None => {
-                log::error!("Received peer declaration with no routing context");
-                None
-            }
-        }
-    }
 }
 
 impl fmt::Display for FaceState {
@@ -193,19 +159,6 @@ impl Primitives for Face {
                     )
                 }
             }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    declare_peer_subscription(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        sub_info,
-                        peer,
-                    )
-                }
-            }
             _ => declare_client_subscription(
                 &mut tables,
                 &mut self.state.clone(),
@@ -226,13 +179,6 @@ impl Primitives for Face {
                         key_expr,
                         &router,
                     )
-                }
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    forget_peer_subscription(&mut tables, &mut self.state.clone(), key_expr, &peer)
                 }
             }
             _ => forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr),
@@ -264,20 +210,6 @@ impl Primitives for Face {
                     )
                 }
             }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    declare_peer_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        kind,
-                        qabl_info,
-                        peer,
-                    )
-                }
-            }
             _ => declare_client_queryable(
                 &mut tables,
                 &mut self.state.clone(),
@@ -304,19 +236,6 @@ impl Primitives for Face {
                         key_expr,
                         kind,
                         &router,
-                    )
-                }
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    forget_peer_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        kind,
-                        &peer,
                     )
                 }
             }

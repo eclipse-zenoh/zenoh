@@ -13,7 +13,7 @@
 //
 use super::runtime::Runtime;
 use petgraph::graph::NodeIndex;
-use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
+use petgraph::visit::{VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
 use zenoh_link::Locator;
@@ -739,17 +739,4 @@ impl Network {
 
         new_childs
     }
-}
-
-#[inline]
-pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<PeerId> {
-    net1.graph
-        .node_references()
-        .filter_map(|(_, node1)| {
-            net2.graph
-                .node_references()
-                .any(|(_, node2)| node1.pid == node2.pid)
-                .then(|| node1.pid)
-        })
-        .collect()
 }

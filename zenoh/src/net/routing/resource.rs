@@ -14,7 +14,6 @@
 use super::face::FaceState;
 use super::router::Tables;
 use async_std::sync::{Arc, Weak};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use zenoh_protocol::io::ZBuf;
@@ -49,16 +48,14 @@ pub(super) struct SessionContext {
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<PeerId>,
-    pub(super) peer_subs: HashSet<PeerId>,
     pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
-    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
-    pub(super) peers_data_routes: Vec<Arc<Route>>,
+    pub(super) peer_data_route: Option<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
     pub(super) routers_query_routes: Vec<Arc<TargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<TargetQablSet>>,
+    pub(super) peer_query_route: Option<Arc<TargetQablSet>>,
     pub(super) client_query_route: Option<Arc<TargetQablSet>>,
 }
 
@@ -66,16 +63,14 @@ impl ResourceContext {
     fn new() -> ResourceContext {
         ResourceContext {
             router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
             router_qabls: HashMap::new(),
-            peer_qabls: HashMap::new(),
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
             routers_data_routes: Vec::new(),
-            peers_data_routes: Vec::new(),
+            peer_data_route: None,
             client_data_route: None,
             routers_query_routes: Vec::new(),
-            peers_query_routes: Vec::new(),
+            peer_query_route: None,
             client_query_route: None,
         }
     }
@@ -165,19 +160,27 @@ impl Resource {
         }
     }
 
-    #[inline(always)]
-    pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => (ctx.peers_data_routes.len() > context)
-                .then(|| ctx.peers_data_routes[context].clone()),
-            None => None,
-        }
-    }
+    // #[inline(always)]
+    // pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+    //     match &self.context {
+    //         Some(ctx) => (ctx.peers_data_routes.len() > context)
+    //             .then(|| ctx.peers_data_routes[context].clone()),
+    //         None => None,
+    //     }
+    // }
 
     #[inline(always)]
     pub fn client_data_route(&self) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => ctx.client_data_route.clone(),
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn peer_data_route(&self) -> Option<Arc<Route>> {
+        match &self.context {
+            Some(ctx) => ctx.peer_data_route.clone(),
             None => None,
         }
     }
@@ -192,10 +195,9 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn peer_query_route(&self) -> Option<Arc<TargetQablSet>> {
         match &self.context {
-            Some(ctx) => (ctx.peers_query_routes.len() > context)
-                .then(|| ctx.peers_query_routes[context].clone()),
+            Some(ctx) => ctx.peer_query_route.clone(),
             None => None,
         }
     }
@@ -602,26 +604,3 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
 //         self.res.hash(state)
 //     }
 // }
-
-#[inline]
-pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [PeerId]) -> &'a PeerId {
-    if routers.len() == 1 {
-        &routers[0]
-    } else {
-        routers
-            .iter()
-            .map(|router| {
-                let mut hasher = DefaultHasher::new();
-                for b in key_expr.as_bytes() {
-                    hasher.write_u8(*b);
-                }
-                for b in router.as_slice() {
-                    hasher.write_u8(*b);
-                }
-                (router, hasher.finish())
-            })
-            .max_by(|(_, s1), (_, s2)| s1.partial_cmp(s2).unwrap())
-            .unwrap()
-            .0
-    }
-}

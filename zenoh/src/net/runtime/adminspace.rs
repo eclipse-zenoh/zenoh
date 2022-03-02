@@ -74,12 +74,6 @@ impl AdminSpace {
                 linkstate_routers_data(context, key, args).boxed()
             })),
         );
-        handlers.insert(
-            [&root_key, "/linkstate/peers"].concat(),
-            Arc::new(Box::new(|context, key, args| {
-                linkstate_peers_data(context, key, args).boxed()
-            })),
-        );
 
         let mut active_plugins = plugins_mgr
             .running_plugins_info()
@@ -569,25 +563,6 @@ pub async fn linkstate_routers_data(
         Encoding::TEXT_PLAIN,
     );
     res
-}
-
-pub async fn linkstate_peers_data(
-    context: &AdminContext,
-    _key: &KeyExpr<'_>,
-    _args: &str,
-) -> (ZBuf, Encoding) {
-    let data: Vec<u8> = context
-        .runtime
-        .router
-        .tables
-        .read()
-        .unwrap()
-        .peers_net
-        .as_ref()
-        .unwrap()
-        .dot()
-        .into();
-    (ZBuf::from(data), Encoding::TEXT_PLAIN)
 }
 
 pub async fn plugins_status(

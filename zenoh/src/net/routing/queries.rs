@@ -32,9 +32,7 @@ use zenoh_protocol_core::{
 
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{
-    elect_router, QueryRoute, Resource, SessionContext, TargetQabl, TargetQablSet,
-};
+use super::resource::{QueryRoute, Resource, SessionContext, TargetQabl, TargetQablSet};
 use super::router::Tables;
 
 pub(crate) struct Query {
@@ -62,58 +60,10 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
     this
 }
 
-fn local_router_qabl_info(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> QueryableInfo {
-    let info = res.context.as_ref().and_then(|ctx| {
-        ctx.peer_qabls.iter().fold(None, |accu, ((pid, k), info)| {
-            if *pid != tables.pid && *k == kind {
-                Some(match accu {
-                    Some(accu) => merge_qabl_infos(accu, info),
-                    None => info.clone(),
-                })
-            } else {
-                accu
-            }
-        })
-    });
+fn local_router_qabl_info(_tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> QueryableInfo {
     res.session_ctxs
         .values()
-        .fold(info, |accu, ctx| {
-            if let Some(info) = ctx.qabl.get(&kind) {
-                Some(match accu {
-                    Some(accu) => merge_qabl_infos(accu, info),
-                    None => info.clone(),
-                })
-            } else {
-                accu
-            }
-        })
-        .unwrap_or(QueryableInfo {
-            complete: 0,
-            distance: 0,
-        })
-}
-
-fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> QueryableInfo {
-    let info = if tables.whatami == WhatAmI::Router && res.context.is_some() {
-        res.context()
-            .router_qabls
-            .iter()
-            .fold(None, |accu, ((pid, k), info)| {
-                if *pid != tables.pid && *k == kind {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => info.clone(),
-                    })
-                } else {
-                    accu
-                }
-            })
-    } else {
-        None
-    };
-    res.session_ctxs
-        .values()
-        .fold(info, |accu, ctx| {
+        .fold(None, |accu, ctx| {
             if let Some(info) = ctx.qabl.get(&kind) {
                 Some(match accu {
                     Some(accu) => merge_qabl_infos(accu, info),
@@ -136,7 +86,7 @@ fn local_qabl_info(
     kind: ZInt,
     face: &Arc<FaceState>,
 ) -> QueryableInfo {
-    let mut info = if whatami == WhatAmI::Router && res.context.is_some() {
+    let info = if whatami == WhatAmI::Router && res.context.is_some() {
         res.context()
             .router_qabls
             .iter()
@@ -153,22 +103,6 @@ fn local_qabl_info(
     } else {
         None
     };
-    if res.context.is_some() {
-        info = res
-            .context()
-            .peer_qabls
-            .iter()
-            .fold(info, |accu, ((pid, k), info)| {
-                if *pid != *local_pid && *k == kind {
-                    Some(match accu {
-                        Some(accu) => merge_qabl_infos(accu, info),
-                        None => info.clone(),
-                    })
-                } else {
-                    accu
-                }
-            })
-    }
     res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
@@ -245,9 +179,17 @@ fn propagate_simple_queryable(
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
             && (current_info.is_none() || *current_info.unwrap() != info)
             && match tables.whatami {
-                WhatAmI::Router => dst_face.whatami == WhatAmI::Client,
-                WhatAmI::Peer => dst_face.whatami == WhatAmI::Client,
-                _ => true,
+                WhatAmI::Router => {
+                    (src_face.is_none()
+                        || src_face.as_ref().unwrap().whatami != WhatAmI::Peer
+                        || dst_face.whatami != WhatAmI::Peer)
+                        && dst_face.whatami != WhatAmI::Router
+                }
+                _ => {
+                    src_face.is_none()
+                        || src_face.as_ref().unwrap().whatami == WhatAmI::Client
+                        || dst_face.whatami == WhatAmI::Client
+                }
             }
         {
             get_mut_unchecked(dst_face)
@@ -268,9 +210,8 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
     qabl_info: &QueryableInfo,
     src_face: Option<Face>,
     source: &PeerId,
-    net_type: WhatAmI,
 ) {
-    let net = tables.get_net(net_type).unwrap();
+    let net = tables.routers_net.as_ref().unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
@@ -327,21 +268,7 @@ fn register_router_queryable(
         }
 
         // Propagate queryable to routers
-        propagate_sourced_queryable(
-            tables,
-            res,
-            kind,
-            qabl_info,
-            face.as_deref(),
-            &router,
-            WhatAmI::Router,
-        );
-
-        // Propagate queryable to peers
-        if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
-            let local_info = local_peer_qabl_info(tables, res, kind);
-            register_peer_queryable(tables, face.as_deref(), res, kind, &local_info, tables.pid)
-        }
+        propagate_sourced_queryable(tables, res, kind, qabl_info, face.as_deref(), &router);
     }
 
     // Propagate queryable to clients
@@ -368,61 +295,61 @@ pub fn declare_router_queryable(
     }
 }
 
-fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
-    tables: &mut Tables,
-    face: Option<Face>,
-    res: &mut Arc<Resource>,
-    kind: ZInt,
-    qabl_info: &QueryableInfo,
-    peer: PeerId,
-) {
-    let current_info = res.context().peer_qabls.get(&(peer, kind));
-    if current_info.is_none() || current_info.unwrap() != qabl_info {
-        // Register peer queryable
-        {
-            log::debug!(
-                "Register peer queryable {} (peer: {}, kind:{})",
-                res.expr(),
-                peer,
-                kind,
-            );
-            get_mut_unchecked(res)
-                .context_mut()
-                .peer_qabls
-                .insert((peer, kind), qabl_info.clone());
-            tables.peer_qabls.insert(res.clone());
-        }
+// fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
+//     tables: &mut Tables,
+//     face: Option<Face>,
+//     res: &mut Arc<Resource>,
+//     kind: ZInt,
+//     qabl_info: &QueryableInfo,
+//     peer: PeerId,
+// ) {
+//     let current_info = res.context().peer_qabls.get(&(peer, kind));
+//     if current_info.is_none() || current_info.unwrap() != qabl_info {
+//         // Register peer queryable
+//         {
+//             log::debug!(
+//                 "Register peer queryable {} (peer: {}, kind:{})",
+//                 res.expr(),
+//                 peer,
+//                 kind,
+//             );
+//             get_mut_unchecked(res)
+//                 .context_mut()
+//                 .peer_qabls
+//                 .insert((peer, kind), qabl_info.clone());
+//             tables.peer_qabls.insert(res.clone());
+//         }
 
-        // Propagate queryable to peers
-        propagate_sourced_queryable(tables, res, kind, qabl_info, face, &peer, WhatAmI::Peer);
-    }
-}
+//         // Propagate queryable to peers
+//         propagate_sourced_queryable(tables, res, kind, qabl_info, face, &peer, WhatAmI::Peer);
+//     }
+// }
 
-pub fn declare_peer_queryable(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
-    kind: ZInt,
-    qabl_info: &QueryableInfo,
-    peer: PeerId,
-) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
-        Some(mut prefix) => {
-            let face = Some(face);
-            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(tables, &mut res);
-            register_peer_queryable(tables, face.as_deref(), &mut res, kind, qabl_info, peer);
+// pub fn declare_peer_queryable(
+//     tables: &mut Tables,
+//     face: &mut Arc<FaceState>,
+//     expr: &KeyExpr,
+//     kind: ZInt,
+//     qabl_info: &QueryableInfo,
+//     peer: PeerId,
+// ) {
+//     match tables.get_mapping(face, &expr.scope).cloned() {
+//         Some(mut prefix) => {
+//             let face = Some(face);
+//             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
+//             Resource::match_resource(tables, &mut res);
+//             register_peer_queryable(tables, face.as_deref(), &mut res, kind, qabl_info, peer);
 
-            if tables.whatami == WhatAmI::Router {
-                let local_info = local_router_qabl_info(tables, &res, kind);
-                register_router_queryable(tables, face, &mut res, kind, &local_info, tables.pid);
-            }
+//             if tables.whatami == WhatAmI::Router {
+//                 let local_info = local_router_qabl_info(tables, &res, kind);
+//                 register_router_queryable(tables, face, &mut res, kind, &local_info, tables.pid);
+//             }
 
-            compute_matches_query_routes(tables, &mut res);
-        }
-        None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
-    }
-}
+//             compute_matches_query_routes(tables, &mut res);
+//         }
+//         None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
+//     }
+// }
 
 fn register_client_queryable(
     _tables: &mut Tables,
@@ -484,17 +411,6 @@ pub fn declare_client_queryable(
                         tables.pid,
                     );
                 }
-                WhatAmI::Peer => {
-                    let local_details = local_peer_qabl_info(tables, &res, kind);
-                    register_peer_queryable(
-                        tables,
-                        Some(face),
-                        &mut res,
-                        kind,
-                        &local_details,
-                        tables.pid,
-                    );
-                }
                 _ => {
                     propagate_simple_queryable(tables, &res, kind, Some(face));
                 }
@@ -514,16 +430,6 @@ fn remote_router_qabls(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> bool
             .router_qabls
             .keys()
             .any(|(router, k)| router != &tables.pid && *k == kind)
-}
-
-#[inline]
-fn remote_peer_qabls(tables: &Tables, res: &Arc<Resource>, kind: ZInt) -> bool {
-    res.context.is_some()
-        && res
-            .context()
-            .peer_qabls
-            .keys()
-            .any(|(peer, k)| peer != &tables.pid && *k == kind)
 }
 
 #[inline]
@@ -594,9 +500,8 @@ fn propagate_forget_sourced_queryable(
     kind: ZInt,
     src_face: Option<&Arc<FaceState>>,
     source: &PeerId,
-    net_type: WhatAmI,
 ) {
-    let net = tables.get_net(net_type).unwrap();
+    let net = tables.routers_net.as_ref().unwrap();
     match net.get_idx(source) {
         Some(tree_sid) => {
             if net.trees.len() > tree_sid.index() {
@@ -646,7 +551,7 @@ fn unregister_router_queryable(
     if res.context().router_qabls.is_empty() {
         tables.router_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
 
-        undeclare_peer_queryable(tables, None, res, kind, &tables.pid.clone());
+        // undeclare_peer_queryable(tables, None, res, kind, &tables.pid.clone());
         propagate_forget_simple_queryable(tables, res, kind);
     }
 }
@@ -660,7 +565,7 @@ fn undeclare_router_queryable(
 ) {
     if res.context().router_qabls.contains_key(&(*router, kind)) {
         unregister_router_queryable(tables, res, kind, router);
-        propagate_forget_sourced_queryable(tables, res, kind, face, router, WhatAmI::Router);
+        propagate_forget_sourced_queryable(tables, res, kind, face, router);
     }
 }
 
@@ -685,88 +590,88 @@ pub fn forget_router_queryable(
     }
 }
 
-fn unregister_peer_queryable(
-    tables: &mut Tables,
-    res: &mut Arc<Resource>,
-    kind: ZInt,
-    peer: &PeerId,
-) {
-    log::debug!(
-        "Unregister peer queryable {} (peer: {}, kind: {})",
-        res.expr(),
-        peer,
-        kind
-    );
-    get_mut_unchecked(res)
-        .context_mut()
-        .peer_qabls
-        .remove(&(*peer, kind));
+// fn unregister_peer_queryable(
+//     tables: &mut Tables,
+//     res: &mut Arc<Resource>,
+//     kind: ZInt,
+//     peer: &PeerId,
+// ) {
+//     log::debug!(
+//         "Unregister peer queryable {} (peer: {}, kind: {})",
+//         res.expr(),
+//         peer,
+//         kind
+//     );
+//     get_mut_unchecked(res)
+//         .context_mut()
+//         .peer_qabls
+//         .remove(&(*peer, kind));
 
-    if res.context().peer_qabls.is_empty() {
-        tables.peer_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
-    }
-}
+//     if res.context().peer_qabls.is_empty() {
+//         tables.peer_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
+//     }
+// }
 
-fn undeclare_peer_queryable(
-    tables: &mut Tables,
-    face: Option<&Arc<FaceState>>,
-    res: &mut Arc<Resource>,
-    kind: ZInt,
-    peer: &PeerId,
-) {
-    if res.context().peer_qabls.contains_key(&(*peer, kind)) {
-        unregister_peer_queryable(tables, res, kind, peer);
-        propagate_forget_sourced_queryable(tables, res, kind, face, peer, WhatAmI::Peer);
-    }
-}
+// fn undeclare_peer_queryable(
+//     tables: &mut Tables,
+//     face: Option<&Arc<FaceState>>,
+//     res: &mut Arc<Resource>,
+//     kind: ZInt,
+//     peer: &PeerId,
+// ) {
+//     if res.context().peer_qabls.contains_key(&(*peer, kind)) {
+//         unregister_peer_queryable(tables, res, kind, peer);
+//         propagate_forget_sourced_queryable(tables, res, kind, face, peer, WhatAmI::Peer);
+//     }
+// }
 
-pub fn forget_peer_queryable(
-    tables: &mut Tables,
-    face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
-    kind: ZInt,
-    peer: &PeerId,
-) {
-    match tables.get_mapping(face, &expr.scope) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                undeclare_peer_queryable(tables, Some(face), &mut res, kind, peer);
+// pub fn forget_peer_queryable(
+//     tables: &mut Tables,
+//     face: &mut Arc<FaceState>,
+//     expr: &KeyExpr,
+//     kind: ZInt,
+//     peer: &PeerId,
+// ) {
+//     match tables.get_mapping(face, &expr.scope) {
+//         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+//             Some(mut res) => {
+//                 undeclare_peer_queryable(tables, Some(face), &mut res, kind, peer);
 
-                if tables.whatami == WhatAmI::Router {
-                    let client_qabls = res
-                        .session_ctxs
-                        .values()
-                        .any(|ctx| ctx.qabl.get(&kind).is_some());
-                    let peer_qabls = remote_peer_qabls(tables, &res, kind);
-                    if !client_qabls && !peer_qabls {
-                        undeclare_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            kind,
-                            &tables.pid.clone(),
-                        );
-                    } else {
-                        let local_info = local_router_qabl_info(tables, &res, kind);
-                        register_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            kind,
-                            &local_info,
-                            tables.pid,
-                        );
-                    }
-                }
+//                 if tables.whatami == WhatAmI::Router {
+//                     let client_qabls = res
+//                         .session_ctxs
+//                         .values()
+//                         .any(|ctx| ctx.qabl.get(&kind).is_some());
+//                     let peer_qabls = remote_peer_qabls(tables, &res, kind);
+//                     if !client_qabls && !peer_qabls {
+//                         undeclare_router_queryable(
+//                             tables,
+//                             None,
+//                             &mut res,
+//                             kind,
+//                             &tables.pid.clone(),
+//                         );
+//                     } else {
+//                         let local_info = local_router_qabl_info(tables, &res, kind);
+//                         register_router_queryable(
+//                             tables,
+//                             None,
+//                             &mut res,
+//                             kind,
+//                             &local_info,
+//                             tables.pid,
+//                         );
+//                     }
+//                 }
 
-                compute_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res)
-            }
-            None => log::error!("Undeclare unknown peer queryable!"),
-        },
-        None => log::error!("Undeclare peer queryable with unknown scope!"),
-    }
-}
+//                 compute_matches_query_routes(tables, &mut res);
+//                 Resource::clean(&mut res)
+//             }
+//             None => log::error!("Undeclare unknown peer queryable!"),
+//         },
+//         None => log::error!("Undeclare peer queryable with unknown scope!"),
+//     }
+// }
 
 pub(crate) fn undeclare_client_queryable(
     tables: &mut Tables,
@@ -791,30 +696,14 @@ pub(crate) fn undeclare_client_queryable(
 
     let mut client_qabls = client_qabls(res, kind);
     let router_qabls = remote_router_qabls(tables, res, kind);
-    let peer_qabls = remote_peer_qabls(tables, res, kind);
 
     match tables.whatami {
         WhatAmI::Router => {
-            if client_qabls.is_empty() && !peer_qabls {
+            if client_qabls.is_empty() {
                 undeclare_router_queryable(tables, None, res, kind, &tables.pid.clone());
             } else {
                 let local_info = local_router_qabl_info(tables, res, kind);
                 register_router_queryable(tables, None, res, kind, &local_info, tables.pid);
-            }
-        }
-        WhatAmI::Peer => {
-            if client_qabls.is_empty() {
-                undeclare_peer_queryable(tables, None, res, kind, &tables.pid.clone());
-            } else {
-                let local_info = local_peer_qabl_info(tables, res, kind);
-                register_peer_queryable::<&Arc<FaceState>>(
-                    tables,
-                    None,
-                    res,
-                    kind,
-                    &local_info,
-                    tables.pid,
-                );
             }
         }
         _ => {
@@ -826,7 +715,7 @@ pub(crate) fn undeclare_client_queryable(
         }
     }
 
-    if client_qabls.len() == 1 && !router_qabls && !peer_qabls {
+    if client_qabls.len() == 1 && !router_qabls {
         let face = &mut client_qabls[0];
         if face.local_qabls.contains_key(&(res.clone(), kind)) {
             let key_expr = Resource::get_best_key(res, "", face.id);
@@ -860,7 +749,7 @@ pub fn forget_client_queryable(
 }
 
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami == WhatAmI::Client && tables.whatami != WhatAmI::Client {
+    if face.whatami != WhatAmI::Router && tables.whatami == WhatAmI::Router {
         for qabl in &tables.router_qabls {
             if let Some(ctx) = qabl.context.as_ref() {
                 for (_, kind) in ctx.router_qabls.keys() {
@@ -875,7 +764,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             }
         }
     }
-    if tables.whatami == WhatAmI::Client {
+    if tables.whatami != WhatAmI::Router {
         for face in tables
             .faces
             .values()
@@ -883,100 +772,42 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             .collect::<Vec<Arc<FaceState>>>()
         {
             for (qabl, kind) in &face.remote_qabls {
-                propagate_simple_queryable(tables, qabl, *kind, None);
+                propagate_simple_queryable(tables, qabl, *kind, Some(&mut face.clone()));
             }
         }
     }
 }
 
-pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId, net_type: WhatAmI) {
-    match net_type {
-        WhatAmI::Router => {
-            let mut qabls = vec![];
-            for res in tables.router_qabls.iter() {
-                for (qabl, kind) in res.context().router_qabls.keys() {
-                    if qabl == node {
-                        qabls.push((res.clone(), *kind));
-                    }
-                }
-            }
-            for (mut res, kind) in qabls {
-                unregister_router_queryable(tables, &mut res, kind, node);
-
-                compute_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res);
+pub(crate) fn queries_remove_node(tables: &mut Tables, node: &PeerId) {
+    let mut qabls = vec![];
+    for res in tables.router_qabls.iter() {
+        for (qabl, kind) in res.context().router_qabls.keys() {
+            if qabl == node {
+                qabls.push((res.clone(), *kind));
             }
         }
-        WhatAmI::Peer => {
-            let mut qabls = vec![];
-            for res in tables.router_qabls.iter() {
-                for (qabl, kind) in res.context().router_qabls.keys() {
-                    if qabl == node {
-                        qabls.push((res.clone(), *kind));
-                    }
-                }
-            }
-            for (mut res, kind) in qabls {
-                unregister_peer_queryable(tables, &mut res, kind, node);
+    }
+    for (mut res, kind) in qabls {
+        unregister_router_queryable(tables, &mut res, kind, node);
 
-                if tables.whatami == WhatAmI::Router {
-                    let client_qabls = res
-                        .session_ctxs
-                        .values()
-                        .any(|ctx| ctx.qabl.get(&kind).is_some());
-                    let peer_qabls = remote_peer_qabls(tables, &res, kind);
-                    if !client_qabls && !peer_qabls {
-                        undeclare_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            kind,
-                            &tables.pid.clone(),
-                        );
-                    } else {
-                        let local_info = local_router_qabl_info(tables, &res, kind);
-                        register_router_queryable(
-                            tables,
-                            None,
-                            &mut res,
-                            kind,
-                            &local_info,
-                            tables.pid,
-                        );
-                    }
-                }
-
-                compute_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res)
-            }
-        }
-        _ => (),
+        compute_matches_query_routes(tables, &mut res);
+        Resource::clean(&mut res);
     }
 }
 
-pub(crate) fn queries_tree_change(
-    tables: &mut Tables,
-    new_childs: &[Vec<NodeIndex>],
-    net_type: WhatAmI,
-) {
+pub(crate) fn queries_tree_change(tables: &mut Tables, new_childs: &[Vec<NodeIndex>]) {
     // propagate qabls to new childs
     for (tree_sid, tree_childs) in new_childs.iter().enumerate() {
         if !tree_childs.is_empty() {
-            let net = tables.get_net(net_type).unwrap();
+            let net = tables.routers_net.as_ref().unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
                 let tree_id = net.graph[tree_idx].pid;
 
-                let qabls_res = match net_type {
-                    WhatAmI::Router => &tables.router_qabls,
-                    _ => &tables.peer_qabls,
-                };
+                let qabls_res = &tables.router_qabls;
 
                 for res in qabls_res {
-                    let qabls = match net_type {
-                        WhatAmI::Router => &res.context().router_qabls,
-                        _ => &res.context().peer_qabls,
-                    };
+                    let qabls = &res.context().router_qabls;
                     for ((qabl, kind), qabl_info) in qabls {
                         if *qabl == tree_id {
                             send_sourced_queryable_to_net_childs::<&Arc<FaceState>>(
@@ -1068,54 +899,13 @@ fn compute_query_route(
         .map(|ctx| Cow::from(&ctx.matches))
         .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-    let master = tables.whatami != WhatAmI::Router
-        || *elect_router(&key_expr, &tables.shared_nodes) == tables.pid;
-
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
         let complete = key_expr::include(&mres.expr(), &key_expr);
         if tables.whatami == WhatAmI::Router {
-            if master || source_type == WhatAmI::Router {
-                let net = tables.routers_net.as_ref().unwrap();
-                let router_source = match source_type {
-                    WhatAmI::Router => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    prefix,
-                    suffix,
-                    tables,
-                    net,
-                    router_source,
-                    &mres.context().router_qabls,
-                    complete,
-                );
-            }
-
-            if master || source_type != WhatAmI::Router {
-                let net = tables.peers_net.as_ref().unwrap();
-                let peer_source = match source_type {
-                    WhatAmI::Peer => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    prefix,
-                    suffix,
-                    tables,
-                    net,
-                    peer_source,
-                    &mres.context().peer_qabls,
-                    complete,
-                );
-            }
-        }
-
-        if tables.whatami == WhatAmI::Peer {
-            let net = tables.peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
+            let net = tables.routers_net.as_ref().unwrap();
+            let router_source = match source_type {
+                WhatAmI::Router => source.unwrap(),
                 _ => net.idx.index(),
             };
             insert_target_for_qabls(
@@ -1124,14 +914,20 @@ fn compute_query_route(
                 suffix,
                 tables,
                 net,
-                peer_source,
-                &mres.context().peer_qabls,
+                router_source,
+                &mres.context().router_qabls,
                 complete,
             );
         }
 
-        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
-            for (sid, context) in &mres.session_ctxs {
+        for (sid, context) in &mres.session_ctxs {
+            if match tables.whatami {
+                WhatAmI::Router => {
+                    (source_type != WhatAmI::Peer || context.face.whatami != WhatAmI::Peer)
+                        && context.face.whatami != WhatAmI::Router
+                }
+                _ => (source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client),
+            } {
                 let key_expr = Resource::get_best_key(prefix, suffix, *sid);
                 for (qabl_kind, qabl_info) in &context.qabl {
                     route.push(TargetQabl {
@@ -1170,26 +966,9 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                 routers_query_routes[idx.index()] =
                     compute_query_route(tables, res, "", Some(idx.index()), WhatAmI::Router);
             }
-        }
-        if tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer {
-            let indexes = tables
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
-            peers_query_routes.clear();
-            peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(TargetQablSet::new()));
-
-            for idx in &indexes {
-                peers_query_routes[idx.index()] =
-                    compute_query_route(tables, res, "", Some(idx.index()), WhatAmI::Peer);
-            }
-        }
-        if tables.whatami == WhatAmI::Client {
+        } else {
+            res_mut.context_mut().peer_query_route =
+                Some(compute_query_route(tables, res, "", None, WhatAmI::Peer));
             res_mut.context_mut().client_query_route =
                 Some(compute_query_route(tables, res, "", None, WhatAmI::Client));
         }
@@ -1390,24 +1169,38 @@ pub fn route_query(
                                 )
                             })
                     }
-                    WhatAmI::Peer => {
-                        let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                    _ => Resource::get_resource(prefix, expr.suffix.as_ref())
+                        .and_then(|res| match face.whatami {
+                            WhatAmI::Router => res.routers_query_route(0),
+                            WhatAmI::Peer => res.peer_query_route(),
+                            WhatAmI::Client => res.client_query_route(),
+                        })
+                        .unwrap_or_else(|| {
+                            compute_query_route(
+                                &tables,
+                                prefix,
+                                expr.suffix.as_ref(),
+                                None,
+                                face.whatami,
+                            )
+                        }),
+                },
+                _ => match face.whatami {
+                    WhatAmI::Peer | WhatAmI::Router => {
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .and_then(|res| res.peers_query_route(local_context))
+                            .and_then(|res| res.peer_query_route())
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
                                     prefix,
                                     expr.suffix.as_ref(),
-                                    Some(local_context),
+                                    None,
                                     WhatAmI::Peer,
                                 )
                             })
                     }
                     _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .and_then(|res| res.routers_query_route(0))
+                        .and_then(|res| res.client_query_route())
                         .unwrap_or_else(|| {
                             compute_query_route(
                                 &tables,
@@ -1418,46 +1211,6 @@ pub fn route_query(
                             )
                         }),
                 },
-                WhatAmI::Peer => match face.whatami {
-                    WhatAmI::Router | WhatAmI::Peer => {
-                        let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                        Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .and_then(|res| res.peers_query_route(local_context))
-                            .unwrap_or_else(|| {
-                                compute_query_route(
-                                    &tables,
-                                    prefix,
-                                    expr.suffix.as_ref(),
-                                    Some(local_context),
-                                    WhatAmI::Peer,
-                                )
-                            })
-                    }
-                    _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .and_then(|res| res.peers_query_route(0))
-                        .unwrap_or_else(|| {
-                            compute_query_route(
-                                &tables,
-                                prefix,
-                                expr.suffix.as_ref(),
-                                None,
-                                WhatAmI::Client,
-                            )
-                        }),
-                },
-                _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                    .and_then(|res| res.client_query_route())
-                    .unwrap_or_else(|| {
-                        compute_query_route(
-                            &tables,
-                            prefix,
-                            expr.suffix.as_ref(),
-                            None,
-                            WhatAmI::Client,
-                        )
-                    }),
             };
 
             let route = compute_final_route(&route, face, &target);

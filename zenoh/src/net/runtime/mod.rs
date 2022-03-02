@@ -79,7 +79,7 @@ impl Runtime {
             PeerId::from(uuid::Uuid::new_v4())
         };
 
-        log::info!("Using PID: {}", pid);
+        println!("Using PID: {}", pid);
 
         let whatami = config.mode().unwrap_or(crate::config::WhatAmI::Peer);
         let hlc = if config.add_timestamp().unwrap_or(false) {
@@ -97,7 +97,7 @@ impl Runtime {
             .autoconnect()
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
-        let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
+        let use_link_state = whatami == WhatAmI::Router && config.link_state().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()
