@@ -79,7 +79,7 @@ impl Runtime {
             PeerId::from(uuid::Uuid::new_v4())
         };
 
-        println!("Using PID: {}", pid);
+        log::info!("Using PID: {}", pid);
 
         let whatami = config.mode().unwrap_or(crate::config::WhatAmI::Peer);
         let hlc = if config.add_timestamp().unwrap_or(false) {
