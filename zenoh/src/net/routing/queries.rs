@@ -336,12 +336,11 @@ fn register_router_queryable(
             &router,
             WhatAmI::Router,
         );
-
-        // Propagate queryable to peers
-        if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
-            let local_info = local_peer_qabl_info(tables, res, kind);
-            register_peer_queryable(tables, face.as_deref(), res, kind, &local_info, tables.pid)
-        }
+    }
+    // Propagate queryable to peers
+    if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
+        let local_info = local_peer_qabl_info(tables, res, kind);
+        register_peer_queryable(tables, face.as_deref(), res, kind, &local_info, tables.pid)
     }
 
     // Propagate queryable to clients

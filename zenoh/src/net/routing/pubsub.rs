@@ -147,11 +147,10 @@ fn register_router_subscription(
 
         // Propagate subscription to routers
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &router, WhatAmI::Router);
-
-        // Propagate subscription to peers
-        if face.whatami != WhatAmI::Peer {
-            register_peer_subscription(tables, face, res, sub_info, tables.pid)
-        }
+    }
+    // Propagate subscription to peers
+    if face.whatami != WhatAmI::Peer {
+        register_peer_subscription(tables, face, res, sub_info, tables.pid)
     }
 
     // Propagate subscription to clients
@@ -273,9 +272,11 @@ pub fn declare_client_subscription(
     expr: &KeyExpr,
     sub_info: &SubInfo,
 ) {
+    log::debug!("Register client subscription");
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
+            log::debug!("Register client subscription {}", res.expr());
             Resource::match_resource(tables, &mut res);
 
             register_client_subscription(tables, face, &mut res, sub_info);
