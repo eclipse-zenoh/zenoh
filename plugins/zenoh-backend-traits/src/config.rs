@@ -192,7 +192,7 @@ impl BackendConfig {
                     name
                 );
             };
-            let paths = match config.get("path") {
+            let paths = match config.get("__path__") {
                 None => None,
                 Some(serde_json::Value::String(s)) => Some(vec![s.clone()]),
                 Some(serde_json::Value::Array(a)) => {

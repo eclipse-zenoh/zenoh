@@ -134,7 +134,7 @@ impl TransportLinkMulticast {
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_rx_buff_size = self.transport.manager.config.link_rx_buff_size;
+            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -142,7 +142,7 @@ impl TransportLinkMulticast {
                     c_link.clone(),
                     c_transport.clone(),
                     c_signal.clone(),
-                    c_rx_buff_size,
+                    c_rx_buffer_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -312,7 +312,7 @@ async fn rx_task(
     link: LinkMulticast,
     transport: TransportMulticastInner,
     signal: Signal,
-    rx_buff_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read((usize, Locator)),
@@ -333,7 +333,7 @@ async fn rx_task(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buff_size / mtu);
+    let n = 1 + (rx_buffer_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the zbuf

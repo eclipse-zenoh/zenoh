@@ -52,7 +52,7 @@ pub use crate::sync::ZFuture;
 pub use zenoh_protocol_core::Locator;
 
 /// The encoding of a zenoh [`Value`].
-pub use zenoh_protocol_core::Encoding;
+pub use zenoh_protocol_core::{Encoding, KnownEncoding};
 
 /// The global unique id of a zenoh peer.
 pub use zenoh_protocol_core::PeerId;
@@ -101,18 +101,17 @@ impl Value {
     }
 
     pub fn as_json(&self) -> Option<serde_json::Value> {
-        if [Encoding::APP_JSON.prefix, Encoding::TEXT_JSON.prefix].contains(&self.encoding.prefix) {
-            serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
-                &self.payload.contiguous(),
-            ))
-            .ok()
-        } else {
-            None
+        match self.encoding.prefix() {
+            KnownEncoding::AppJson | KnownEncoding::TextJson => serde::Deserialize::deserialize(
+                &mut serde_json::Deserializer::from_slice(&self.payload.contiguous()),
+            )
+            .ok(),
+            _ => None,
         }
     }
 
     pub fn as_integer(&self) -> Option<i64> {
-        if self.encoding.prefix == Encoding::APP_INTEGER.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppInteger {
             std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
@@ -123,7 +122,7 @@ impl Value {
     }
 
     pub fn as_float(&self) -> Option<f64> {
-        if self.encoding.prefix == Encoding::APP_FLOAT.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppFloat {
             std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
@@ -134,7 +133,7 @@ impl Value {
     }
 
     pub fn as_properties(&self) -> Option<Properties> {
-        if self.encoding.prefix == Encoding::APP_PROPERTIES.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppProperties {
             Some(Properties::from(
                 std::str::from_utf8(&self.payload.contiguous()).ok()?,
             ))

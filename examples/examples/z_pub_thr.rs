@@ -47,10 +47,10 @@ fn parse_args() -> (Config, usize) {
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
-            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -71,11 +71,17 @@ fn parse_args() -> (Config, usize) {
     if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
         config.set_mode(Some(mode)).unwrap();
     }
-    if let Some(values) = args.values_of("peer") {
-        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    if let Some(values) = args.values_of("connect") {
+        config
+            .connect
+            .endpoints
+            .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listener") {
-        config.listeners.extend(values.map(|v| v.parse().unwrap()))
+    if let Some(values) = args.values_of("listen") {
+        config
+            .listen
+            .endpoints
+            .extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();

@@ -28,9 +28,9 @@ use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
+use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zerror};
-use zenoh_link::{Link, Locator};
+use zenoh_link::{EndPoint, Link};
 use zenoh_protocol;
 use zenoh_protocol::core::{PeerId, WhatAmI};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
@@ -65,13 +65,9 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(version: u8, mut config: Config) -> ZResult<Runtime> {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
-
-        config
-            .set_version(Some(version))
-            .map_err(|e| zerror!("Unable to set version: {:?}", e))?;
 
         let pid = if let Some(s) = config.id() {
             s.parse()?
@@ -90,14 +86,15 @@ impl Runtime {
             None
         };
 
-        let peers_autoconnect = config.peers_autoconnect().unwrap_or(true);
+        let peers_autoconnect = config.scouting().peers_autoconnect().unwrap_or(true);
         let routers_autoconnect_gossip = config
             .scouting()
             .gossip()
             .autoconnect()
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
-        let use_link_state = whatami != WhatAmI::Client && config.link_state().unwrap_or(true);
+        let use_link_state =
+            whatami != WhatAmI::Client && config.scouting().gossip().enabled().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()
@@ -118,7 +115,6 @@ impl Runtime {
         let transport_manager = TransportManager::builder()
             .from_config(&config)
             .await?
-            .version(version)
             .whatami(whatami)
             .pid(pid)
             .build(handler.clone())?;
@@ -212,7 +208,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         match zread!(self.runtime).as_ref() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
-                locator: std::sync::RwLock::new(None),
+                endpoint: std::sync::RwLock::new(None),
                 sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
             None => bail!("Runtime not yet ready!"),
@@ -230,7 +226,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
-    pub(super) locator: std::sync::RwLock<Option<Locator>>,
+    pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 
