@@ -665,7 +665,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// let value_selector: ValueSelector = "?x>1&y<2&z=4(p1=v1;p2=v2;pn=vn)[a;b;x;y;z]".try_into().unwrap();
 /// assert_eq!(value_selector.filter, "x>1&y<2&z=4");
 /// assert_eq!(value_selector.properties.get("p2").unwrap().as_str(), "v2");
-/// assert_eq!(value_selector.fragment, "a;b;x;y;z");
+/// assert_eq!(value_selector.fragment, Some("a;b;x;y;z"));
 /// ```
 ///
 /// ```no_run
@@ -682,7 +682,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
-///     println!("fragment: {}", value_selector.fragment);
+///     println!("fragment: {:?}", value_selector.fragment);
 /// }
 /// # })
 /// ```
@@ -697,7 +697,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// let value_selector = ValueSelector::empty()
 ///     .with_filter("x>1&y<2")
 ///     .with_properties(properties)
-///     .with_fragment("x;y");
+///     .with_fragment(Some("x;y"));
 ///
 /// let mut replies = session.get(
 ///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
