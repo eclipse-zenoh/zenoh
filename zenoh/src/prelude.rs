@@ -711,12 +711,12 @@ pub struct ValueSelector<'a> {
     /// the properties part of this `ValueSelector`) (all characters between ``( )`` and after `?`)
     pub properties: Properties,
     /// the fragment part of this `ValueSelector`, if any (all characters between ``[ ]`` and after `?`)
-    pub fragment: &'a str,
+    pub fragment: Option<&'a str>,
 }
 
 impl<'a> ValueSelector<'a> {
     /// Creates a new `ValueSelector`.
-    pub fn new(filter: &'a str, properties: Properties, fragment: &'a str) -> Self {
+    pub fn new(filter: &'a str, properties: Properties, fragment: Option<&'a str>) -> Self {
         ValueSelector {
             filter,
             properties,
@@ -726,7 +726,7 @@ impl<'a> ValueSelector<'a> {
 
     /// Creates an empty `ValueSelector`.
     pub fn empty() -> Self {
-        ValueSelector::new("", Properties::default(), "")
+        ValueSelector::new("", Properties::default(), None)
     }
 
     /// Sets the filter part of this `ValueSelector`.
@@ -742,7 +742,7 @@ impl<'a> ValueSelector<'a> {
     }
 
     /// Sets the fragment part of this `ValueSelector`.
-    pub fn with_fragment(mut self, fragment: &'a str) -> Self {
+    pub fn with_fragment(mut self, fragment: Option<&'a str>) -> Self {
         self.fragment = fragment;
         self
     }
@@ -763,9 +763,9 @@ impl fmt::Display for ValueSelector<'_> {
             s.push_str(self.properties.to_string().as_str());
             s.push(')');
         }
-        if !self.fragment.is_empty() {
+        if let Some(frag) = self.fragment {
             s.push('[');
-            s.push_str(self.fragment);
+            s.push_str(frag);
             s.push(']');
         }
         write!(f, "{}", s)
@@ -795,7 +795,7 @@ impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
                     .name("prop")
                     .map(|s| s.as_str().into())
                     .unwrap_or_default(),
-                fragment: caps.name("frag").map_or("", |s| s.as_str()),
+                fragment: caps.name("frag").map(|s| s.as_str()),
             })
         } else {
             bail!("invalid selector: {}", &s)
