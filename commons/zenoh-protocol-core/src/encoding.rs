@@ -62,9 +62,9 @@ impl AsRef<str> for KnownEncoding {
         consts::MIMES[usize::from(*self)]
     }
 }
-/// The encoding of a zenoh [`Value`](crate::Value).
+/// The encoding of a zenoh `zenoh::Value`.
 ///
-/// A zenoh encoding is a [`Mime`](http_types::Mime) type represented, for wire efficiency,
+/// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
 /// as an integer prefix (that maps to a string) and a string suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Encoding {

@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-//! Properties to pass to [`open`](zenoh::open) and [`scout`](zenoh::scout) functions as configuration
+//! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
 //! and associated constants.
 
 use serde_json::Value;
