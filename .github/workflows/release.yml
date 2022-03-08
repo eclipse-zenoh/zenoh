@@ -202,12 +202,12 @@ jobs:
           command: build
           args: --release --bins --lib --examples --target=${{ matrix.job.target }}
 
-      - name: Debian package - zenoh
+      - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
         uses: actions-rs/cargo@v1
         with:
           command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh
+          args: --no-build --target=${{ matrix.job.target }} -p zenohd
 
       - name: Debian package - zenoh-plugin-storages
         if: contains(matrix.job.target, '-linux-gnu')
