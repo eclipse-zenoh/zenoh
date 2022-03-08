@@ -384,7 +384,11 @@ impl Config {
         }
     }
     pub fn libloader(&self) -> LibLoader {
-        LibLoader::new(&self.plugins_search_dirs, true)
+        if self.plugins_search_dirs.is_empty() {
+            LibLoader::default()
+        } else {
+            LibLoader::new(&self.plugins_search_dirs, true)
+        }
     }
 }
 
