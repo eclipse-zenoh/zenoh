@@ -159,6 +159,10 @@ r#"--rest-http-port=[PORT | IP:PORT | none] \
 fn config_from_args(args: &ArgMatches) -> Config {
     let mut config = args
         .value_of("config")
+        .map_or_else(
+            || std::env::var("ZENOH_CFG_FILE").ok(),
+            |c| Some(c.to_owned()),
+        )
         .map_or_else(Config::default, |conf_file| {
             Config::from_file(conf_file).unwrap()
         });
