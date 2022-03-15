@@ -531,9 +531,9 @@ pub const PROP_STOPTIME: &str = "stoptime";
 ///
 /// Structure of a selector:
 /// ```text
-/// /s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)#a;b;x;y;...;z
-/// |key_selector||---------------- value_selector -------------------|
-///                |--- filter --| |---- properties ---|  |  fragment |
+/// /s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)[a;b;x;y;...;z]
+/// |key_selector||---------------- value_selector --------------------|
+///                |--- filter --| |---- properties ---|  |--fragment-|
 /// ```
 /// where:
 ///  * __key_selector__: an expression identifying a set of Resources.
