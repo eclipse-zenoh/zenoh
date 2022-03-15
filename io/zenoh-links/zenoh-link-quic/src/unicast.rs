@@ -16,17 +16,16 @@ use crate::{
     config::*, get_quic_addr, get_quic_dns, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
     QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
-use async_std::fs;
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use quinn::Endpoint as QuicEndPoint;
-use quinn::*;
 use std::collections::HashMap;
 use std::fmt;
+use std::io::BufReader;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -39,21 +38,21 @@ use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
-    connection: NewConnection,
+    connection: quinn::NewConnection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
-    send: AsyncMutex<SendStream>,
-    recv: AsyncMutex<RecvStream>,
+    send: AsyncMutex<quinn::SendStream>,
+    recv: AsyncMutex<quinn::RecvStream>,
 }
 
 impl LinkUnicastQuic {
     fn new(
-        connection: NewConnection,
+        connection: quinn::NewConnection,
         src_addr: SocketAddr,
         dst_locator: Locator,
-        send: SendStream,
-        recv: RecvStream,
+        send: quinn::SendStream,
+        recv: quinn::RecvStream,
     ) -> LinkUnicastQuic {
         // Build the Quic object
         LinkUnicastQuic {
@@ -76,7 +75,9 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         if let Err(e) = guard.finish().await {
             log::trace!("Error closing QUIC stream {}: {}", self, e);
         }
-        self.connection.connection.close(VarInt::from_u32(0), &[0]);
+        self.connection
+            .connection
+            .close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
 
@@ -154,7 +155,9 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
 impl Drop for LinkUnicastQuic {
     fn drop(&mut self) {
-        self.connection.connection.close(VarInt::from_u32(0), &[0]);
+        self.connection
+            .connection
+            .close(quinn::VarInt::from_u32(0), &[0]);
     }
 }
 
@@ -229,52 +232,61 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let config = &endpoint.config;
 
         // Initialize the QUIC connection
-        let tls_root_ca_certificate = if let Some(config) = config {
+        let mut root_cert_store = rustls::RootCertStore::empty();
+
+        // Read the certificates
+        let f = if let Some(config) = config {
             if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
                 value.as_bytes().to_vec()
             } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                fs::read(value)
+                async_std::fs::read(value)
                     .await
                     .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
             } else {
-                Vec::new()
+                vec![]
             }
         } else {
-            Vec::new()
+            vec![]
         };
 
-        let mut config = if tls_root_ca_certificate.is_empty() {
-            ClientConfigBuilder::default()
+        let certificates = if f.is_empty() {
+            rustls_native_certs::load_native_certs()
+                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+                .drain(..)
+                .map(|x| rustls::Certificate(x.0))
+                .collect::<Vec<rustls::Certificate>>()
         } else {
-            let ca = Certificate::from_pem(&tls_root_ca_certificate)
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?;
-
-            let mut cc = ClientConfigBuilder::default();
-            cc.protocols(ALPN_QUIC_HTTP);
-            cc.add_certificate_authority(ca)
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?;
-
-            cc
+            rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
+                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+                .drain(..)
+                .map(|x| rustls::Certificate(x))
+                .collect::<Vec<rustls::Certificate>>()
         };
-
-        config.protocols(ALPN_QUIC_HTTP);
-
-        let mut endpoint = Endpoint::builder();
-        endpoint.default_client_config(config.build());
-
-        let (endpoint, _) = if addr.is_ipv4() {
-            endpoint.bind(&"0.0.0.0:0".parse().unwrap())
-        } else {
-            endpoint.bind(&"[::]:0".parse().unwrap())
+        for c in certificates.iter() {
+            root_cert_store.add(c).map_err(|e| zerror!("{}", e))?;
         }
-        .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let src_addr = endpoint
+        let mut client_crypto = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+
+        let ip_addr: IpAddr = if addr.is_ipv4() {
+            Ipv4Addr::new(0, 0, 0, 0).into()
+        } else {
+            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into()
+        };
+        let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
+            .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
+        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(client_crypto)));
+
+        let src_addr = quic_endpoint
             .local_addr()
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
-        let quic_conn = endpoint
-            .connect(&addr, host)
+        let quic_conn = quic_endpoint
+            .connect(addr, host)
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
@@ -297,61 +309,73 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        let config = match endpoint.config.as_ref() {
+            Some(c) => c,
+            None => bail!("No QUIC configuration provided"),
+        };
+
         let locator = &endpoint.locator;
         let addr = get_quic_addr(locator).await?;
 
-        let mut tls_server_private_key = Vec::new();
-        let mut tls_server_certificate = Vec::new();
-        if let Some(config) = &endpoint.config {
-            let config = &***config;
-            if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
-                tls_server_private_key = value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-                tls_server_private_key = fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid QUIC server private key file: {}", e))?
-            }
-            if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
-                tls_server_certificate = value.as_bytes().to_vec();
-            } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
-                fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid QUIC server certificate file: {}", e))?;
-            }
-        }
+        let f = if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+            value.as_bytes().to_vec()
+        } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+            async_std::fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+        } else {
+            bail!("No QUIC CA certificate has been provided.");
+        };
+        let certificates = rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
+            .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+            .drain(..)
+            .map(|x| rustls::Certificate(x))
+            .collect();
 
-        // Configure the server private key
-        if tls_server_private_key.is_empty() {
-            bail!(
-                "Can not create a new QUIC listener on {}: missing server private key",
-                addr
-            )
-        }
-        let keys = PrivateKey::from_pem(&tls_server_private_key).unwrap();
+        // Private keys
+        let f = if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+            value.as_bytes().to_vec()
+        } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+            async_std::fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
+        } else {
+            bail!("No QUIC CA private key has been provided.");
+        };
+        let private_key = rustls::PrivateKey(
+            rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
+                .map_err(|e| zerror!("Invalid QUIC CA private key file: {}", e))?
+                .iter()
+                .filter_map(|x| match x {
+                    rustls_pemfile::Item::RSAKey(k)
+                    | rustls_pemfile::Item::PKCS8Key(k)
+                    | rustls_pemfile::Item::ECKey(k) => Some(k.to_vec()),
+                    _ => None,
+                })
+                .take(1)
+                .next()
+                .ok_or_else(|| zerror!("No QUIC CA private key has been provided."))?,
+        );
 
-        // Configure the server certificate
-        let certs = CertificateChain::from_pem(&tls_server_certificate)
-            .map_err(|e| zerror!("Invalid TLS server certificate: {}", e))?;
+        // Server config
+        let mut server_crypto = rustls::ServerConfig::builder()
+            .with_safe_defaults()
+            .with_no_client_auth()
+            .with_single_cert(certificates, private_key)?;
+        server_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
 
-        let mut tc = TransportConfig::default();
         // We do not accept unidireactional streams.
-        tc.max_concurrent_uni_streams(0)
-            .map_err(|e| zerror!("Invalid QUIC server configuration: {}", e))?;
+        Arc::get_mut(&mut server_config.transport)
+            .unwrap()
+            .max_concurrent_uni_streams(0_u8.into());
         // For the time being we only allow one bidirectional stream
-        tc.max_concurrent_bidi_streams(1)
-            .map_err(|e| zerror!("Invalid QUIC server configuration: {}", e))?;
-        let mut sc = ServerConfig::default();
-        sc.transport = Arc::new(tc);
-        let mut sc = ServerConfigBuilder::new(sc);
-        sc.protocols(ALPN_QUIC_HTTP);
-        sc.certificate(certs, keys)
-            .map_err(|e| zerror!("Invalid TLS server configuration: {}", e))?;
+        Arc::get_mut(&mut server_config.transport)
+            .unwrap()
+            .max_concurrent_bidi_streams(1_u8.into());
 
         // Initialize the Endpoint
-        let mut quic_endpoint = QuicEndPoint::builder();
-        quic_endpoint.listen(sc.build());
-        let (quic_endpoint, acceptor) = quic_endpoint
-            .bind(&addr)
+        let (quic_endpoint, acceptor) = quinn::Endpoint::server(server_config, addr)
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         let local_addr = quic_endpoint
@@ -463,18 +487,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 }
 
 async fn accept_task(
-    endpoint: Endpoint,
-    mut acceptor: Incoming,
+    endpoint: quinn::Endpoint,
+    mut acceptor: quinn::Incoming,
     active: Arc<AtomicBool>,
     signal: Signal,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     enum Action {
-        Accept(NewConnection),
+        Accept(quinn::NewConnection),
         Stop,
     }
 
-    async fn accept(acceptor: &mut Incoming) -> ZResult<Action> {
+    async fn accept(acceptor: &mut quinn::Incoming) -> ZResult<Action> {
         let qc = acceptor
             .next()
             .await
@@ -494,11 +518,9 @@ async fn accept_task(
         Ok(Action::Stop)
     }
 
-    let src_addr = endpoint.local_addr().map_err(|e| {
-        let e = zerror!("Can not accept QUIC connections: {}", e);
-        log::warn!("{}", e);
-        e
-    })?;
+    let src_addr = endpoint
+        .local_addr()
+        .map_err(|e| zerror!("Can not accept QUIC connections: {}", e))?;
 
     // The accept future
     log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
@@ -510,7 +532,7 @@ async fn accept_task(
                 Action::Stop => break,
             },
             Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
+                log::warn!("{} Hint: increase the system open file limit.", e);
                 // Throttle the accept loop upon an error
                 // NOTE: This might be due to various factors. However, the most common case is that
                 //       the process has reached the maximum number of open files in the system. On
