@@ -545,22 +545,30 @@ impl Runtime {
             async move {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
-                    let (n, peer) = socket.recv_from(&mut buf).await.unwrap();
-                    let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-                    if let Some(msg) = zbuf.reader().read_transport_message() {
-                        log::trace!("Received {:?} from {}", msg.body, peer);
-                        if let TransportBody::Hello(hello) = &msg.body {
-                            let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
-                            if matcher.matches(whatami) {
-                                if let Loop::Break = f(hello.clone()).await {
-                                    break;
+                    match socket.recv_from(&mut buf).await {
+                        Ok((n, peer)) => {
+                            let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
+                            if let Some(msg) = zbuf.reader().read_transport_message() {
+                                log::trace!("Received {:?} from {}", msg.body, peer);
+                                if let TransportBody::Hello(hello) = &msg.body {
+                                    let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
+                                    if matcher.matches(whatami) {
+                                        if let Loop::Break = f(hello.clone()).await {
+                                            break;
+                                        }
+                                    } else {
+                                        log::warn!("Received unexpected Hello : {:?}", msg.body);
+                                    }
                                 }
                             } else {
-                                log::warn!("Received unexpected Hello : {:?}", msg.body);
+                                log::trace!(
+                                    "Received unexpected UDP datagram from {} : {}",
+                                    peer,
+                                    zbuf
+                                );
                             }
                         }
-                    } else {
-                        log::trace!("Received unexpected UDP datagram from {} : {}", peer, zbuf);
+                        Err(e) => log::debug!("Error receiving UDP datagram : {}", e),
                     }
                 }
             }
