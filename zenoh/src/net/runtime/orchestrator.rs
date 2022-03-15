@@ -561,9 +561,13 @@ impl Runtime {
                                     }
                                 }
                             } else {
-                                log::trace!("Received unexpected UDP datagram from {} : {}", peer, zbuf);
+                                log::trace!(
+                                    "Received unexpected UDP datagram from {} : {}",
+                                    peer,
+                                    zbuf
+                                );
                             }
-                        },
+                        }
                         Err(e) => log::debug!("Error receiving UDP datagram : {}", e),
                     }
                 }
