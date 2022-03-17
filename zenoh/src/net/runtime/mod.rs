@@ -147,7 +147,7 @@ impl Runtime {
             async move {
                 let mut stream = receiver.into_stream();
                 while let Some(event) = stream.next().await {
-                    if &*event == "peers" {
+                    if &*event == "connect/endpoints" {
                         if let Err(e) = runtime2.update_peers().await {
                             log::error!("Error updating peers : {}", e);
                         }
