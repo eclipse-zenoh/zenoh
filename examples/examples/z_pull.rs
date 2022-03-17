@@ -17,7 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::net::protocol::io::SplitBuffer;
+use zenoh::prelude::*;
 use zenoh::subscriber::SubMode;
 
 #[async_std::main]

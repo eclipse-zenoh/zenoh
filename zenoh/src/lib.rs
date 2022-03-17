@@ -121,23 +121,7 @@ pub mod plugins;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
-pub mod buf {
-    /// A read-only bytes buffer.
-    pub use zenoh_buffers::ZBuf;
-
-    /// A [`ZBuf`] slice.
-    pub use zenoh_buffers::ZSlice;
-
-    /// A writable bytes buffer.
-    pub use zenoh_buffers::WBuf;
-
-    #[cfg(feature = "shared-memory")]
-    pub use zenoh_buffers::SharedMemoryBuf;
-    #[cfg(feature = "shared-memory")]
-    pub use zenoh_buffers::SharedMemoryBufInfo;
-    #[cfg(feature = "shared-memory")]
-    pub use zenoh_buffers::SharedMemoryManager;
-}
+pub use zenoh_buffers as buf;
 
 /// Time related types and functions.
 pub mod time {

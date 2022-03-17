@@ -35,7 +35,7 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
-use zenoh_buffers::SplitBuffer;
+pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
