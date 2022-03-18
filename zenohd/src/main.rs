@@ -16,8 +16,7 @@ use async_std::task;
 use clap::ArgMatches;
 use clap::{App, Arg};
 use git_version::git_version;
-use validated_struct::ValidatedMap;
-use zenoh::config::{Config, EndPoint, PluginLoad};
+use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
 

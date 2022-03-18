@@ -3031,45 +3031,21 @@ dependencies = [
 
 [[package]]
 name = "validated_struct"
-version = "0.1.11"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85affc53ebb88700a36aefff74b6a4db38dbccf26ec777d40c9e9b471be261f8"
+checksum = "182c487f4b7cc196ec9626a8fa816cb6346b998e2f669b28c2f20ea976ac78eb"
 dependencies = [
  "json5",
  "serde",
  "serde_json",
- "validated_struct_macros 0.1.10",
-]
-
-[[package]]
-name = "validated_struct"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d16daadad78d0a3aec2938c75864f3f57efed795bd9bb6b794fa2e3c3ffeffc3"
-dependencies = [
- "json5",
- "serde",
- "serde_json",
- "validated_struct_macros 1.0.0",
+ "validated_struct_macros",
 ]
 
 [[package]]
 name = "validated_struct_macros"
-version = "0.1.10"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca689f3addec28c7d67ed3139498d0325253c71bf58ef57c2ba76141f7ce576f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "unzip-n",
-]
-
-[[package]]
-name = "validated_struct_macros"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc2d772810cb61e997977e8d0b51c0344321692d2660e1aa2463dd745b4e803f"
+checksum = "f2427ccf44db18e67afd86b83fb32ff3f8fe9e61ac302eb2a1ed26c2a65851bb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3320,7 +3296,6 @@ dependencies = [
  "stop-token",
  "uhlc",
  "uuid",
- "validated_struct 0.1.11",
  "vec_map",
  "zenoh-buffers",
  "zenoh-cfg-properties",
@@ -3380,7 +3355,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "validated_struct 1.0.0",
+ "validated_struct",
  "zenoh-cfg-properties",
  "zenoh-core",
  "zenoh-protocol-core",
@@ -3420,7 +3395,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "rustc_version 0.4.0",
- "validated_struct 0.1.11",
  "zenoh",
 ]
 
@@ -3593,7 +3567,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zenoh-plugin-storages"
+name = "zenoh-plugin-storage-manager"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
@@ -3743,7 +3717,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "rustc_version 0.4.0",
- "validated_struct 1.0.0",
  "zenoh",
 ]
 

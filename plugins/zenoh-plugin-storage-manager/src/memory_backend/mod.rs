@@ -20,17 +20,17 @@ use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::utils::key_expr;
-use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
+use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
 
-pub fn create_memory_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Backend>> {
     Ok(Box::new(MemoryBackend { config }))
 }
 
 pub struct MemoryBackend {
-    config: BackendConfig,
+    config: VolumeConfig,
 }
 
 #[async_trait]

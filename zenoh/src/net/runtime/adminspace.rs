@@ -22,6 +22,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
+use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
@@ -326,7 +327,13 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = self.context.runtime.config.insert_json5(key, json) {
+                        if let Err(e) = self
+                            .context
+                            .runtime
+                            .config
+                            .mutable()
+                            .insert_json5(key, json)
+                        {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{}:{} - {}",
                                 &self.context.pid_str, key, json, e

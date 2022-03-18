@@ -12,7 +12,7 @@
 #   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 #
 [package]
-name = "zenoh-plugin-storages"
+name = "zenoh-plugin-storage-manager"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -32,7 +32,7 @@ no_mangle = ["zenoh-plugin-trait/no_mangle"]
 default = ["no_mangle"]
 
 [lib]
-name = "zplugin_storages"
+name = "zplugin_storage_manager"
 crate-type = ["cdylib"]
 
 

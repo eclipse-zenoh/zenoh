@@ -11,28 +11,17 @@
       __required__: true, // defaults to false
       http_port: 8000,
     },
-    storages: {
+    "storage-manager": {
       /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
       __path__: [
         "./target/release/libzplugin_storages.so",
         "./target/release/libzplugin_storages.dylib",
       ],
-      /// Storages are grouped by backend, which may implement the storage function in various ways.
-      backends: {
-        /// The memory backend is always available, and stores values in RAM.
-        memory: {
-          /// Each backend may manage several storages
-          storages: {
-            /// Each storage must be named
-            demo: {
-              key_expr: "/demo/memory/**",
-            },
-          },
-        },
+      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
+      volumes: {
         /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
         influxdb: {
           url: "https://myinfluxdb.example",
-          db: "example",
           /// Some plugins may need passwords in their configuration.
           /// To avoid leaking them through the adminspace, they may be masked behind a privacy barrier.
           /// any value held at the key "private" will not be shown in the adminspace.
@@ -40,28 +29,42 @@
             username: "user1",
             password: "pw1",
           },
-          storages: {
-            influxdemo: {
-              key_expr: "/demo/influxdb/**",
-              /// This prefix will be stripped of the received keys when storing.
-              strip_prefix: "/demo/influxdb/",
-            },
-          },
         },
         influxdb2: {
           /// A second backend of the same type can be spawned using `__path__`, for examples when different DBs are needed.
-          __path__: ["../libzbackend_influxdb.so"],
+          backend: "influxdb",
           private: {
             username: "user2",
             password: "pw2",
           },
-          url: "https://localhost:3000",
-          db: "localhost-example",
-          storages: {
-            influxdemo: {
-              key_expr: "/demo/influxdb2/**",
-              strip_prefix: "/demo/influxdb2/",
-            },
+          url: "https://localhost:8086",
+        },
+      },
+      ///
+      storages: {
+        demo: {
+          /// Storages always need to know what set of keys they must work with. These sets are defined by a key expression.
+          key_expr: "/demo/memory/**",
+          /// Storages also need to know which volume will be used to actually store their key-value pairs.
+          /// The "memory" volume is always available, and doesn't require any per-storage options, so requesting "memory" by string is always sufficient.
+          volume: "memory",
+        },
+        influx_demo: {
+          key_expr: "/demo/influxdb/**",
+          /// This prefix will be stripped of the received keys when storing.
+          strip_prefix: "/demo/influxdb/",
+          /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
+          volume: {
+            id: "influxdb",
+            db: "example",
+          },
+        },
+        influx_demo2: {
+          key_expr: "/demo/influxdb2/**",
+          strip_prefix: "/demo/influxdb2/",
+          volume: {
+            id: "influxdb2",
+            db: "example",
           },
         },
       },
@@ -79,15 +82,15 @@
   connect: {
     endpoints: [
       // "<proto>/<address>"
-    ]
+    ],
   },
   /// Which endpoints to listen on. E.g. tcp/localhost:7447.
-  /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers, 
+  /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
   /// peers, or client can use to establish a zenoh session.
   listen: {
     endpoints: [
       // "<proto>/<address>"
-    ]
+    ],
   },
   startup: {
     subscribe: ["/demo/subs/**"],
@@ -111,8 +114,6 @@
       autoconnect: "peer|client",
     },
     gossip: {
-      /// Whether the link state protocol should be enabled
-      enabled: true,
       autoconnect: "",
     },
     /// If set to `false`, peers will never automatically establish sessions between each-other.

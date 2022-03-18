@@ -425,7 +425,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let peers = session.config().await.get("connect/endpoints").unwrap();
+    /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # })
     /// ```
     ///
@@ -435,12 +435,12 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let _ = session.config().await.insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
+    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn config(&self) -> impl ZFuture<Output = &Notifier<Config>> {
-        zready(&self.runtime.config)
+    #[allow(clippy::mut_from_ref)]
+    pub fn config(&self) -> &mut Notifier<Config> {
+        self.runtime.config.mutable()
     }
 
     /// Get informations about the zenoh [`Session`](Session).

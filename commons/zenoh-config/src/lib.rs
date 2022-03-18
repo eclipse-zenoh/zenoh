@@ -24,7 +24,8 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
-use validated_struct::{GetError, ValidatedMap};
+use validated_struct::ValidatedMapAssociatedTypes;
+pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 pub use zenoh_protocol_core::{whatami, EndPoint, Locator, WhatAmI};
@@ -133,8 +134,6 @@ validated_struct::validator! {
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             },
             pub gossip: GossipConf {
-                /// Whether the link state protocol (gossip scouting) should be enabled. Defaults to `true` if left empty.
-                enabled: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
@@ -470,16 +469,29 @@ impl<T: ValidatedMap> Notifier<T> {
     pub fn lock(&self) -> MutexGuard<T> {
         zlock!(self.inner.inner)
     }
-
-    pub fn insert<'d, D: serde::Deserializer<'d>, K: AsRef<str>>(
-        &self,
-        key: K,
+    /// Since this type is fully interior-mutable, this method can be used to obtain a mutable reference for trait-compatibility with [`validated_struct::ValidatedMap`]
+    /// # Safety
+    /// Despite transmuting an ref to a mut-ref, all operations on this type require locking a Mutex. Compiler optimisations won't change that.
+    #[allow(mutable_transmutes, clippy::mut_from_ref)]
+    pub fn mutable(&self) -> &mut Self {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
+    type Accessor = GetGuard<'a, T>;
+}
+impl<T: ValidatedMap + 'static> ValidatedMap for Notifier<T>
+where
+    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
+{
+    fn insert<'d, D: serde::Deserializer<'d>>(
+        &mut self,
+        key: &str,
         value: D,
     ) -> Result<(), validated_struct::InsertionError>
     where
         validated_struct::InsertionError: From<D::Error>,
     {
-        let key = key.as_ref();
         {
             let mut guard = zlock!(self.inner.inner);
             guard.insert(key, value)?;
@@ -487,42 +499,11 @@ impl<T: ValidatedMap> Notifier<T> {
         self.notify(key);
         Ok(())
     }
-
-    pub fn insert_json<K: AsRef<str>>(
-        &self,
-        key: K,
-        value: &str,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<serde_json::Error>,
+    fn get<'a>(
+        &'a self,
+        key: &str,
+    ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
-        let key = key.as_ref();
-        {
-            let mut guard = zlock!(self.inner.inner);
-            guard.insert(key, &mut serde_json::Deserializer::from_str(value))?;
-        }
-        self.notify(key);
-        Ok(())
-    }
-
-    pub fn insert_json5<K: AsRef<str>>(
-        &self,
-        key: K,
-        value: &str,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<json5::Error>,
-    {
-        let key = key.as_ref();
-        {
-            let mut guard = zlock!(self.inner.inner);
-            guard.insert(key, &mut json5::Deserializer::from_str(value)?)?;
-        }
-        self.notify(key);
-        Ok(())
-    }
-
-    pub fn get<'a, K: AsRef<str>>(&'a self, key: K) -> Result<GetGuard<'a, T>, GetError> {
         let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
         // Safety: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
@@ -530,6 +511,13 @@ impl<T: ValidatedMap> Notifier<T> {
             _guard: guard,
             subref,
         })
+    }
+    fn get_json(&self, key: &str) -> Result<String, GetError> {
+        self.lock().get_json(key)
+    }
+    type Keys = T::Keys;
+    fn keys(&self) -> Self::Keys {
+        self.lock().keys()
     }
 }
 
@@ -787,6 +775,9 @@ impl PartialMerge for serde_json::Value {
         *value = new_value;
         Ok(self)
     }
+}
+impl<'a> validated_struct::ValidatedMapAssociatedTypes<'a> for PluginsConfig {
+    type Accessor = &'a dyn Any;
 }
 impl validated_struct::ValidatedMap for PluginsConfig {
     fn insert<'d, D: serde::Deserializer<'d>>(
