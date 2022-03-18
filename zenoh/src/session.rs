@@ -260,9 +260,9 @@ impl Session {
             };
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.join_on_startup().subscriptions().clone();
-            let join_publications = config.join_on_startup().publications().clone();
-            match Runtime::new(0, config).await {
+            let join_subscriptions = config.startup().subscribe().clone();
+            let join_publications = config.startup().declare_publications().clone();
+            match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
@@ -425,7 +425,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let peers = session.config().await.get("peers").unwrap();
+    /// let peers = session.config().await.get("connect/endpoints").unwrap();
     /// # })
     /// ```
     ///
@@ -435,7 +435,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let _ = session.config().await.insert_json5("peers", r#"["tcp/127.0.0.1/7447"]"#);
+    /// let _ = session.config().await.insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]

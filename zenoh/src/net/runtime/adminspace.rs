@@ -509,8 +509,7 @@ pub async fn router_data(
             use std::convert::TryFrom;
             let stats = crate::prelude::ValueSelector::try_from(selector)
                 .ok()
-                .map(|s| s.properties.get("stats").map(|v| v == "true"))
-                .flatten()
+                .and_then(|s| s.properties.get("stats").map(|v| v == "true"))
                 .unwrap_or(false);
             if stats {
                 json.as_object_mut().unwrap().insert(

@@ -38,4 +38,4 @@ json5 = "0.4.1"
 serde = "1.0.123"
 serde_json = "1.0"
 serde_yaml = "0.8"
-validated_struct = { version = "0.1", features = ["json5", "serde_json"] }
+validated_struct = { version = "1.0.0", features = ["json5", "json_get"] }

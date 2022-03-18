@@ -22,6 +22,8 @@ const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
 pub struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub http_port: String,
+    __path__: Option<String>,
+    __required__: Option<bool>,
 }
 
 impl From<&Config> for serde_json::Value {

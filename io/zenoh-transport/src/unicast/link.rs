@@ -118,7 +118,7 @@ impl TransportLinkUnicast {
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_rx_buff_size = self.transport.config.manager.config.link_rx_buff_size;
+            let c_rx_buffer_size = self.transport.config.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -127,7 +127,7 @@ impl TransportLinkUnicast {
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
-                    c_rx_buff_size,
+                    c_rx_buffer_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -227,7 +227,7 @@ async fn rx_task_stream(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    rx_buff_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -252,7 +252,7 @@ async fn rx_task_stream(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buff_size / mtu);
+    let n = 1 + (rx_buffer_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the ZBuf
@@ -302,7 +302,7 @@ async fn rx_task_dgram(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    rx_buff_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -323,7 +323,7 @@ async fn rx_task_dgram(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buff_size / mtu);
+    let n = 1 + (rx_buffer_size / mtu);
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the zbuf
@@ -378,11 +378,11 @@ async fn rx_task(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    rx_buff_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     if link.is_streamed() {
-        rx_task_stream(link, transport, lease, signal, rx_buff_size).await
+        rx_task_stream(link, transport, lease, signal, rx_buffer_size).await
     } else {
-        rx_task_dgram(link, transport, lease, signal, rx_buff_size).await
+        rx_task_dgram(link, transport, lease, signal, rx_buffer_size).await
     }
 }

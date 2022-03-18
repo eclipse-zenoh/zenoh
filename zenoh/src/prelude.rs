@@ -35,7 +35,7 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
-use zenoh_buffers::SplitBuffer;
+pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
@@ -52,7 +52,7 @@ pub use crate::sync::ZFuture;
 pub use zenoh_protocol_core::Locator;
 
 /// The encoding of a zenoh [`Value`].
-pub use zenoh_protocol_core::Encoding;
+pub use zenoh_protocol_core::{Encoding, KnownEncoding};
 
 /// The global unique id of a zenoh peer.
 pub use zenoh_protocol_core::PeerId;
@@ -101,18 +101,17 @@ impl Value {
     }
 
     pub fn as_json(&self) -> Option<serde_json::Value> {
-        if [Encoding::APP_JSON.prefix, Encoding::TEXT_JSON.prefix].contains(&self.encoding.prefix) {
-            serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
-                &self.payload.contiguous(),
-            ))
-            .ok()
-        } else {
-            None
+        match self.encoding.prefix() {
+            KnownEncoding::AppJson | KnownEncoding::TextJson => serde::Deserialize::deserialize(
+                &mut serde_json::Deserializer::from_slice(&self.payload.contiguous()),
+            )
+            .ok(),
+            _ => None,
         }
     }
 
     pub fn as_integer(&self) -> Option<i64> {
-        if self.encoding.prefix == Encoding::APP_INTEGER.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppInteger {
             std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
@@ -123,7 +122,7 @@ impl Value {
     }
 
     pub fn as_float(&self) -> Option<f64> {
-        if self.encoding.prefix == Encoding::APP_FLOAT.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppFloat {
             std::str::from_utf8(&self.payload.contiguous())
                 .ok()?
                 .parse()
@@ -134,7 +133,7 @@ impl Value {
     }
 
     pub fn as_properties(&self) -> Option<Properties> {
-        if self.encoding.prefix == Encoding::APP_PROPERTIES.prefix {
+        if *self.encoding.prefix() == KnownEncoding::AppProperties {
             Some(Properties::from(
                 std::str::from_utf8(&self.payload.contiguous()).ok()?,
             ))
@@ -532,9 +531,9 @@ pub const PROP_STOPTIME: &str = "stoptime";
 ///
 /// Structure of a selector:
 /// ```text
-/// /s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)#a;b;x;y;...;z
-/// |key_selector||---------------- value_selector -------------------|
-///                |--- filter --| |---- properties ---|  |  fragment |
+/// /s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)[a;b;x;y;...;z]
+/// |key_selector||---------------- value_selector --------------------|
+///                |--- filter --| |---- properties ---|  |--fragment-|
 /// ```
 /// where:
 ///  * __key_selector__: an expression identifying a set of Resources.
@@ -666,7 +665,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// let value_selector: ValueSelector = "?x>1&y<2&z=4(p1=v1;p2=v2;pn=vn)[a;b;x;y;z]".try_into().unwrap();
 /// assert_eq!(value_selector.filter, "x>1&y<2&z=4");
 /// assert_eq!(value_selector.properties.get("p2").unwrap().as_str(), "v2");
-/// assert_eq!(value_selector.fragment, "a;b;x;y;z");
+/// assert_eq!(value_selector.fragment, Some("a;b;x;y;z"));
 /// ```
 ///
 /// ```no_run
@@ -683,7 +682,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
 ///     println!("properties: {}", value_selector.properties);
-///     println!("fragment: {}", value_selector.fragment);
+///     println!("fragment: {:?}", value_selector.fragment);
 /// }
 /// # })
 /// ```
@@ -698,7 +697,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// let value_selector = ValueSelector::empty()
 ///     .with_filter("x>1&y<2")
 ///     .with_properties(properties)
-///     .with_fragment("x;y");
+///     .with_fragment(Some("x;y"));
 ///
 /// let mut replies = session.get(
 ///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
@@ -712,12 +711,12 @@ pub struct ValueSelector<'a> {
     /// the properties part of this `ValueSelector`) (all characters between ``( )`` and after `?`)
     pub properties: Properties,
     /// the fragment part of this `ValueSelector`, if any (all characters between ``[ ]`` and after `?`)
-    pub fragment: &'a str,
+    pub fragment: Option<&'a str>,
 }
 
 impl<'a> ValueSelector<'a> {
     /// Creates a new `ValueSelector`.
-    pub fn new(filter: &'a str, properties: Properties, fragment: &'a str) -> Self {
+    pub fn new(filter: &'a str, properties: Properties, fragment: Option<&'a str>) -> Self {
         ValueSelector {
             filter,
             properties,
@@ -727,7 +726,7 @@ impl<'a> ValueSelector<'a> {
 
     /// Creates an empty `ValueSelector`.
     pub fn empty() -> Self {
-        ValueSelector::new("", Properties::default(), "")
+        ValueSelector::new("", Properties::default(), None)
     }
 
     /// Sets the filter part of this `ValueSelector`.
@@ -743,7 +742,7 @@ impl<'a> ValueSelector<'a> {
     }
 
     /// Sets the fragment part of this `ValueSelector`.
-    pub fn with_fragment(mut self, fragment: &'a str) -> Self {
+    pub fn with_fragment(mut self, fragment: Option<&'a str>) -> Self {
         self.fragment = fragment;
         self
     }
@@ -764,9 +763,9 @@ impl fmt::Display for ValueSelector<'_> {
             s.push_str(self.properties.to_string().as_str());
             s.push(')');
         }
-        if !self.fragment.is_empty() {
+        if let Some(frag) = self.fragment {
             s.push('[');
-            s.push_str(self.fragment);
+            s.push_str(frag);
             s.push(']');
         }
         write!(f, "{}", s)
@@ -796,7 +795,7 @@ impl<'a> TryFrom<&'a str> for ValueSelector<'a> {
                     .name("prop")
                     .map(|s| s.as_str().into())
                     .unwrap_or_default(),
-                fragment: caps.name("frag").map_or("", |s| s.as_str()),
+                fragment: caps.name("frag").map(|s| s.as_str()),
             })
         } else {
             bail!("invalid selector: {}", &s)

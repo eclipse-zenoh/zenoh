@@ -221,9 +221,11 @@ pub fn declare_client_subscription(
     expr: &KeyExpr,
     sub_info: &SubInfo,
 ) {
+    log::debug!("Register client subscription");
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
+            log::debug!("Register client subscription {}", res.expr());
             Resource::match_resource(tables, &mut res);
 
             register_client_subscription(tables, face, &mut res, sub_info);

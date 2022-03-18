@@ -108,7 +108,7 @@ mod tests {
 
         // check that the slow subscriber does not half
         let result = async_std::future::timeout(
-            Duration::from_millis(500),
+            Duration::from_millis(50000),
             futures::future::join3(r#pub, fast_sub, slow_sub),
         )
         .await;

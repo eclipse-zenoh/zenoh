@@ -158,8 +158,7 @@ impl SharedMemoryAuthenticator {
     }
 
     pub async fn from_config(config: &Config) -> ZResult<Option<SharedMemoryAuthenticator>> {
-        let is_shm: bool = config.shared_memory().unwrap_or(true);
-        if is_shm {
+        if config.transport().shared_memory().unwrap_or(true) {
             let mut prng = PseudoRng::from_entropy();
             let challenge = prng.gen::<ZInt>();
 

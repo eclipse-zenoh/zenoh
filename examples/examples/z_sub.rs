@@ -17,7 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::net::protocol::io::SplitBuffer;
+use zenoh::prelude::*;
 
 #[async_std::main]
 async fn main() {
@@ -26,7 +26,7 @@ async fn main() {
 
     let (config, key_expr) = parse_args();
 
-    println!("Openning session...");
+    println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
@@ -62,10 +62,10 @@ fn parse_args() -> (Config, String) {
                 .possible_values(&["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...   'Peer locators used to initiate the zenoh session.'",
+            "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
-            "-l, --listener=[LOCATOR]...   'Locators to listen on.'",
+            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
@@ -87,11 +87,17 @@ fn parse_args() -> (Config, String) {
     if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
         config.set_mode(Some(mode)).unwrap();
     }
-    if let Some(values) = args.values_of("peer") {
-        config.peers.extend(values.map(|v| v.parse().unwrap()))
+    if let Some(values) = args.values_of("connect") {
+        config
+            .connect
+            .endpoints
+            .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listener") {
-        config.listeners.extend(values.map(|v| v.parse().unwrap()))
+    if let Some(values) = args.values_of("listen") {
+        config
+            .listen
+            .endpoints
+            .extend(values.map(|v| v.parse().unwrap()))
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();

@@ -69,81 +69,86 @@
   },
   /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
   plugins_search_dirs: [],
-  version: null,
   /// The identifier (as hex-string) that zenohd must use. If not set, a random UUIDv4 will be used.
   /// WARNING: this id must be unique in your zenoh network.
-  id: null,
+  // id: "I like trains",
   /// The node's mode (router, peer or client)
   mode: "router",
-  /// Which locators to connect to, proto may be one of tcp|udp|quic|tls|unixsock-stream.
-  peers: [
-    // "<proto>/<ip>:<port>"
-  ],
-  /// Which locators to listen on. These are typically bound to local IPs or 0.0.0.0
-  listeners: [
-    // "<proto>/<ip>:<port>"
-  ],
+  /// Which endpoints to connect to. E.g. tcp/localhost:7447.
+  /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+  connect: {
+    endpoints: [
+      // "<proto>/<address>"
+    ]
+  },
+  /// Which endpoints to listen on. E.g. tcp/localhost:7447.
+  /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers, 
+  /// peers, or client can use to establish a zenoh session.
+  listen: {
+    endpoints: [
+      // "<proto>/<address>"
+    ]
+  },
+  startup: {
+    subscribe: ["/demo/subs/**"],
+    declare_publications: ["/demo/pubs/**"],
+  },
   scouting: {
     /// In client mode, the period dedicated to scouting for a router before failing
-    timeout: 2.5,
+    timeout: 3000,
     /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
-    delay: 1.25,
+    delay: 200,
     /// How multicast should behave
     multicast: {
       /// Whether multicast scouting is enabled or not
-      enabled: false,
+      enabled: true,
       /// The socket which should be used for multicast scouting
-      address: "0.0.0.0:7447",
+      address: "224.0.0.224:7447",
       /// The network interface which should be used for multicast scouting
-      interface: null,
+      interface: "", // empty string means auto
       /// An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
       /// If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
       autoconnect: "peer|client",
     },
     gossip: {
+      /// Whether the link state protocol should be enabled
       enabled: true,
       autoconnect: "",
     },
+    /// If set to `false`, peers will never automatically establish sessions between each-other.
+    peers_autoconnect: false,
   },
   /// Whether data messages should be timestamped
   add_timestamp: true,
-  /// Whether the link state protocol should be enabled
-  link_state: true,
-  /// Whether peers should connect to each other upon discovery (through multicast or gossip)
-  peers_autoconnect: false,
   /// Whether local writes/queries should reach local subscribers/queryables
   local_routing: true,
-  join_on_startup: {
-    subscriptions: ["/demo/subs/**"],
-    publications: ["/demo/pubs/**"],
-  },
-  shared_memory: false,
   transport: {
-    sequence_number_resolution: 4294967296,
+    shared_memory: true,
+    sequence_number_resolution: 268435456,
     qos: false,
     unicast: {
       /// Timeout in milliseconds when opening a link
-      open_timeout: 10000,
-      open_pending: null,
-      max_sessions: 50,
-      max_links: 100,
+      accept_timeout: 10000,
+      accept_pending: 100,
+      max_sessions: 1024,
+      max_links: 1,
     },
     multicast: {
       /// Link keep-alive duration in milliseconds
-      join_interval: 50000,
-      max_sessions: null,
+      join_interval: 2500,
+      max_sessions: 1024,
     },
     link: {
-      batch_size: null,
+      batch_size: 65535,
       /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
-      lease: null,
+      lease: 10000,
       /// Link keep-alive duration in milliseconds
-      keep_alive: null,
+      keep_alive: 2500,
       /// Receiving buffer size for each link
-      rx_buff_size: null,
+      rx_buffer_size: 16777216,
       /// Maximum size of the defragmentation buffer at receiver end.
       /// Fragmented messages that are larger than the configured size will be dropped.
-      defrag_buffer_size: null,
+      defrag_buffer_size: 1073741824,
       tls: {
         root_ca_certificate: null,
         server_private_key: null,

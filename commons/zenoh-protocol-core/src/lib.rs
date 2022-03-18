@@ -38,7 +38,7 @@ pub type WhatAmI = whatami::WhatAmI;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 
-/// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
+/// A numerical Id mapped to a key expression with `zenoh::Session::declare_expr()`.
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
@@ -47,7 +47,7 @@ pub mod key_expr;
 pub use crate::key_expr::KeyExpr;
 
 mod encoding;
-pub use encoding::Encoding;
+pub use encoding::{Encoding, KnownEncoding};
 
 pub mod locators;
 pub use locators::Locator;
@@ -328,7 +328,7 @@ pub enum ConsolidationMode {
     Full,
 }
 
-/// The kind of consolidation that should be applied on replies to a [`get`](zenoh::Session::get)
+/// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConsolidationStrategy {
@@ -414,7 +414,7 @@ impl Default for ConsolidationStrategy {
     }
 }
 
-/// The [`Queryable`](zenoh::queryable::Queryable)s that should be target of a [`get`](zenoh::Session::get).
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     BestMatching,
@@ -431,7 +431,7 @@ impl Default for Target {
     }
 }
 
-/// The [`Queryable`](zenoh::queryable::Queryable)s that should be target of a [`get`](zenoh::Session::get).
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QueryTarget {
     pub kind: ZInt,

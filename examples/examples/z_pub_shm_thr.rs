@@ -49,7 +49,7 @@ fn parse_args() -> (Config, usize, usize) {
                 .default_value("32"),
         )
         .arg(Arg::from_usage(
-            "-e, --peer=[LOCATOR]...  'Peer locators used to initiate the zenoh session.'",
+            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

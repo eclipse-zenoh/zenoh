@@ -13,32 +13,6 @@
 //
 
 use super::{IntKeyProperties, KeyTranscoder};
-use std::{borrow::Cow, collections::HashMap};
-pub use zenoh_macros::IntKeyMapLike;
-#[allow(clippy::result_unit_err)]
-pub trait IntKeyMapLike {
-    type Keys: IntoIterator<Item = u64>;
-    fn iget(&self, key: u64) -> Option<Cow<'_, str>>;
-    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()>;
-    fn ikeys(&self) -> Self::Keys;
-}
-
-impl IntKeyMapLike for HashMap<u64, String> {
-    type Keys = Vec<u64>;
-
-    fn iget(&self, key: u64) -> Option<Cow<'_, str>> {
-        self.get(&key).map(|f| Cow::Borrowed(f.as_ref()))
-    }
-
-    fn iset<S: Into<String> + AsRef<str>>(&mut self, key: u64, value: S) -> Result<(), ()> {
-        self.insert(key, value.into());
-        Ok(())
-    }
-
-    fn ikeys(&self) -> Self::Keys {
-        self.keys().copied().collect()
-    }
-}
 
 mod consts {
     /// `"true"`
@@ -57,20 +31,20 @@ mod consts {
     pub const ZN_MODE_DEFAULT: &str = "peer";
 
     /// The locator of a peer to connect to.
-    /// String key : `"peer"`.
-    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
+    /// String key : `"connect"`.
+    /// Accepted values : `<endpoint>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
-    pub const ZN_PEER_KEY: u64 = 0x41;
-    pub const ZN_PEER_STR: &str = "peer";
+    pub const ZN_CONNECT_KEY: u64 = 0x41;
+    pub const ZN_CONNECT_STR: &str = "connect";
 
     /// A locator to listen on.
-    /// String key : `"listener"`.
-    /// Accepted values : `<locator>` (ex: `"tcp/10.10.10.10:7447"`).
+    /// String key : `"listen"`.
+    /// Accepted values : `<endpoint>` (ex: `"tcp/10.10.10.10:7447"`).
     /// Default value : None.
     /// Multiple values accepted.
-    pub const ZN_LISTENER_KEY: u64 = 0x42;
-    pub const ZN_LISTENER_STR: &str = "listener";
+    pub const ZN_LISTEN_KEY: u64 = 0x42;
+    pub const ZN_LISTEN_STR: &str = "listen";
 
     /// The user name to use for authentication.
     /// String key : `"user"`.
@@ -255,7 +229,7 @@ mod consts {
     /// Default value : `1024`.
     pub const ZN_OPEN_INCOMING_PENDING_KEY: u64 = 0x67;
     pub const ZN_OPEN_INCOMING_PENDING_STR: &str = "open_pending";
-    pub const ZN_OPEN_INCOMING_PENDING_DEFAULT: &str = "1024";
+    pub const ZN_OPEN_INCOMING_PENDING_DEFAULT: &str = "100";
 
     /// Configures the peer ID.
     /// String key : `"peer_id"`.
@@ -422,8 +396,8 @@ impl KeyTranscoder for ConfigTranscoder {
     fn encode(key: &str) -> Option<u64> {
         match &key.to_lowercase()[..] {
             ZN_MODE_STR => Some(ZN_MODE_KEY),
-            ZN_PEER_STR => Some(ZN_PEER_KEY),
-            ZN_LISTENER_STR => Some(ZN_LISTENER_KEY),
+            ZN_CONNECT_STR => Some(ZN_CONNECT_KEY),
+            ZN_LISTEN_STR => Some(ZN_LISTEN_KEY),
             ZN_USER_STR => Some(ZN_USER_KEY),
             ZN_PASSWORD_STR => Some(ZN_PASSWORD_KEY),
             ZN_MULTICAST_SCOUTING_STR => Some(ZN_MULTICAST_SCOUTING_KEY),
@@ -476,8 +450,8 @@ impl KeyTranscoder for ConfigTranscoder {
     fn decode(key: u64) -> Option<String> {
         match key {
             ZN_MODE_KEY => Some(ZN_MODE_STR.to_string()),
-            ZN_PEER_KEY => Some(ZN_PEER_STR.to_string()),
-            ZN_LISTENER_KEY => Some(ZN_LISTENER_STR.to_string()),
+            ZN_CONNECT_KEY => Some(ZN_CONNECT_STR.to_string()),
+            ZN_LISTEN_KEY => Some(ZN_LISTEN_STR.to_string()),
             ZN_USER_KEY => Some(ZN_USER_STR.to_string()),
             ZN_PASSWORD_KEY => Some(ZN_PASSWORD_STR.to_string()),
             ZN_MULTICAST_SCOUTING_KEY => Some(ZN_MULTICAST_SCOUTING_STR.to_string()),

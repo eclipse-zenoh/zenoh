@@ -39,8 +39,8 @@ use zenoh_protocol_core::locators::LocatorProtocol;
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
     pub keep_alive: Duration,
-    pub open_timeout: Duration,
-    pub open_pending: usize,
+    pub accept_timeout: Duration,
+    pub accept_pending: usize,
     pub max_sessions: usize,
     pub max_links: usize,
     pub is_qos: bool,
@@ -74,8 +74,8 @@ pub struct TransportManagerBuilderUnicast {
     //       target interval.
     pub(super) lease: Duration,
     pub(super) keep_alive: Duration,
-    pub(super) open_timeout: Duration,
-    pub(super) open_pending: usize,
+    pub(super) accept_timeout: Duration,
+    pub(super) accept_pending: usize,
     pub(super) max_sessions: usize,
     pub(super) max_links: usize,
     pub(super) is_qos: bool,
@@ -96,13 +96,13 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    pub fn open_timeout(mut self, open_timeout: Duration) -> Self {
-        self.open_timeout = open_timeout;
+    pub fn accept_timeout(mut self, accept_timeout: Duration) -> Self {
+        self.accept_timeout = accept_timeout;
         self
     }
 
-    pub fn open_pending(mut self, open_pending: usize) -> Self {
-        self.open_pending = open_pending;
+    pub fn accept_pending(mut self, accept_pending: usize) -> Self {
+        self.accept_pending = accept_pending;
         self
     }
 
@@ -147,11 +147,11 @@ impl TransportManagerBuilderUnicast {
         if let Some(v) = properties.transport().link().keep_alive() {
             self = self.keep_alive(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.transport().unicast().open_timeout() {
-            self = self.open_timeout(Duration::from_millis(*v));
+        if let Some(v) = properties.transport().unicast().accept_timeout() {
+            self = self.accept_timeout(Duration::from_millis(*v));
         }
-        if let Some(v) = properties.transport().unicast().open_pending() {
-            self = self.open_pending(*v);
+        if let Some(v) = properties.transport().unicast().accept_pending() {
+            self = self.accept_pending(*v);
         }
         if let Some(v) = properties.transport().unicast().max_sessions() {
             self = self.max_sessions(*v);
@@ -163,7 +163,7 @@ impl TransportManagerBuilderUnicast {
             self = self.qos(*v);
         }
         #[cfg(feature = "shared-memory")]
-        if let Some(v) = properties.shared_memory() {
+        if let Some(v) = properties.transport().shared_memory() {
             self = self.shm(*v);
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
@@ -179,8 +179,8 @@ impl TransportManagerBuilderUnicast {
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
-            open_timeout: self.open_timeout,
-            open_pending: self.open_pending,
+            accept_timeout: self.accept_timeout,
+            accept_pending: self.accept_pending,
             max_sessions: self.max_sessions,
             max_links: self.max_links,
             is_qos: self.is_qos,
@@ -229,8 +229,8 @@ impl Default for TransportManagerBuilderUnicast {
         Self {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
             keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
-            open_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
-            open_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
+            accept_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
+            accept_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
             max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
             max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
@@ -522,7 +522,7 @@ impl TransportManager {
 
     pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
         let mut guard = zasynclock!(self.state.unicast.incoming);
-        if *guard >= self.config.unicast.open_pending {
+        if *guard >= self.config.unicast.accept_pending {
             // We reached the limit of concurrent incoming transport, this means two things:
             // - the values configured for ZN_OPEN_INCOMING_PENDING and ZN_OPEN_TIMEOUT
             //   are too small for the scenario zenoh is deployed in;
@@ -578,7 +578,7 @@ impl TransportManager {
             };
 
             let res = super::establishment::accept::accept_link(&link, &c_manager, &mut auth_link)
-                .timeout(c_manager.config.unicast.open_timeout)
+                .timeout(c_manager.config.unicast.accept_timeout)
                 .await;
             match res {
                 Ok(res) => {
