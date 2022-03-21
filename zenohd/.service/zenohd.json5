@@ -1,0 +1,95 @@
+/**
+ * Configuration file for the Eclipse zenoh router (service "zenohd").
+ *
+ * This file presents only the main settings. For a complete example of configuration file,
+ * see https://github.com/eclipse-zenoh/zenoh/blob/master/EXAMPLE_CONFIG.json5
+ */
+{
+  /**
+   * The identifier (as hex-string) that zenohd must use.
+   * If not set, a random UUIDv4 will be used.
+   * WARNING: this id must be unique in your zenoh network.
+   */
+  // id: "0123456789ABCDEF",
+
+  /**
+   * Which endpoints to listen on. E.g. tcp/localhost:7447.
+   * By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
+   * peers, or client can use to establish a zenoh session.
+   * If none are specified, "tcp/0.0.0.0:7447" will be used (i.e. any interface)
+   */
+  listen: {
+    endpoints: [
+      // "<proto>/<address>"
+    ]
+  },
+
+  /**
+   * Which endpoints to connect to. E.g. tcp/localhost:7447.
+   * By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+   */
+  connect: {
+    endpoints: [
+      // "<proto>/<address>"
+    ]
+  },
+
+  /**
+   * Configuration of the scouting protocol (for discovery of other routers, peers or clients)
+   * Uncoment to change the default values.
+   */
+  // scouting: {
+  //   /* How multicast should behave */
+  //   multicast: {
+  //     /* Whether multicast scouting is enabled or not */
+  //     enabled: true,
+  //     /* The socket which should be used for multicast scouting */
+  //     address: "224.0.0.224:7447",
+  //     /* The network interface which should be used for multicast scouting */
+  //     interface: "auto", // auto selection of interface
+  //     /**
+  //      * An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
+  //      * If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
+  //      */
+  //     autoconnect: "peer|client",
+  //   },
+  // },
+
+  /**
+   * Directories where plugins configured by name should be looked for.
+   * Plugins configured by __path__ are not subject to lookup
+   */
+  plugins_search_dirs: [ "/usr/lib" ],
+
+  plugins: {
+    /**
+     * REST plugin configuration. Uncomment to activate it.
+     */
+    // rest: {
+    //   /* Setting this option to true allows zenohd to panic should it detect issues with this plugin.
+    //    * Setting it to false politely asks the plugin not to panic. */
+    //   __required__: true,
+    //   http_port: 8000,
+    // },
+
+    /**
+     * Storages plugin configuration . Uncomment to activate it and configure backends/storages
+     */
+    // storages: {
+    //   /* Storages are grouped by backend, which may implement the storage function in various ways. */
+    //   backends: {
+    //     /* The memory backend is always available, and stores values in RAM. */
+    //     memory: {
+    //       /* Each backend may manage several storages */
+    //       storages: {
+    //         /* Each storage must be named */
+    //         demo: {
+    //           key_expr: "/demo/example/**",
+    //         },
+    //       },
+    //     },
+    //   },
+    // },
+  },
+
+}

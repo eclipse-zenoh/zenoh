@@ -21,9 +21,8 @@ set -e
 case "$1" in
     configure)
         id -u zenohd  >/dev/null 2>&1 ||  sudo useradd -r -s /bin/false zenohd
-        mkdir -p /etc/zenohd
-        chown zenohd:zenohd -R /etc/zenohd
-        chmod 0644 /etc/zenohd -R
+        mkdir -p /var/zenohd
+        chown zenohd:zenohd /var/zenohd
         systemctl daemon-reload
         systemctl disable zenohd
     ;;

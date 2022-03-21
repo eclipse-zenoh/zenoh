@@ -62,10 +62,12 @@ copyright = "2017, 2021 ADLINK Technology Inc."
 section = "net"
 license-file = ["../LICENSE", "0"]
 depends = "$auto"
-maintainer-scripts = "zenoh/.deb"
+maintainer-scripts = ".deb"
 assets = [
 	# binary
 	["target/release/zenohd", "/usr/bin/", "755"],
+	# config
+	[".service/zenohd.json5", "/etc/zenohd/", "644"],
 	# service
 	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]
