@@ -26,8 +26,13 @@
 
 FROM alpine:latest AS builder
 
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 ARG TARGET=x86_64-unknown-linux-musl
 
+RUN echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM" 
+RUN uname -a
+RUN uname -m
 RUN apk add --no-cache curl gcc musl-dev llvm-dev clang-dev git
 
 COPY rust-toolchain rust-toolchain
