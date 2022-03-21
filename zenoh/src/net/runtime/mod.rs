@@ -93,7 +93,7 @@ impl Runtime {
             .autoconnect()
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
-        let use_link_state = whatami != WhatAmI::Client;
+        let use_link_state = whatami != WhatAmI::Client; // TODO: support disabling link_state: && config.scouting().gossip().enabled().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()

@@ -17,7 +17,6 @@ use async_std::channel::Sender;
 use async_std::sync::Arc;
 use async_std::task;
 use libloading::Library;
-use log::debug;
 use memory_backend::create_memory_backend;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -45,7 +44,7 @@ zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
-    const STATIC_NAME: &'static str = "storages";
+    const STATIC_NAME: &'static str = "storage-manager";
 
     type StartArgs = Runtime;
     type RunningPlugin = zenoh::plugins::RunningPlugin;
@@ -66,7 +65,7 @@ struct StorageRuntimeInner {
     runtime: Runtime,
     session: Arc<Session>,
     lib_loader: LibLoader,
-    backends: HashMap<String, BackendHandle>,
+    volumes: HashMap<String, VolumeHandle>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
 }
 impl StorageRuntimeInner {
@@ -84,7 +83,8 @@ impl StorageRuntimeInner {
         let PluginConfig {
             name,
             backend_search_dirs,
-            backends,
+            volumes,
+            storages,
             ..
         } = config;
         let lib_loader = backend_search_dirs
@@ -97,68 +97,67 @@ impl StorageRuntimeInner {
             runtime,
             session,
             lib_loader,
-            backends: Default::default(),
+            volumes: Default::default(),
             storages: Default::default(),
         };
-        new_self.update(backends.into_iter().map(ConfigDiff::AddBackend))?;
+        new_self.spawn_volume(VolumeConfig {
+            name: "memory".into(),
+            backend: None,
+            paths: None,
+            required: false,
+            rest: Default::default(),
+        })?;
+        new_self.update(
+            volumes
+                .into_iter()
+                .map(ConfigDiff::AddVolume)
+                .chain(storages.into_iter().map(ConfigDiff::AddStorage)),
+        )?;
         Ok(new_self)
     }
     fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
         for diff in diffs {
             match diff {
-                ConfigDiff::DeleteBackend(backend) => self.kill_backend(backend),
-                ConfigDiff::AddBackend(mut backend) => {
-                    let name = backend.name.clone();
-                    let mut storages = Vec::new();
-                    std::mem::swap(&mut storages, &mut backend.storages);
-                    self.spawn_backend(backend)?;
-                    for storage in storages {
-                        self.spawn_storage(&name, storage)?;
-                    }
+                ConfigDiff::DeleteVolume(volume) => self.kill_volume(volume),
+                ConfigDiff::AddVolume(volume) => {
+                    self.spawn_volume(volume)?;
                 }
-                ConfigDiff::DeleteStorage {
-                    backend_name,
-                    config,
-                } => self.kill_storage(&backend_name, config),
-                ConfigDiff::AddStorage {
-                    backend_name,
-                    config,
-                } => self.spawn_storage(&backend_name, config)?,
+                ConfigDiff::DeleteStorage(config) => self.kill_storage(config),
+                ConfigDiff::AddStorage(config) => self.spawn_storage(config)?,
             }
         }
         Ok(())
     }
-    fn kill_backend(&mut self, backend: BackendConfig) {
-        debug!("Close backend {} and all its storages", backend.name);
-        if let Some(storages) = self.storages.remove(&backend.name) {
+    fn kill_volume(&mut self, volume: VolumeConfig) {
+        if let Some(storages) = self.storages.remove(&volume.name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
                     .into_iter()
                     .map(|(_, s)| async move { s.send(StorageMessage::Stop).await }),
             ));
         }
-        std::mem::drop(self.backends.remove(&backend.name));
+        std::mem::drop(self.volumes.remove(&volume.name));
     }
-    fn spawn_backend(&mut self, config: BackendConfig) -> ZResult<()> {
-        let backend_name = config.name.clone();
-        if backend_name == MEMORY_BACKEND_NAME {
+    fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
+        let volume_id = config.name.clone();
+        if volume_id == MEMORY_BACKEND_NAME {
             match create_memory_backend(config) {
                 Ok(backend) => {
-                    self.backends.insert(
-                        backend_name,
-                        BackendHandle::new(backend, None, "<static-memory>".into()),
+                    self.volumes.insert(
+                        volume_id,
+                        VolumeHandle::new(backend, None, "<static-memory>".into()),
                     );
                 }
                 Err(e) => bail!("{}", e),
             }
         } else {
-            match &config.paths {
-                Some(paths) => {
+            match config.backend_search_method() {
+                BackendSearchMethod::ByPaths(paths) => {
                     for path in paths {
                         unsafe {
                             if let Ok((lib, path)) = LibLoader::load_file(path) {
                                 self.loaded_backend_from_lib(
-                                    &backend_name,
+                                    &volume_id,
                                     config.clone(),
                                     lib,
                                     path,
@@ -168,21 +167,20 @@ impl StorageRuntimeInner {
                         }
                     }
                     bail!(
-                        "Failed to find a suitable library for Backend {} from paths: {:?}",
-                        backend_name,
+                        "Failed to find a suitable library for volume {} from paths: {:?}",
+                        volume_id,
                         paths
                     );
                 }
-                None => unsafe {
-                    if let Ok((lib, path)) = self
-                        .lib_loader
-                        .search_and_load(&format!("{}{}", BACKEND_LIB_PREFIX, &backend_name))
-                    {
-                        self.loaded_backend_from_lib(&backend_name, config.clone(), lib, path)?;
+                BackendSearchMethod::ByName(backend_name) => unsafe {
+                    let backend_filename = format!("{}{}", BACKEND_LIB_PREFIX, &backend_name);
+                    if let Ok((lib, path)) = self.lib_loader.search_and_load(&backend_filename) {
+                        self.loaded_backend_from_lib(&volume_id, config.clone(), lib, path)?;
                     } else {
                         bail!(
-                            "Failed to find a suitable library for Backend {}",
-                            backend_name
+                            "Failed to find a suitable library for volume {} (was looking for <lib>{}<.so/.dll/.dylib>)",
+                            volume_id,
+                            &backend_filename
                         );
                     }
                 },
@@ -192,17 +190,17 @@ impl StorageRuntimeInner {
     }
     unsafe fn loaded_backend_from_lib(
         &mut self,
-        backend_name: &str,
-        config: BackendConfig,
+        volume_id: &str,
+        config: VolumeConfig,
         lib: Library,
         lib_path: PathBuf,
     ) -> ZResult<()> {
         if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
             match create_backend(config) {
                 Ok(backend) => {
-                    self.backends.insert(
-                        backend_name.to_string(),
-                        BackendHandle::new(
+                    self.volumes.insert(
+                        volume_id.to_string(),
+                        VolumeHandle::new(
                             backend,
                             Some(lib),
                             lib_path.to_string_lossy().into_owned(),
@@ -212,32 +210,33 @@ impl StorageRuntimeInner {
                 }
                 Err(e) => bail!(
                     "Failed to load Backend {} from {} : {}",
-                    backend_name,
+                    volume_id,
                     lib_path.display(),
                     e
                 ),
             }
         } else {
             bail!(
-                "Failed to load Backend {} from {} : function {}(BackendConfig) not found in lib",
-                backend_name,
+                "Failed to instantiate volume {} from {} : function {}(VolumeConfig) not found in lib",
+                volume_id,
                 lib_path.display(),
                 String::from_utf8_lossy(CREATE_BACKEND_FN_NAME)
             );
         }
     }
-    fn kill_storage(&mut self, backend: &str, config: StorageConfig) {
-        if let Some(storages) = self.storages.get_mut(backend) {
+    fn kill_storage(&mut self, config: StorageConfig) {
+        let volume = &config.volume_id;
+        if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
-                debug!("Close storage {} from backend {}", config.name, backend);
+                log::debug!("Closing storage {} from volume {}", config.name, volume);
                 let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
             }
         }
     }
-    fn spawn_storage(&mut self, backend_name: &str, storage: StorageConfig) -> ZResult<()> {
-        let admin_key =
-            self.status_key() + "/backends/" + backend_name + "/storages/" + &storage.name;
-        if let Some(backend) = self.backends.get_mut(backend_name) {
+    fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
+        let admin_key = self.status_key() + "/storages/" + &storage.name;
+        let volume_id = storage.volume_id.clone();
+        if let Some(backend) = self.volumes.get_mut(&volume_id) {
             let storage_name = storage.name.clone();
             let in_interceptor = backend.backend.incoming_data_interceptor();
             let out_interceptor = backend.backend.outgoing_data_interceptor();
@@ -250,24 +249,24 @@ impl StorageRuntimeInner {
                 self.session.clone(),
             ))?;
             self.storages
-                .entry(backend_name.into())
+                .entry(volume_id)
                 .or_default()
                 .insert(storage_name, stopper);
             Ok(())
         } else {
-            bail!("`{}` backend not found", backend_name)
+            bail!("`{}` volume not found", volume_id)
         }
     }
 }
-struct BackendHandle {
+struct VolumeHandle {
     backend: Box<dyn Backend>,
     _lib: Option<Library>,
     lib_path: String,
     stopper: Arc<AtomicBool>,
 }
-impl BackendHandle {
+impl VolumeHandle {
     fn new(backend: Box<dyn Backend>, lib: Option<Library>, lib_path: String) -> Self {
-        BackendHandle {
+        VolumeHandle {
             backend,
             _lib: lib,
             lib_path,
@@ -275,7 +274,7 @@ impl BackendHandle {
         }
     }
 }
-impl Drop for BackendHandle {
+impl Drop for VolumeHandle {
     fn drop(&mut self) {
         self.stopper
             .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -321,47 +320,44 @@ impl RunningPluginTrait for StorageRuntime {
             }
         });
         let guard = self.0.lock().unwrap();
-        with_extended_string(&mut key, &["/backends/"], |key| {
-            for (backend_name, backend) in &guard.backends {
-                with_extended_string(key, &[backend_name], |key| {
+        with_extended_string(&mut key, &["/volumes/"], |key| {
+            for (volume_id, volume) in &guard.volumes {
+                with_extended_string(key, &[volume_id], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if zenoh::utils::key_expr::intersect(key, key_selector) {
                             responses.push(zenoh::plugins::Response {
                                 key: key.clone(),
-                                value: backend.lib_path.clone().into(),
+                                value: volume.lib_path.clone().into(),
                             })
                         }
                     });
                     if zenoh::utils::key_expr::intersect(key, key_selector) {
                         responses.push(zenoh::plugins::Response {
                             key: key.clone(),
-                            value: backend.backend.get_admin_status(),
+                            value: volume.backend.get_admin_status(),
                         })
                     }
-                    with_extended_string(key, &["/storages/"], |key| {
-                        let storages = if let Some(s) = guard.storages.get(backend_name) {
-                            s
-                        } else {
-                            return;
-                        };
-                        for (storage, handle) in storages {
-                            with_extended_string(key, &[storage], |key| {
-                                if zenoh::utils::key_expr::intersect(key, key_selector) {
-                                    if let Ok(value) = task::block_on(async {
-                                        let (tx, rx) = async_std::channel::bounded(1);
-                                        let _ = handle.send(StorageMessage::GetStatus(tx)).await;
-                                        rx.recv().await
-                                    }) {
-                                        responses.push(zenoh::plugins::Response {
-                                            key: key.clone(),
-                                            value,
-                                        })
-                                    }
-                                }
-                            })
-                        }
-                    });
                 });
+            }
+        });
+        with_extended_string(&mut key, &["/storages/"], |key| {
+            for storages in guard.storages.values() {
+                for (storage, handle) in storages {
+                    with_extended_string(key, &[storage], |key| {
+                        if zenoh::utils::key_expr::intersect(key, key_selector) {
+                            if let Ok(value) = task::block_on(async {
+                                let (tx, rx) = async_std::channel::bounded(1);
+                                let _ = handle.send(StorageMessage::GetStatus(tx)).await;
+                                rx.recv().await
+                            }) {
+                                responses.push(zenoh::plugins::Response {
+                                    key: key.clone(),
+                                    value,
+                                })
+                            }
+                        }
+                    })
+                }
             }
         });
         Ok(responses)

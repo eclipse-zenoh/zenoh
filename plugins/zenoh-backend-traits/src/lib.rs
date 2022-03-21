@@ -30,13 +30,13 @@
 //! use zenoh::Result as ZResult;
 //!
 //! #[no_mangle]
-//! pub fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+//! pub fn create_backend(config: VolumeConfig) -> ZResult<Box<dyn Backend>> {
 //!     Ok(Box::new(MyBackend { config }))
 //! }
 //!
 //! // Your Backend implementation
 //! struct MyBackend {
-//!     config: BackendConfig,
+//!     config: VolumeConfig,
 //! }
 //!
 //! #[async_trait]
@@ -133,11 +133,11 @@ use zenoh::Result as ZResult;
 
 pub mod config;
 pub mod utils;
-use config::{BackendConfig, StorageConfig};
+use config::{StorageConfig, VolumeConfig};
 
 /// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
 pub const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
-pub type CreateBackend = fn(BackendConfig) -> ZResult<Box<dyn Backend>>;
+pub type CreateBackend = fn(VolumeConfig) -> ZResult<Box<dyn Backend>>;
 
 /// Trait to be implemented by a Backend.
 ///

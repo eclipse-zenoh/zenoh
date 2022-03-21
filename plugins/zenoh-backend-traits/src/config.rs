@@ -9,42 +9,39 @@ pub struct PluginConfig {
     pub name: String,
     pub required: bool,
     pub backend_search_dirs: Option<Vec<String>>,
-    pub backends: Vec<BackendConfig>,
+    pub volumes: Vec<VolumeConfig>,
+    pub storages: Vec<StorageConfig>,
     #[as_ref]
     #[as_mut]
     pub rest: Map<String, Value>,
 }
 #[derive(Debug, Clone, AsMut, AsRef)]
-pub struct BackendConfig {
+pub struct VolumeConfig {
     pub name: String,
+    pub backend: Option<String>,
     pub paths: Option<Vec<String>>,
-    pub storages: Vec<StorageConfig>,
     pub required: bool,
     #[as_ref]
     #[as_mut]
     pub rest: Map<String, Value>,
 }
-#[derive(Debug, Clone, PartialEq, AsMut, AsRef)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StorageConfig {
     pub name: String,
     pub key_expr: String,
     pub strip_prefix: String,
-    #[as_ref]
-    #[as_mut]
-    pub rest: Map<String, Value>,
+    pub volume_id: String,
+    pub volume_cfg: Value,
+    // #[as_ref]
+    // #[as_mut]
+    // pub rest: Map<String, Value>,
 }
 #[derive(Debug)]
 pub enum ConfigDiff {
-    DeleteBackend(BackendConfig),
-    AddBackend(BackendConfig),
-    DeleteStorage {
-        backend_name: String,
-        config: StorageConfig,
-    },
-    AddStorage {
-        backend_name: String,
-        config: StorageConfig,
-    },
+    DeleteVolume(VolumeConfig),
+    AddVolume(VolumeConfig),
+    DeleteStorage(StorageConfig),
+    AddStorage(StorageConfig),
 }
 pub trait AsObject {
     fn as_object(&self) -> Option<&serde_json::Map<String, serde_json::Value>>;
@@ -92,20 +89,40 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
             None => None,
             _ => bail!("`backend_search_dirs` field of {}'s configuration must be a string or array of strings", name.as_ref())
         };
-        let backends = match value.get("backends") {
-            Some(backends) => BackendConfig::try_from(name.as_ref(), backends)?,
+        let volumes = match value.get("volumes") {
+            Some(configs) => VolumeConfig::try_from(name.as_ref(), configs)?,
             None => Vec::new(),
+        };
+        let storages = match value.get("storages") {
+            Some(serde_json::Value::Object(configs)) => {
+                let mut storages = Vec::with_capacity(configs.len());
+                for (storage_name, config) in configs {
+                    storages.push(StorageConfig::try_from(
+                        name.as_ref(),
+                        storage_name,
+                        config,
+                    )?)
+                }
+                storages
+            }
+            None => Vec::new(),
+            _ => bail!(
+                "`storages` field of `{}`'s configuration must be an object",
+                name.as_ref()
+            ),
         };
         Ok(PluginConfig {
             name: name.into(),
             required,
             backend_search_dirs,
-            backends,
+            volumes,
+            storages,
             rest: value
                 .into_iter()
                 .filter_map(|(k, v)| {
-                    (!["__required__", "backend_search_dirs", "backends"].contains(&k.as_str()))
-                        .then(|| (k.clone(), v.clone()))
+                    (!["__required__", "backend_search_dirs", "volumes", "storages"]
+                        .contains(&k.as_str()))
+                    .then(|| (k.clone(), v.clone()))
                 })
                 .collect(),
         })
@@ -114,53 +131,34 @@ impl<S: Into<String> + AsRef<str>, V: AsObject> TryFrom<(S, &V)> for PluginConfi
 impl ConfigDiff {
     pub fn diffs(old: PluginConfig, new: PluginConfig) -> Vec<ConfigDiff> {
         let mut diffs = Vec::new();
-        for old in &old.backends {
-            if let Some(new) = new.backends.iter().find(|&new| new == old) {
-                for old_storage in &old.storages {
-                    if !new.storages.contains(old_storage) {
-                        diffs.push(ConfigDiff::DeleteStorage {
-                            backend_name: old.name.clone(),
-                            config: old_storage.clone(),
-                        })
-                    }
-                }
-            } else {
-                diffs.extend(old.storages.iter().map(|config| ConfigDiff::DeleteStorage {
-                    backend_name: old.name.clone(),
-                    config: config.clone(),
-                }));
-                diffs.push(ConfigDiff::DeleteBackend(old.clone()));
+        for old in &old.storages {
+            if !new.storages.contains(old) {
+                diffs.push(ConfigDiff::DeleteStorage(old.clone()))
             }
         }
-        for mut new in new.backends {
-            if let Some(old) = old.backends.iter().find(|&old| old == &new) {
-                for new_storage in new.storages {
-                    if !old.storages.contains(&new_storage) {
-                        diffs.push(ConfigDiff::AddStorage {
-                            backend_name: new.name.clone(),
-                            config: new_storage,
-                        })
-                    }
-                }
-            } else {
-                let mut new_storages = Vec::new();
-                std::mem::swap(&mut new_storages, &mut new.storages);
-                let name = new.name.clone();
-                diffs.push(ConfigDiff::AddBackend(new));
-                diffs.extend(
-                    new_storages
-                        .into_iter()
-                        .map(|config| ConfigDiff::AddStorage {
-                            backend_name: name.clone(),
-                            config,
-                        }),
-                )
+        for old in &old.volumes {
+            if !new.volumes.contains(old) {
+                diffs.push(ConfigDiff::DeleteVolume(old.clone()))
+            }
+        }
+        for new in new.volumes {
+            if !old.volumes.contains(&new) {
+                diffs.push(ConfigDiff::AddVolume(new))
+            }
+        }
+        for new in new.storages {
+            if !old.storages.contains(&new) {
+                diffs.push(ConfigDiff::AddStorage(new))
             }
         }
         diffs
     }
 }
-impl BackendConfig {
+pub enum BackendSearchMethod<'a> {
+    ByPaths(&'a [String]),
+    ByName(&'a str),
+}
+impl VolumeConfig {
     pub fn to_json_value(&self) -> Value {
         let mut result = self.rest.clone();
         if let Some(paths) = &self.paths {
@@ -174,14 +172,20 @@ impl BackendConfig {
         }
         Value::Object(result)
     }
+    pub fn backend_search_method(&self) -> BackendSearchMethod {
+        match &self.paths {
+            None => BackendSearchMethod::ByName(self.backend.as_deref().unwrap_or(&self.name)),
+            Some(paths) => BackendSearchMethod::ByPaths(paths),
+        }
+    }
     fn try_from<V: AsObject>(plugin_name: &str, configs: &V) -> ZResult<Vec<Self>> {
         let configs = configs.as_object().ok_or_else(|| {
             zerror!(
-                "Configuration for plugin `{}`'s `backends` field must be an object",
+                "Configuration for plugin `{}`'s `volumes` field must be an object",
                 plugin_name
             )
         })?;
-        let mut backends = Vec::with_capacity(configs.len());
+        let mut volumes = Vec::with_capacity(configs.len());
         for (name, config) in configs {
             let config = if let Value::Object(config) = config {
                 config
@@ -192,6 +196,15 @@ impl BackendConfig {
                     name
                 );
             };
+            let backend = match config.get("backend") {
+                None => None,
+                Some(serde_json::Value::String(s)) => Some(s.clone()),
+                _ => bail!(
+                    "`backend` field of `{}`'s `{}` volume configuration must be a string",
+                    plugin_name,
+                    name
+                ),
+            };
             let paths = match config.get("__path__") {
                 None => None,
                 Some(serde_json::Value::String(s)) => Some(vec![s.clone()]),
@@ -201,53 +214,38 @@ impl BackendConfig {
                         if let serde_json::Value::String(path) = path {
                             paths.push(path.clone());
                         } else {
-                            bail!("`path` field of `{}`'s `{}` backend configuration must be a string or array of string", plugin_name, name)
+                            bail!("`path` field of `{}`'s `{}` volume configuration must be a string or array of string", plugin_name, name)
                         }
                     }
                     Some(paths)
                 }
-                _ => bail!("`path` field of `{}`'s `{}` backend configuration must be a string or array of string", plugin_name, name)
+                _ => bail!("`path` field of `{}`'s `{}` volume configuration must be a string or array of string", plugin_name, name)
             };
-            let required = match config.get("required") {
+            let required = match config.get("__required__") {
                 Some(serde_json::Value::Bool(b)) => *b,
                 None => true,
                 _ => todo!(),
             };
-            let storages = match config.get("storages") {
-                Some(serde_json::Value::Object(configs)) => {
-                    let mut storages = Vec::with_capacity(configs.len());
-                    for (name, config) in configs {
-                        storages.push(StorageConfig::try_from(plugin_name, name, name, config)?)
-                    }
-                    storages
-                }
-                None => Vec::new(),
-                _ => bail!(
-                    "`storages` field of `{}`'s `{}` backend configuration must be an object",
-                    plugin_name,
-                    name
-                ),
-            };
-            backends.push(BackendConfig {
+            volumes.push(VolumeConfig {
                 name: name.clone(),
+                backend,
                 paths,
-                storages,
                 required,
                 rest: config
                     .iter()
                     .filter_map(|(k, v)| {
-                        (!["path", "required", "storages"].contains(&k.as_str()))
+                        (!["__path__", "__required__"].contains(&k.as_str()))
                             .then(|| (k.clone(), v.clone()))
                     })
                     .collect(),
             })
         }
-        Ok(backends)
+        Ok(volumes)
     }
 }
 impl StorageConfig {
     pub fn to_json_value(&self) -> Value {
-        let mut result = self.rest.clone();
+        let mut result = serde_json::Map::new();
         result.insert("key_expr".into(), Value::String(self.key_expr.clone()));
         if !self.strip_prefix.is_empty() {
             result.insert(
@@ -255,50 +253,70 @@ impl StorageConfig {
                 Value::String(self.strip_prefix.clone()),
             );
         }
+        result.insert(
+            "volume".into(),
+            match &self.volume_cfg {
+                Value::Null => Value::String(self.volume_id.clone()),
+                Value::Object(v) => {
+                    let mut v = v.clone();
+                    v.insert("id".into(), self.volume_id.clone().into());
+                    Value::Object(v)
+                }
+                _ => unreachable!(),
+            },
+        );
         Value::Object(result)
     }
-    fn try_from<V: AsObject>(
-        plugin_name: &str,
-        backend_name: &str,
-        storage_name: &str,
-        config: &V,
-    ) -> ZResult<Self> {
+    fn try_from<V: AsObject>(plugin_name: &str, storage_name: &str, config: &V) -> ZResult<Self> {
         let config = config.as_object().ok_or_else(|| {
             zerror!(
-                "`storages` field of `{}`'s `{}` backend configuration must be an array of objects",
+                "`storages` field of `{}`'s configuration must be an array of objects",
                 plugin_name,
-                backend_name
             )
         })?;
         let key_expr = if let Some(Value::String(s)) = config.get("key_expr") {
             s.clone()
         } else {
-            bail!("elements of the `storages` field of `{}`'s `{}` backend configuration must be objects with at least a `key_expr` field",
-            plugin_name,
-            backend_name)
+            bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` field",
+            plugin_name,)
         };
         let strip_prefix = match config.get("strip_prefix") {
             Some(Value::String(s)) => s.clone(),
             None => String::new(),
-            _ => bail!("`strip_prefix` field of elements of the `storage` field of `{}`'s `{}` backend configuration must be a string",
-            plugin_name,
-            backend_name)
+            _ => bail!("Invalid type for field `strip_prefix` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
+        };
+        let (volume_id, volume_cfg) = match config.get("volume") {
+            Some(Value::String(volume_id)) => (volume_id.clone(), Value::Null),
+            Some(Value::Object(volume)) => {
+                let mut volume_id = None;
+                let mut volume_cfg = serde_json::Map::new();
+                for (key, value) in volume {
+                    match (key.as_str(), value) {
+                        ("id", Value::String(id)) => volume_id = Some(id.to_owned()),
+                        ("id", _) => {}
+                        _ => {
+                            volume_cfg.insert(key.clone(), value.clone());
+                        }
+                    }
+                }
+                (volume_id.ok_or_else(|| zerror!("`volume` value for storage `{}` is an object, but misses mandatory string-typed field `id`", storage_name))?, volume_cfg.into())
+            }
+            None => bail!(
+                "`volume` field missing for storage `{}`. This field is mandatory and accepts strings or objects with at least the `id` field",
+                storage_name
+            ),
+            _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
         Ok(StorageConfig {
             name: storage_name.into(),
             key_expr,
             strip_prefix,
-            rest: config
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    (!["key_expr", "strip_prefix"].contains(&k.as_str()))
-                        .then(|| (k.clone(), v.clone()))
-                })
-                .collect(),
+            volume_id,
+            volume_cfg,
         })
     }
 }
-impl PartialEq for BackendConfig {
+impl PartialEq for VolumeConfig {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name && self.paths == other.paths && self.rest == other.rest
     }

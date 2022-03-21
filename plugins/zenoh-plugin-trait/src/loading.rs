@@ -161,7 +161,10 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
         let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", &name))? };
-        let plugin = Self::load_plugin(&name, lib, p)?;
+        let plugin = match Self::load_plugin(&name, lib, p.clone()) {
+            Ok(p) => p,
+            Err(e) => bail!("After loading `{:?}`: {}", &p, e),
+        };
         let path = plugin.path().into();
         self.plugin_starters.push(Box::new(plugin));
         Ok(path)
