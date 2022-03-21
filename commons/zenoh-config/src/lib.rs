@@ -283,31 +283,6 @@ impl Config {
     pub fn add_plugin_validator(&mut self, name: impl Into<String>, validator: ValidationFunction) {
         self.plugins.validators.insert(name.into(), validator);
     }
-    pub fn insert_json<K: AsRef<str>>(
-        &mut self,
-        key: K,
-        value: &str,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<serde_json::Error>,
-    {
-        let key = key.as_ref();
-        let key = key.strip_prefix('/').unwrap_or(key);
-        self.insert(key, &mut serde_json::Deserializer::from_str(value))
-    }
-
-    pub fn insert_json5<K: AsRef<str>>(
-        &mut self,
-        key: K,
-        value: &str,
-    ) -> Result<(), validated_struct::InsertionError>
-    where
-        validated_struct::InsertionError: From<json5::Error>,
-    {
-        let key = key.as_ref();
-        let key = key.strip_prefix('/').unwrap_or(key);
-        self.insert(key, &mut json5::Deserializer::from_str(value)?)
-    }
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
         self.plugins.values.get(name)

@@ -3031,9 +3031,9 @@ dependencies = [
 
 [[package]]
 name = "validated_struct"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "182c487f4b7cc196ec9626a8fa816cb6346b998e2f669b28c2f20ea976ac78eb"
+checksum = "feef04c049b4beae3037a2a31b8da40d8cebec0b97456f24c7de0ede4ed9efed"
 dependencies = [
  "json5",
  "serde",
@@ -3043,9 +3043,9 @@ dependencies = [
 
 [[package]]
 name = "validated_struct_macros"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2427ccf44db18e67afd86b83fb32ff3f8fe9e61ac302eb2a1ed26c2a65851bb"
+checksum = "9d4444a980afa9ef0d29c2a3f4d952ec0495a7a996a9c78b52698b71bc21edb4"
 dependencies = [
  "proc-macro2",
  "quote",

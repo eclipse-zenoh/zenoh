@@ -191,17 +191,17 @@ fn config_from_args(args: &ArgMatches) -> Config {
             match plugin.split_once(':') {
                 Some((name, path)) => {
                     config
-                        .insert_json5(format!("plugins/{}/__required__", name), "true")
+                        .insert_json5(&format!("plugins/{}/__required__", name), "true")
                         .unwrap();
                     config
                         .insert_json5(
-                            format!("plugins/{}/__path__", name),
+                            &format!("plugins/{}/__path__", name),
                             &format!("\"{}\"", path),
                         )
                         .unwrap();
                 }
                 None => config
-                    .insert_json5(format!("plugins/{}/__required__", plugin), "true")
+                    .insert_json5(&format!("plugins/{}/__required__", plugin), "true")
                     .unwrap(),
             }
         }
