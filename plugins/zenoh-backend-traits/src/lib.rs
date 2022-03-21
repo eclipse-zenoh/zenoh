@@ -30,13 +30,13 @@
 //! use zenoh::Result as ZResult;
 //!
 //! #[no_mangle]
-//! pub fn create_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+//! pub fn create_backend(config: VolumeConfig) -> ZResult<Box<dyn Backend>> {
 //!     Ok(Box::new(MyBackend { config }))
 //! }
 //!
 //! // Your Backend implementation
 //! struct MyBackend {
-//!     config: BackendConfig,
+//!     config: VolumeConfig,
 //! }
 //!
 //! #[async_trait]

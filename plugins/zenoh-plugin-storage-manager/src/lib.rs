@@ -217,7 +217,7 @@ impl StorageRuntimeInner {
             }
         } else {
             bail!(
-                "Failed to instantiate volume {} from {} : function {}(BackendConfig) not found in lib",
+                "Failed to instantiate volume {} from {} : function {}(VolumeConfig) not found in lib",
                 volume_id,
                 lib_path.display(),
                 String::from_utf8_lossy(CREATE_BACKEND_FN_NAME)
