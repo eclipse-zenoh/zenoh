@@ -35,15 +35,15 @@ ENV PATH /root/.cargo/bin:$PATH
 
 COPY . .
 
-RUN cargo build --release --target=${TARGET}
+RUN cargo build --release
 
 
 FROM alpine:latest
 
 RUN apk add --no-cache libgcc libstdc++
 
-COPY --from=builder target/*/release/zenohd /
-COPY --from=builder target/*/release/*.so /
+COPY --from=builder target/release/zenohd /
+COPY --from=builder target/release/*.so /
 
 RUN echo '#!/bin/ash' > /entrypoint.sh
 RUN echo 'echo " * Starting: /zenohd $*"' >> /entrypoint.sh
