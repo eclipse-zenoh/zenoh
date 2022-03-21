@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Add;
 use std::time::{Duration, Instant};
-use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
 use zenoh::queryable::EVAL;

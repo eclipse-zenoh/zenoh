@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use futures::prelude::*;
 use zenoh::config::Config;
-use zenoh::net::protocol::io::SplitBuffer;
+use zenoh::prelude::*;
 use zenoh::query::*;
 use zenoh::queryable;
 

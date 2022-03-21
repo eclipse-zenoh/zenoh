@@ -162,7 +162,12 @@ pub enum Priority {
 }
 
 impl Priority {
-    pub const NUM: usize = 8;
+    /// The lowest Priority
+    pub const MIN: Self = Self::Background;
+    /// The highest Priority
+    pub const MAX: Self = Self::Control;
+    /// The number of available priorities
+    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
 }
 
 impl Default for Priority {
@@ -170,6 +175,7 @@ impl Default for Priority {
         Priority::Data
     }
 }
+
 impl TryFrom<u8> for Priority {
     type Error = zenoh_core::Error;
 
@@ -184,8 +190,10 @@ impl TryFrom<u8> for Priority {
             6 => Ok(Priority::DataLow),
             7 => Ok(Priority::Background),
             unknown => bail!(
-                "{} is not a valid conduit value. Admitted values are [0-7].",
-                unknown
+                "{} is not a valid priority value. Admitted values are: [{}-{}].",
+                unknown,
+                Self::MAX as u8,
+                Self::MIN as u8
             ),
         }
     }
