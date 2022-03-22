@@ -413,10 +413,9 @@ impl Session {
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
     /// The returned configuration [`Notifier`] can be used to read the current
-    /// zenoh configuration through the [`get`](Notifier::get) function or
-    /// modify the zenoh configuration through the [`insert`](Notifier::insert),
-    /// [`insert_json`](Notifier::insert_json) or [`insert_json5`](Notifier::insert_json5)
-    /// funtion.
+    /// zenoh configuration through the `get` function or
+    /// modify the zenoh configuration through the `insert`,
+    /// or `insert_json5` funtion.
     ///
     /// # Examples
     /// ### Read current zenoh configuration
