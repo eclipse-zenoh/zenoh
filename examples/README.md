@@ -11,7 +11,7 @@
 
    If you run the tests against the zenoh router running in a Docker container, you need to add the
    `-e tcp/localhost:7447` option to your examples. That's because Docker doesn't support UDP multicast
-   transport, and therefore the zenoh scouting and discrovery mechanism cannot work with.
+   transport, and therefore the zenoh scouting and discovery mechanism cannot work with.
 
 ## Examples description
 
@@ -65,7 +65,7 @@
 
 ### z_sub
 
-   Declares a key expression and a susbcriber.  
+   Declares a key expression and a subscriber.
    The subscriber will be notified of each `put` or `delete` made on any key expression matching the subscriber key expression, and will print this notification.
 
    Typical usage:
@@ -79,8 +79,8 @@
 
 ### z_pull
 
-   Declares a key expression and a pull susbcriber.  
-   On each pull, the pull subsciber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
+   Declares a key expression and a pull subscriber.
+   On each pull, the pull subscriber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
 
    Typical usage:
@@ -156,7 +156,7 @@
 ### z_pub_thr & z_sub_thr
 
    Pub/Sub throughput test.
-   This example allows to perform throughput measurements between a pubisher performing
+   This example allows to perform throughput measurements between a publisher performing
    put operations and a subscriber receiving notifications of those puts.
 
    Typical Subscriber usage:
@@ -191,7 +191,7 @@
 ### z_pub_shm_thr & z_sub_shm_thr
 
    Pub/Sub throughput test involving the shared-memory feature.
-   This example allows to perform throughput measurements between a pubisher performing
+   This example allows to perform throughput measurements between a publisher performing
    put operations with the shared-memory feature and a subscriber receiving notifications
    of those puts.
 

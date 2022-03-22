@@ -11,7 +11,7 @@
 
    If you run the tests against the zenoh router running in a Docker container, you need to add the
    `-e tcp/localhost:7447` option to your examples. That's because Docker doesn't support UDP multicast
-   transport, and therefore the zenoh scouting and discrovery mechanism cannot work with.
+   transport, and therefore the zenoh scouting and discovery mechanism cannot work with.
 
 ## Examples description
 
