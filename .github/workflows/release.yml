@@ -209,12 +209,12 @@ jobs:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenohd
 
-      - name: Debian package - zenoh-plugin-storages
+      - name: Debian package - zenoh-plugin-storage-manager
         if: contains(matrix.job.target, '-linux-gnu')
         uses: actions-rs/cargo@v1
         with:
           command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storages
+          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
 
       - name: Debian package - zenoh-plugin-rest
         if: contains(matrix.job.target, '-linux-gnu')
