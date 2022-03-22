@@ -30,12 +30,14 @@ const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn main() {
     task::block_on(async {
+        let mut log_builder =
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
         #[cfg(feature = "stats")]
-        env_logger::builder().format_timestamp_millis().init();
+        log_builder.format_timestamp_millis().init();
         #[cfg(not(feature = "stats"))]
-        env_logger::init();
+        log_builder.init();
 
-        log::debug!("zenohd {}", *LONG_VERSION);
+        log::info!("zenohd {}", *LONG_VERSION);
 
         let app = App::new("The zenoh router")
             .version(GIT_VERSION)
