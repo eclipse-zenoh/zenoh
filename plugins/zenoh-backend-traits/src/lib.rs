@@ -129,20 +129,20 @@
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use zenoh::prelude::{KeyExpr, Sample, Selector};
-use zenoh::Result as ZResult;
+pub use zenoh::Result as ZResult;
 
 pub mod config;
 pub mod utils;
 use config::{StorageConfig, VolumeConfig};
 
-/// Signature of the `create_backend` operation to be implemented in the library as an entrypoint.
-pub const CREATE_BACKEND_FN_NAME: &[u8] = b"create_backend";
-pub type CreateBackend = fn(VolumeConfig) -> ZResult<Box<dyn Backend>>;
+/// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
+pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
+pub type CreateVolume = fn(VolumeConfig) -> ZResult<Box<dyn Volume>>;
 
 /// Trait to be implemented by a Backend.
 ///
 #[async_trait]
-pub trait Backend: Send + Sync {
+pub trait Volume: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this backend.
     fn get_admin_status(&self) -> serde_json::Value;

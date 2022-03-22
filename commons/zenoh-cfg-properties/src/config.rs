@@ -387,9 +387,6 @@ mod consts {
 
 pub use consts::*;
 
-/// A set of [`IntKeyProperties`] used to configure zenoh.
-pub type ConfigProperties = IntKeyProperties<ConfigTranscoder>;
-
 pub struct ConfigTranscoder;
 
 impl KeyTranscoder for ConfigTranscoder {
