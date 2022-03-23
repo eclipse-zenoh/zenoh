@@ -13,7 +13,7 @@
 //
 
 //! This crate provides the traits to be implemented by a zenoh backend library:
-//!  - [`Backend`]
+//!  - [`Volume`]
 //!  - [`Storage`]
 //!
 //! Such library must also declare a `create_backend()` operation
@@ -30,21 +30,21 @@
 //! use zenoh::Result as ZResult;
 //!
 //! #[no_mangle]
-//! pub fn create_backend(config: VolumeConfig) -> ZResult<Box<dyn Backend>> {
-//!     Ok(Box::new(MyBackend { config }))
+//! pub fn create_volume(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
+//!     Ok(Box::new(MyVolumeType { config }))
 //! }
 //!
 //! // Your Backend implementation
-//! struct MyBackend {
+//! struct MyVolumeType {
 //!     config: VolumeConfig,
 //! }
 //!
 //! #[async_trait]
-//! impl Backend for MyBackend {
+//! impl Volume for MyVolumeType {
 //!     fn get_admin_status(&self) -> serde_json::Value {
-//!         // This operation is called on GET operation on the admin space for the Backend
+//!         // This operation is called on GET operation on the admin space for the Volume
 //!         // Here we reply with a static status (containing the configuration properties).
-//!         // But we could add dynamic properties for Backend monitoring.
+//!         // But we could add dynamic properties for Volume monitoring.
 //!         self.config.to_json_value()
 //!     }
 //!
