@@ -345,7 +345,7 @@ where
 ///
 /// # Arguments
 ///
-/// * `config` - The [`ConfigProperties`] for the zenoh session
+/// * `config` - The [`Config`] for the zenoh session
 ///
 /// # Examples
 /// ```
@@ -356,34 +356,11 @@ where
 /// # })
 /// ```
 ///
-/// # Configuration Properties
-///
-/// [`ConfigProperties`] are a set of key/value (`u64`/`String`) pairs.
-/// Constants for the accepted keys can be found in the [`config`] module.
-/// Multiple values are coma separated.
-///
-/// # Examples
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
 ///
 /// let mut config = config::peer();
-/// config.set_local_routing(Some(false));
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
-///
-/// let session = zenoh::open(config).await.unwrap();
-/// # })
-/// ```
-///
-/// [`ConfigProperties`] can be built set of key/value (`String`/`String`) set
-/// of [`Properties`](crate::properties::Properties).
-///
-/// # Examples
-/// ```
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-///
-/// let mut config = config::default();
 /// config.set_local_routing(Some(false));
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///

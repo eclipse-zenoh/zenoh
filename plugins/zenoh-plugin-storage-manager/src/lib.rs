@@ -28,9 +28,9 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::Session;
-use zenoh_backend_traits::CreateBackend;
-use zenoh_backend_traits::CREATE_BACKEND_FN_NAME;
-use zenoh_backend_traits::{config::*, Backend};
+use zenoh_backend_traits::CreateVolume;
+use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
+use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zlock};
 use zenoh_util::LibLoader;
@@ -44,7 +44,7 @@ zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
-    const STATIC_NAME: &'static str = "storage-manager";
+    const STATIC_NAME: &'static str = "storage_manager";
 
     type StartArgs = Runtime;
     type RunningPlugin = zenoh::plugins::RunningPlugin;
@@ -195,7 +195,7 @@ impl StorageRuntimeInner {
         lib: Library,
         lib_path: PathBuf,
     ) -> ZResult<()> {
-        if let Ok(create_backend) = lib.get::<CreateBackend>(CREATE_BACKEND_FN_NAME) {
+        if let Ok(create_backend) = lib.get::<CreateVolume>(CREATE_VOLUME_FN_NAME) {
             match create_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
@@ -220,7 +220,7 @@ impl StorageRuntimeInner {
                 "Failed to instantiate volume {} from {} : function {}(VolumeConfig) not found in lib",
                 volume_id,
                 lib_path.display(),
-                String::from_utf8_lossy(CREATE_BACKEND_FN_NAME)
+                String::from_utf8_lossy(CREATE_VOLUME_FN_NAME)
             );
         }
     }
@@ -259,13 +259,13 @@ impl StorageRuntimeInner {
     }
 }
 struct VolumeHandle {
-    backend: Box<dyn Backend>,
+    backend: Box<dyn Volume>,
     _lib: Option<Library>,
     lib_path: String,
     stopper: Arc<AtomicBool>,
 }
 impl VolumeHandle {
-    fn new(backend: Box<dyn Backend>, lib: Option<Library>, lib_path: String) -> Self {
+    fn new(backend: Box<dyn Volume>, lib: Option<Library>, lib_path: String) -> Self {
         VolumeHandle {
             backend,
             _lib: lib,
