@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 
-use super::{IntKeyProperties, KeyTranscoder};
+use super::KeyTranscoder;
 
 mod consts {
     /// `"true"`
