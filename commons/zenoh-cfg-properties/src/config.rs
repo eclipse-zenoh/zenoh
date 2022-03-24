@@ -296,10 +296,10 @@ mod consts {
     /// Configures the buffer size in bytes at receiving side for each link.
     /// String key : `"link_rx_buff_size"`.
     /// Accepted values : `<unsigned integer>`.
-    /// Default value : `16777216` (16MiB).
+    /// Default value : `65535` (64KiB).
     pub const ZN_LINK_RX_BUFF_SIZE_KEY: u64 = 0x76;
     pub const ZN_LINK_RX_BUFF_SIZE_STR: &str = "link_rx_buff_size";
-    pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "16777216";
+    pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "65535";
 
     /// The multicast IPv6 address and ports to use for multicast scouting.
     /// String key : `"multicast_ipv6_address"`.

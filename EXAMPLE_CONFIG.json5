@@ -140,15 +140,24 @@
       max_sessions: 1024,
     },
     link: {
+      /// Batch size is expressed as a 16bit unsigned integer.
+      /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
+      /// The default batch size value is the maximum batch size: 65535.
       batch_size: 65535,
       /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
       lease: 10000,
       /// Link keep-alive duration in milliseconds
       keep_alive: 2500,
       /// Receiving buffer size for each link
-      rx_buffer_size: 16777216,
+      /// The default the rx_buffer_size value is the same as the default batch size: 65335.
+      /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+      /// more in-flight data. This is particularly relevant when dealing with large messages.
+      /// E.g. for 16MiB rx_buffer_size: 16777216.
+      rx_buffer_size: 65535,
       /// Maximum size of the defragmentation buffer at receiver end.
       /// Fragmented messages that are larger than the configured size will be dropped.
+      /// The default value is 1GiB. This would work in most scenarios.
+      /// NOTE: reduce the value if you are operating on a memory constrained device.
       defrag_buffer_size: 1073741824,
       tls: {
         root_ca_certificate: null,
