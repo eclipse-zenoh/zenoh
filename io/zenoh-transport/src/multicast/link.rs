@@ -333,7 +333,10 @@ async fn rx_task(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buffer_size / mtu);
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the zbuf
