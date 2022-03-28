@@ -154,7 +154,7 @@ impl Locator {
         let addr_end = self
             .inner
             .find(METADATA_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+            .unwrap_or(self.inner.len());
         self.inner.replace_range(addr_start..addr_end, addr);
         true
     }
@@ -180,20 +180,14 @@ impl Locator {
     }
 
     pub fn protocol(&self) -> &str {
-        let index = self
-            .inner
-            .find(PROTO_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+        let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         &self.inner[..index]
     }
 
     pub fn address(&self) -> &str {
-        let index = self
-            .inner
-            .find(PROTO_SEPARATOR)
-            .unwrap_or_else(|| self.inner.len());
+        let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         let rest = &self.inner[index + 1..];
-        let index = rest.find(METADATA_SEPARATOR).unwrap_or_else(|| rest.len());
+        let index = rest.find(METADATA_SEPARATOR).unwrap_or(rest.len());
         &rest[..index]
     }
 
