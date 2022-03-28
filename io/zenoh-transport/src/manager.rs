@@ -30,13 +30,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
+use std::time::Duration;
 use zenoh_cfg_properties::{config::*, Properties};
-use zenoh_config::Config;
+use zenoh_config::{Config, QueueConf, QueueSizeConf};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zparse};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol_core::{EndPoint, Locator, Priority};
 
 /// # Examples
 /// ```
@@ -95,6 +96,8 @@ pub struct TransportManagerConfig {
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: u16,
+    pub queue_size: [usize; Priority::NUM],
+    pub queue_backoff: Duration,
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
@@ -119,6 +122,8 @@ pub struct TransportManagerBuilder {
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: u16,
+    queue_size: QueueSizeConf,
+    queue_backoff: Duration,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
@@ -147,6 +152,16 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn queue_size(mut self, queue_size: QueueSizeConf) -> Self {
+        self.queue_size = queue_size;
+        self
+    }
+
+    pub fn queue_backoff(mut self, queue_backoff: Duration) -> Self {
+        self.queue_backoff = queue_backoff;
+        self
+    }
+
     pub fn defrag_buff_size(mut self, defrag_buff_size: usize) -> Self {
         self.defrag_buff_size = defrag_buff_size;
         self
@@ -172,27 +187,29 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub async fn from_config(mut self, properties: &Config) -> ZResult<TransportManagerBuilder> {
-        if let Some(v) = properties.id() {
+    pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
+        if let Some(v) = config.id() {
             self = self.pid(zparse!(v)?);
         }
-        if let Some(v) = properties.mode() {
+        if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }
-        if let Some(v) = properties.transport().sequence_number_resolution() {
-            self = self.sn_resolution(*v);
-        }
-        if let Some(v) = properties.transport().link().batch_size() {
-            self = self.batch_size(*v);
-        }
-        if let Some(v) = properties.transport().link().defrag_buffer_size() {
-            self = self.defrag_buff_size(*v);
-        }
-        if let Some(v) = properties.transport().link().rx_buffer_size() {
-            self = self.link_rx_buffer_size(*v);
-        }
-        let (config, errors) = zenoh_link::LinkConfigurator::default()
-            .configurations(properties)
+
+        self = self.sn_resolution(
+            config
+                .transport()
+                .link()
+                .tx()
+                .sequence_number_resolution()
+                .unwrap(),
+        );
+        self = self.batch_size(config.transport().link().tx().batch_size().unwrap());
+        self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
+        self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
+        self = self.queue_size(config.transport().link().tx().queue().size().clone());
+
+        let (c, errors) = zenoh_link::LinkConfigurator::default()
+            .configurations(config)
             .await;
         if !errors.is_empty() {
             use std::fmt::Write;
@@ -202,15 +219,15 @@ impl TransportManagerBuilder {
             }
             bail!("{}", formatter);
         }
-        self = self.endpoint(config);
+        self = self.endpoint(c);
         self = self.unicast(
             TransportManagerBuilderUnicast::default()
-                .from_config(properties)
+                .from_config(config)
                 .await?,
         );
         self = self.multicast(
             TransportManagerBuilderMulticast::default()
-                .from_config(properties)
+                .from_config(config)
                 .await?,
         );
 
@@ -221,12 +238,24 @@ impl TransportManagerBuilder {
         let unicast = self.unicast.build()?;
         let multicast = self.multicast.build()?;
 
+        let mut queue_size = [0; Priority::NUM];
+        queue_size[Priority::Control as usize] = *self.queue_size.control();
+        queue_size[Priority::RealTime as usize] = *self.queue_size.real_time();
+        queue_size[Priority::InteractiveHigh as usize] = *self.queue_size.interactive_high();
+        queue_size[Priority::InteractiveLow as usize] = *self.queue_size.interactive_low();
+        queue_size[Priority::DataHigh as usize] = *self.queue_size.data_high();
+        queue_size[Priority::Data as usize] = *self.queue_size.data();
+        queue_size[Priority::DataLow as usize] = *self.queue_size.data_low();
+        queue_size[Priority::Background as usize] = *self.queue_size.background();
+
         let config = TransportManagerConfig {
             version: self.version,
             pid: self.pid,
             whatami: self.whatami,
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
+            queue_size,
+            queue_backoff: self.queue_backoff,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
@@ -248,12 +277,16 @@ impl TransportManagerBuilder {
 
 impl Default for TransportManagerBuilder {
     fn default() -> Self {
+        let queue = QueueConf::default();
+        let backoff = queue.backoff().unwrap();
         Self {
             version: VERSION,
             pid: PeerId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
+            queue_size: queue.size,
+            queue_backoff: Duration::from_nanos(backoff),
             defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
             link_rx_buffer_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             endpoint: HashMap::new(),

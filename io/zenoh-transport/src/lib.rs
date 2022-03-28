@@ -12,7 +12,6 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 mod common;
-pub mod defaults;
 mod manager;
 mod multicast;
 mod primitives;

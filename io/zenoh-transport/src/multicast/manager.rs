@@ -17,10 +17,9 @@ use crate::TransportManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh_cfg_properties::config::*;
 use zenoh_config::Config;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock, zparse};
+use zenoh_core::{zerror, zlock};
 use zenoh_link::*;
 use zenoh_protocol::proto::tmsg;
 use zenoh_protocol_core::locators::LocatorProtocol;
@@ -81,23 +80,19 @@ impl TransportManagerBuilderMulticast {
 
     pub async fn from_config(
         mut self,
-        properties: &Config,
+        config: &Config,
     ) -> ZResult<TransportManagerBuilderMulticast> {
-        if let Some(v) = properties.transport().link().lease() {
-            self = self.lease(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().link().keep_alive() {
-            self = self.keep_alive(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().multicast().join_interval() {
-            self = self.join_interval(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().multicast().max_sessions() {
-            self = self.max_sessions(*v);
-        }
-        if let Some(v) = properties.transport().qos() {
-            self = self.qos(*v);
-        }
+        self = self.lease(Duration::from_millis(
+            config.transport().link().tx().lease().unwrap(),
+        ));
+        self = self.keep_alive(Duration::from_millis(
+            config.transport().link().tx().keep_alive().unwrap(),
+        ));
+        self = self.join_interval(Duration::from_millis(
+            config.transport().multicast().join_interval().unwrap(),
+        ));
+        self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
+        self = self.qos(*config.transport().qos().enabled());
 
         Ok(self)
     }
@@ -124,13 +119,14 @@ impl TransportManagerBuilderMulticast {
 
 impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
-        TransportManagerBuilderMulticast {
-            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
-            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
-            join_interval: Duration::from_millis(zparse!(ZN_JOIN_INTERVAL_DEFAULT).unwrap()),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_MULTICAST_DEFAULT).unwrap(),
-            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
-        }
+        let tmb = TransportManagerBuilderMulticast {
+            lease: Duration::from_millis(0),
+            keep_alive: Duration::from_millis(0),
+            join_interval: Duration::from_millis(0),
+            max_sessions: 0,
+            is_qos: false,
+        };
+        async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
     }
 }
 
