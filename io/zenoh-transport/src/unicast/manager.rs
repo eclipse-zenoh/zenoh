@@ -137,37 +137,27 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    pub async fn from_config(
-        mut self,
-        properties: &Config,
-    ) -> ZResult<TransportManagerBuilderUnicast> {
-        if let Some(v) = properties.transport().link().lease() {
-            self = self.lease(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().link().keep_alive() {
-            self = self.keep_alive(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().unicast().accept_timeout() {
-            self = self.accept_timeout(Duration::from_millis(*v));
-        }
-        if let Some(v) = properties.transport().unicast().accept_pending() {
-            self = self.accept_pending(*v);
-        }
-        if let Some(v) = properties.transport().unicast().max_sessions() {
-            self = self.max_sessions(*v);
-        }
-        if let Some(v) = properties.transport().unicast().max_links() {
-            self = self.max_links(*v);
-        }
-        if let Some(v) = properties.transport().qos() {
-            self = self.qos(*v);
-        }
+    pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
+        self = self.lease(Duration::from_millis(
+            config.transport().link().tx().lease().unwrap(),
+        ));
+        self = self.keep_alive(Duration::from_millis(
+            config.transport().link().tx().keep_alive().unwrap(),
+        ));
+        self = self.accept_timeout(Duration::from_millis(
+            config.transport().unicast().accept_timeout().unwrap(),
+        ));
+        self = self.accept_pending(config.transport().unicast().accept_pending().unwrap());
+        self = self.max_sessions(config.transport().unicast().max_sessions().unwrap());
+        self = self.max_links(config.transport().unicast().max_links().unwrap());
+        self = self.qos(*config.transport().qos().enabled());
+
         #[cfg(feature = "shared-memory")]
-        if let Some(v) = properties.transport().shared_memory() {
-            self = self.shm(*v);
+        {
+            self = self.shm(*config.transport().shared_memory().enabled());
         }
-        self = self.peer_authenticator(PeerAuthenticator::from_config(properties).await?);
-        self = self.link_authenticator(LinkAuthenticator::from_config(properties).await?);
+        self = self.peer_authenticator(PeerAuthenticator::from_config(config).await?);
+        self = self.link_authenticator(LinkAuthenticator::from_config(config).await?);
 
         Ok(self)
     }

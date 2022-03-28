@@ -14,7 +14,7 @@
 
 //! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
 //! and associated constants.
-
+mod defaults;
 use serde_json::Value;
 use std::{
     any::Any,
@@ -28,7 +28,7 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-pub use zenoh_protocol_core::{whatami, EndPoint, Locator, WhatAmI};
+pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -92,8 +92,9 @@ validated_struct::validator! {
     /// Most fields are optional as a way to keep defaults flexible. Some of the fields have different default values depending on the rest of the configuration.
     ///
     /// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML are currently supported, please use the proper extension for your format as the deserializer will be picked according to it).
+    #[derive(Default)]
     #[recursive_attrs]
-    #[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default)]
+    #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
     #[serde(default)]
     #[serde(deny_unknown_fields)]
     Config {
@@ -102,27 +103,32 @@ validated_struct::validator! {
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
-        pub connect: ConnectConfig {
+        pub connect: #[derive(Default)]
+        ConnectConfig {
             pub endpoints: Vec<EndPoint>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
-        pub listen: ListenConfig {
+        pub listen: #[derive(Default)]
+        ListenConfig {
             pub endpoints: Vec<EndPoint>,
         },
         /// Actions taken by the Zenoh instance upon startup.
-        pub startup: JoinConfig {
+        pub startup: #[derive(Default)]
+        JoinConfig {
             /// A list of key-expressions to subscribe to upon startup.
             subscribe: Vec<String>,
             /// A list of key-expressions to declare publications onto upon startup.
             declare_publications: Vec<String>,
         },
-        pub scouting: ScoutingConf {
+        pub scouting: #[derive(Default)]
+        ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
             /// How multicast should behave.
-            pub multicast: ScoutingMulticastConf {
+            pub multicast: #[derive(Default)]
+            ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
                 enabled: Option<bool>,
                 /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7447` by default if none is provided.
@@ -133,7 +139,8 @@ validated_struct::validator! {
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
             },
-            pub gossip: GossipConf {
+            pub gossip: #[derive(Default)]
+            GossipConf {
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<whatami::WhatAmIMatcher>,
@@ -147,43 +154,75 @@ validated_struct::validator! {
         local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
-        pub transport: TransportConf {
-            /// If set to `false`, the shared-memory transports will be disabled. (default `true`).
-            shared_memory: Option<bool>,
-            /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
-            /// Defaults to 2^28.
-            sequence_number_resolution: Option<ZInt>,
-            /// Enables QOS (traffic priorities) (default false).
-            qos: Option<bool>,
+        pub transport: #[derive(Default)]
+        TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
                 accept_timeout: Option<ZInt>,
                 /// Number of links that may stay pending during accept phase (default: 100).
                 accept_pending: Option<usize>,
-                /// Maximum number of unicast sessions (default: 1024)
+                /// Maximum number of unicast sessions (default: 1000)
                 max_sessions: Option<usize>,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
                 max_links: Option<usize>,
             },
             pub multicast: TransportMulticastConf {
-                /// Link keep-alive duration in milliseconds (default: 2500)
+                /// Link join interval duration in milliseconds (default: 2500)
                 join_interval: Option<ZInt>,
-                /// Maximum number of multicast sessions (default: 1024)
+                /// Maximum number of multicast sessions (default: 1000)
                 max_sessions: Option<usize>,
             },
-            pub link: TransportLinkConf {
-                /// Zenoh's MTU equivalent (default: 2^16-1)
-                batch_size: Option<u16>,
-                /// Link lease duration in milliseconds (default: 10000)
-                lease: Option<ZInt>,
-                /// Link keep-alive duration in milliseconds (default: 2500)
-                keep_alive: Option<ZInt>,
-                /// Receiving buffer size for each link (default: 16MiB, this default is currently under investigation)
-                rx_buffer_size: Option<usize>,
-                /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
-                /// Fragmented messages that are larger than the configured size will be dropped.
-                defrag_buffer_size: Option<usize>,
-                pub tls: TLSConf {
+            pub qos: QoSConf {
+                /// Whether QoS is enabled or not.
+                /// If set to `false`, the QoS will be disabled. (default `true`).
+                enabled: bool
+            },
+            pub link: #[derive(Default)]
+            TransportLinkConf {
+                pub tx: LinkTxConf {
+                    /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
+                    /// Defaults to 2^28.
+                    sequence_number_resolution: Option<ZInt>,
+                    /// Link lease duration in milliseconds (default: 10000)
+                    lease: Option<ZInt>,
+                    /// Link keep-alive duration in milliseconds (default: 2500)
+                    keep_alive: Option<ZInt>,
+                    /// Zenoh's MTU equivalent (default: 2^16-1)
+                    batch_size: Option<u16>,
+                    pub queue: QueueConf {
+                        /// The size of each priority queue indicates the number of batches a given queue can contain.
+                        /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
+                        /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
+                        /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
+                        /// If qos is false, then only the DATA priority will be allocated.
+                        pub size: QueueSizeConf {
+                            control: usize,
+                            real_time: usize,
+                            interactive_high: usize,
+                            interactive_low: usize,
+                            data_high: usize,
+                            data: usize,
+                            data_low: usize,
+                            background: usize,
+                        },
+                        /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
+                        /// Higher values lead to a more aggressive batching but it will introduce additional latency.
+                        backoff: Option<ZInt>
+                    }
+                },
+                pub rx: LinkRxConf {
+                    /// Receiving buffer size in bytes for each link
+                    /// The default the rx_buffer_size value is the same as the default batch size: 65335.
+                    /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+                    /// more in-flight data. This is particularly relevant when dealing with large messages.
+                    /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
+                    buffer_size: Option<usize>,
+                    /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
+                    /// Fragmented messages that are larger than the configured size will be dropped.
+                    max_message_size: Option<usize>,
+                },
+                pub tls: #[derive(Default)]
+                TLSConf {
                     root_ca_certificate: Option<String>,
                     server_private_key: Option<String>,
                     server_certificate: Option<String>,
@@ -192,16 +231,24 @@ validated_struct::validator! {
                     client_certificate: Option<String>,
                 },
             },
-            pub auth: AuthConf {
+            pub shared_memory: SharedMemoryConf {
+                /// Whether shared memory is enabled or not.
+                /// If set to `false`, the shared-memory transport will be disabled. (default `true`).
+                enabled: bool,
+            },
+            pub auth: #[derive(Default)]
+            AuthConf {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
-                pub usrpwd: UserConf {
+                pub usrpwd: #[derive(Default)]
+                UserConf {
                     user: Option<String>,
                     password: Option<String>,
                     /// The path to a file containing the user password dictionary, a file containing "<user>:<password>"
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
-                pub pubkey: PubKeyConf {
+                pub pubkey: #[derive(Default)]
+                PubKeyConf {
                     public_key_pem: Option<String>,
                     private_key_pem: Option<String>,
                     public_key_file: Option<String>,
@@ -378,7 +425,7 @@ fn config_from_json() {
     let from_str = serde_json::Deserializer::from_str;
     let mut config = Config::from_deserializer(&mut from_str(r#"{}"#)).unwrap();
     config
-        .insert("transport/link/lease", &mut from_str("168"))
+        .insert("transport/link/tx/lease", &mut from_str("168"))
         .unwrap();
     dbg!(std::mem::size_of_val(&config));
     println!("{}", serde_json::to_string_pretty(&config).unwrap());

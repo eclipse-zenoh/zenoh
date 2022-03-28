@@ -148,7 +148,7 @@ impl From<&PeerId> for uhlc::ID {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,

@@ -1,3 +1,5 @@
+use crate::common::pipeline::TransmissionPipelineConf;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -74,12 +76,14 @@ impl TransportLinkUnicast {
         conduit_tx: Arc<[TransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
+            let config = TransmissionPipelineConf {
+                is_streamed: self.link.is_streamed(),
+                batch_size: batch_size.min(self.link.get_mtu()),
+                queue_size: self.transport.config.manager.config.queue_size,
+                backoff: self.transport.config.manager.config.queue_backoff,
+            };
             // The pipeline
-            let pipeline = Arc::new(TransmissionPipeline::new(
-                batch_size.min(self.link.get_mtu()),
-                self.link.is_streamed(),
-                conduit_tx,
-            ));
+            let pipeline = Arc::new(TransmissionPipeline::new(config, conduit_tx));
             self.pipeline = Some(pipeline.clone());
 
             // Spawn the TX task

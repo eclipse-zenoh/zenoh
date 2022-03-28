@@ -123,42 +123,80 @@
   add_timestamp: true,
   /// Whether local writes/queries should reach local subscribers/queryables
   local_routing: true,
-  transport: {
-    shared_memory: true,
-    sequence_number_resolution: 268435456,
-    qos: false,
+  transport: {        
     unicast: {
       /// Timeout in milliseconds when opening a link
       accept_timeout: 10000,
+      /// Maximum number of zenoh session in pending state while accepting
       accept_pending: 100,
+      /// Maximum number of sessions that can be simultaneously alive
       max_sessions: 1024,
+      /// Maximum number of incoming links that are admitted per session
       max_links: 1,
     },
     multicast: {
-      /// Link keep-alive duration in milliseconds
+      /// Link join interval duration in milliseconds
       join_interval: 2500,
+      /// Maximum number of sessions that can be simultaneously alive
       max_sessions: 1024,
     },
+    qos: { 
+      enabled: false,
+    },
     link: {
-      /// Batch size is expressed as a 16bit unsigned integer.
-      /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
-      /// The default batch size value is the maximum batch size: 65535.
-      batch_size: 65535,
-      /// Link lease duration in milliseconds, into = usize_to_cowstr, from = usize_from_str
-      lease: 10000,
-      /// Link keep-alive duration in milliseconds
-      keep_alive: 2500,
-      /// Receiving buffer size for each link
-      /// The default the rx_buffer_size value is the same as the default batch size: 65335.
-      /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
-      /// more in-flight data. This is particularly relevant when dealing with large messages.
-      /// E.g. for 16MiB rx_buffer_size: 16777216.
-      rx_buffer_size: 65535,
-      /// Maximum size of the defragmentation buffer at receiver end.
-      /// Fragmented messages that are larger than the configured size will be dropped.
-      /// The default value is 1GiB. This would work in most scenarios.
-      /// NOTE: reduce the value if you are operating on a memory constrained device.
-      defrag_buffer_size: 1073741824,
+      tx: {
+        /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). 
+        /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
+        /// Defaults to 2^28.
+        sequence_number_resolution: 268435456,
+        /// Link lease duration in milliseconds to announce to other zenoh nodes
+        lease: 10000,
+        /// Link keep-alive interval in milliseconds. If no data is sent, keep alive
+        /// messages will be sent at the configured time interval.
+        /// NOTE: In order to consider eventual packet loss and transmission latency and jitter,
+        ///       set the actual keep_alive timeout to one fourth of the lease time.
+        ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
+        ///       check which considers a link as failed when no messages are received in 3.5 times the
+        ///       target interval.
+        keep_alive: 2500,
+        /// Batch size in bytes is expressed as a 16bit unsigned integer.
+        /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
+        /// The default batch size value is the maximum batch size: 65535.
+        batch_size: 65535,
+        queue: {
+            /// The size of each priority queue indicates the number of batches a given queue can contain.
+            /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
+            /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE, 
+            /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
+            /// If qos is false, then only the DATA priority will be allocated.
+            size: {
+              control: 1,
+              real_time: 1,
+              interactive_high: 1,
+              interactive_low: 1,
+              data_high: 2,
+              data: 4,
+              data_low: 4,
+              background: 4, 
+            },
+            /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
+            /// Higher values lead to a more aggressive batching but it will introduce additional latency.
+            backoff: 100,
+        }        
+      },
+      rx: {
+        /// Receiving buffer size in bytes for each link
+        /// The default the rx_buffer_size value is the same as the default batch size: 65335.
+        /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
+        /// more in-flight data. This is particularly relevant when dealing with large messages.
+        /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
+        buffer_size: 65535,
+        /// Maximum size of the defragmentation buffer at receiver end.
+        /// Fragmented messages that are larger than the configured size will be dropped.
+        /// The default value is 1GiB. This would work in most scenarios.
+        /// NOTE: reduce the value if you are operating on a memory constrained device.
+        max_message_size: 1073741824,
+      },
       tls: {
         root_ca_certificate: null,
         server_private_key: null,
@@ -167,6 +205,9 @@
         client_private_key: null,
         client_certificate: null,
       },
+    },
+    shared_memory: {
+      enabled: true,
     },
     auth: {
       /// The configuration of authentification.

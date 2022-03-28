@@ -178,22 +178,26 @@ impl Locator {
                 .map(|prop| split_once(prop, FIELD_SEPARATOR)),
         )
     }
+
     pub fn protocol(&self) -> &str {
         let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         &self.inner[..index]
     }
+
     pub fn address(&self) -> &str {
         let index = self.inner.find(PROTO_SEPARATOR).unwrap_or(self.inner.len());
         let rest = &self.inner[index + 1..];
         let index = rest.find(METADATA_SEPARATOR).unwrap_or(rest.len());
         &rest[..index]
     }
+
     pub fn clone_without_meta(&self) -> Self {
         Locator {
             inner: self.inner.clone(),
             metadata: None,
         }
     }
+
     pub fn metadata(&self) -> Option<&ArcProperties> {
         self.metadata.as_ref()
     }

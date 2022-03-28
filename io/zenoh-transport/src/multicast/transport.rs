@@ -20,7 +20,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -53,7 +52,7 @@ impl TransportMulticastPeer {
     }
 
     pub(super) fn is_qos(&self) -> bool {
-        self.conduit_rx[0].priority != Priority::default()
+        self.conduit_rx.len() == Priority::NUM
     }
 }
 
@@ -109,19 +108,13 @@ impl TransportMulticastInner {
 
         match config.initial_sns {
             ConduitSnList::Plain(sn) => {
-                let tct = TransportConduitTx::make(
-                    Priority::default(),
-                    config.manager.config.sn_resolution,
-                )?;
+                let tct = TransportConduitTx::make(config.manager.config.sn_resolution)?;
                 let _ = tct.sync(sn)?;
                 conduit_tx.push(tct);
             }
             ConduitSnList::QoS(sns) => {
-                for (i, sn) in sns.iter().enumerate() {
-                    let tct = TransportConduitTx::make(
-                        (i as u8).try_into().unwrap(),
-                        config.manager.config.sn_resolution,
-                    )?;
+                for (_, sn) in sns.iter().enumerate() {
+                    let tct = TransportConduitTx::make(config.manager.config.sn_resolution)?;
                     let _ = tct.sync(*sn)?;
                     conduit_tx.push(tct);
                 }
@@ -360,7 +353,6 @@ impl TransportMulticastInner {
         let conduit_rx = match join.next_sns {
             ConduitSnList::Plain(sn) => {
                 let tcr = TransportConduitRx::make(
-                    Priority::default(),
                     join.sn_resolution,
                     self.manager.config.defrag_buff_size,
                 )?;
@@ -369,9 +361,8 @@ impl TransportMulticastInner {
             }
             ConduitSnList::QoS(ref sns) => {
                 let mut tcrs = Vec::with_capacity(sns.len());
-                for (prio, sn) in sns.iter().enumerate() {
+                for (_, sn) in sns.iter().enumerate() {
                     let tcr = TransportConduitRx::make(
-                        (prio as u8).try_into().unwrap(),
                         join.sn_resolution,
                         self.manager.config.defrag_buff_size,
                     )?;
