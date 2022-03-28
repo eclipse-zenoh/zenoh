@@ -30,7 +30,6 @@ use crate::Sample;
 use crate::Selector;
 use crate::Value;
 use crate::ZFuture;
-use crate::GIT_VERSION;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -250,7 +249,6 @@ impl Session {
     where
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
-        log::debug!("Zenoh Rust API {}", GIT_VERSION);
         zpinbox(async move {
             let config: Config = match config.try_into() {
                 Ok(c) => c,

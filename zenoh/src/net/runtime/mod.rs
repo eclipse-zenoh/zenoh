@@ -18,6 +18,7 @@ use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{Config, Notifier};
+use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
 use async_std::sync::Arc;
@@ -66,6 +67,7 @@ impl std::ops::Deref for Runtime {
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
+        log::debug!("Zenoh Rust API {}", GIT_VERSION);
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
