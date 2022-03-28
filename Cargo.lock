@@ -575,10 +575,25 @@ dependencies = [
  "ansi_term",
  "atty",
  "bitflags",
- "strsim",
- "textwrap",
+ "strsim 0.8.0",
+ "textwrap 0.11.0",
  "unicode-width",
  "vec_map",
+]
+
+[[package]]
+name = "clap"
+version = "3.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8c93436c21e4698bacadf42917db28b23017027a4deccb35dbe47a7e7840123"
+dependencies = [
+ "atty",
+ "bitflags",
+ "indexmap",
+ "os_str_bytes",
+ "strsim 0.10.0",
+ "termcolor",
+ "textwrap 0.15.0",
 ]
 
 [[package]]
@@ -670,7 +685,7 @@ checksum = "1604dafd25fba2fe2d5895a9da139f8dc9b319a5fe5354ca137cbbce4e178d10"
 dependencies = [
  "atty",
  "cast",
- "clap",
+ "clap 2.34.0",
  "criterion-plot",
  "csv",
  "itertools",
@@ -1676,6 +1691,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "os_str_bytes"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e22443d1643a904602595ba1cd8f7d896afe56d26712531c5ff73a15b2fbf64"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -2713,6 +2737,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
+name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
+
+[[package]]
 name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2764,6 +2794,12 @@ checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
 ]
+
+[[package]]
+name = "textwrap"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"
@@ -3387,7 +3423,7 @@ name = "zenoh-examples"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
- "clap",
+ "clap 2.34.0",
  "env_logger",
  "futures",
  "git-version",
@@ -3404,7 +3440,7 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "bincode",
- "clap",
+ "clap 2.34.0",
  "env_logger",
  "flume",
  "futures",
@@ -3550,7 +3586,7 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "base64 0.13.0",
- "clap",
+ "clap 2.34.0",
  "env_logger",
  "flume",
  "futures",
@@ -3572,7 +3608,7 @@ version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
  "async-trait",
- "clap",
+ "clap 2.34.0",
  "env_logger",
  "futures",
  "git-version",
@@ -3671,7 +3707,7 @@ name = "zenoh-util"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
- "clap",
+ "clap 2.34.0",
  "futures",
  "hex",
  "home",
@@ -3708,7 +3744,7 @@ name = "zenohd"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
- "clap",
+ "clap 3.1.6",
  "env_logger",
  "futures",
  "git-version",
@@ -3746,7 +3782,7 @@ name = "zplugin-example"
 version = "0.6.0-dev.0"
 dependencies = [
  "async-std",
- "clap",
+ "clap 2.34.0",
  "env_logger",
  "futures",
  "log",
