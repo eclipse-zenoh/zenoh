@@ -47,27 +47,26 @@ clap::arg!(-l --listen [ENDPOINT] ... r"A locator on which this router will list
 Repeat this option to open several listeners."),
 clap::arg!(-e --connect [ENDPOINT] ... r"A peer locator this router will try to connect to.
 Repeat this option to connect to several peers."),
-clap::arg!(-i --id [HEX_STRING] r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use.
-WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
-If not set, a random UUIDv4 will be used.").multiple_values(false).multiple_occurrences(false),
-clap::arg!(-P --plugin [PLUGIN] ... r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library \
-named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+clap::arg!(-i --id [HEX_STRING] r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use. If not set, a random UUIDv4 will be used.
+WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!").multiple_values(false).multiple_occurrences(false),
+clap::arg!(-P --plugin [PLUGIN] ... r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
 Repeat this option to load several plugins. If loading failed, zenohd will exit."#),
 clap::arg!(--"plugin-search-dir" [DIRECTORY] ... r"A directory where to search for plugins libraries to load.
 Repeat this option to specify several search directories."),
-clap::arg!(--"no-timestamp" r"By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
-This option disables this feature."),
-clap::arg!(--"no-multicast-scouting" r"By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
-This option disables this feature."),
+clap::arg!(--"no-timestamp" r"By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature."),
+clap::arg!(--"no-multicast-scouting" r"By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature."),
 clap::arg!(--"rest-http-port" [SOCKET] r"Configures HTTP interface for the REST API (enabled by default). Accepted values:
-- a port number
-- a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
-- `none` to disable the REST API
+  - a port number
+  - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+  - `none` to disable the REST API
 ").default_value("8000").multiple_values(false).multiple_occurrences(false),
-clap::Arg::new("cfg").long("cfg").takes_value(true).multiple_occurrences(true).value_name("KEY:VALUE").help(r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs.
-KEY must be a valid config path.
-VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
-Examples: `--cfg='startup/subscribe:["/demo/**"]'` , or `--cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**", volume:"memory"}'`"#)
+clap::Arg::new("cfg").long("cfg").takes_value(true).multiple_occurrences(true).value_name("KEY:VALUE").help(
+r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
+  - KEY must be a valid config path.
+  - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+Examples:
+--cfg='startup/subscribe:["/demo/**"]'
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'"#)
                 ]
             );
         let args = app.get_matches();
