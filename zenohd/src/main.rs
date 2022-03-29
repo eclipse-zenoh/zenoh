@@ -67,7 +67,7 @@ clap::arg!(--"rest-http-port" [SOCKET] r"Configures HTTP interface for the REST 
 clap::Arg::new("cfg").long("cfg").takes_value(true).multiple_occurrences(true).value_name("KEY:VALUE").help(r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs.
 KEY must be a valid config path.
 VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
-Examples: `--cfg='startup/subscribe:["/demo/**"]'` , or `--cfg='plugins/storage_manager/volumes/demo:{key_expr: "/demo/example/**", volume: "memory"}'`"#)
+Examples: `--cfg='startup/subscribe:["/demo/**"]'` , or `--cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**", volume:"memory"}'`"#)
                 ]
             );
         let args = app.get_matches();
