@@ -190,7 +190,7 @@ impl Default for TransmissionPipelineConf {
             is_streamed: true,
             batch_size: u16::MAX,
             queue_size: [1; Priority::NUM],
-            backoff: Duration::from_nanos(0),
+            backoff: Duration::from_nanos(100),
         }
     }
 }
