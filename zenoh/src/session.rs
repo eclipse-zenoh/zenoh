@@ -1040,6 +1040,39 @@ impl Session {
         })
     }
 
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        PublisherBuilder {
+            publisher: Some(Publisher {
+                session: SessionRef::Borrow(self),
+                key_expr: key_expr.into().to_owned(),
+                value: None,
+                kind: None,
+                congestion_control: CongestionControl::default(),
+                priority: Priority::default(),
+                local_routing: None,
+            }),
+        }
+    }
+
     /// Write data.
     ///
     /// # Arguments
@@ -1068,7 +1101,7 @@ impl Session {
         IntoValue: Into<Value>,
     {
         Writer {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(value.into()),
             kind: None,
@@ -1076,31 +1109,6 @@ impl Session {
             priority: Priority::default(),
             local_routing: None,
         }
-    }
-
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").await.unwrap();
-    /// publisher.send("value").unwrap();
-    /// # })
-    /// ```
-    pub async fn publish<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> ZResult<Publisher<'a>>
-    where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
-    {
-        Ok(Publisher {
-            session: self,
-            key_expr: key_expr.into(),
-            value: None,
-            kind: None,
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
-        })
     }
 
     /// Delete data.
@@ -1124,7 +1132,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         Writer {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
@@ -1453,6 +1461,39 @@ impl EntityFactory for Arc<Session> {
             key_expr: key_expr.into(),
             kind: EVAL,
             complete: true,
+        }
+    }
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        PublisherBuilder {
+            publisher: Some(Publisher {
+                session: SessionRef::Shared(self.clone()),
+                key_expr: key_expr.into().to_owned(),
+                value: None,
+                kind: None,
+                congestion_control: CongestionControl::default(),
+                priority: Priority::default(),
+                local_routing: None,
+            }),
         }
     }
 }

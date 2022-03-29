@@ -26,6 +26,7 @@
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
+use crate::publication::PublisherBuilder;
 use crate::queryable::{Query, QueryableBuilder};
 use crate::subscriber::SubscriberBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
@@ -954,6 +955,26 @@ pub trait EntityFactory {
     /// # })
     /// ```
     fn queryable<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>;
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
 }
