@@ -20,21 +20,21 @@ use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::utils::key_expr;
-use zenoh_backend_traits::config::{BackendConfig, StorageConfig};
+use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
 
-pub fn create_memory_backend(config: BackendConfig) -> ZResult<Box<dyn Backend>> {
+pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))
 }
 
 pub struct MemoryBackend {
-    config: BackendConfig,
+    config: VolumeConfig,
 }
 
 #[async_trait]
-impl Backend for MemoryBackend {
+impl Volume for MemoryBackend {
     fn get_admin_status(&self) -> serde_json::Value {
         self.config.to_json_value()
     }
@@ -46,22 +46,22 @@ impl Backend for MemoryBackend {
 
     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        // None
+        None
         // To test interceptors, uncomment this line:
-        Some(Arc::new(|sample| {
-            trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
-            sample
-        }))
+        // Some(Arc::new(|sample| {
+        //     trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+        //     sample
+        // }))
     }
 
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
-        // None
+        None
         // To test interceptors, uncomment this line:
-        Some(Arc::new(|sample| {
-            trace!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
-            sample
-        }))
+        // Some(Arc::new(|sample| {
+        //     trace!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
+        //     sample
+        // }))
     }
 }
 

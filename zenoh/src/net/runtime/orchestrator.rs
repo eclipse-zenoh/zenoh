@@ -524,7 +524,7 @@ impl Runtime {
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
                     if let Err(err) = socket.send_to(&zslice, mcast_addr.to_string()).await {
-                        log::warn!(
+                        log::debug!(
                             "Unable to send {:?} to {} on interface {} : {}",
                             scout.body,
                             mcast_addr,

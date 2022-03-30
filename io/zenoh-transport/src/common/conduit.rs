@@ -12,7 +12,7 @@
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
 use super::defragmentation::DefragBuffer;
-use super::protocol::core::{ConduitSn, Priority, Reliability, ZInt};
+use super::protocol::core::{ConduitSn, Reliability, ZInt};
 use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
@@ -69,17 +69,15 @@ impl TransportChannelRx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportConduitTx {
-    pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<TransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelTx>>,
 }
 
 impl TransportConduitTx {
-    pub(crate) fn make(priority: Priority, sn_resolution: ZInt) -> ZResult<TransportConduitTx> {
+    pub(crate) fn make(sn_resolution: ZInt) -> ZResult<TransportConduitTx> {
         let rch = TransportChannelTx::make(sn_resolution)?;
         let bch = TransportChannelTx::make(sn_resolution)?;
         let ctx = TransportConduitTx {
-            priority,
             reliable: Arc::new(Mutex::new(rch)),
             best_effort: Arc::new(Mutex::new(bch)),
         };
@@ -94,14 +92,12 @@ impl TransportConduitTx {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TransportConduitRx {
-    pub(crate) priority: Priority,
     pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,
 }
 
 impl TransportConduitRx {
     pub(crate) fn make(
-        priority: Priority,
         sn_resolution: ZInt,
         defrag_buff_size: usize,
     ) -> ZResult<TransportConduitRx> {
@@ -109,7 +105,6 @@ impl TransportConduitRx {
         let bch =
             TransportChannelRx::make(Reliability::BestEffort, sn_resolution, defrag_buff_size)?;
         let ctr = TransportConduitRx {
-            priority,
             reliable: Arc::new(Mutex::new(rch)),
             best_effort: Arc::new(Mutex::new(bch)),
         };

@@ -40,14 +40,13 @@ zenoh = { path = "../zenoh/" }
 async-std = { version = "=1.10.0", default-features = false, features = [
 	"attributes",
 ] }
-clap = "2.33.3"
+clap = "3.1.6"
 env_logger = "0.9.0"
 futures = "0.3.12"
 git-version = "0.3.4"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
 log = "0.4"
-validated_struct = { version = "1.0.0", features = ["json5", "json_get"] }
 
 [dev-dependencies]
 rand = "0.8.3"
@@ -62,10 +61,12 @@ copyright = "2017, 2021 ADLINK Technology Inc."
 section = "net"
 license-file = ["../LICENSE", "0"]
 depends = "$auto"
-maintainer-scripts = "zenoh/.deb"
+maintainer-scripts = ".deb"
 assets = [
 	# binary
 	["target/release/zenohd", "/usr/bin/", "755"],
+	# config
+	[".service/zenohd.json5", "/etc/zenohd/", "644"],
 	# service
 	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]

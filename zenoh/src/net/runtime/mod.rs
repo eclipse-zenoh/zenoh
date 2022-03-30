@@ -18,6 +18,7 @@ use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{Config, Notifier};
+use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::stream::StreamExt;
 use async_std::sync::Arc;
@@ -66,6 +67,7 @@ impl std::ops::Deref for Runtime {
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
+        log::debug!("Zenoh Rust API {}", GIT_VERSION);
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
@@ -93,8 +95,7 @@ impl Runtime {
             .autoconnect()
             .map(|f| f.matches(whatami))
             .unwrap_or(false);
-        let use_link_state =
-            whatami != WhatAmI::Client && config.scouting().gossip().enabled().unwrap_or(true);
+        let use_link_state = whatami != WhatAmI::Client; // TODO: support disabling link_state: && config.scouting().gossip().enabled().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()

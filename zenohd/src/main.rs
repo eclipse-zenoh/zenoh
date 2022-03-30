@@ -13,11 +13,9 @@
 //
 use async_std::future;
 use async_std::task;
-use clap::ArgMatches;
-use clap::{App, Arg};
+use clap::{ArgMatches, Command};
 use git_version::git_version;
-use validated_struct::ValidatedMap;
-use zenoh::config::{Config, EndPoint, PluginLoad};
+use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
 
@@ -31,70 +29,46 @@ const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn main() {
     task::block_on(async {
+        let mut log_builder =
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
         #[cfg(feature = "stats")]
-        env_logger::builder().format_timestamp_millis().init();
+        log_builder.format_timestamp_millis().init();
         #[cfg(not(feature = "stats"))]
-        env_logger::init();
+        log_builder.init();
 
-        log::debug!("zenohd {}", *LONG_VERSION);
+        log::info!("zenohd {}", *LONG_VERSION);
 
-        let app = App::new("The zenoh router")
+        let app = Command::new("The zenoh router")
             .version(GIT_VERSION)
-            .long_version(LONG_VERSION.as_str())
-            .arg(Arg::from_usage(
-r#"-c, --config=[FILE] \
-'The configuration file. Currently, this file must be a valid JSON5 or YAML file.'"#,
-            ))
-            .arg(Arg::from_usage(
-r#"-l, --listen=[ENDPOINT]... \
-'A locator on which this router will listen for incoming sessions.
-Repeat this option to open several listeners.'"#,
-                ),
-            )
-            .arg(Arg::from_usage(
-r#"-e, --connect=[ENDPOINT]... \
-'A peer locator this router will try to connect to.
-Repeat this option to connect to several peers.'"#,
-            ))
-            .arg(Arg::from_usage(
-r#"-i, --id=[HEX_STRING] \
-'The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use.
-WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
-If not set, a random UUIDv4 will be used.'"#,
-            ))
-            .arg(Arg::from_usage(
-r#"-P, --plugin=[PLUGIN_NAME | PLUGIN_NAME:LIB_PATH]... \
-'A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library \
-named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
-Repeat this option to load several plugins. If loading failed, zenohd will exit.'"#,
-            ))
-            .arg(Arg::from_usage(
-r#"--plugin-search-dir=[DIRECTORY]... \
-'A directory where to search for plugins libraries to load.
-Repeat this option to specify several search directories.'"#))
-            .arg(Arg::from_usage(
-r#"--no-timestamp \
-'By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. \
-This option disables this feature.'"#,
-            )).arg(Arg::from_usage(
-r#"--no-multicast-scouting \
-'By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
-This option disables this feature.'"#,
-            )).arg(Arg::from_usage(
-r#"--cfg=[KEY:VALUE]... \
-'Allows arbitrary configuration changes.
-KEY must be a valid config path.
-VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
-Examples: `--cfg='join_on_startup/subscriptions:["/demo/**"]']` , or `--cfg='plugins/storages/backends/influxdb:{url: "localhost:1337", db: "myDB"}'`'"#
-            )).arg(Arg::from_usage(
-r#"--rest-http-port=[PORT | IP:PORT | none] \
-'Configures HTTP interface for the REST API (enabled by default). Accepted values:
-- either a port number
-- either a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
-- either `none` to disable the REST API
-'"#
-            ).default_value("8000"));
-
+            .long_version(LONG_VERSION.as_str()).args(
+                &[
+clap::arg!(-c --config [FILE] "The configuration file. Currently, this file must be a valid JSON5 or YAML file."),
+clap::arg!(-l --listen [ENDPOINT] ... r"A locator on which this router will listen for incoming sessions.
+Repeat this option to open several listeners."),
+clap::arg!(-e --connect [ENDPOINT] ... r"A peer locator this router will try to connect to.
+Repeat this option to connect to several peers."),
+clap::arg!(-i --id [HEX_STRING] r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use. If not set, a random UUIDv4 will be used.
+WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!").multiple_values(false).multiple_occurrences(false),
+clap::arg!(-P --plugin [PLUGIN] ... r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+Repeat this option to load several plugins. If loading failed, zenohd will exit."#),
+clap::arg!(--"plugin-search-dir" [DIRECTORY] ... r"A directory where to search for plugins libraries to load.
+Repeat this option to specify several search directories."),
+clap::arg!(--"no-timestamp" r"By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature."),
+clap::arg!(--"no-multicast-scouting" r"By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature."),
+clap::arg!(--"rest-http-port" [SOCKET] r"Configures HTTP interface for the REST API (enabled by default). Accepted values:
+  - a port number
+  - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+  - `none` to disable the REST API
+").default_value("8000").multiple_values(false).multiple_occurrences(false),
+clap::Arg::new("cfg").long("cfg").takes_value(true).multiple_occurrences(true).value_name("KEY:VALUE").help(
+r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
+  - KEY must be a valid config path.
+  - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+Examples:
+--cfg='startup/subscribe:["/demo/**"]'
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'"#)
+                ]
+            );
         let args = app.get_matches();
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
@@ -192,17 +166,17 @@ fn config_from_args(args: &ArgMatches) -> Config {
             match plugin.split_once(':') {
                 Some((name, path)) => {
                     config
-                        .insert_json5(format!("plugins/{}/__required__", name), "true")
+                        .insert_json5(&format!("plugins/{}/__required__", name), "true")
                         .unwrap();
                     config
                         .insert_json5(
-                            format!("plugins/{}/__path__", name),
+                            &format!("plugins/{}/__path__", name),
                             &format!("\"{}\"", path),
                         )
                         .unwrap();
                 }
                 None => config
-                    .insert_json5(format!("plugins/{}/__required__", plugin), "true")
+                    .insert_json5(&format!("plugins/{}/__required__", plugin), "true")
                     .unwrap(),
             }
         }

@@ -26,7 +26,7 @@ fn main() {
 
     let key_expr = session.declare_expr("/test/thr").wait().unwrap();
 
-    let mut count = 0u128;
+    let mut count = 0;
     let mut start = Instant::now();
 
     let mut nm = 0;
@@ -54,13 +54,13 @@ fn main() {
     std::thread::park();
 }
 
-fn print_stats(start: Instant, n: u128) {
+fn print_stats(start: Instant, n: usize) {
     let elapsed = start.elapsed().as_secs_f64();
     let thpt = (n as f64) / elapsed;
     println!("{} msg/s", thpt);
 }
 
-fn parse_args() -> (Config, u32, u128) {
+fn parse_args() -> (Config, usize, usize) {
     let args = App::new("zenoh throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -114,8 +114,8 @@ fn parse_args() -> (Config, u32, u128) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let samples: u32 = args.value_of("samples").unwrap().parse().unwrap();
-    let number: u128 = args.value_of("number").unwrap().parse().unwrap();
+    let samples: usize = args.value_of("samples").unwrap().parse().unwrap();
+    let number: usize = args.value_of("number").unwrap().parse().unwrap();
 
     (config, samples, number)
 }

@@ -30,7 +30,6 @@ use crate::Sample;
 use crate::Selector;
 use crate::Value;
 use crate::ZFuture;
-use crate::GIT_VERSION;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
@@ -250,7 +249,6 @@ impl Session {
     where
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
-        log::debug!("Zenoh Rust API {}", GIT_VERSION);
         zpinbox(async move {
             let config: Config = match config.try_into() {
                 Ok(c) => c,
@@ -413,10 +411,9 @@ impl Session {
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
     /// The returned configuration [`Notifier`] can be used to read the current
-    /// zenoh configuration through the [`get`](Notifier::get) function or
-    /// modify the zenoh configuration through the [`insert`](Notifier::insert),
-    /// [`insert_json`](Notifier::insert_json) or [`insert_json5`](Notifier::insert_json5)
-    /// funtion.
+    /// zenoh configuration through the `get` function or
+    /// modify the zenoh configuration through the `insert`,
+    /// or `insert_json5` funtion.
     ///
     /// # Examples
     /// ### Read current zenoh configuration
@@ -425,7 +422,7 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let peers = session.config().await.get("connect/endpoints").unwrap();
+    /// let peers = session.config().get("connect/endpoints").unwrap();
     /// # })
     /// ```
     ///
@@ -435,12 +432,12 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let _ = session.config().await.insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
+    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn config(&self) -> impl ZFuture<Output = &Notifier<Config>> {
-        zready(&self.runtime.config)
+    #[allow(clippy::mut_from_ref)]
+    pub fn config(&self) -> &mut Notifier<Config> {
+        self.runtime.config.mutable()
     }
 
     /// Get informations about the zenoh [`Session`](Session).
@@ -1043,6 +1040,39 @@ impl Session {
         })
     }
 
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'b>>,
+    {
+        PublisherBuilder {
+            publisher: Some(Publisher {
+                session: SessionRef::Borrow(self),
+                key_expr: key_expr.into().to_owned(),
+                value: None,
+                kind: None,
+                congestion_control: CongestionControl::default(),
+                priority: Priority::default(),
+                local_routing: None,
+            }),
+        }
+    }
+
     /// Write data.
     ///
     /// # Arguments
@@ -1071,7 +1101,7 @@ impl Session {
         IntoValue: Into<Value>,
     {
         Writer {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(value.into()),
             kind: None,
@@ -1079,31 +1109,6 @@ impl Session {
             priority: Priority::default(),
             local_routing: None,
         }
-    }
-
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").await.unwrap();
-    /// publisher.send("value").unwrap();
-    /// # })
-    /// ```
-    pub async fn publish<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> ZResult<Publisher<'a>>
-    where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
-    {
-        Ok(Publisher {
-            session: self,
-            key_expr: key_expr.into(),
-            value: None,
-            kind: None,
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
-        })
     }
 
     /// Delete data.
@@ -1127,7 +1132,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         Writer {
-            session: self,
+            session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(Value::empty()),
             kind: Some(data_kind::DELETE),
@@ -1456,6 +1461,39 @@ impl EntityFactory for Arc<Session> {
             key_expr: key_expr.into(),
             kind: EVAL,
             complete: true,
+        }
+    }
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
+    /// let publisher = session.publish("/key/expression").await.unwrap();
+    /// publisher.send("value").unwrap();
+    /// # })
+    /// ```
+    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        PublisherBuilder {
+            publisher: Some(Publisher {
+                session: SessionRef::Shared(self.clone()),
+                key_expr: key_expr.into().to_owned(),
+                value: None,
+                kind: None,
+                congestion_control: CongestionControl::default(),
+                priority: Priority::default(),
+                local_routing: None,
+            }),
         }
     }
 }

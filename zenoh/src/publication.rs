@@ -18,8 +18,9 @@ use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
-use crate::Session;
+use crate::SessionRef;
 use zenoh_core::zread;
+use zenoh_core::zresult::ZResult;
 use zenoh_protocol::proto::{data_kind, DataInfo, Options};
 use zenoh_protocol_core::Channel;
 use zenoh_sync::{derive_zfuture, Runnable};
@@ -49,7 +50,7 @@ derive_zfuture! {
     /// ```
     #[derive(Debug, Clone)]
     pub struct Writer<'a> {
-        pub(crate) session: &'a Session,
+        pub(crate) session: SessionRef<'a>,
         pub(crate) key_expr: KeyExpr<'a>,
         pub(crate) value: Option<Value>,
         pub(crate) kind: Option<ZInt>,
@@ -62,7 +63,7 @@ derive_zfuture! {
 impl<'a> Writer<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Writer<'a> {
+    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
         self
     }
@@ -90,7 +91,7 @@ impl<'a> Writer<'a> {
 
     /// Change the priority of the written data.
     #[inline]
-    pub fn priority(mut self, priority: Priority) -> Writer<'a> {
+    pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
     }
@@ -234,5 +235,88 @@ where
     #[inline]
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
+    }
+}
+
+derive_zfuture! {
+    /// A builder for initializing a [`Publisher`](Publisher).
+    ///
+    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+    /// or asynchronously via `.await`.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use zenoh::publication::CongestionControl;
+    ///
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let publisher = session
+    ///     .publish("/key/expression")
+    ///     .encoding(Encoding::TEXT_PLAIN)
+    ///     .congestion_control(CongestionControl::Block)
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[derive(Debug, Clone)]
+    pub struct PublisherBuilder<'a> {
+        pub(crate) publisher: Option<Publisher<'a>>,
+    }
+}
+
+impl<'a> PublisherBuilder<'a> {
+    /// Change the `congestion_control` to apply when routing the data.
+    #[inline]
+    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.publisher = Some(
+            self.publisher
+                .take()
+                .unwrap()
+                .congestion_control(congestion_control),
+        );
+        self
+    }
+
+    /// Change the kind of the written data.
+    #[inline]
+    pub fn kind(mut self, kind: SampleKind) -> Self {
+        self.publisher = Some(self.publisher.take().unwrap().kind(kind));
+        self
+    }
+
+    /// Change the encoding of the written data.
+    #[inline]
+    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+    where
+        IntoEncoding: Into<Encoding>,
+    {
+        self.publisher = Some(self.publisher.take().unwrap().encoding(encoding));
+        self
+    }
+
+    /// Change the priority of the written data.
+    #[inline]
+    pub fn priority(mut self, priority: Priority) -> Self {
+        self.publisher = Some(self.publisher.take().unwrap().priority(priority));
+        self
+    }
+
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.publisher = Some(self.publisher.take().unwrap().local_routing(local_routing));
+        self
+    }
+}
+
+impl<'a> Runnable for PublisherBuilder<'a> {
+    type Output = ZResult<Publisher<'a>>;
+
+    #[inline]
+    fn run(&mut self) -> Self::Output {
+        let publisher = self.publisher.take().unwrap();
+        log::trace!("publish({:?})", publisher.key_expr);
+        Ok(publisher)
     }
 }

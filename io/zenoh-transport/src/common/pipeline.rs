@@ -11,19 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-use super::super::defaults::{
-    // Constants
-    ZN_QUEUE_PULL_BACKOFF,
-    // Configurable constants
-    ZN_QUEUE_SIZE_BACKGROUND,
-    ZN_QUEUE_SIZE_CONTROL,
-    ZN_QUEUE_SIZE_DATA,
-    ZN_QUEUE_SIZE_DATA_HIGH,
-    ZN_QUEUE_SIZE_DATA_LOW,
-    ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-    ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-    ZN_QUEUE_SIZE_REAL_TIME,
-};
 use super::batch::SerializationBatch;
 use super::conduit::{TransportChannelTx, TransportConduitTx};
 use super::protocol::core::Priority;
@@ -189,6 +176,25 @@ impl StageRefill {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct TransmissionPipelineConf {
+    pub(crate) is_streamed: bool,
+    pub(crate) batch_size: u16,
+    pub(crate) queue_size: [usize; Priority::NUM],
+    pub(crate) backoff: Duration,
+}
+
+impl Default for TransmissionPipelineConf {
+    fn default() -> Self {
+        Self {
+            is_streamed: true,
+            batch_size: u16::MAX,
+            queue_size: [1; Priority::NUM],
+            backoff: Duration::from_nanos(100),
+        }
+    }
+}
+
 /// Link queue
 pub(crate) struct TransmissionPipeline {
     // Status variable of transmission pipeline
@@ -211,30 +217,16 @@ pub(crate) struct TransmissionPipeline {
     // A single conditional variable for all the conduit queues
     // The conditional variable requires a MutexGuard from stage_out
     cond_canpull: AsyncCondvar,
+    // The default backoff interval
+    backoff: Duration,
 }
 
 impl TransmissionPipeline {
     /// Create a new link queue.
     pub(crate) fn new(
-        batch_size: u16,
-        is_streamed: bool,
+        config: TransmissionPipelineConf,
         conduit: Arc<[TransportConduitTx]>,
     ) -> TransmissionPipeline {
-        macro_rules! zcapacity {
-            ($conduit:expr) => {
-                match $conduit.priority {
-                    Priority::Control => *ZN_QUEUE_SIZE_CONTROL,
-                    Priority::RealTime => *ZN_QUEUE_SIZE_REAL_TIME,
-                    Priority::InteractiveHigh => *ZN_QUEUE_SIZE_INTERACTIVE_HIGH,
-                    Priority::InteractiveLow => *ZN_QUEUE_SIZE_INTERACTIVE_LOW,
-                    Priority::DataHigh => *ZN_QUEUE_SIZE_DATA_HIGH,
-                    Priority::Data => *ZN_QUEUE_SIZE_DATA,
-                    Priority::DataLow => *ZN_QUEUE_SIZE_DATA_LOW,
-                    Priority::Background => *ZN_QUEUE_SIZE_BACKGROUND,
-                }
-            };
-        }
-
         // Conditional variables
         let mut cond_canrefill = vec![];
         cond_canrefill.resize_with(conduit.len(), Condvar::new);
@@ -244,10 +236,10 @@ impl TransmissionPipeline {
 
         // Build the stage REFILL
         let mut stage_refill = Vec::with_capacity(conduit.len());
-        for c in conduit.iter() {
-            let capacity = zcapacity!(c);
-            stage_refill.push(Mutex::new(StageRefill::new(capacity)));
+        for i in 0..conduit.len() {
+            stage_refill.push(Mutex::new(StageRefill::new(config.queue_size[i])));
         }
+
         let stage_refill = stage_refill.into_boxed_slice();
 
         // Batches to be pulled from stage OUT
@@ -257,9 +249,8 @@ impl TransmissionPipeline {
 
         // Build the stage OUT
         let mut stage_out = Vec::with_capacity(conduit.len());
-        for (priority, c) in conduit.iter().enumerate() {
-            let capacity = zcapacity!(c);
-            stage_out.push(StageOut::new(priority, capacity, batches_out.clone()));
+        for i in 0..conduit.len() {
+            stage_out.push(StageOut::new(i, config.queue_size[i], batches_out.clone()));
         }
         let stage_out = Mutex::new(stage_out.into_boxed_slice());
 
@@ -270,13 +261,12 @@ impl TransmissionPipeline {
 
         // Build the stage IN
         let mut stage_in = Vec::with_capacity(conduit.len());
-        for (priority, c) in conduit.iter().enumerate() {
-            let capacity = zcapacity!(c);
+        for i in 0..conduit.len() {
             stage_in.push(Mutex::new(StageIn::new(
-                priority,
-                capacity,
-                batch_size,
-                is_streamed,
+                i,
+                config.queue_size[i],
+                config.batch_size,
+                config.is_streamed,
                 bytes_in.clone(),
             )));
         }
@@ -292,6 +282,7 @@ impl TransmissionPipeline {
             stage_refill,
             cond_canrefill,
             cond_canpull,
+            backoff: config.backoff,
         }
     }
 
@@ -463,7 +454,7 @@ impl TransmissionPipeline {
     }
 
     pub(crate) async fn try_pull_queue(&self, priority: usize) -> Option<SerializationBatch> {
-        let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
+        let mut backoff = self.backoff;
         let mut bytes_in_pre: usize = 0;
         loop {
             // Check first if we have complete batches available for transmission
@@ -512,7 +503,7 @@ impl TransmissionPipeline {
             Sleep,
         }
 
-        let mut backoff = Duration::from_nanos(*ZN_QUEUE_PULL_BACKOFF);
+        let mut backoff = self.backoff;
         loop {
             for conduit in 0..self.conduit.len() {
                 if let Some(batch) = self.try_pull_queue(conduit).await {
@@ -632,7 +623,6 @@ impl fmt::Debug for TransmissionPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defaults::ZN_QUEUE_SIZE_CONTROL;
     use async_std::prelude::*;
     use async_std::task;
     use std::convert::TryFrom;
@@ -648,6 +638,13 @@ mod tests {
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);
+
+    const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
+        is_streamed: false,
+        batch_size: u16::MAX,
+        queue_size: [1; Priority::NUM],
+        backoff: Duration::from_nanos(100),
+    };
 
     #[test]
     fn tx_pipeline_flow() {
@@ -728,13 +725,10 @@ mod tests {
         }
 
         // Pipeline
-        let batch_size = BATCH_SIZE;
-        let is_streamed = true;
-        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduit = vec![tct].into_boxed_slice();
         let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
+            TransmissionPipelineConf::default(),
             conduit.into(),
         ));
 
@@ -776,7 +770,7 @@ mod tests {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
-            let payload_size = (BATCH_SIZE / 2) as usize;
+            let payload_size = (CONFIG.batch_size / 2) as usize;
 
             // Send reliable messages
             let key = "test".into();
@@ -804,7 +798,7 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = 1 + *ZN_QUEUE_SIZE_CONTROL;
+            let num_msg = 1 + CONFIG.queue_size[0];
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
@@ -822,13 +816,10 @@ mod tests {
         }
 
         // Pipeline
-        let batch_size = BATCH_SIZE;
-        let is_streamed = true;
-        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduit = vec![tct].into_boxed_slice();
         let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
+            TransmissionPipelineConf::default(),
             conduit.into(),
         ));
 
@@ -850,10 +841,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_CONTROL
+                CONFIG.queue_size[Priority::MAX as usize]
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CONTROL {
+                while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -912,7 +903,7 @@ mod tests {
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
-            let num_msg = *ZN_QUEUE_SIZE_CONTROL;
+            let num_msg = CONFIG.queue_size[Priority::MAX as usize];
             for i in 0..num_msg {
                 println!(
                     "Pipeline Blocking [>>>]: Scheduling message #{} with payload size of {} bytes",
@@ -928,15 +919,9 @@ mod tests {
         }
 
         // Queue
-        let batch_size = BATCH_SIZE;
-        let is_streamed = true;
-        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduit = vec![tct].into_boxed_slice();
-        let queue = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            conduit.into(),
-        ));
+        let queue = Arc::new(TransmissionPipeline::new(CONFIG, conduit.into()));
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -958,10 +943,10 @@ mod tests {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                *ZN_QUEUE_SIZE_CONTROL
+                CONFIG.queue_size[Priority::MAX as usize]
             );
             let check = async {
-                while counter.load(Ordering::Acquire) < *ZN_QUEUE_SIZE_CONTROL {
+                while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
                     task::sleep(SLEEP).await;
                 }
             };
@@ -988,15 +973,9 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let batch_size = BATCH_SIZE;
-        let is_streamed = true;
-        let tct = TransportConduitTx::make(Priority::Control, SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduit = vec![tct].into_boxed_slice();
-        let pipeline = Arc::new(TransmissionPipeline::new(
-            batch_size,
-            is_streamed,
-            conduit.into(),
-        ));
+        let pipeline = Arc::new(TransmissionPipeline::new(CONFIG, conduit.into()));
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 

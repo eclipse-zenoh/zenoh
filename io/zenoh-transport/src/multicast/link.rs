@@ -16,6 +16,7 @@ use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::common::batch::SerializationBatch;
+use crate::common::pipeline::TransmissionPipelineConf;
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -89,12 +90,14 @@ impl TransportLinkMulticast {
             .collect();
 
         if self.handle_tx.is_none() {
+            let tpc = TransmissionPipelineConf {
+                is_streamed: false,
+                batch_size: config.batch_size.min(self.link.get_mtu()),
+                queue_size: self.transport.manager.config.queue_size,
+                backoff: self.transport.manager.config.queue_backoff,
+            };
             // The pipeline
-            let pipeline = Arc::new(TransmissionPipeline::new(
-                config.batch_size.min(self.link.get_mtu()),
-                false,
-                conduit_tx,
-            ));
+            let pipeline = Arc::new(TransmissionPipeline::new(tpc, conduit_tx));
             self.pipeline = Some(pipeline.clone());
 
             // Spawn the TX task
@@ -333,7 +336,10 @@ async fn rx_task(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buffer_size / mtu);
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the zbuf

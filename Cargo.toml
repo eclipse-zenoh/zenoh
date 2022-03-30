@@ -40,7 +40,7 @@ members = [
   "plugins/zenoh-plugin-trait",
   "plugins/example-plugin",
   "plugins/zenoh-plugin-rest",
-  "plugins/zenoh-plugin-storages",
+  "plugins/zenoh-plugin-storage-manager",
   "plugins/zenoh-backend-traits",
 ]
 

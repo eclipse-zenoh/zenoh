@@ -22,7 +22,6 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
@@ -84,29 +83,13 @@ impl TransportUnicastInner {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
-        if config.is_qos {
-            for c in 0..Priority::NUM {
-                conduit_tx.push(TransportConduitTx::make(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                )?);
-            }
+        let num = if config.is_qos { Priority::NUM } else { 1 };
+        for _ in 0..num {
+            conduit_tx.push(TransportConduitTx::make(config.sn_resolution)?);
+        }
 
-            for c in 0..Priority::NUM {
-                conduit_rx.push(TransportConduitRx::make(
-                    (c as u8).try_into().unwrap(),
-                    config.sn_resolution,
-                    config.manager.config.defrag_buff_size,
-                )?);
-            }
-        } else {
-            conduit_tx.push(TransportConduitTx::make(
-                Priority::default(),
-                config.sn_resolution,
-            )?);
-
+        for _ in 0..Priority::NUM {
             conduit_rx.push(TransportConduitRx::make(
-                Priority::default(),
                 config.sn_resolution,
                 config.manager.config.defrag_buff_size,
             )?);

@@ -1,3 +1,5 @@
+use crate::common::pipeline::TransmissionPipelineConf;
+
 //
 // Copyright (c) 2017, 2020 ADLINK Technology Inc.
 //
@@ -74,12 +76,14 @@ impl TransportLinkUnicast {
         conduit_tx: Arc<[TransportConduitTx]>,
     ) {
         if self.handle_tx.is_none() {
+            let config = TransmissionPipelineConf {
+                is_streamed: self.link.is_streamed(),
+                batch_size: batch_size.min(self.link.get_mtu()),
+                queue_size: self.transport.config.manager.config.queue_size,
+                backoff: self.transport.config.manager.config.queue_backoff,
+            };
             // The pipeline
-            let pipeline = Arc::new(TransmissionPipeline::new(
-                batch_size.min(self.link.get_mtu()),
-                self.link.is_streamed(),
-                conduit_tx,
-            ));
+            let pipeline = Arc::new(TransmissionPipeline::new(config, conduit_tx));
             self.pipeline = Some(pipeline.clone());
 
             // Spawn the TX task
@@ -252,7 +256,10 @@ async fn rx_task_stream(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buffer_size / mtu);
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the ZBuf
@@ -323,7 +330,10 @@ async fn rx_task_dgram(
     let mut zbuf = ZBuf::default();
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let n = 1 + (rx_buffer_size / mtu);
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Clear the zbuf
