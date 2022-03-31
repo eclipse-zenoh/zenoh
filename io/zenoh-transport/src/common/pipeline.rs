@@ -677,7 +677,8 @@ mod tests {
                 "Pipeline Flow [>>>]: Sending {} messages with payload size of {} bytes",
                 num_msg, payload_size
             );
-            for _ in 0..num_msg {
+            for i in 0..num_msg {
+                println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
                 queue.push_zenoh_message(message.clone());
             }
         }
@@ -713,7 +714,9 @@ mod tests {
                             msgs += 1;
                         }
                     }
+                    println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                 }
+                println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
                 // Reinsert the batch
                 queue.refill(batch, priority);
             }
