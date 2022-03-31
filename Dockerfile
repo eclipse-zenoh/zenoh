@@ -26,26 +26,24 @@
 
 FROM alpine:latest AS builder
 
-ARG TARGET=x86_64-unknown-linux-musl
-
 RUN apk add --no-cache curl gcc musl-dev llvm-dev clang-dev git
 
 COPY rust-toolchain rust-toolchain
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host ${TARGET} --default-toolchain `cat rust-toolchain`
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host `uname -m`-unknown-linux-musl --default-toolchain `cat rust-toolchain`
 
 ENV PATH /root/.cargo/bin:$PATH
 
 COPY . .
 
-RUN cargo build --release --target=${TARGET}
+RUN cargo build --release
 
 
 FROM alpine:latest
 
 RUN apk add --no-cache libgcc libstdc++
 
-COPY --from=builder target/x86_64-unknown-linux-musl/release/zenohd /
-COPY --from=builder target/x86_64-unknown-linux-musl/release/*.so /
+COPY --from=builder target/release/zenohd /
+COPY --from=builder target/release/*.so /
 
 RUN echo '#!/bin/ash' > /entrypoint.sh
 RUN echo 'echo " * Starting: /zenohd $*"' >> /entrypoint.sh
