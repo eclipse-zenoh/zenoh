@@ -244,9 +244,9 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 log::debug!("Issuing Query for {}", &qres);
                                 let mut receiver = z.get(&qres).consolidation(qc).await.unwrap();
 
-                                while let Some(sample) = receiver.next().await {
+                                while let Some(reply) = receiver.next().await {
                                     match bincode::deserialize::<Member>(
-                                        &sample.data.value.payload.contiguous(),
+                                        &reply.sample.value.payload.contiguous(),
                                     ) {
                                         Ok(m) => {
                                             let mut expiry = Instant::now();

@@ -70,7 +70,7 @@ fn sample_to_json(sample: Sample) -> String {
 
 async fn to_json(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_json(reply.data)) })
+        .filter_map(move |reply| async move { Some(sample_to_json(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join(",\n");
@@ -87,7 +87,7 @@ fn sample_to_html(sample: Sample) -> String {
 
 async fn to_html(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_html(reply.data)) })
+        .filter_map(move |reply| async move { Some(sample_to_html(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join("\n");

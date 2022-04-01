@@ -117,7 +117,7 @@ impl Default for QueryConsolidation {
 #[derive(Clone, Debug)]
 pub struct Reply {
     /// The [`Sample`] for this Reply.
-    pub data: Sample,
+    pub sample: Sample,
     /// The kind of [`Queryable`](crate::queryable::Queryable) that answered this Reply.
     pub replier_kind: ZInt,
     /// The id of the zenoh instance that answered this Reply.
@@ -153,7 +153,7 @@ zreceiver! {
     ///
     /// let mut replies = session.get("/key/expression").wait().unwrap();
     /// while let Ok(reply) = replies.recv() {
-    ///     println!(">> Received {:?}", reply.data);
+    ///     println!(">> Received {:?}", reply.sample);
     /// }
     /// ```
     ///
@@ -166,7 +166,7 @@ zreceiver! {
     ///
     /// let mut replies = session.get("/key/expression").await.unwrap();
     /// while let Some(reply) = replies.next().await {
-    ///     println!(">> Received {:?}", reply.data);
+    ///     println!(">> Received {:?}", reply.sample);
     /// }
     /// # })
     /// ```

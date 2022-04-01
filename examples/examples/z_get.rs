@@ -33,8 +33,8 @@ async fn main() {
     while let Some(reply) = replies.next().await {
         println!(
             ">> Received ('{}': '{}')",
-            reply.data.key_expr.as_str(),
-            String::from_utf8_lossy(&reply.data.value.payload.contiguous())
+            reply.sample.key_expr.as_str(),
+            String::from_utf8_lossy(&reply.sample.value.payload.contiguous())
         )
     }
 }

@@ -417,9 +417,9 @@ impl Stream for InnerState {
                 loop {
                     match mself.replies_recv_queue[i].poll_next(cx) {
                         Poll::Ready(Some(mut reply)) => {
-                            log::trace!("Reply received: {}", reply.data.key_expr);
-                            reply.data.ensure_timestamp();
-                            mself.merge_queue.push(reply.data);
+                            log::trace!("Reply received: {}", reply.sample.key_expr);
+                            reply.sample.ensure_timestamp();
+                            mself.merge_queue.push(reply.sample);
                         }
                         Poll::Ready(None) => {
                             // query completed - remove the receiver and break loop
@@ -491,9 +491,9 @@ impl InnerState {
             // get all replies and add them to merge_queue
             for recv in self.replies_recv_queue.drain(..) {
                 while let Ok(mut reply) = recv.recv() {
-                    log::trace!("Reply received: {}", reply.data.key_expr);
-                    reply.data.ensure_timestamp();
-                    self.merge_queue.push(reply.data);
+                    log::trace!("Reply received: {}", reply.sample.key_expr);
+                    reply.sample.ensure_timestamp();
+                    self.merge_queue.push(reply.sample);
                 }
             }
             log::debug!(
@@ -543,9 +543,9 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].try_recv() {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.key_expr);
-                            reply.data.ensure_timestamp();
-                            self.merge_queue.push(reply.data);
+                            log::trace!("Reply received: {}", reply.sample.key_expr);
+                            reply.sample.ensure_timestamp();
+                            self.merge_queue.push(reply.sample);
                         }
                         Err(TryRecvError::Disconnected) => {
                             // query completed - remove the receiver and break loop
@@ -614,9 +614,9 @@ impl InnerState {
                 loop {
                     match self.replies_recv_queue[i].recv_deadline(deadline) {
                         Ok(mut reply) => {
-                            log::trace!("Reply received: {}", reply.data.key_expr);
-                            reply.data.ensure_timestamp();
-                            self.merge_queue.push(reply.data);
+                            log::trace!("Reply received: {}", reply.sample.key_expr);
+                            reply.sample.ensure_timestamp();
+                            self.merge_queue.push(reply.sample);
                         }
                         Err(RecvTimeoutError::Disconnected) => {
                             // query completed - remove the receiver and break loop
