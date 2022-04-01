@@ -1266,7 +1266,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut replies = session.get("/key/expression").await.unwrap();
     /// while let Some(reply) = replies.next().await {
-    ///     println!(">> Received {:?}", reply.data);
+    ///     println!(">> Received {:?}", reply.sample);
     /// }
     /// # })
     /// ```
@@ -1629,7 +1629,7 @@ impl Primitives for Session {
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    data: Sample::with_info(key_expr.into(), payload, data_info),
+                    sample: Sample::with_info(key_expr.into(), payload, data_info),
                     replier_kind,
                     replier_id,
                 };
@@ -1642,23 +1642,22 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.data.key_expr.as_str())
+                            .get(new_reply.sample.key_expr.as_str())
                         {
                             Some(reply) => {
-                                if new_reply.data.timestamp > reply.data.timestamp {
+                                if new_reply.sample.timestamp > reply.sample.timestamp {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.data.key_expr.to_string(),
+                                        new_reply.sample.key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                     let _ = query.rep_sender.send(new_reply);
                                 }
                             }
                             None => {
-                                query
-                                    .replies
-                                    .as_mut()
-                                    .unwrap()
-                                    .insert(new_reply.data.key_expr.to_string(), new_reply.clone());
+                                query.replies.as_mut().unwrap().insert(
+                                    new_reply.sample.key_expr.to_string(),
+                                    new_reply.clone(),
+                                );
                                 let _ = query.rep_sender.send(new_reply);
                             }
                         }
@@ -1668,22 +1667,21 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.data.key_expr.as_str())
+                            .get(new_reply.sample.key_expr.as_str())
                         {
                             Some(reply) => {
-                                if new_reply.data.timestamp > reply.data.timestamp {
+                                if new_reply.sample.timestamp > reply.sample.timestamp {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.data.key_expr.to_string(),
+                                        new_reply.sample.key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                 }
                             }
                             None => {
-                                query
-                                    .replies
-                                    .as_mut()
-                                    .unwrap()
-                                    .insert(new_reply.data.key_expr.to_string(), new_reply.clone());
+                                query.replies.as_mut().unwrap().insert(
+                                    new_reply.sample.key_expr.to_string(),
+                                    new_reply.clone(),
+                                );
                             }
                         };
                     }

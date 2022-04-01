@@ -69,7 +69,7 @@
 //!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut replies = session.get("/key/expression").await.unwrap();
 //!     while let Some(reply) = replies.next().await {
-//!         println!(">> Received {}", reply.data);
+//!         println!(">> Received {}", reply.sample);
 //!     }
 //! }
 //! ```
