@@ -592,7 +592,7 @@ pub struct PluginsConfig {
     values: Value,
     validators: HashMap<String, ValidationFunction>,
 }
-fn sift_privates(value: &mut serde_json::Value) {
+pub fn sift_privates(value: &mut serde_json::Value) {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
         Value::Array(a) => a.iter_mut().for_each(sift_privates),
