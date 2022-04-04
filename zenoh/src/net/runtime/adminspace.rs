@@ -410,7 +410,8 @@ impl Primitives for AdminSpace {
                 futures::join!(handler_tasks, async {
                     let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
                     for status in plugin_status {
-                        let crate::plugins::Response { key, value } = status;
+                        let crate::plugins::Response { key, mut value } = status;
+                        zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
                         let mut data_info = DataInfo::new();
                         data_info.encoding = Some(Encoding::APP_JSON);
