@@ -37,6 +37,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::bail;
+use webpki_roots;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
