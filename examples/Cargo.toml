@@ -37,7 +37,7 @@ shared-memory = ["zenoh/shared-memory"]
 [dependencies]
 zenoh = { path = "../zenoh/" }
 
-async-std = { version = "=1.10.0", default-features = false, features = [
+async-std = { version = "=1.11.0", default-features = false, features = [
 	"attributes",
 ] }
 clap = "2.33.3"

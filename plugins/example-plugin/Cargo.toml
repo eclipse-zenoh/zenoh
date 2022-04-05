@@ -32,7 +32,7 @@ crate-type = ["cdylib"]
 
 
 [dependencies]
-async-std = "=1.10.0"
+async-std = "=1.11.0"
 clap = "2"
 env_logger = "0.9.0"
 futures = "0.3.12"

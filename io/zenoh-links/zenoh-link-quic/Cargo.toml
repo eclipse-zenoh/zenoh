@@ -40,7 +40,7 @@ zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
 
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
-async-std = { version = "=1.10.0", default-features = false, features = [
+async-std = { version = "=1.11.0", default-features = false, features = [
 	"unstable",
 	"tokio1",
 ] }
