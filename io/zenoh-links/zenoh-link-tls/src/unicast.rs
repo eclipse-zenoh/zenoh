@@ -294,7 +294,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         }
 
         let config = if bytes.is_empty() {
-            Arc::new(ClientConfig::new())
+            let mut config_special = ClientConfig::new();
+            config_special
+            .root_store
+            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+            Arc::new(config_special)
         } else {
             let mut cc = ClientConfig::new();
             let _ = cc
