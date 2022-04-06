@@ -1,6 +1,6 @@
 use crate::TLS_LOCATOR_PREFIX;
 //
-// Copyright (c) 2017, 2020 ADLINK Technology Inc.
+// Copyright (c) 2022 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -10,7 +10,7 @@ use crate::TLS_LOCATOR_PREFIX;
 // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
 //
 // Contributors:
-//   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
     config::*, get_tls_addr, get_tls_dns, get_tls_host, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,

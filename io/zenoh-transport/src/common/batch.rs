@@ -4,7 +4,7 @@ use zenoh_buffers::{WBufReader, WBufWriter};
 use zenoh_protocol::proto::MessageWriter;
 
 //
-// Copyright (c) 2017, 2020 ADLINK Technology Inc.
+// Copyright (c) 2022 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -14,7 +14,7 @@ use zenoh_protocol::proto::MessageWriter;
 // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
 //
 // Contributors:
-//   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::protocol::core::{Priority, Reliability, ZInt};
 use super::protocol::io::WBuf;
