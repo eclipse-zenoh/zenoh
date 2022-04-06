@@ -13,8 +13,8 @@
 //
 use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
-use futures_lite::stream::Stream;
-use futures_lite::StreamExt;
+use futures::stream::Stream;
+use futures::StreamExt;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -295,7 +295,7 @@ impl Stream for QueryingSubscriber<'_> {
 
     #[inline(always)]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.receiver.poll_next(cx)
+        self.receiver.poll_next_unpin(cx)
     }
 }
 
@@ -356,7 +356,7 @@ impl Stream for QueryingSubscriberReceiver {
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let state = &mut zwrite!(self.state);
-        state.poll_next(cx)
+        state.poll_next_unpin(cx)
     }
 }
 
@@ -415,7 +415,7 @@ impl Stream for InnerState {
             let mut i = 0;
             while i < mself.replies_recv_queue.len() {
                 loop {
-                    match mself.replies_recv_queue[i].poll_next(cx) {
+                    match mself.replies_recv_queue[i].poll_next_unpin(cx) {
                         Poll::Ready(Some(mut reply)) => {
                             log::trace!("Reply received: {}", reply.sample.key_expr);
                             reply.sample.ensure_timestamp();
@@ -442,7 +442,7 @@ impl Stream for InnerState {
             );
 
             // get all publications received during the queries and add them to merge_queue
-            while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next(cx) {
+            while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next_unpin(cx) {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
@@ -465,7 +465,7 @@ impl Stream for InnerState {
         if mself.merge_queue.is_empty() {
             log::trace!("poll_next: receiving from subscriber...");
             // if merge_queue is empty, receive from subscriber
-            mself.subscriber_recv.poll_next(cx)
+            mself.subscriber_recv.poll_next_unpin(cx)
         } else {
             log::trace!(
                 "poll_next: pop sample from merge_queue (len={})",

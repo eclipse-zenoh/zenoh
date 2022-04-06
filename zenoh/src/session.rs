@@ -33,7 +33,7 @@ use crate::ZFuture;
 use async_std::sync::Arc;
 use async_std::task;
 use flume::{bounded, Sender};
-use futures_lite::StreamExt;
+use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::fmt;

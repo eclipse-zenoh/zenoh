@@ -170,13 +170,13 @@ macro_rules! zreceiver{
             }
         }
 
-        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? futures::stream::Stream for $struct_name$(<$( $lt ),+>)? {
             type Item = $recv_type;
 
             #[inline(always)]
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                use futures_lite::StreamExt;
-                self.stream.poll_next(cx)
+                use ::futures::stream::StreamExt;
+                self.stream.poll_next_unpin(cx)
             }
         }
 
