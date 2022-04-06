@@ -17,7 +17,7 @@ use async_std::task;
 use async_std::task::{Context, Poll};
 use futures::select;
 use futures::FutureExt;
-use futures_lite::StreamExt;
+use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use zenoh::prelude::*;
