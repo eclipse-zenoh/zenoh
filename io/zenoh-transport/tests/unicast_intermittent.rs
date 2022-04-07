@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::Arc;
 use async_std::task;
 use std::any::Any;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;

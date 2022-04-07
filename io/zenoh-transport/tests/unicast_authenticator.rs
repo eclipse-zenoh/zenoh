@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::Arc;
 use async_std::task;
 #[cfg(feature = "auth_pubkey")]
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
@@ -21,6 +20,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;

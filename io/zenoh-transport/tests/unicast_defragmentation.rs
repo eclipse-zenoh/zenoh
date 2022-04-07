@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::Arc;
 use async_std::task;
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;

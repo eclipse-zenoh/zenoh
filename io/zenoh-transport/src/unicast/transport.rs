@@ -21,7 +21,7 @@ use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
@@ -72,7 +72,7 @@ pub(crate) struct TransportUnicastInner {
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
-    pub(super) alive: AsyncArc<AsyncMutex<bool>>,
+    pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
@@ -109,7 +109,7 @@ impl TransportUnicastInner {
             conduit_rx: conduit_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
-            alive: AsyncArc::new(AsyncMutex::new(false)),
+            alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
         };

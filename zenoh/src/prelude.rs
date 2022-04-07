@@ -30,12 +30,12 @@ use crate::publication::PublisherBuilder;
 use crate::queryable::{Query, QueryableBuilder};
 use crate::subscriber::SubscriberBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
-#[cfg(feature = "shared-memory")]
-use async_std::sync::Arc;
 use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
 pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};

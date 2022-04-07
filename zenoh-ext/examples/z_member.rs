@@ -1,5 +1,5 @@
-use async_std::sync::Arc;
 use futures::StreamExt;
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh_ext::group::*;

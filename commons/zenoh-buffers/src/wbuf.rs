@@ -20,13 +20,13 @@ use crate::SplitBuffer;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::ZSlice;
-use async_std::sync::Arc;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
 use std::num::NonZeroUsize;
 use std::ops::Bound::{Excluded, Included, Unbounded};
 use std::ops::RangeBounds;
+use std::sync::Arc;
 
 // Notes:
 //  - Wbuf has 2 flavors:

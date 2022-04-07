@@ -1,4 +1,4 @@
-use async_std::sync::{Arc, Mutex};
+use async_std::sync::Mutex;
 use async_std::task::JoinHandle;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
@@ -6,6 +6,7 @@ use futures::select;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Add;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
