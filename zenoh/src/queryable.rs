@@ -17,7 +17,6 @@
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::channel::Receiver;
-use crate::sync::ZFuture;
 use crate::Session;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
@@ -31,7 +30,7 @@ use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
 use zenoh_protocol_core::QueryableInfo;
-use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
+use zenoh_sync::zreceiver;
 
 pub use zenoh_protocol_core::queryable::*;
 
@@ -244,17 +243,16 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = crate::Result<()>> {
+    pub async fn close(mut self) -> crate::Result<()> {
         self.alive = false;
-        self.session.close_queryable(self.state.id)
+        self.session.close_queryable(self.state.id).await
     }
 }
 
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.close_queryable(self.state.id).wait();
+            let _ = self.session.close_queryable(self.state.id);
         }
     }
 }
@@ -331,34 +329,32 @@ impl RepliesSender {
     // }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Queryable`](Queryable).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    /// use zenoh::queryable;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session
-    ///     .queryable("/key/expression")
-    ///     .kind(queryable::EVAL)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct QueryableBuilder<'a, 'b> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'b>,
-        pub(crate) kind: ZInt,
-        pub(crate) complete: bool,
-    }
+/// A builder for initializing a [`Queryable`](Queryable).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::queryable;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let mut queryable = session
+///     .queryable("/key/expression")
+///     .kind(queryable::EVAL)
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct QueryableBuilder<'a, 'b> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) kind: ZInt,
+    pub(crate) complete: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
@@ -375,14 +371,10 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         self.complete = complete;
         self
     }
-}
 
-impl<'a> Runnable for QueryableBuilder<'a, '_> {
-    type Output = crate::Result<Queryable<'a>>;
-
-    fn run(&mut self) -> Self::Output {
+    pub async fn build(self) -> crate::Result<Queryable<'a>> {
         log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);
-        let mut state = zwrite!(self.session.state);
+        let mut state = async_std::task::block_on(self.session.state.write());
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {

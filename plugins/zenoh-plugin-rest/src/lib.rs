@@ -237,7 +237,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
+                    let mut sub = req.state().0.subscribe(&key_expr).build().await.unwrap();
                     loop {
                         let sample = sub.next().await.unwrap();
                         let send = async {

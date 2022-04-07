@@ -90,10 +90,8 @@ use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
-use sync::{zready, ZFuture};
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_sync::zpinbox;
 
 /// A zenoh result.
 pub use zenoh_core::Result;
@@ -206,11 +204,6 @@ pub mod properties {
 /// ```
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub mod sync {
-    pub use zenoh_sync::zready;
-    pub use zenoh_sync::ZFuture;
-    pub use zenoh_sync::ZPinBoxFuture;
-    pub use zenoh_sync::ZReady;
-
     /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
     pub mod channel {
         pub use zenoh_sync::channel::Iter;
@@ -273,10 +266,10 @@ pub mod scouting {
 /// }
 /// # })
 /// ```
-pub fn scout<I: Into<WhatAmIMatcher>, IntoConfig>(
+pub async fn scout<I: Into<WhatAmIMatcher>, IntoConfig>(
     what: I,
     config: IntoConfig,
-) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
+) -> ZResult<scouting::HelloReceiver>
 where
     IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
@@ -284,7 +277,7 @@ where
     let what = what.into();
     let config: crate::config::Config = match config.try_into() {
         Ok(config) => config,
-        Err(e) => return zready(Err(zerror!("invalid configuration {:?}", &e).into())),
+        Err(e) => return Err(zerror!("invalid configuration {:?}", &e).into()),
     };
 
     trace!("scout({}, {})", what, &config);
@@ -292,12 +285,12 @@ where
     let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
         Ok(addr) => addr,
         Err(e) => {
-            return zready(Err(zerror!(
+            return Err(zerror!(
                 "invalid default addr {}: {:?}",
                 ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
                 &e
             )
-            .into()))
+            .into())
         }
     };
 
@@ -335,10 +328,7 @@ where
         }
     }
 
-    zready(Ok(scouting::HelloReceiver::new(
-        stop_sender,
-        hello_receiver,
-    )))
+    Ok(scouting::HelloReceiver::new(stop_sender, hello_receiver))
 }
 
 /// Open a zenoh [`Session`].
@@ -367,18 +357,17 @@ where
 /// let session = zenoh::open(config).await.unwrap();
 /// # })
 /// ```
-pub fn open<IntoConfig>(config: IntoConfig) -> impl ZFuture<Output = ZResult<Session>>
+pub async fn open<IntoConfig>(config: IntoConfig) -> ZResult<Session>
 where
     IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    Session::new(config)
+    Session::new(config).await
 }
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime than the router.
 #[doc(hidden)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-pub fn init(runtime: Runtime) -> impl ZFuture<Output = ZResult<Session>> {
-    zpinbox(async { Ok(Session::init(runtime, true, vec![], vec![]).await) })
+pub async fn init(runtime: Runtime) -> ZResult<Session> {
+    Ok(Session::init(runtime, true, vec![], vec![]).await)
 }

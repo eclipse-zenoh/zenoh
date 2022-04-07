@@ -15,19 +15,18 @@
 //! Subscribing primitives.
 use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
-use crate::sync::ZFuture;
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use async_std::sync::Arc;
+use async_std::sync::RwLock;
 use flume::r#async::RecvFut;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
 use std::fmt;
 use std::pin::Pin;
-use std::sync::RwLock;
 use std::task::{Context, Poll};
 use zenoh_protocol_core::SubInfo;
-use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
+use zenoh_sync::zreceiver;
 
 /// The subscription mode.
 pub use zenoh_protocol_core::SubMode;
@@ -182,9 +181,8 @@ impl Subscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
-        self.session.pull(&self.state.key_expr)
+    pub async fn pull(&self) -> ZResult<()> {
+        self.session.pull(&self.state.key_expr).await
     }
 
     /// Close a [`Subscriber`](Subscriber) previously created with [`subscribe`](crate::Session::subscribe).
@@ -203,17 +201,16 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn close(mut self) -> ZResult<()> {
         self.alive = false;
-        self.session.unsubscribe(self.state.id)
+        self.session.unsubscribe(self.state.id).await
     }
 }
 
 impl Drop for Subscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unsubscribe(self.state.id).wait();
+            let _ = self.session.unsubscribe(self.state.id);
         }
     }
 }
@@ -249,9 +246,8 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
-        self.session.pull(&self.state.key_expr)
+    pub async fn pull(&self) -> ZResult<()> {
+        self.session.pull(&self.state.key_expr).await
     }
 
     /// Undeclare a [`CallbackSubscriber`](CallbackSubscriber).
@@ -272,17 +268,16 @@ impl CallbackSubscriber<'_> {
     /// # })
     /// ```
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn undeclare(mut self) -> ZResult<()> {
         self.alive = false;
-        self.session.unsubscribe(self.state.id)
+        self.session.unsubscribe(self.state.id).await
     }
 }
 
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unsubscribe(self.state.id).wait();
+            let _ = self.session.unsubscribe(self.state.id);
         }
     }
 }
@@ -293,35 +288,33 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Subscriber`](Subscriber).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/key/expression")
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct SubscriberBuilder<'a, 'b> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'b>,
-        pub(crate) reliability: Reliability,
-        pub(crate) mode: SubMode,
-        pub(crate) period: Option<Period>,
-        pub(crate) local: bool,
-    }
+/// A builder for initializing a [`Subscriber`](Subscriber).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let subscriber = session
+///     .subscribe("/key/expression")
+///     .best_effort()
+///     .pull_mode()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct SubscriberBuilder<'a, 'b> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) reliability: Reliability,
+    pub(crate) mode: SubMode,
+    pub(crate) period: Option<Period>,
+    pub(crate) local: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
@@ -398,16 +391,12 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         self.local = true;
         self
     }
-}
 
-impl<'a> Runnable for SubscriberBuilder<'a, '_> {
-    type Output = ZResult<Subscriber<'a>>;
-
-    fn run(&mut self) -> Self::Output {
+    pub async fn build(self) -> ZResult<Subscriber<'a>> {
         log::trace!("subscribe({:?})", self.key_expr);
         let (sender, receiver) = bounded(*API_DATA_RECEPTION_CHANNEL_SIZE);
 
-        if self.local {
+        let result = if self.local {
             self.session
                 .declare_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| {
@@ -430,6 +419,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                         period: self.period,
                     },
                 )
+                .await
                 .map(|sub_state| {
                     Subscriber::new(
                         self.session.clone(),
@@ -439,41 +429,41 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
                         receiver,
                     )
                 })
-        }
+        };
+
+        result
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/key/expression")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Clone)]
-    pub struct CallbackSubscriberBuilder<'a, 'b> {
-        session: SessionRef<'a>,
-        key_expr: KeyExpr<'b>,
-        reliability: Reliability,
-        mode: SubMode,
-        period: Option<Period>,
-        local: bool,
-        handler: Arc<RwLock<DataHandler>>,
-    }
+/// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let subscriber = session
+///     .subscribe("/key/expression")
+///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .best_effort()
+///     .pull_mode()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Clone)]
+pub struct CallbackSubscriberBuilder<'a, 'b> {
+    session: SessionRef<'a>,
+    key_expr: KeyExpr<'b>,
+    reliability: Reliability,
+    mode: SubMode,
+    period: Option<Period>,
+    local: bool,
+    handler: Arc<RwLock<DataHandler>>,
 }
 
 impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
@@ -545,15 +535,11 @@ impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
         self.local = true;
         self
     }
-}
 
-impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
-    type Output = ZResult<CallbackSubscriber<'a>>;
-
-    fn run(&mut self) -> Self::Output {
+    pub async fn build(self) -> ZResult<CallbackSubscriber<'a>> {
         log::trace!("declare_callback_subscriber({:?})", self.key_expr);
 
-        if self.local {
+        let result = if self.local {
             self.session
                 .declare_any_local_subscriber(
                     &self.key_expr,
@@ -575,11 +561,14 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                         period: self.period,
                     },
                 )
+                .await
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
                     alive: true,
                 })
-        }
+        };
+
+        result
     }
 }

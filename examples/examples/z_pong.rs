@@ -16,28 +16,29 @@ use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
-fn main() {
+#[async_std::main]
+async fn main() {
     // initiate logging
     env_logger::init();
 
     let config = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     // The key expression to read the data from
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = session.declare_expr("/test/ping").await.unwrap();
 
     // The key expression to echo the data back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = session.declare_expr("/test/pong").await.unwrap();
 
-    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
+    let sub = session.subscribe(&key_expr_ping).build().await.unwrap();
 
     while let Ok(sample) = sub.recv() {
         session
             .put(&key_expr_pong, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .await
             .unwrap();
     }
 }

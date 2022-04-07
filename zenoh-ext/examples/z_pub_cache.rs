@@ -36,7 +36,7 @@ async fn main() {
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
-    let _publication_cache = publication_cache_builder.await.unwrap();
+    let _publication_cache = publication_cache_builder.build().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;

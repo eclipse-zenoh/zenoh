@@ -17,20 +17,21 @@ use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
-fn main() {
+#[async_std::main]
+async fn main() {
     // initiate logging
     env_logger::init();
 
     let (config, size, n) = parse_args();
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = session.declare_expr("/test/ping").await.unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = session.declare_expr("/test/pong").await.unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).wait().unwrap();
+    let sub = session.subscribe(&key_expr_pong).build().await.unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -47,7 +48,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .await
             .unwrap();
 
         let _ = sub.recv();
@@ -60,7 +61,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .await
             .unwrap();
 
         let _ = sub.recv();

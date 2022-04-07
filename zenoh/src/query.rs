@@ -22,10 +22,11 @@ use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use flume::r#async::RecvFut;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::task::{Context, Poll};
-use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
+use zenoh_sync::zreceiver;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::Target;
@@ -174,37 +175,35 @@ zreceiver! {
     pub struct ReplyReceiver : Receiver<Reply> {}
 }
 
-derive_zfuture! {
-    /// A builder for initializing a `query`.
-    ///
-    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
-    /// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    /// use zenoh::query::*;
-    /// use zenoh::queryable;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut replies = session
-    ///     .get("/key/expression?value>1")
-    ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
-    ///     .consolidation(QueryConsolidation::none())
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct Getter<'a, 'b> {
-        pub(crate) session: &'a Session,
-        pub(crate) selector: Selector<'b>,
-        pub(crate) target: Option<QueryTarget>,
-        pub(crate) consolidation: Option<QueryConsolidation>,
-        pub(crate) local_routing: Option<bool>,
-    }
+/// A builder for initializing a `query`.
+///
+/// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
+/// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::query::*;
+/// use zenoh::queryable;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let mut replies = session
+///     .get("/key/expression?value>1")
+///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
+///     .consolidation(QueryConsolidation::none())
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct Getter<'a, 'b> {
+    pub(crate) session: &'a Session,
+    pub(crate) selector: Selector<'b>,
+    pub(crate) target: Option<QueryTarget>,
+    pub(crate) consolidation: Option<QueryConsolidation>,
+    pub(crate) local_routing: Option<bool>,
 }
 
 impl<'a, 'b> Getter<'a, 'b> {
@@ -230,17 +229,17 @@ impl<'a, 'b> Getter<'a, 'b> {
     }
 }
 
-impl Runnable for Getter<'_, '_> {
+impl Future for Getter<'_, '_> {
     type Output = zenoh_core::Result<ReplyReceiver>;
 
-    fn run(&mut self) -> Self::Output {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         log::trace!(
             "get({}, {:?}, {:?})",
             self.selector,
             self.target,
             self.consolidation
         );
-        let mut state = zwrite!(self.session.state);
+        let mut state = async_std::task::block_on(self.session.state.write());
         let target = self.target.take().unwrap();
         let consolidation = match self.consolidation.take().unwrap() {
             QueryConsolidation::Auto => {
@@ -293,6 +292,6 @@ impl Runnable for Getter<'_, '_> {
             );
         }
 
-        Ok(ReplyReceiver::new(rep_receiver))
+        Poll::Ready(Ok(ReplyReceiver::new(rep_receiver)))
     }
 }

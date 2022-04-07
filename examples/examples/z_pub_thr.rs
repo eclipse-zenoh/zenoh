@@ -17,7 +17,8 @@ use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
-fn main() {
+#[async_std::main]
+async fn main() {
     // initiate logging
     env_logger::init();
     let (config, size, prio, print, number) = parse_args();
@@ -27,9 +28,9 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
+    let key_expr = session.declare_expr("/test/thr").await.unwrap();
 
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
@@ -40,7 +41,7 @@ fn main() {
             .congestion_control(CongestionControl::Block)
             // Set the right priority
             .priority(prio)
-            .wait()
+            .await
             .unwrap();
 
         if print {

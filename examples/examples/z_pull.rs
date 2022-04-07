@@ -35,6 +35,7 @@ async fn main() {
     let mut subscriber = session
         .subscribe(&key_expr)
         .mode(SubMode::Pull)
+        .build()
         .await
         .unwrap();
 

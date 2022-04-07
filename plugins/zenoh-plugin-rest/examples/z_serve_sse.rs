@@ -45,7 +45,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let mut queryable = session.queryable(key).kind(EVAL).await.unwrap();
+    let mut queryable = session.queryable(key).kind(EVAL).build().await.unwrap();
 
     async_std::task::spawn(
         queryable

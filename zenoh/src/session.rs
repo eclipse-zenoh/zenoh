@@ -23,14 +23,13 @@ use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
 use crate::subscriber::*;
-use crate::sync::zready;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
 use crate::Selector;
 use crate::Value;
-use crate::ZFuture;
 use async_std::sync::Arc;
+use async_std::sync::RwLock;
 use async_std::task;
 use flume::{bounded, Sender};
 use futures::StreamExt;
@@ -39,10 +38,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_core::{zconfigurable, zread, Result as ZResult};
+use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_protocol::{
     core::{
         key_expr, queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
@@ -54,7 +52,6 @@ use zenoh_protocol::{
 use zenoh_protocol_core::PeerId;
 use zenoh_protocol_core::WhatAmI;
 use zenoh_protocol_core::EMPTY_EXPR_ID;
-use zenoh_sync::zpinbox;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -243,39 +240,37 @@ impl Session {
         }
     }
 
-    pub(super) fn new<C: std::convert::TryInto<Config> + Send + 'static>(
+    pub(super) async fn new<C: std::convert::TryInto<Config> + Send + 'static>(
         config: C,
-    ) -> impl ZFuture<Output = ZResult<Session>>
+    ) -> ZResult<Session>
     where
         <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
     {
-        zpinbox(async move {
-            let config: Config = match config.try_into() {
-                Ok(c) => c,
-                Err(e) => {
-                    bail!("invalid configuration {:?}", &e)
-                }
-            };
-            log::debug!("Config: {:?}", &config);
-            let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.startup().subscribe().clone();
-            let join_publications = config.startup().declare_publications().clone();
-            match Runtime::new(config).await {
-                Ok(runtime) => {
-                    let session = Self::init(
-                        runtime,
-                        local_routing,
-                        join_subscriptions,
-                        join_publications,
-                    )
-                    .await;
-                    // Workaround for the declare_and_shoot problem
-                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                    Ok(session)
-                }
-                Err(err) => Err(err),
+        let config: Config = match config.try_into() {
+            Ok(c) => c,
+            Err(e) => {
+                bail!("invalid configuration {:?}", &e)
             }
-        })
+        };
+        log::debug!("Config: {:?}", &config);
+        let local_routing = config.local_routing().unwrap_or(true);
+        let join_subscriptions = config.startup().subscribe().clone();
+        let join_publications = config.startup().declare_publications().clone();
+        match Runtime::new(config).await {
+            Ok(runtime) => {
+                let session = Self::init(
+                    runtime,
+                    local_routing,
+                    join_subscriptions,
+                    join_publications,
+                )
+                .await;
+                // Workaround for the declare_and_shoot problem
+                task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                Ok(session)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Consumes the given `Session`, returning a thread-safe reference-counting
@@ -341,9 +336,8 @@ impl Session {
     }
 
     /// Returns the identifier for this session.
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn id(&self) -> impl ZFuture<Output = String> {
-        zready(self.runtime.get_pid_str())
+    pub async fn id(&self) -> String {
+        self.runtime.get_pid_str()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -353,13 +347,12 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn init(
+    pub async fn init(
         runtime: Runtime,
         local_routing: bool,
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
-    ) -> impl ZFuture<Output = Session> {
+    ) -> Session {
         let router = runtime.router.clone();
         let state = Arc::new(RwLock::new(SessionState::new(
             local_routing,
@@ -372,20 +365,25 @@ impl Session {
             alive: true,
         };
         let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-        zwrite!(state).primitives = primitives;
-        zready(session)
+        state.write().await.primitives = primitives;
+        session
     }
 
-    fn close_alive(self) -> impl ZFuture<Output = ZResult<()>> {
-        zpinbox(async move {
-            trace!("close()");
-            self.runtime.close().await?;
+    async fn close_alive(self) -> ZResult<()> {
+        trace!("close()");
+        self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
+        let primitives = self
+            .state
+            .write()
+            .await
+            .primitives
+            .as_ref()
+            .unwrap()
+            .clone();
+        primitives.send_close();
 
-            Ok(())
-        })
+        Ok(())
     }
 
     /// Close the zenoh [`Session`](Session).
@@ -402,10 +400,9 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn close(mut self) -> ZResult<()> {
         self.alive = false;
-        self.close_alive()
+        self.close_alive().await
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
@@ -451,8 +448,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
+    pub async fn info(&self) -> InfoProperties {
         trace!("info()");
         let sessions = self.runtime.manager().get_transports();
         let peer_pids = sessions
@@ -497,7 +493,7 @@ impl Session {
             ZN_INFO_PID_KEY,
             hex::encode_upper(self.runtime.pid.as_slice()),
         );
-        zready(info)
+        info
     }
 
     /// Associate a numerical Id with the given key expression.
@@ -518,19 +514,15 @@ impl Session {
     /// let expr_id = session.declare_expr("/key/expression").await.unwrap();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn declare_expr<'a, IntoKeyExpr>(
-        &self,
-        key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<ExprId>>
+    pub async fn declare_expr<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ZResult<ExprId>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
         trace!("declare_expr({:?})", key_expr);
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write().await;
 
-        zready(state.localkey_to_expr(&key_expr).map(|expr| {
+        state.localkey_to_expr(&key_expr).map(|expr| {
             match state
                 .local_resources
                 .iter()
@@ -555,7 +547,7 @@ impl Session {
                     expr_id
                 }
             }
-        }))
+        })
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
@@ -575,17 +567,16 @@ impl Session {
     /// session.undeclare_expr(expr_id).await;
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn undeclare_expr(&self, expr_id: ExprId) -> ZResult<()> {
         trace!("undeclare_expr({:?})", expr_id);
-        let mut state = zwrite!(self.state);
+        let mut state = async_std::task::block_on(self.state.write());
         state.local_resources.remove(&expr_id);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.forget_resource(expr_id);
 
-        zready(Ok(()))
+        Ok(())
     }
 
     /// Declare a publication for the given key expression.
@@ -607,17 +598,14 @@ impl Session {
     /// session.put("/key/expression", "value").await.unwrap();
     /// # })
     /// ```
-    pub fn declare_publication<'a, IntoKeyExpr>(
-        &self,
-        key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    pub async fn declare_publication<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ZResult<()>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
         log::trace!("declare_publication({:?})", key_expr);
-        zready({
-            let mut state = zwrite!(self.state);
+        {
+            let mut state = async_std::task::block_on(self.state.write());
             state.localkey_to_expr(&key_expr).map(|key_expr_str| {
                 if !state.publications.iter().any(|p| *p == key_expr_str) {
                     let declared_pub = if let Some(join_pub) = state
@@ -642,7 +630,7 @@ impl Session {
                     }
                 }
             })
-        })
+        }
     }
 
     /// Undeclare a publication previously declared
@@ -663,16 +651,13 @@ impl Session {
     /// session.undeclare_publication("/key/expression").await.unwrap();
     /// # })
     /// ```
-    pub fn undeclare_publication<'a, IntoKeyExpr>(
-        &self,
-        key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    pub fn undeclare_publication<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> ZResult<()>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        let mut state = zwrite!(self.state);
-        zready(state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
+        let mut state = async_std::task::block_on(self.state.write());
+        state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
             if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
                 trace!("undeclare_publication({:?})", key_expr_str);
                 state.publications.remove(idx);
@@ -703,18 +688,22 @@ impl Session {
             } else {
                 bail!("Unable to find publication")
             }
-        }))
+        })
     }
 
-    pub(crate) fn declare_any_subscriber(
+    pub(crate) async fn declare_any_subscriber<'a, IntoKeyExpr>(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: IntoKeyExpr,
         invoker: SubscriberInvoker,
         info: &SubInfo,
-    ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+    ) -> ZResult<Arc<SubscriberState>>
+    where
+        IntoKeyExpr: Into<KeyExpr<'a>>,
+    {
+        let key_expr = key_expr.into();
+        let mut state = self.state.write().await;
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let key_expr_str = state.localkey_to_expr(key_expr)?;
+        let key_expr_str = state.localkey_to_expr(&key_expr)?;
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.to_owned(),
@@ -761,14 +750,14 @@ impl Session {
             let key_expr = if key_expr.scope == EMPTY_EXPR_ID {
                 match key_expr.suffix.as_ref().find('*') {
                     Some(pos) => {
-                        let scope = self.declare_expr(&key_expr.suffix.as_ref()[..pos]).wait()?;
+                        let scope = self.declare_expr(&key_expr.suffix.as_ref()[..pos]).await?;
                         KeyExpr {
                             scope,
                             suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
                         }
                     }
                     None => {
-                        let scope = self.declare_expr(key_expr.suffix.as_ref()).wait()?;
+                        let scope = self.declare_expr(key_expr.suffix.as_ref()).await?;
                         KeyExpr {
                             scope,
                             suffix: "".into(),
@@ -790,7 +779,7 @@ impl Session {
         key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = async_std::task::block_on(self.state.write());
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
@@ -852,9 +841,9 @@ impl Session {
         }
     }
 
-    pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
-        zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
+    pub(crate) async fn unsubscribe(&self, sid: usize) -> ZResult<()> {
+        let mut state = async_std::task::block_on(self.state.write());
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
             for res in state.local_resources.values_mut() {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
@@ -909,7 +898,7 @@ impl Session {
             Ok(())
         } else {
             Err(zerror!("Unable to find subscriber").into())
-        })
+        }
     }
 
     pub(crate) fn twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {
@@ -982,9 +971,9 @@ impl Session {
         }
     }
 
-    pub(crate) fn close_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
-        zready(if let Some(qable_state) = state.queryables.remove(&qid) {
+    pub(crate) async fn close_queryable(&self, qid: usize) -> ZResult<()> {
+        let mut state = async_std::task::block_on(self.state.write());
+        if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
                 // There still exist Queryables on the same KeyExpr.
@@ -1037,7 +1026,7 @@ impl Session {
             Ok(())
         } else {
             Err(zerror!("Unable to find queryable").into())
-        })
+        }
     }
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
@@ -1151,7 +1140,7 @@ impl Session {
     ) {
         match invoker {
             SubscriberInvoker::Handler(handler) => {
-                let handler = &mut *zwrite!(handler);
+                let mut handler = async_std::task::block_on(handler.write());
                 handler(Sample::with_info(key_expr.into(), payload, data_info));
             }
             SubscriberInvoker::Sender(sender) => {
@@ -1171,7 +1160,7 @@ impl Session {
         payload: ZBuf,
         local_routing: Option<bool>,
     ) {
-        let state = zread!(self.state);
+        let state = async_std::task::block_on(self.state.read());
         let local_routing = local_routing.unwrap_or(state.local_routing);
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, local) {
@@ -1241,13 +1230,13 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull(&self, key_expr: &KeyExpr) -> impl ZFuture<Output = ZResult<()>> {
+    pub(crate) async fn pull<'a>(&self, key_expr: &KeyExpr<'a>) -> ZResult<()> {
         trace!("pull({:?})", key_expr);
-        let state = zread!(self.state);
+        let state = async_std::task::block_on(self.state.read());
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_pull(true, key_expr, 0, &None);
-        zready(Ok(()))
+        Ok(())
     }
 
     /// Query data from the matching queryables in the system.
@@ -1294,7 +1283,7 @@ impl Session {
         _consolidation: ConsolidationStrategy,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
-            let state = zread!(self.state);
+            let state = async_std::task::block_on(self.state.read());
             match state.key_expr_to_expr(key_expr, local) {
                 Ok(key_expr) => {
                     let kinds_and_senders = state
@@ -1386,7 +1375,7 @@ impl Session {
     }
 
     pub fn key_expr_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
-        let state = zread!(self.state);
+        let state = async_std::task::block_on(self.state.read());
         state.remotekey_to_expr(key_expr)
     }
 }
@@ -1501,7 +1490,7 @@ impl EntityFactory for Arc<Session> {
 impl Primitives for Session {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
         trace!("recv Decl Resource {} {:?}", expr_id, key_expr);
-        let state = &mut zwrite!(self.state);
+        let mut state = async_std::task::block_on(self.state.write());
         match state.remotekey_to_expr(key_expr) {
             Ok(key_expr) => {
                 let mut res = Resource::new(key_expr.clone());
@@ -1618,7 +1607,7 @@ impl Primitives for Session {
             data_info,
             payload
         );
-        let state = &mut zwrite!(self.state);
+        let mut state = async_std::task::block_on(self.state.write());
         let key_expr = match state.remotekey_to_expr(&key_expr) {
             Ok(name) => name,
             Err(e) => {
@@ -1695,7 +1684,7 @@ impl Primitives for Session {
 
     fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        let mut state = zwrite!(self.state);
+        let mut state = async_std::task::block_on(self.state.write());
         match state.queries.get_mut(&qid) {
             Some(mut query) => {
                 query.nb_final -= 1;
@@ -1739,7 +1728,7 @@ impl Primitives for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.clone().close_alive().wait();
+            let _ = async_std::task::block_on(self.clone().close_alive());
         }
     }
 }

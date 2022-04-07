@@ -182,7 +182,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.queryable(&qres).kind(EVAL).await.unwrap();
+    let mut queryable = z.queryable(&qres).kind(EVAL).build().await.unwrap();
 
     while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);
@@ -191,7 +191,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 }
 
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
-    let mut sub = z.subscribe(&state.event_expr).await.unwrap();
+    let mut sub = z.subscribe(&state.event_expr).build().await.unwrap();
     while let Some(s) = sub.next().await {
         log::debug!("Handling Network Event...");
         match bincode::deserialize::<GroupNetEvent>(&(s.value.payload.contiguous())) {

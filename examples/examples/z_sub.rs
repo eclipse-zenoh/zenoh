@@ -31,7 +31,7 @@ async fn main() {
 
     println!("Creating Subscriber on '{}'...", key_expr);
 
-    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
+    let mut subscriber = session.subscribe(&key_expr).build().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();

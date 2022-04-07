@@ -50,13 +50,15 @@ impl Plugin for StoragesPlugin {
     type RunningPlugin = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
-        std::mem::drop(env_logger::try_init());
-        let config =
-            { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
-        Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
-            runtime.clone(),
-            config,
-        )?)))
+        async_std::task::block_on(async move {
+            std::mem::drop(env_logger::try_init());
+            let config =
+                PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap()))?;
+            let storage_runtime: Self::RunningPlugin = Box::new(StorageRuntime::from(
+                StorageRuntimeInner::new(runtime.clone(), config).await?,
+            ));
+            Ok(storage_runtime)
+        })
     }
 }
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
@@ -75,7 +77,7 @@ impl StorageRuntimeInner {
             &self.runtime.pid, &self.name
         )
     }
-    fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
+    async fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
         // Try to initiate login.
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
@@ -91,7 +93,7 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let session = Arc::new(zenoh::init(runtime.clone()).wait().unwrap());
+        let session = Arc::new(zenoh::init(runtime.clone()).await.unwrap());
         let mut new_self = StorageRuntimeInner {
             name,
             runtime,

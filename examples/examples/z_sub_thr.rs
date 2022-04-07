@@ -14,17 +14,17 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::prelude::*;
 
-fn main() {
+#[async_std::main]
+async fn main() {
     // initiate logging
     env_logger::init();
 
     let (config, m, n) = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
+    let key_expr = session.declare_expr("/test/thr").await.unwrap();
 
     let mut count = 0;
     let mut start = Instant::now();
@@ -47,7 +47,8 @@ fn main() {
                 }
             }
         })
-        .wait()
+        .build()
+        .await
         .unwrap();
 
     // Stop forever

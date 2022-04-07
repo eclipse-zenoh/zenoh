@@ -12,18 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::pin::Pin;
 use async_std::task;
-use async_std::task::{Context, Poll};
 use futures::select;
 use futures::FutureExt;
 use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
-use std::future::Future;
 use zenoh::prelude::*;
 use zenoh::queryable::Queryable;
 use zenoh::subscriber::Subscriber;
-use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
 use zenoh_core::bail;
@@ -70,19 +66,9 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
         self.resources_limit = Some(limit);
         self
     }
-}
 
-impl<'a, 'b> Future for PublicationCacheBuilder<'a, '_> {
-    type Output = ZResult<PublicationCache<'a>>;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(PublicationCache::new(Pin::into_inner(self).clone()))
-    }
-}
-
-impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
-    fn wait(self) -> ZResult<PublicationCache<'a>> {
-        PublicationCache::new(self)
+    pub async fn build(self) -> ZResult<PublicationCache<'a>> {
+        PublicationCache::new(self).await
     }
 }
 
@@ -95,7 +81,7 @@ pub struct PublicationCache<'a> {
 impl<'a> PublicationCache<'a> {
     pub const QUERYABLE_KIND: ZInt = 0x08;
 
-    fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
+    async fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
             conf.pub_key_expr,
@@ -112,7 +98,12 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let mut local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
+        let mut local_sub = conf
+            .session
+            .subscribe(&conf.pub_key_expr)
+            .local()
+            .build()
+            .await?;
 
         // declare the queryable that will answer to queries on cache
         let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
@@ -128,7 +119,8 @@ impl<'a> PublicationCache<'a> {
             .session
             .queryable(&queryable_key_expr)
             .kind(PublicationCache::QUERYABLE_KIND)
-            .wait()?;
+            .build()
+            .await?;
 
         // take local ownership of stuff to be moved into task
         let mut sub_recv = local_sub.receiver().clone();
@@ -209,8 +201,8 @@ impl<'a> PublicationCache<'a> {
 
     /// Close this PublicationCache
     #[inline]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn close(self) -> ZResult<()> {
         // just drop self and all its content
-        zready(Ok(()))
+        Ok(())
     }
 }

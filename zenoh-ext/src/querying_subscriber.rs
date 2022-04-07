@@ -15,15 +15,13 @@ use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::StreamExt;
-use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
+use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};
 use zenoh::queryable::STORAGE;
 use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
-use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
 use zenoh_core::{zread, zwrite};
@@ -166,23 +164,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             query_consolidation: self.query_consolidation,
         }
     }
-}
 
-impl<'a, 'b> Future for QueryingSubscriberBuilder<'a, 'b> {
-    type Output = ZResult<QueryingSubscriber<'a>>;
-
-    #[inline]
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(QueryingSubscriber::new(
-            Pin::into_inner(self).clone().with_static_keys(),
-        ))
-    }
-}
-
-impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
-    #[inline]
-    fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
-        QueryingSubscriber::new(self.with_static_keys())
+    pub async fn build(self) -> ZResult<QueryingSubscriber<'a>> {
+        QueryingSubscriber::new(self.with_static_keys()).await
     }
 }
 
@@ -193,22 +177,28 @@ pub struct QueryingSubscriber<'a> {
 }
 
 impl<'a> QueryingSubscriber<'a> {
-    fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
+    async fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
         use zenoh::prelude::EntityFactory;
         // declare subscriber at first
         let mut subscriber = match conf.session.clone() {
-            SessionRef::Borrow(session) => session
-                .subscribe(&conf.sub_key_expr)
-                .reliability(conf.reliability)
-                .mode(conf.mode)
-                .period(conf.period)
-                .wait()?,
-            SessionRef::Shared(session) => session
-                .subscribe(&conf.sub_key_expr)
-                .reliability(conf.reliability)
-                .mode(conf.mode)
-                .period(conf.period)
-                .wait()?,
+            SessionRef::Borrow(session) => {
+                session
+                    .subscribe(&conf.sub_key_expr)
+                    .reliability(conf.reliability)
+                    .mode(conf.mode)
+                    .period(conf.period)
+                    .build()
+                    .await?
+            }
+            SessionRef::Shared(session) => {
+                session
+                    .subscribe(&conf.sub_key_expr)
+                    .reliability(conf.reliability)
+                    .mode(conf.mode)
+                    .period(conf.period)
+                    .build()
+                    .await?
+            }
         };
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
@@ -220,15 +210,15 @@ impl<'a> QueryingSubscriber<'a> {
         };
 
         // start query
-        query_subscriber.query().wait()?;
+        query_subscriber.query().await?;
 
         Ok(query_subscriber)
     }
 
     /// Close this QueryingSubscriber
     #[inline]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
-        self.subscriber.close()
+    pub async fn close(self) -> ZResult<()> {
+        self.subscriber.close().await
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.
@@ -239,7 +229,7 @@ impl<'a> QueryingSubscriber<'a> {
 
     /// Issue a new query using the configured selector.
     #[inline]
-    pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub async fn query(&mut self) -> ZResult<()> {
         self.query_on_selector(
             Selector {
                 key_selector: self.conf.query_key_expr.clone(),
@@ -248,45 +238,42 @@ impl<'a> QueryingSubscriber<'a> {
             self.conf.query_target.clone(),
             self.conf.query_consolidation.clone(),
         )
+        .await
     }
 
     /// Issue a new query on the specified selector.
     #[inline]
-    pub fn query_on<'c, IntoSelector>(
+    pub async fn query_on<'c, IntoSelector>(
         &mut self,
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    ) -> ZResult<()>
     where
         IntoSelector: Into<Selector<'c>>,
     {
         self.query_on_selector(selector.into(), target, consolidation)
+            .await
     }
 
     #[inline]
-    fn query_on_selector(
+    async fn query_on_selector<'s>(
         &mut self,
-        selector: Selector,
+        selector: Selector<'s>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> impl ZFuture<Output = ZResult<()>> {
+    ) -> ZResult<()> {
         let mut state = zwrite!(self.receiver.state);
         log::debug!("Start query on {}", selector);
-        match self
+        let recv = self
             .conf
             .session
             .get(selector)
             .target(target)
             .consolidation(consolidation)
-            .wait()
-        {
-            Ok(recv) => {
-                state.replies_recv_queue.push(recv);
-                zready(Ok(()))
-            }
-            Err(err) => zready(Err(err)),
-        }
+            .await?;
+        state.replies_recv_queue.push(recv);
+        Ok(())
     }
 }
 

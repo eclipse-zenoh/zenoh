@@ -19,45 +19,42 @@ use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
-use zenoh_core::zread;
+use std::future::Future;
 use zenoh_core::zresult::ZResult;
 use zenoh_protocol::proto::{data_kind, DataInfo, Options};
 use zenoh_protocol_core::Channel;
-use zenoh_sync::{derive_zfuture, Runnable};
 
 /// The kind of congestion control.
 pub use zenoh_protocol_core::CongestionControl;
 
-derive_zfuture! {
-    /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
-    ///
-    /// The `write` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// session
-    ///     .put("/key/expression", "value")
-    ///     .encoding(Encoding::TEXT_PLAIN)
-    ///     .congestion_control(CongestionControl::Block)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct Writer<'a> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'a>,
-        pub(crate) value: Option<Value>,
-        pub(crate) kind: Option<ZInt>,
-        pub(crate) congestion_control: CongestionControl,
-        pub(crate) priority: Priority,
-        pub(crate) local_routing: Option<bool>,
-    }
+/// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
+///
+/// The `write` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// session
+///     .put("/key/expression", "value")
+///     .encoding(Encoding::TEXT_PLAIN)
+///     .congestion_control(CongestionControl::Block)
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct Writer<'a> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'a>,
+    pub(crate) value: Option<Value>,
+    pub(crate) kind: Option<ZInt>,
+    pub(crate) congestion_control: CongestionControl,
+    pub(crate) priority: Priority,
+    pub(crate) local_routing: Option<bool>,
 }
 
 impl<'a> Writer<'a> {
@@ -105,7 +102,7 @@ impl<'a> Writer<'a> {
 
     fn write(&self, value: Value) -> zenoh_core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
-        let state = zread!(self.session.state);
+        let state = async_std::task::block_on(self.session.state.read());
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
 
@@ -144,13 +141,12 @@ impl<'a> Writer<'a> {
     }
 }
 
-impl Runnable for Writer<'_> {
+impl Future for Writer<'_> {
     type Output = zenoh_core::Result<()>;
 
-    #[inline]
-    fn run(&mut self) -> Self::Output {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         let value = self.value.take().unwrap();
-        self.write(value)
+        Poll::Ready(self.write(value))
     }
 }
 
@@ -238,31 +234,29 @@ where
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Publisher`](Publisher).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session
-    ///     .publish("/key/expression")
-    ///     .encoding(Encoding::TEXT_PLAIN)
-    ///     .congestion_control(CongestionControl::Block)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct PublisherBuilder<'a> {
-        pub(crate) publisher: Option<Publisher<'a>>,
-    }
+/// A builder for initializing a [`Publisher`](Publisher).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let publisher = session
+///     .publish("/key/expression")
+///     .encoding(Encoding::TEXT_PLAIN)
+///     .congestion_control(CongestionControl::Block)
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct PublisherBuilder<'a> {
+    pub(crate) publisher: Option<Publisher<'a>>,
 }
 
 impl<'a> PublisherBuilder<'a> {
@@ -310,13 +304,12 @@ impl<'a> PublisherBuilder<'a> {
     }
 }
 
-impl<'a> Runnable for PublisherBuilder<'a> {
+impl<'a> Future for PublisherBuilder<'a> {
     type Output = ZResult<Publisher<'a>>;
 
-    #[inline]
-    fn run(&mut self) -> Self::Output {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         let publisher = self.publisher.take().unwrap();
         log::trace!("publish({:?})", publisher.key_expr);
-        Ok(publisher)
+        Poll::Ready(Ok(publisher))
     }
 }
