@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::*;
-use async_std::stream::StreamExt;
+use async_std::prelude::FutureExt;
+use futures::stream::StreamExt;
 use zenoh::config::Config;
 use zenoh::scouting::WhatAmI;
 

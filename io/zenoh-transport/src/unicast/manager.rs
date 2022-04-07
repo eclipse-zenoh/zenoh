@@ -18,7 +18,7 @@ use crate::unicast::{
     TransportConfigUnicast, TransportUnicast,
 };
 use crate::TransportManager;
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
 use std::collections::{HashMap, HashSet};

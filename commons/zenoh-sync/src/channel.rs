@@ -18,7 +18,7 @@ pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 
 /// A trait that mimics the [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver).
 ///
-/// Most structs implementing this trait in zenoh also implement the [`Stream`](async_std::stream::Stream)
+/// Most structs implementing this trait in zenoh also implement the [`Stream`](futures::stream::Stream)
 /// trait so that values can be accessed synchronously or asynchronously.
 pub trait Receiver<T> {
     /// Asynchronously receive a value on this receiver, returning an error if all

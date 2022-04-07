@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::sync::Barrier;
 use async_std::task;
 use std::any::Any;

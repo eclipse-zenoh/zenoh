@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "shared-memory")]
 mod tests {
-    use async_std::prelude::*;
+    use async_std::prelude::FutureExt;
     use async_std::task;
     use std::any::Any;
     use std::collections::HashSet;

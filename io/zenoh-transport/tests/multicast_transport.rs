@@ -16,7 +16,7 @@
 // on GitHub CI actions on Linux and Windows.
 #[cfg(target_os = "macos")]
 mod tests {
-    use async_std::prelude::*;
+    use async_std::prelude::FutureExt;
     use async_std::task;
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};

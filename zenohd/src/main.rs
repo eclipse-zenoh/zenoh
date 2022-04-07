@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::future;
 use async_std::task;
 use clap::{ArgMatches, Command};
+use futures::future;
 use git_version::git_version;
 use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
 use zenoh::net::runtime::{AdminSpace, Runtime};

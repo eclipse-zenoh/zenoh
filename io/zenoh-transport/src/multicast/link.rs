@@ -17,7 +17,7 @@ use super::transport::TransportMulticastInner;
 use super::TransportMulticastStatsAtomic;
 use crate::common::batch::SerializationBatch;
 use crate::common::pipeline::TransmissionPipelineConf;
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 use std::convert::TryInto;
