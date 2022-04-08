@@ -208,7 +208,9 @@ validated_struct::validator! {
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: Option<ZInt>
-                    }
+                    },
+                    // Number of threads used for TX
+                    threads: Option<usize>,
                 },
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link

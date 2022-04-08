@@ -245,6 +245,7 @@ pub(super) async fn transport_finalize(
     // Start the TX loop
     let _ = transport.start_tx(
         link,
+        &manager.tx_executor,
         manager.config.unicast.keep_alive,
         manager.config.batch_size,
     )?;
