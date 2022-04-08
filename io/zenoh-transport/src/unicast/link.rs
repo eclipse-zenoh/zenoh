@@ -1,5 +1,3 @@
-use crate::common::pipeline::TransmissionPipelineConf;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -20,9 +18,10 @@ use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
+use crate::common::pipeline::TransmissionPipelineConf;
+use crate::TransportExecutor;
 use async_std::prelude::*;
-use async_std::task;
-use async_std::task::JoinHandle;
+use async_std::task::{self, JoinHandle};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::buffer::InsertBuffer;
@@ -45,7 +44,7 @@ pub(super) struct TransportLinkUnicast {
     // The transport this link is associated to
     transport: TransportUnicastInner,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>,
+    handle_tx: Option<Arc<async_executor::Task<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
@@ -71,6 +70,7 @@ impl TransportLinkUnicast {
 impl TransportLinkUnicast {
     pub(super) fn start_tx(
         &mut self,
+        executor: &TransportExecutor,
         keep_alive: Duration,
         batch_size: u16,
         conduit_tx: Arc<[TransportConduitTx]>,
@@ -89,7 +89,7 @@ impl TransportLinkUnicast {
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
-            let handle = task::spawn(async move {
+            let handle = executor.spawn(async move {
                 let res = tx_task(
                     pipeline.clone(),
                     c_link.clone(),

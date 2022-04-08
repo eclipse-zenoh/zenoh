@@ -104,6 +104,7 @@ pub struct TransportManagerConfig {
     pub multicast: TransportManagerConfigMulticast,
     pub endpoint: HashMap<String, Properties>,
     pub handler: Arc<dyn TransportEventHandler>,
+    pub tx_threads: usize,
 }
 
 pub struct TransportManagerState {
@@ -129,6 +130,7 @@ pub struct TransportManagerBuilder {
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
     endpoint: HashMap<String, Properties>,
+    tx_threads: usize,
 }
 
 impl TransportManagerBuilder {
@@ -187,6 +189,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn tx_threads(mut self, num: usize) -> Self {
+        self.tx_threads = num;
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
         if let Some(v) = config.id() {
             self = self.pid(zparse!(v)?);
@@ -207,6 +214,7 @@ impl TransportManagerBuilder {
         self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
         self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
         self = self.queue_size(config.transport().link().tx().queue().size().clone());
+        self = self.tx_threads(config.transport().link().tx().threads().unwrap());
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(config)
@@ -262,6 +270,7 @@ impl TransportManagerBuilder {
             multicast: multicast.config,
             endpoint: self.endpoint,
             handler,
+            tx_threads: self.tx_threads,
         };
 
         let state = TransportManagerState {
@@ -292,7 +301,38 @@ impl Default for TransportManagerBuilder {
             endpoint: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),
+            tx_threads: 1,
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct TransportExecutor {
+    executor: Arc<async_executor::Executor<'static>>,
+    sender: async_std::channel::Sender<()>,
+}
+
+impl TransportExecutor {
+    fn new(num_threads: usize) -> Self {
+        let (sender, receiver) = async_std::channel::bounded(1);
+        let executor = Arc::new(async_executor::Executor::new());
+        for _ in 0..num_threads {
+            let exec = executor.clone();
+            let recv = receiver.clone();
+            std::thread::spawn(move || async_std::task::block_on(exec.run(recv.recv())));
+        }
+        Self { executor, sender }
+    }
+
+    async fn stop(&self) {
+        let _ = self.sender.send(()).await;
+    }
+
+    pub(crate) fn spawn<T: Send + 'static>(
+        &self,
+        future: impl core::future::Future<Output = T> + Send + 'static,
+    ) -> async_executor::Task<T> {
+        self.executor.spawn(future)
     }
 }
 
@@ -306,6 +346,7 @@ pub struct TransportManager {
     pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
+    pub(crate) tx_executor: TransportExecutor,
 }
 
 impl TransportManager {
@@ -316,8 +357,10 @@ impl TransportManager {
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);
 
+        // @TODO: this should be moved into the unicast module
         let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
 
+        let tx_threads = params.config.tx_threads;
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),
@@ -327,8 +370,10 @@ impl TransportManager {
             shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
+            tx_executor: TransportExecutor::new(tx_threads),
         };
 
+        // @TODO: this should be moved into the unicast module
         async_std::task::spawn({
             let this = this.clone();
             async move {
@@ -353,6 +398,7 @@ impl TransportManager {
         log::trace!("TransportManager::clear())");
         self.close_unicast().await;
         self.close_multicast().await;
+        self.tx_executor.stop().await;
     }
 
     /*************************************/

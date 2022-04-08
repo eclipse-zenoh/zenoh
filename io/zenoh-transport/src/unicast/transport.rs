@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::{TransportManager, TransportPeerEventHandler};
+use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use super::common::{
     conduit::{TransportConduitRx, TransportConduitTx},
     pipeline::TransmissionPipeline,
@@ -240,6 +240,7 @@ impl TransportUnicastInner {
     pub(super) fn start_tx(
         &self,
         link: &LinkUnicast,
+        executor: &TransportExecutor,
         keep_alive: Duration,
         batch_size: u16,
     ) -> ZResult<()> {
@@ -247,7 +248,7 @@ impl TransportUnicastInner {
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
-                l.start_tx(keep_alive, batch_size, self.conduit_tx.clone());
+                l.start_tx(executor, keep_alive, batch_size, self.conduit_tx.clone());
                 Ok(())
             }
             None => {

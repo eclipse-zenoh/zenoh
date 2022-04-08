@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::*;
+use num_cpus;
 
 impl Default for TransportUnicastConf {
     fn default() -> Self {
@@ -42,12 +43,14 @@ impl Default for QoSConf {
 impl Default for LinkTxConf {
     #[allow(clippy::unnecessary_cast)]
     fn default() -> Self {
+        let num = 1 + ((num_cpus::get() - 1) / 4);
         Self {
             sequence_number_resolution: Some((2 as ZInt).pow(28)),
             lease: Some(10000),
             keep_alive: Some(2500),
             batch_size: Some(u16::MAX),
             queue: QueueConf::default(),
+            threads: Some(num),
         }
     }
 }

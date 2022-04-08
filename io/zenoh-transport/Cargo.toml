@@ -59,6 +59,7 @@ zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
 
 zenoh-link = { path = "../zenoh-link/" }
 
+async-executor = "1.4.1"
 async-global-executor = "2.0.2"
 async-std = { version = "=1.11.0", default-features = false }
 async-trait = "0.1.42"
