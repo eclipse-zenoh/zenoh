@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::*;
-use num_cpus;
 
 impl Default for TransportUnicastConf {
     fn default() -> Self {
