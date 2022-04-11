@@ -28,9 +28,6 @@ use std::task::{Context, Poll};
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use zenoh_protocol_core::Target;
-
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::QueryTarget;
 
 /// The kind of consolidation.
@@ -191,7 +188,7 @@ derive_zfuture! {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut replies = session
     ///     .get("/key/expression?value>1")
-    ///     .target(QueryTarget{ kind: queryable::ALL_KINDS, target: Target::All })
+    ///     .target(QueryTarget::All)
     ///     .consolidation(QueryConsolidation::none())
     ///     .await
     ///     .unwrap();
@@ -278,7 +275,10 @@ impl Runnable for Getter<'_, '_> {
             &self.selector.key_selector,
             self.selector.value_selector.as_ref(),
             qid,
-            target.clone(),
+            zenoh_protocol_core::QueryTAK {
+                kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                target: target.clone(),
+            },
             consolidation.clone(),
             None,
         );
@@ -288,7 +288,10 @@ impl Runnable for Getter<'_, '_> {
                 &self.selector.key_selector,
                 self.selector.value_selector.as_ref(),
                 qid,
-                target,
+                zenoh_protocol_core::QueryTAK {
+                    kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                    target,
+                },
                 consolidation,
             );
         }

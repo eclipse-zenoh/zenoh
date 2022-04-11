@@ -26,7 +26,7 @@ use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KeyExpr, PeerId, QueryTarget, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    KeyExpr, PeerId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -354,7 +354,7 @@ impl Primitives for AdminSpace {
         key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: QueryTAK,
         _consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {

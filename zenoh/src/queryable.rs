@@ -33,8 +33,6 @@ use std::task::{Context, Poll};
 use zenoh_protocol_core::QueryableInfo;
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
-pub use zenoh_protocol_core::queryable::*;
-
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
     /// The key_selector of this Query.
@@ -347,7 +345,6 @@ derive_zfuture! {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session
     ///     .queryable("/key/expression")
-    ///     .kind(queryable::EVAL)
     ///     .await
     ///     .unwrap();
     /// # })
@@ -362,13 +359,6 @@ derive_zfuture! {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
-    /// Change the queryable kind.
-    #[inline]
-    pub fn kind(mut self, kind: ZInt) -> Self {
-        self.kind = kind;
-        self
-    }
-
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
@@ -381,7 +371,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = crate::Result<Queryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);
+        log::trace!("queryable({:?})", self.key_expr);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);

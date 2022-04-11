@@ -424,7 +424,7 @@ impl Default for ConsolidationStrategy {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Target {
+pub enum QueryTarget {
     BestMatching,
     All,
     AllComplete,
@@ -433,24 +433,24 @@ pub enum Target {
     Complete(ZInt),
 }
 
-impl Default for Target {
+impl Default for QueryTarget {
     fn default() -> Self {
-        Target::BestMatching
+        QueryTarget::BestMatching
     }
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct QueryTarget {
+pub struct QueryTAK {
     pub kind: ZInt,
-    pub target: Target,
+    pub target: QueryTarget,
 }
 
-impl Default for QueryTarget {
+impl Default for QueryTAK {
     fn default() -> Self {
-        QueryTarget {
+        QueryTAK {
             kind: queryable::ALL_KINDS,
-            target: Target::default(),
+            target: QueryTarget::default(),
         }
     }
 }

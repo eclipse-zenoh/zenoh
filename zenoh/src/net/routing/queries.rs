@@ -26,14 +26,14 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable, ConsolidationStrategy, KeyExpr, PeerId, QueryTarget, QueryableInfo,
-    Target, WhatAmI, ZInt,
+    key_expr, queryable, ConsolidationStrategy, KeyExpr, PeerId, QueryTAK, QueryTarget,
+    QueryableInfo, WhatAmI, ZInt,
 };
 
 use super::face::FaceState;
 use super::network::Network;
 use super::resource::{
-    elect_router, QueryRoute, Resource, SessionContext, TargetQabl, TargetQablSet,
+    elect_router, QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
 };
 use super::router::Tables;
 
@@ -1007,7 +1007,7 @@ fn matching_kind(query_kind: ZInt, qabl_kind: ZInt) -> bool {
 #[inline]
 #[allow(clippy::too_many_arguments)]
 fn insert_target_for_qabls(
-    route: &mut TargetQablSet,
+    route: &mut QueryTargetQablSet,
     prefix: &Arc<Resource>,
     suffix: &str,
     tables: &Tables,
@@ -1025,7 +1025,7 @@ fn insert_target_for_qabls(
                             if let Some(face) = tables.get_face(&net.graph[direction].pid) {
                                 if net.distances.len() > qabl_idx.index() {
                                     let key_expr = Resource::get_best_key(prefix, suffix, face.id);
-                                    route.push(TargetQabl {
+                                    route.push(QueryTargetQabl {
                                         direction: (
                                             face.clone(),
                                             key_expr.to_owned(),
@@ -1057,8 +1057,8 @@ fn compute_query_route(
     suffix: &str,
     source: Option<usize>,
     source_type: WhatAmI,
-) -> Arc<TargetQablSet> {
-    let mut route = TargetQablSet::new();
+) -> Arc<QueryTargetQablSet> {
+    let mut route = QueryTargetQablSet::new();
     let key_expr = [&prefix.expr(), suffix].concat();
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
@@ -1133,7 +1133,7 @@ fn compute_query_route(
             for (sid, context) in &mres.session_ctxs {
                 let key_expr = Resource::get_best_key(prefix, suffix, *sid);
                 for (qabl_kind, qabl_info) in &context.qabl {
-                    route.push(TargetQabl {
+                    route.push(QueryTargetQabl {
                         direction: (context.face.clone(), key_expr.to_owned(), None),
                         complete: if complete { qabl_info.complete } else { 0 },
                         kind: *qabl_kind,
@@ -1163,7 +1163,7 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
             routers_query_routes.clear();
             routers_query_routes
-                .resize_with(max_idx.index() + 1, || Arc::new(TargetQablSet::new()));
+                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
                 routers_query_routes[idx.index()] =
@@ -1181,7 +1181,8 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             let max_idx = indexes.iter().max().unwrap();
             let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
             peers_query_routes.clear();
-            peers_query_routes.resize_with(max_idx.index() + 1, || Arc::new(TargetQablSet::new()));
+            peers_query_routes
+                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
                 peers_query_routes[idx.index()] =
@@ -1218,13 +1219,13 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 
 #[inline]
 fn compute_final_route(
-    qabls: &Arc<TargetQablSet>,
+    qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
-    target: &QueryTarget,
+    target: &QueryTAK,
 ) -> QueryRoute {
     match &target.target {
-        Target::None => HashMap::new(),
-        Target::All => {
+        QueryTarget::None => HashMap::new(),
+        QueryTarget::All => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if qabl.direction.0.id != src_face.id && matching_kind(target.kind, qabl.kind) {
@@ -1244,7 +1245,7 @@ fn compute_final_route(
             }
             route
         }
-        Target::AllComplete => {
+        QueryTarget::AllComplete => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
                 if qabl.direction.0.id != src_face.id
@@ -1268,7 +1269,7 @@ fn compute_final_route(
             route
         }
         #[cfg(feature = "complete_n")]
-        Target::Complete(n) => {
+        QueryTarget::Complete(n) => {
             let mut route = HashMap::new();
             let mut remaining = *n;
             for qabl in qabls.iter() {
@@ -1279,7 +1280,7 @@ fn compute_final_route(
                     let nb = std::cmp::min(qabl.complete, remaining);
                     route
                         .entry(qabl.direction.0.id)
-                        .or_insert_with(|| (qabl.direction.clone(), Target::Complete(nb)));
+                        .or_insert_with(|| (qabl.direction.clone(), QueryTarget::Complete(nb)));
                     remaining -= nb;
                     if remaining == 0 {
                         break;
@@ -1288,7 +1289,7 @@ fn compute_final_route(
             }
             route
         }
-        Target::BestMatching => {
+        QueryTarget::BestMatching => {
             if let Some(qabl) = qabls.iter().find(|qabl| {
                 qabl.direction.0.id != src_face.id
                     && qabl.complete > 0
@@ -1311,9 +1312,9 @@ fn compute_final_route(
                 compute_final_route(
                     qabls,
                     src_face,
-                    &QueryTarget {
+                    &QueryTAK {
                         kind: target.kind,
-                        target: Target::All,
+                        target: QueryTarget::All,
                     },
                 )
             }
@@ -1356,7 +1357,7 @@ pub fn route_query(
     expr: &KeyExpr,
     value_selector: &str,
     qid: ZInt,
-    target: QueryTarget,
+    target: QueryTAK,
     consolidation: ConsolidationStrategy,
     routing_context: Option<RoutingContext>,
 ) {
@@ -1495,7 +1496,7 @@ pub fn route_query(
                         key_expr,
                         value_selector,
                         qid,
-                        QueryTarget {
+                        QueryTAK {
                             kind: target.kind,
                             target: t.clone(),
                         },

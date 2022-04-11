@@ -24,7 +24,6 @@ use std::sync::{
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
@@ -133,7 +132,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     let mut sub = session.subscribe(&selector).await.unwrap();
 
     debug!("Create Queryable on {}", selector);
-    let mut queryable = session.queryable(&selector).kind(STORAGE).await.unwrap();
+    let mut queryable = session.queryable(&selector).await.unwrap();
 
     while flag.load(Relaxed) {
         select!(

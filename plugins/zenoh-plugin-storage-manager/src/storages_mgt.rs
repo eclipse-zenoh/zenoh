@@ -19,8 +19,7 @@ use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, QueryTarget, Target};
-use zenoh::queryable;
+use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::Session;
 use zenoh_backend_traits::Query;
 use zenoh_core::Result as ZResult;
@@ -53,13 +52,9 @@ pub(crate) async fn start_storage(
 
         // align with other storages, querying them on key_expr,
         // with starttime to get historical data (in case of time-series)
-        let query_target = QueryTarget {
-            kind: queryable::STORAGE,
-            target: Target::All,
-        };
         let mut replies = match zenoh
             .get(&Selector::from(&key_expr).with_value_selector("?(starttime=0)"))
-            .target(query_target)
+            .target(QueryTarget::All)
             .consolidation(QueryConsolidation::none())
             .await
         {
@@ -91,8 +86,7 @@ pub(crate) async fn start_storage(
         }
 
         // answer to queries on key_expr
-        let mut storage_queryable = match zenoh.queryable(&key_expr).kind(queryable::STORAGE).await
-        {
+        let mut storage_queryable = match zenoh.queryable(&key_expr).await {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);

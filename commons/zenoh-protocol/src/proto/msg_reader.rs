@@ -54,8 +54,8 @@ pub trait MessageReader {
     fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody>;
     fn read_link_state(&mut self) -> Option<LinkState>;
     fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)>;
+    fn read_query_tak(&mut self) -> Option<QueryTAK>;
     fn read_query_target(&mut self) -> Option<QueryTarget>;
-    fn read_target(&mut self) -> Option<Target>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
     fn read_consolidation(&mut self) -> Option<ConsolidationStrategy>;
 }
@@ -727,7 +727,7 @@ impl MessageReader for ZBufReader<'_> {
         let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
-            Some(self.read_query_target()?)
+            Some(self.read_query_tak()?)
         } else {
             None
         };
@@ -811,26 +811,26 @@ impl MessageReader for ZBufReader<'_> {
         Some((mode, period))
     }
 
-    fn read_query_target(&mut self) -> Option<QueryTarget> {
+    fn read_query_tak(&mut self) -> Option<QueryTAK> {
         let kind = self.read_zint()?;
-        let target = self.read_target()?;
-        Some(QueryTarget { kind, target })
+        let target = self.read_query_target()?;
+        Some(QueryTAK { kind, target })
     }
 
-    fn read_target(&mut self) -> Option<Target> {
+    fn read_query_target(&mut self) -> Option<QueryTarget> {
         let t = self.read_zint()?;
         match t {
-            0 => Some(Target::BestMatching),
-            1 => Some(Target::All),
-            2 => Some(Target::AllComplete),
-            3 => Some(Target::None),
+            0 => Some(QueryTarget::BestMatching),
+            1 => Some(QueryTarget::All),
+            2 => Some(QueryTarget::AllComplete),
+            3 => Some(QueryTarget::None),
             #[cfg(feature = "complete_n")]
             4 => {
                 let n = self.read_zint()?;
-                Some(Target::Complete(n))
+                Some(QueryTarget::Complete(n))
             }
             id => {
-                log::trace!("UNEXPECTED ID FOR Target: {}", id);
+                log::trace!("UNEXPECTED ID FOR QueryTarget: {}", id);
                 None
             }
         }

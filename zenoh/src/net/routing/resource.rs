@@ -26,16 +26,16 @@ use zenoh_sync::get_mut_unchecked;
 pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::Target)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = Route;
-pub(super) struct TargetQabl {
+pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
     pub(super) kind: ZInt,
     pub(super) complete: ZInt,
     pub(super) distance: f64,
 }
-pub(super) type TargetQablSet = Vec<TargetQabl>;
+pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
@@ -57,9 +57,9 @@ pub(super) struct ResourceContext {
     pub(super) routers_data_routes: Vec<Arc<Route>>,
     pub(super) peers_data_routes: Vec<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
-    pub(super) routers_query_routes: Vec<Arc<TargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<TargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<TargetQablSet>>,
+    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
 }
 
 impl ResourceContext {
@@ -183,7 +183,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.routers_query_routes.len() > context)
                 .then(|| ctx.routers_query_routes[context].clone()),
@@ -192,7 +192,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.peers_query_routes.len() > context)
                 .then(|| ctx.peers_query_routes[context].clone()),
@@ -201,7 +201,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn client_query_route(&self) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => ctx.client_query_route.clone(),
             None => None,

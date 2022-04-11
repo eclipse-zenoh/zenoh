@@ -59,8 +59,8 @@ pub trait MessageWriter {
     fn write_query(&mut self, query: &Query) -> bool;
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool;
     fn write_link_state(&mut self, link_state: &LinkState) -> bool;
+    fn write_query_tak(&mut self, target: &QueryTAK) -> bool;
     fn write_query_target(&mut self, target: &QueryTarget) -> bool;
-    fn write_target(&mut self, target: &Target) -> bool;
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt;
     fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool;
 }
@@ -541,7 +541,7 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
-            zcheck!(self.write_query_target(t));
+            zcheck!(self.write_query_tak(t));
         }
         self.write_consolidation(&query.consolidation)
     }
@@ -576,20 +576,20 @@ impl MessageWriter for WBuf {
         true
     }
 
-    fn write_query_target(&mut self, target: &QueryTarget) -> bool {
-        self.write_zint(target.kind) && self.write_target(&target.target)
+    fn write_query_tak(&mut self, target: &QueryTAK) -> bool {
+        self.write_zint(target.kind) && self.write_query_target(&target.target)
     }
 
-    fn write_target(&mut self, target: &Target) -> bool {
+    fn write_query_target(&mut self, target: &QueryTarget) -> bool {
         // Note: desactivate Clippy check here because cast to ZInt can't be changed since ZInt size might change
         #![allow(clippy::unnecessary_cast)]
         match target {
-            Target::BestMatching => self.write_zint(0 as ZInt),
-            Target::All => self.write_zint(1 as ZInt),
-            Target::AllComplete => self.write_zint(2 as ZInt),
-            Target::None => self.write_zint(3 as ZInt),
+            QueryTarget::BestMatching => self.write_zint(0 as ZInt),
+            QueryTarget::All => self.write_zint(1 as ZInt),
+            QueryTarget::AllComplete => self.write_zint(2 as ZInt),
+            QueryTarget::None => self.write_zint(3 as ZInt),
             #[cfg(feature = "complete_n")]
-            Target::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
+            QueryTarget::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
         }
     }
 

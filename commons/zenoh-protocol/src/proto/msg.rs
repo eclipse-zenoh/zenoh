@@ -192,7 +192,7 @@ pub mod zmsg {
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
-        pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
+        pub const T: u8 = 1 << 5; // 0x20 QueryTAK   if T==1 then the query target is present
 
         pub const X: u8 = 0; // Unused flags are set to zero
     }
@@ -381,7 +381,7 @@ impl Attachment {
 ///   - the **Data** messages that result from a query
 ///   - or a **Unit** message in case the message is a
 ///     SOURCE_FINAL or REPLY_FINAL.
-///  The **replier-id** (eval or storage id) is represented as a byte-array.
+///  The **replier-id** (queryable id) is represented as a byte-array.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -987,7 +987,7 @@ pub struct Query {
     pub key: KeyExpr<'static>,
     pub value_selector: String,
     pub qid: ZInt,
-    pub target: Option<QueryTarget>,
+    pub target: Option<QueryTAK>,
     pub consolidation: ConsolidationStrategy,
 }
 
@@ -1207,7 +1207,7 @@ impl ZenohMessage {
         key: KeyExpr<'static>,
         value_selector: String,
         qid: ZInt,
-        target: Option<QueryTarget>,
+        target: Option<QueryTAK>,
         consolidation: ConsolidationStrategy,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,

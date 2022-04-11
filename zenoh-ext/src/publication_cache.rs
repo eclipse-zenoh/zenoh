@@ -93,8 +93,6 @@ pub struct PublicationCache<'a> {
 }
 
 impl<'a> PublicationCache<'a> {
-    pub const QUERYABLE_KIND: ZInt = 0x08;
-
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
         log::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
@@ -124,11 +122,7 @@ impl<'a> PublicationCache<'a> {
         } else {
             conf.pub_key_expr.clone()
         };
-        let mut queryable = conf
-            .session
-            .queryable(&queryable_key_expr)
-            .kind(PublicationCache::QUERYABLE_KIND)
-            .wait()?;
+        let mut queryable = conf.session.queryable(&queryable_key_expr).wait()?;
 
         // take local ownership of stuff to be moved into task
         let mut sub_recv = local_sub.receiver().clone();

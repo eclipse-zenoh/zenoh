@@ -21,7 +21,6 @@ use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::*;
-use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
 
 #[async_std::main]
@@ -40,7 +39,7 @@ async fn main() {
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).kind(STORAGE).await.unwrap();
+    let mut queryable = session.queryable(&key_expr).await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();

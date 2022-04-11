@@ -95,7 +95,7 @@
 ### z_get
 
    Sends a query message for a selector.  
-   The queryables with a matching path or selector (for instance [z_eval](#z_eval) and [z_storage](#z_storage))
+   The queryables with a matching path or selector (for instance [z_queryable](#z_queryable) and [z_storage](#z_storage))
    will receive this query and reply with paths/values that will be received by the receiver stream.
 
    Typical usage:
@@ -107,7 +107,7 @@
       z_get -s /demo/**
    ```
 
-### z_eval
+### z_queryable
 
    Declares a queryable function with a path.  
    This queryable function will be triggered by each call to get
@@ -115,11 +115,11 @@
 
    Typical usage:
    ```bash
-      z_eval
+      z_queryable
    ```
    or
    ```bash
-      z_eval -p /demo/example/eval -v 'This is the result'
+      z_queryable -p /demo/example/queryable -v 'This is the result'
    ```
 
 ### z_storage

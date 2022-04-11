@@ -46,10 +46,10 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - in another shell run: `./target/release/examples/z_put`
     - the subscriber should receive the publication.
 
- - **get/eval**
-    - run: `./target/release/examples/z_eval`
+ - **get/queryable**
+    - run: `./target/release/examples/z_queryable`
     - in another shell run: `./target/release/examples/z_get`
-    - the eval should display the log in its listener, and the get should receive the eval result.
+    - the queryable should display the log in its listener, and the get should receive the queryable result.
 
 **Routed tests:**
 

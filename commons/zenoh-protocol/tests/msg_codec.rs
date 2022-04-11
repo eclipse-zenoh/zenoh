@@ -202,21 +202,21 @@ fn gen_key() -> KeyExpr<'static> {
     }
 }
 
-fn gen_query_target() -> QueryTarget {
+fn gen_query_target() -> QueryTAK {
     let kind: ZInt = thread_rng().gen_range(0..4);
     let target = gen_target();
-    QueryTarget { kind, target }
+    QueryTAK { kind, target }
 }
 
-fn gen_target() -> Target {
+fn gen_target() -> QueryTarget {
     let num: u8 = thread_rng().gen_range(0..4);
     match num {
-        0 => Target::BestMatching,
-        1 => Target::All,
-        2 => Target::AllComplete,
+        0 => QueryTarget::BestMatching,
+        1 => QueryTarget::All,
+        2 => QueryTarget::AllComplete,
         #[cfg(feature = "complete_n")]
-        4 => Target::Complete(3),
-        _ => Target::None,
+        4 => QueryTarget::Complete(3),
+        _ => QueryTarget::None,
     }
 }
 

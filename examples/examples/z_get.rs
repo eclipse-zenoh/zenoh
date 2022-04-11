@@ -16,7 +16,6 @@ use futures::prelude::*;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::query::*;
-use zenoh::queryable;
 
 #[async_std::main]
 async fn main() {
@@ -54,11 +53,6 @@ fn parse_args() -> (Config, String, QueryTarget) {
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
                 .default_value("/demo/example/**"),
-        )
-        .arg(
-            Arg::from_usage("-k, --kind=[KIND] 'The KIND of queryables to query'")
-                .possible_values(&["ALL_KINDS", "STORAGE", "EVAL"])
-                .default_value("ALL_KINDS"),
         )
         .arg(
             Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
@@ -99,18 +93,12 @@ fn parse_args() -> (Config, String, QueryTarget) {
 
     let selector = args.value_of("selector").unwrap().to_string();
 
-    let kind = match args.value_of("kind") {
-        Some("STORAGE") => queryable::STORAGE,
-        Some("EVAL") => queryable::EVAL,
-        _ => queryable::ALL_KINDS,
-    };
-
     let target = match args.value_of("target") {
-        Some("BEST_MATCHING") => Target::BestMatching,
-        Some("ALL_COMPLETE") => Target::AllComplete,
-        Some("NONE") => Target::None,
-        _ => Target::All,
+        Some("BEST_MATCHING") => QueryTarget::BestMatching,
+        Some("ALL_COMPLETE") => QueryTarget::AllComplete,
+        Some("NONE") => QueryTarget::None,
+        _ => QueryTarget::All,
     };
 
-    (config, selector, QueryTarget { kind, target })
+    (config, selector, target)
 }

@@ -18,7 +18,6 @@ use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::*;
-use zenoh::queryable::EVAL;
 
 #[async_std::main]
 async fn main() {
@@ -31,7 +30,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).kind(EVAL).await.unwrap();
+    let mut queryable = session.queryable(&key_expr).await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -56,7 +55,7 @@ async fn main() {
 }
 
 fn parse_args() -> (Config, String, String) {
-    let args = App::new("zenoh eval example")
+    let args = App::new("zenoh queryable example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
                 .possible_values(&["peer", "client"]),
@@ -69,13 +68,13 @@ fn parse_args() -> (Config, String, String) {
         ))
         .arg(
             Arg::from_usage(
-                "-k, --key=[KEYEXPR]        'The key expression matching queries to evaluate.'",
+                "-k, --key=[KEYEXPR]        'The key expression matching queries to reply to.'",
             )
-            .default_value("/demo/example/zenoh-rs-eval"),
+            .default_value("/demo/example/zenoh-rs-queryable"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
-                .default_value("Eval from Rust!"),
+                .default_value("Queryable from Rust!"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

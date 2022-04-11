@@ -19,8 +19,7 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
-use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};
-use zenoh::queryable::STORAGE;
+use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver};
 use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
@@ -29,8 +28,6 @@ use zenoh::Result as ZResult;
 use zenoh_core::{zread, zwrite};
 
 use crate::session_ext::SessionRef;
-
-use super::PublicationCache;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
@@ -55,10 +52,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         sub_key_expr: KeyExpr<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
-        let query_target = QueryTarget {
-            kind: PublicationCache::QUERYABLE_KIND | STORAGE,
-            target: Target::All,
-        };
+        let query_target = QueryTarget::All;
 
         // By default no query consolidation, to receive more than 1 sample per-resource
         // (in history of publications is available)

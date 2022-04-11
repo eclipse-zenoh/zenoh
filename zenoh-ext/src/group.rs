@@ -9,7 +9,6 @@ use std::ops::Add;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
-use zenoh::queryable::EVAL;
 use zenoh::Session;
 use zenoh_sync::Condition;
 
@@ -182,7 +181,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.queryable(&qres).kind(EVAL).await.unwrap();
+    let mut queryable = z.queryable(&qres).await.unwrap();
 
     while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);

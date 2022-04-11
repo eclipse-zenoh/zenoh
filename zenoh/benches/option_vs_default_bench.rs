@@ -17,7 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Target {
+pub enum QueryTarget {
     BestMatching,
     All,
     AllComplete,
@@ -26,73 +26,73 @@ pub enum Target {
     Complete(u64),
 }
 
-impl Default for Target {
+impl Default for QueryTarget {
     fn default() -> Self {
-        Target::BestMatching
+        QueryTarget::BestMatching
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct QueryTarget {
-    pub storage: Target,
-    pub eval: Target,
+pub struct QueryTAK {
+    pub storage: QueryTarget,
+    pub eval: QueryTarget,
     // @TODO: finalise
 }
 
-pub const QUERY_TARGET_DEFAULT: QueryTarget = QueryTarget {
-    storage: Target::BestMatching,
-    eval: Target::BestMatching,
+pub const QUERY_TARGET_DEFAULT: QueryTAK = QueryTAK {
+    storage: QueryTarget::BestMatching,
+    eval: QueryTarget::BestMatching,
 };
 
-impl Default for &QueryTarget {
+impl Default for &QueryTAK {
     fn default() -> Self {
         &QUERY_TARGET_DEFAULT
     }
 }
 
-pub fn pass_by_ref_option(arg: &Option<QueryTarget>, sum: &mut u64) {
+pub fn pass_by_ref_option(arg: &Option<QueryTAK>, sum: &mut u64) {
     let v = arg.as_ref().unwrap_or_default();
     match v.eval {
-        Target::BestMatching => *sum *= 3,
-        Target::AllComplete => *sum *= 2,
-        Target::All => (),
-        Target::None => *sum *= 5,
+        QueryTarget::BestMatching => *sum *= 3,
+        QueryTarget::AllComplete => *sum *= 2,
+        QueryTarget::All => (),
+        QueryTarget::None => *sum *= 5,
         #[cfg(feature = "complete_n")]
-        Target::Complete(_) => *sum *= 4,
+        QueryTarget::Complete(_) => *sum *= 4,
     }
 }
 
-pub fn pass_by_option(arg: Option<QueryTarget>, sum: &mut u64) {
+pub fn pass_by_option(arg: Option<QueryTAK>, sum: &mut u64) {
     let v = arg.unwrap_or_default();
     match v.eval {
-        Target::BestMatching => *sum *= 3,
-        Target::AllComplete => *sum *= 2,
-        Target::All => (),
-        Target::None => *sum *= 5,
+        QueryTarget::BestMatching => *sum *= 3,
+        QueryTarget::AllComplete => *sum *= 2,
+        QueryTarget::All => (),
+        QueryTarget::None => *sum *= 5,
         #[cfg(feature = "complete_n")]
-        Target::Complete(_) => *sum *= 4,
+        QueryTarget::Complete(_) => *sum *= 4,
     }
 }
 
-pub fn pass_by_ref(arg: &QueryTarget, sum: &mut u64) {
+pub fn pass_by_ref(arg: &QueryTAK, sum: &mut u64) {
     match arg.eval {
-        Target::BestMatching => *sum *= 3,
-        Target::AllComplete => *sum *= 2,
-        Target::All => (),
-        Target::None => *sum *= 5,
+        QueryTarget::BestMatching => *sum *= 3,
+        QueryTarget::AllComplete => *sum *= 2,
+        QueryTarget::All => (),
+        QueryTarget::None => *sum *= 5,
         #[cfg(feature = "complete_n")]
-        Target::Complete(_) => *sum *= 4,
+        QueryTarget::Complete(_) => *sum *= 4,
     }
 }
 
-pub fn pass_by_val(arg: QueryTarget, sum: &mut u64) {
+pub fn pass_by_val(arg: QueryTAK, sum: &mut u64) {
     match arg.eval {
-        Target::BestMatching => *sum *= 3,
-        Target::AllComplete => *sum *= 2,
-        Target::All => (),
-        Target::None => *sum *= 5,
+        QueryTarget::BestMatching => *sum *= 3,
+        QueryTarget::AllComplete => *sum *= 2,
+        QueryTarget::All => (),
+        QueryTarget::None => *sum *= 5,
         #[cfg(feature = "complete_n")]
-        Target::Complete(_) => *sum *= 4,
+        QueryTarget::Complete(_) => *sum *= 4,
     }
 }
 
@@ -129,7 +129,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut sum5 = 0u64;
     c.bench_function("pass_by_ref default", |b| {
         b.iter(|| {
-            pass_by_ref(&QueryTarget::default(), &mut sum5);
+            pass_by_ref(&QueryTAK::default(), &mut sum5);
         })
     });
 
@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut sum7 = 0u64;
     c.bench_function("pass_by_val default", |b| {
         b.iter(|| {
-            pass_by_val(QueryTarget::default(), &mut sum7);
+            pass_by_val(QueryTAK::default(), &mut sum7);
         })
     });
 

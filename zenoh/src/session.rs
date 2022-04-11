@@ -977,7 +977,7 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
-            kind: EVAL,
+            kind: zenoh_protocol_core::queryable::ALL_KINDS,
             complete: true,
         }
     }
@@ -1290,7 +1290,7 @@ impl Session {
         key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: zenoh_protocol_core::QueryTAK,
         _consolidation: ConsolidationStrategy,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
@@ -1459,7 +1459,7 @@ impl EntityFactory for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.into(),
-            kind: EVAL,
+            kind: zenoh_protocol_core::queryable::EVAL,
             complete: true,
         }
     }
@@ -1586,7 +1586,7 @@ impl Primitives for Session {
         key_expr: &KeyExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: zenoh_protocol_core::QueryTAK,
         consolidation: ConsolidationStrategy,
         _routing_context: Option<RoutingContext>,
     ) {
