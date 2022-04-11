@@ -34,11 +34,6 @@ pub struct LeaveEvent {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct NewGroupViewEvent {
-    pub source: String,
-    pub members: Vec<Member>,
-}
-#[derive(Serialize, Deserialize, Debug)]
 pub struct NewLeaderEvent {
     pub mid: String,
 }
@@ -53,7 +48,6 @@ enum GroupNetEvent {
     Join(JoinEvent),
     Leave(LeaveEvent),
     KeepAlive(KeepAliveEvent),
-    NewGroupView(NewGroupViewEvent),
 }
 
 /// Events exposed to the user to be informed for relevant
@@ -64,7 +58,6 @@ pub enum GroupEvent {
     Leave(LeaveEvent),
     LeaseExpired(LeaseExpiredEvent),
     NewLeader(NewLeaderEvent),
-    NewGroupView(NewGroupViewEvent),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -252,7 +245,13 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                             let mut expiry = Instant::now();
                                             expiry = expiry.add(m.lease);
                                             log::debug!("Received member information: {:?}", &m);
-                                            mm.insert(kae.mid.clone(), (m, expiry));
+                                            mm.insert(kae.mid.clone(), (m.clone(), expiry));
+                                            // Advertise a JoinEvent
+                                            let u_evt = &*state.user_events_tx.lock().await;
+                                            if let Some(tx) = u_evt {
+                                                let je = JoinEvent { member: m };
+                                                tx.send(GroupEvent::Join(je)).unwrap()
+                                            }
                                         }
                                         Err(e) => {
                                             log::debug!(
@@ -265,15 +264,6 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                         }
                     } else {
                         log::debug!("KeepAlive from Local Participant -- Ignoring");
-                    }
-                }
-                GroupNetEvent::NewGroupView(ngve) => {
-                    let mut ms = state.members.lock().await;
-                    for m in ngve.members {
-                        if ms.get(&m.mid).is_none() {
-                            let alive_till = Instant::now().add(m.lease);
-                            ms.insert(m.mid.clone(), (m, alive_till));
-                        }
                     }
                 }
             },
