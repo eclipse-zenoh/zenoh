@@ -115,8 +115,6 @@ impl Default for QueryConsolidation {
 pub struct Reply {
     /// The [`Sample`] for this Reply.
     pub sample: Sample,
-    /// The kind of [`Queryable`](crate::queryable::Queryable) that answered this Reply.
-    pub replier_kind: ZInt,
     /// The id of the zenoh instance that answered this Reply.
     pub replier_id: PeerId,
 }

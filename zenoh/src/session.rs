@@ -1630,7 +1630,6 @@ impl Primitives for Session {
             Some(query) => {
                 let new_reply = Reply {
                     sample: Sample::with_info(key_expr.into(), payload, data_info),
-                    replier_kind,
                     replier_id,
                 };
                 match query.reception_mode {
