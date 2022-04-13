@@ -139,6 +139,14 @@ use config::{StorageConfig, VolumeConfig};
 pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
 pub type CreateVolume = fn(VolumeConfig) -> ZResult<Box<dyn Volume>>;
 
+///
+pub enum StorageInsertionResult {
+    Outdated,
+    Inserted,
+    Replaced,
+    Deleted,
+}
+
 /// Trait to be implemented by a Backend.
 ///
 #[async_trait]
@@ -167,7 +175,7 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;
+    async fn on_sample(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming query matching this storage's keys exp.
     /// This storage should reply with data matching the query calling [`Query::reply()`].
