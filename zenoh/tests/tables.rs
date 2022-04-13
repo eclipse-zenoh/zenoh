@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::Arc;
 use std::convert::TryInto;
+use std::sync::Arc;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh::net::routing::router::*;

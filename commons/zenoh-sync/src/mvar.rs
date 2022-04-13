@@ -94,9 +94,9 @@ mod tests {
     #[test]
     fn mvar() {
         use super::Mvar;
-        use async_std::prelude::*;
-        use async_std::sync::Arc;
+        use async_std::prelude::FutureExt;
         use async_std::task;
+        use std::sync::Arc;
         use std::time::Duration;
 
         const TIMEOUT: Duration = Duration::from_secs(60);

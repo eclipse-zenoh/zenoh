@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::sync::Arc;
 use async_trait::async_trait;
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+use std::sync::Arc;
 use zenoh_buffers::buffer::CopyBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{SplitBuffer, WBuf, ZBuf};

@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::{Arc, RwLock};
+use async_std::sync::RwLock;
 use async_trait::async_trait;
 use log::{debug, trace, warn};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;

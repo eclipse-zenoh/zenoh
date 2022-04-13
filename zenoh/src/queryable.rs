@@ -21,7 +21,6 @@ use crate::sync::ZFuture;
 use crate::Session;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
-use async_std::sync::Arc;
 use flume::r#async::RecvFut;
 use flume::{
     bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError, TrySendError,
@@ -29,6 +28,7 @@ use flume::{
 use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use zenoh_protocol_core::QueryableInfo;
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};

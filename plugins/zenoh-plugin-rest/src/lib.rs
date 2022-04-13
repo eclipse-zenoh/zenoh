@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::sync::Arc;
 use futures::prelude::*;
 use http_types::Method;
 use std::str::FromStr;
+use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};

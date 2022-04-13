@@ -126,8 +126,8 @@
 //! }
 //! ```
 
-use async_std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, Sample, Selector};
 pub use zenoh::Result as ZResult;
 

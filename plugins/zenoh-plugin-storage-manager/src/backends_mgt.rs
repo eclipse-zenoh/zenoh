@@ -13,8 +13,8 @@
 //
 use super::storages_mgt::*;
 use async_std::channel::Sender;
-use async_std::sync::Arc;
 use log::trace;
+use std::sync::Arc;
 use zenoh::prelude::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;

@@ -12,10 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::*;
-use async_std::sync::{Arc, Mutex, Weak};
+use async_std::sync::Mutex;
 use async_std::task;
 use async_trait::async_trait;
 use flume::{bounded, Receiver, RecvError, Sender};
+use std::sync::{Arc, Weak};
 use zenoh_core::zconfigurable;
 
 use std::cmp::Ordering as ComparisonOrdering;
@@ -297,10 +298,10 @@ mod tests {
     #[test]
     fn timer() {
         use super::{Timed, TimedEvent, Timer};
-        use async_std::sync::Arc;
         use async_std::task;
         use async_trait::async_trait;
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
         use std::time::{Duration, Instant};
 
         #[derive(Clone)]
