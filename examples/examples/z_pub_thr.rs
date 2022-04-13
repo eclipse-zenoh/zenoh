@@ -79,7 +79,6 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
             Arg::from_usage(
                 "-n, --number=[number] 'Number of messages in each throughput measurements.'",
             )
-            .requires("print")
             .default_value("100000"),
         )
         .arg(Arg::from_usage(
