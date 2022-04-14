@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-name = "zenoh-link-unixsock_stream"
+name = "zenoh-link-ws"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
@@ -34,13 +34,14 @@ description = "Internal crate for zenoh."
 [dependencies]
 zenoh-core = { path = "../../../commons/zenoh-core/" }
 zenoh-sync = { path = "../../../commons/zenoh-sync/" }
+zenoh-util = { path = "../../../commons/zenoh-util/" }
 zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
-
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
 async-std = { version = "=1.11.0", default-features = false }
+tokio-tungstenite = "0.17.1"
+tokio = { version = "1.17.0", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 async-trait = "0.1.42"
 log = "0.4"
-nix = { version = "0.23.0" }
-uuid = { version = "0.8.2", features = ["v4"] }
-futures = "0.3.21"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+url = "2.2.2"
