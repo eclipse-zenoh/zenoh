@@ -1,5 +1,6 @@
 name: Report a bug
-description: Create a bug report to help us improve Zenoh
+description: |
+  Create a bug report to help us improve Zenoh.
 title: "[Bug] "
 labels: ["bug"]
 body:
