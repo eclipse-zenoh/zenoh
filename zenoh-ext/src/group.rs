@@ -185,7 +185,10 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
     while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);
-        query.reply(Ok(Sample::new(qres.clone(), buf.clone())))
+        query
+            .reply(Ok(Sample::new(qres.clone(), buf.clone())))
+            .await
+            .unwrap();
     }
 }
 

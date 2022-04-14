@@ -52,8 +52,9 @@ async fn main() {
             .clone()
             .for_each(move |request| async move {
                 request
-                    .reply_async(Ok(Sample::new(key.to_string(), HTML)))
-                    .await;
+                    .reply(Ok(Sample::new(key.to_string(), HTML)))
+                    .await
+                    .unwrap();
             }),
     );
 

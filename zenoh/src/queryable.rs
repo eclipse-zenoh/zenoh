@@ -23,9 +23,9 @@ use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use async_std::sync::Arc;
 use flume::r#async::RecvFut;
-use flume::{
-    bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError, TrySendError,
-};
+use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
+use futures::Future;
+use futures_lite::FutureExt;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
@@ -39,9 +39,11 @@ pub struct Query {
     pub(crate) key_selector: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
+
+    pub(crate) kind: ZInt,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
-    pub replies_sender: RepliesSender,
+    pub(crate) replies_sender: Sender<(ZInt, Sample)>,
 }
 
 impl Query {
@@ -68,37 +70,10 @@ impl Query {
 
     /// Sends a reply to this Query.
     #[inline(always)]
-    pub fn reply(&'_ self, result: Result<Sample, Value>) {
-        match result {
-            Ok(result) => self.replies_sender.send(result),
-            Err(_) => log::debug!("Replying errors is not yet supported!"),
-        }
-    }
-
-    /// Tries sending a reply to this Query.
-    #[inline(always)]
-    pub fn try_reply(
-        &self,
-        result: Result<Sample, Value>,
-    ) -> core::result::Result<(), TrySendError<Result<Sample, Value>>> {
-        match result {
-            Ok(result) => self.replies_sender.try_send(result).map_err(|e| match e {
-                TrySendError::Full(r) => TrySendError::Full(Ok(r)),
-                TrySendError::Disconnected(r) => TrySendError::Disconnected(Ok(r)),
-            }),
-            Err(_) => {
-                log::debug!("Replying errors is not yet supported!");
-                Ok(())
-            }
-        }
-    }
-
-    /// Sends a reply to this Query asynchronously.
-    #[inline(always)]
-    pub async fn reply_async(&'_ self, result: Result<Sample, Value>) {
-        match result {
-            Ok(result) => self.replies_sender.send_async(result).await,
-            Err(_) => log::debug!("Replying errors is not yet supported!"),
+    pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
+        ReplyBuilder {
+            query: self,
+            result: ResOrFut::Result(result),
         }
     }
 }
@@ -120,6 +95,67 @@ impl fmt::Display for Query {
             "Query{{ '{}{}' }}",
             self.key_selector, self.value_selector
         )
+    }
+}
+
+enum ResOrFut<'a> {
+    Result(Result<Sample, Value>),
+    Fut(flume::r#async::SendFut<'a, (ZInt, Sample)>),
+    Empty(),
+}
+
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+pub struct ReplyBuilder<'a> {
+    query: &'a Query,
+    result: ResOrFut<'a>,
+}
+
+impl Future for ReplyBuilder<'_> {
+    type Output = zenoh_core::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if matches!(self.result, ResOrFut::Result(_)) {
+            let result = std::mem::replace(&mut self.result, ResOrFut::Empty());
+            if let ResOrFut::Result(result) = result {
+                match result {
+                    Ok(sample) => {
+                        self.result = ResOrFut::Fut(
+                            self.query
+                                .replies_sender
+                                .send_async((self.query.kind, sample)),
+                        );
+                    }
+                    Err(_) => {
+                        return Poll::Ready(Err(
+                            zerror!("Replying errors is not yet supported!").into()
+                        ))
+                    }
+                }
+            }
+        }
+
+        if let ResOrFut::Fut(fut) = &mut self.result {
+            fut.poll(cx).map_err(|e| zerror!("{}", e).into())
+        } else {
+            Poll::Ready(Err(zerror!("Not a future!").into()))
+        }
+    }
+}
+
+impl ZFuture for ReplyBuilder<'_> {
+    fn wait(self) -> Self::Output {
+        if let ResOrFut::Result(result) = self.result {
+            match result {
+                Ok(sample) => self
+                    .query
+                    .replies_sender
+                    .send((self.query.kind, sample))
+                    .map_err(|e| zerror!("{}", e).into()),
+                Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
+            }
+        } else {
+            Err(zerror!("Not a result!").into())
+        }
     }
 }
 
@@ -279,72 +315,6 @@ impl fmt::Debug for Queryable<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.state.fmt(f)
     }
-}
-
-/// Struct used by a [`Queryable`](Queryable) to send replies to queries.
-#[derive(Clone)]
-pub struct RepliesSender {
-    pub(crate) kind: ZInt,
-    pub(crate) sender: Sender<(ZInt, Sample)>,
-}
-
-impl RepliesSender {
-    #[inline(always)]
-    /// Send a reply.
-    pub fn send(&'_ self, msg: Sample) {
-        if let Err(e) = self.sender.send((self.kind, msg)) {
-            log::error!("Error sending reply: {}", e);
-        }
-    }
-
-    /// Attempt to send a reply. If the channel is full, an error is returned.
-    #[inline(always)]
-    pub fn try_send(&self, msg: Sample) -> core::result::Result<(), TrySendError<Sample>> {
-        match self.sender.try_send((self.kind, msg)) {
-            Ok(()) => Ok(()),
-            Err(TrySendError::Full(sample)) => Err(TrySendError::Full(sample.1)),
-            Err(TrySendError::Disconnected(sample)) => Err(TrySendError::Disconnected(sample.1)),
-        }
-    }
-
-    #[inline(always)]
-    /// Returns the channel capacity of this `RepliesSender`.
-    pub fn capacity(&self) -> usize {
-        self.sender.capacity().unwrap_or(0)
-    }
-
-    #[inline(always)]
-    /// Returns true the channel of this `RepliesSender` is empty.
-    pub fn is_empty(&self) -> bool {
-        self.sender.is_empty()
-    }
-
-    #[inline(always)]
-    /// Returns true the channel of this `RepliesSender` is full.
-    pub fn is_full(&self) -> bool {
-        self.sender.is_full()
-    }
-
-    #[inline(always)]
-    /// Returns the number of replies in the channel of this `RepliesSender`.
-    pub fn len(&self) -> usize {
-        self.sender.len()
-    }
-
-    #[inline(always)]
-    /// Asynchronously send a reply. If the channel is full, the returned future
-    /// will yield to the async runtime.
-    pub async fn send_async(&self, msg: Sample) {
-        if let Err(e) = self.sender.send_async((self.kind, msg)).await {
-            log::error!("Error sending reply: {}", e);
-        }
-    }
-
-    // @TODO
-    // #[inline(always)]
-    // pub fn sink(&self) -> flume::r#async::SendSink<'_, Sample> {
-    //     self.sender.sink()
-    // }
 }
 
 derive_zfuture! {

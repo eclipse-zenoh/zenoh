@@ -212,7 +212,7 @@ impl Storage for MemoryStorage {
             if let Some(Present { sample, ts: _ }) =
                 self.map.read().await.get(query.key_selector().as_str())
             {
-                query.reply(sample.clone()).await;
+                query.reply(sample.clone()).await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
@@ -220,7 +220,7 @@ impl Storage for MemoryStorage {
                     if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
                     {
                         let s: Sample = sample.clone();
-                        query.reply(s).await;
+                        query.reply(s).await?;
                     }
                 }
             }

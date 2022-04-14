@@ -128,8 +128,11 @@
 
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use zenoh::prelude::{KeyExpr, Sample, Selector};
 pub use zenoh::Result as ZResult;
+use zenoh::{
+    prelude::{KeyExpr, Sample, Selector},
+    queryable::ReplyBuilder,
+};
 
 pub mod config;
 pub mod utils;
@@ -208,7 +211,7 @@ impl Query {
     }
 
     /// Sends a Sample as a reply to this Query
-    pub async fn reply(&self, sample: Sample) {
+    pub fn reply(&self, sample: Sample) -> ReplyBuilder<'_> {
         // Call outgoing intercerceptor
         let sample = if let Some(ref interceptor) = self.interceptor {
             interceptor(sample)
@@ -216,6 +219,6 @@ impl Query {
             sample
         };
         // Send reply
-        self.q.reply_async(Ok(sample)).await
+        self.q.reply(Ok(sample))
     }
 }

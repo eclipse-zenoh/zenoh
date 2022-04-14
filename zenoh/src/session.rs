@@ -960,10 +960,10 @@ impl Session {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.next().await {
-    ///     query.reply_async(Ok(Sample::new(
+    ///     query.reply(Ok(Sample::new(
     ///         "/key/expression".to_string(),
     ///         "value",
-    ///     ))).await;
+    ///     ))).await.unwrap();
     /// }
     /// # })
     /// ```
@@ -1341,10 +1341,8 @@ impl Session {
             let _ = req_sender.send(Query {
                 key_selector: key_expr.clone().into(),
                 value_selector: value_selector.clone(),
-                replies_sender: RepliesSender {
-                    kind,
-                    sender: rep_sender.clone(),
-                },
+                kind,
+                replies_sender: rep_sender.clone(),
             });
         }
         drop(rep_sender); // all senders need to be dropped for the channel to close
@@ -1444,10 +1442,10 @@ impl EntityFactory for Arc<Session> {
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(query) = queryable.next().await {
-    ///         query.reply_async(Ok(Sample::new(
+    ///         query.reply(Ok(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",
-    ///         ))).await;
+    ///         ))).await.unwrap();
     ///     }
     /// }).await;
     /// # })

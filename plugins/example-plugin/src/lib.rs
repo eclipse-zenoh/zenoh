@@ -147,7 +147,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
                     if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
-                        query.reply_async(Ok(sample.clone())).await;
+                        query.reply(Ok(sample.clone())).await.unwrap();
                     }
                 }
             }
