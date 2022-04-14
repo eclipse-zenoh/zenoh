@@ -184,41 +184,39 @@ impl Storage for MemoryStorage {
                     });
                     return Ok(StorageInsertionResult::Deleted);
                 }
-                Entry::Occupied(mut o) => {
-                    match o.get() {
-                        Removed {
-                            ts,
-                            cleanup_handle: _,
-                        } => {
-                            if ts < &timestamp {
-                                let cleanup_handle =
-                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
-                                o.insert(Removed {
-                                    ts: timestamp,
-                                    cleanup_handle,
-                                });
-                                return Ok(StorageInsertionResult::Deleted);
-                            } else {
-                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
-                                return Ok(StorageInsertionResult::Outdated);
-                            }
-                        }
-                        Present { sample: _, ts } => {
-                            if ts < &timestamp {
-                                let cleanup_handle =
-                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
-                                o.insert(Removed {
-                                    ts: timestamp,
-                                    cleanup_handle,
-                                });
-                                return Ok(StorageInsertionResult::Deleted);
-                            } else {
-                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
-                                return Ok(StorageInsertionResult::Outdated);
-                            }
+                Entry::Occupied(mut o) => match o.get() {
+                    Removed {
+                        ts,
+                        cleanup_handle: _,
+                    } => {
+                        if ts < &timestamp {
+                            let cleanup_handle =
+                                self.schedule_cleanup(sample.key_expr.to_string()).await;
+                            o.insert(Removed {
+                                ts: timestamp,
+                                cleanup_handle,
+                            });
+                            return Ok(StorageInsertionResult::Deleted);
+                        } else {
+                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                            return Ok(StorageInsertionResult::Outdated);
                         }
                     }
-                }
+                    Present { sample: _, ts } => {
+                        if ts < &timestamp {
+                            let cleanup_handle =
+                                self.schedule_cleanup(sample.key_expr.to_string()).await;
+                            o.insert(Removed {
+                                ts: timestamp,
+                                cleanup_handle,
+                            });
+                            return Ok(StorageInsertionResult::Deleted);
+                        } else {
+                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                            return Ok(StorageInsertionResult::Outdated);
+                        }
+                    }
+                },
             },
             SampleKind::Patch => {
                 warn!("Received PATCH for {}: not yet supported", sample.key_expr);
