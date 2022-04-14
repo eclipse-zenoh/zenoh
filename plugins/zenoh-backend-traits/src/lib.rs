@@ -84,7 +84,7 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
 //!         // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!         // extract Timestamp from sample
 //!         sample.ensure_timestamp();
@@ -96,20 +96,24 @@
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
+//!                 return Ok(StorageInsertionResult::Inserted);
 //!                 //  - if not: drop the sample
+//!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!             SampleKind::Delete => {
 //!                 let _key = sample.key_expr;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
+//!                 return Ok(StorageInsertionResult::Deleted);
 //!                 //  - if not: drop the sample
+//!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!             SampleKind::Patch => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.key_expr);
+//!                 return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!         }
-//!         Ok(())
 //!     }
 //!
 //!     // When receiving a Query (i.e. on GET operations)
