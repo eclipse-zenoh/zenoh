@@ -187,11 +187,21 @@ impl Storage for MemoryStorage {
                 Entry::Occupied(mut o) => {
                     match o.get() {
                         Removed {
-                            ts: _,
+                            ts,
                             cleanup_handle: _,
                         } => {
-                            // nothing to do
-                            return Ok(StorageInsertionResult::Outdated);
+                            if ts < &timestamp {
+                                let cleanup_handle =
+                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
+                                o.insert(Removed {
+                                    ts: timestamp,
+                                    cleanup_handle,
+                                });
+                                return Ok(StorageInsertionResult::Deleted);
+                            } else {
+                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                                return Ok(StorageInsertionResult::Outdated);
+                            }
                         }
                         Present { sample: _, ts } => {
                             if ts < &timestamp {
