@@ -113,8 +113,8 @@ impl Default for QueryConsolidation {
 /// Structs returned by a [`get`](Session::get).
 #[derive(Clone, Debug)]
 pub struct Reply {
-    /// The [`Sample`] for this Reply.
-    pub sample: Sample,
+    /// The result of this Reply.
+    pub sample: Result<Sample, Value>,
     /// The id of the zenoh instance that answered this Reply.
     pub replier_id: PeerId,
 }

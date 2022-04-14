@@ -62,7 +62,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
-                        query.reply(sample.clone());
+                        query.reply(Ok(sample.clone()));
                     }
                 }
             },

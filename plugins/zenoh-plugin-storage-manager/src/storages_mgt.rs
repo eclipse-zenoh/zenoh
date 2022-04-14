@@ -65,23 +65,27 @@ pub(crate) async fn start_storage(
             }
         };
         while let Some(reply) = replies.next().await {
-            log::trace!(
-                "Storage {} aligns data {}",
-                admin_key,
-                reply.sample.key_expr
-            );
-            // Call incoming data interceptor (if any)
-            let sample = if let Some(ref interceptor) = in_interceptor {
-                interceptor(reply.sample)
-            } else {
-                reply.sample
-            };
-            // Call storage
-            if let Err(e) = storage.on_sample(sample).await {
-                warn!(
-                    "Storage {} raised an error aligning a sample: {}",
+            match reply.sample {
+                Ok(sample) => {
+                    log::trace!("Storage {} aligns data {}", admin_key, sample.key_expr);
+                    // Call incoming data interceptor (if any)
+                    let sample = if let Some(ref interceptor) = in_interceptor {
+                        interceptor(sample)
+                    } else {
+                        sample
+                    };
+                    // Call storage
+                    if let Err(e) = storage.on_sample(sample).await {
+                        warn!(
+                            "Storage {} raised an error aligning a sample: {}",
+                            admin_key, e
+                        );
+                    }
+                }
+                Err(e) => warn!(
+                    "Storage {} received an error to align query: {}",
                     admin_key, e
-                );
+                ),
             }
         }
 

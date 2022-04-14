@@ -171,14 +171,14 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_selector.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {
-                                        query.reply(sample.clone());
+                                        query.reply(Ok(sample.clone()));
                                     }
                                 }
                             } else {
                                 for (key_expr, queue) in cache.iter() {
                                     if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                                         for sample in queue {
-                                            query.reply(sample.clone());
+                                            query.reply(Ok(sample.clone()));
                                         }
                                     }
                                 }

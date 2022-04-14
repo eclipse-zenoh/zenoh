@@ -68,9 +68,23 @@ fn sample_to_json(sample: Sample) -> String {
     )
 }
 
+fn result_to_json(sample: Result<Sample, Value>) -> String {
+    match sample {
+        Ok(sample) => sample_to_json(sample),
+        Err(err) => {
+            let encoding = err.encoding.to_string();
+            format!(
+                r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
+                value_to_json(err),
+                encoding,
+            )
+        }
+    }
+}
+
 async fn to_json(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_json(reply.sample)) })
+        .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join(",\n");
@@ -85,9 +99,21 @@ fn sample_to_html(sample: Sample) -> String {
     )
 }
 
+fn result_to_html(sample: Result<Sample, Value>) -> String {
+    match sample {
+        Ok(sample) => sample_to_html(sample),
+        Err(err) => {
+            format!(
+                "<dt>ERROR</dt>\n<dd>{}</dd>\n",
+                String::from_utf8_lossy(&err.payload.contiguous())
+            )
+        }
+    }
+}
+
 async fn to_html(results: ReplyReceiver) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_html(reply.sample)) })
+        .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join("\n");

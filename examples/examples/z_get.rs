@@ -30,11 +30,17 @@ async fn main() {
     println!("Sending Query '{}'...", selector);
     let mut replies = session.get(&selector).target(target).await.unwrap();
     while let Some(reply) = replies.next().await {
-        println!(
-            ">> Received ('{}': '{}')",
-            reply.sample.key_expr.as_str(),
-            String::from_utf8_lossy(&reply.sample.value.payload.contiguous())
-        )
+        match reply.sample {
+            Ok(sample) => println!(
+                ">> Received ('{}': '{}')",
+                sample.key_expr.as_str(),
+                String::from_utf8_lossy(&sample.value.payload.contiguous())
+            ),
+            Err(err) => println!(
+                ">> Received (ERROR: '{}')",
+                String::from_utf8_lossy(&err.payload.contiguous())
+            ),
+        }
     }
 }
 

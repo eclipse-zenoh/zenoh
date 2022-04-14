@@ -185,7 +185,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 
     while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);
-        query.reply(Sample::new(qres.clone(), buf.clone()))
+        query.reply(Ok(Sample::new(qres.clone(), buf.clone())))
     }
 }
 
@@ -244,18 +244,28 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 let mut receiver = z.get(&qres).consolidation(qc).await.unwrap();
 
                                 while let Some(reply) = receiver.next().await {
-                                    match bincode::deserialize::<Member>(
-                                        &reply.sample.value.payload.contiguous(),
-                                    ) {
-                                        Ok(m) => {
-                                            let mut expiry = Instant::now();
-                                            expiry = expiry.add(m.lease);
-                                            log::debug!("Received member information: {:?}", &m);
-                                            mm.insert(kae.mid.clone(), (m, expiry));
+                                    match reply.sample {
+                                        Ok(sample) => {
+                                            match bincode::deserialize::<Member>(
+                                                &sample.value.payload.contiguous(),
+                                            ) {
+                                                Ok(m) => {
+                                                    let mut expiry = Instant::now();
+                                                    expiry = expiry.add(m.lease);
+                                                    log::debug!(
+                                                        "Received member information: {:?}",
+                                                        &m
+                                                    );
+                                                    mm.insert(kae.mid.clone(), (m, expiry));
+                                                }
+                                                Err(e) => {
+                                                    log::debug!(
+                                                        "Unable to deserialize the Member info received:\n {}", e);
+                                                }
+                                            }
                                         }
                                         Err(e) => {
-                                            log::debug!(
-                                                "Unable to deserialize the Member info received:\n {}", e);
+                                            log::debug!("Error received:\n {}", e);
                                         }
                                     }
                                 }

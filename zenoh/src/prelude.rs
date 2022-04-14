@@ -946,10 +946,10 @@ pub trait EntityFactory {
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(query) = queryable.next().await {
-    ///         query.reply_async(Sample::new(
+    ///         query.reply_async(Ok(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",
-    ///         )).await;
+    ///         ))).await;
     ///     }
     /// }).await;
     /// # })

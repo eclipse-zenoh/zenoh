@@ -68,20 +68,38 @@ impl Query {
 
     /// Sends a reply to this Query.
     #[inline(always)]
-    pub fn reply(&'_ self, msg: Sample) {
-        self.replies_sender.send(msg);
+    pub fn reply(&'_ self, result: Result<Sample, Value>) {
+        match result {
+            Ok(result) => self.replies_sender.send(result),
+            Err(_) => log::debug!("Replying errors is not yet supported!"),
+        }
     }
 
     /// Tries sending a reply to this Query.
     #[inline(always)]
-    pub fn try_reply(&self, msg: Sample) -> core::result::Result<(), TrySendError<Sample>> {
-        self.replies_sender.try_send(msg)
+    pub fn try_reply(
+        &self,
+        result: Result<Sample, Value>,
+    ) -> core::result::Result<(), TrySendError<Result<Sample, Value>>> {
+        match result {
+            Ok(result) => self.replies_sender.try_send(result).map_err(|e| match e {
+                TrySendError::Full(r) => TrySendError::Full(Ok(r)),
+                TrySendError::Disconnected(r) => TrySendError::Disconnected(Ok(r)),
+            }),
+            Err(_) => {
+                log::debug!("Replying errors is not yet supported!");
+                Ok(())
+            }
+        }
     }
 
     /// Sends a reply to this Query asynchronously.
     #[inline(always)]
-    pub async fn reply_async(&'_ self, msg: Sample) {
-        self.replies_sender.send_async(msg).await;
+    pub async fn reply_async(&'_ self, result: Result<Sample, Value>) {
+        match result {
+            Ok(result) => self.replies_sender.send_async(result).await,
+            Err(_) => log::debug!("Replying errors is not yet supported!"),
+        }
     }
 }
 

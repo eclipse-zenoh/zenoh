@@ -960,10 +960,10 @@ impl Session {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// while let Some(query) = queryable.next().await {
-    ///     query.reply_async(Sample::new(
+    ///     query.reply_async(Ok(Sample::new(
     ///         "/key/expression".to_string(),
     ///         "value",
-    ///     )).await;
+    ///     ))).await;
     /// }
     /// # })
     /// ```
@@ -1444,10 +1444,10 @@ impl EntityFactory for Arc<Session> {
     /// let mut queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Some(query) = queryable.next().await {
-    ///         query.reply_async(Sample::new(
+    ///         query.reply_async(Ok(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",
-    ///         )).await;
+    ///         ))).await;
     ///     }
     /// }).await;
     /// # })
@@ -1629,7 +1629,7 @@ impl Primitives for Session {
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    sample: Sample::with_info(key_expr.into(), payload, data_info),
+                    sample: Ok(Sample::with_info(key_expr.into(), payload, data_info)),
                     replier_id,
                 };
                 match query.reception_mode {
@@ -1641,12 +1641,14 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
                         {
                             Some(reply) => {
-                                if new_reply.sample.timestamp > reply.sample.timestamp {
+                                if new_reply.sample.as_ref().unwrap().timestamp
+                                    > reply.sample.as_ref().unwrap().timestamp
+                                {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.key_expr.to_string(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                     let _ = query.rep_sender.send(new_reply);
@@ -1654,7 +1656,7 @@ impl Primitives for Session {
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.key_expr.to_string(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                     new_reply.clone(),
                                 );
                                 let _ = query.rep_sender.send(new_reply);
@@ -1666,19 +1668,21 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
                         {
                             Some(reply) => {
-                                if new_reply.sample.timestamp > reply.sample.timestamp {
+                                if new_reply.sample.as_ref().unwrap().timestamp
+                                    > reply.sample.as_ref().unwrap().timestamp
+                                {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.key_expr.to_string(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                         new_reply.clone(),
                                     );
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.key_expr.to_string(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                     new_reply.clone(),
                                 );
                             }
