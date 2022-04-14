@@ -2,7 +2,6 @@ name: Request a feature
 description: |
   Suggest new features for this repository. For generic Zenoh ideas please use
   "Ask a question"
-labels: ["enhancement"]
 body:
   - type: textarea
     id: feature
