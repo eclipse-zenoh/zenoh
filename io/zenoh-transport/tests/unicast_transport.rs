@@ -424,6 +424,41 @@ fn transport_unicast_unix_only() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
 }
 
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_unicast_ws_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:11447".parse().unwrap(),
+        "ws/[::1]:11447".parse().unwrap(),
+    ];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
+}
+
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_unicast_tcp_udp() {

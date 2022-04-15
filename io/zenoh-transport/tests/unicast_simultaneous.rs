@@ -332,3 +332,31 @@ fn transport_tcp_simultaneous() {
         transport_simultaneous(endpoint01, endpoint02).await;
     });
 }
+
+
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_ws_simultaneous() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint01: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:16447".parse().unwrap(),
+        "ws/127.0.0.1:16448".parse().unwrap(),
+        "ws/127.0.0.1:16449".parse().unwrap(),
+        "ws/127.0.0.1:16450".parse().unwrap(),
+        "ws/127.0.0.1:16451".parse().unwrap(),
+        "ws/127.0.0.1:16452".parse().unwrap(),
+        "ws/127.0.0.1:16453".parse().unwrap(),
+    ];
+    let endpoint02: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:16454".parse().unwrap(),
+        "ws/127.0.0.1:16455".parse().unwrap(),
+        "ws/127.0.0.1:16456".parse().unwrap(),
+    ];
+
+    task::block_on(async {
+        transport_simultaneous(endpoint01, endpoint02).await;
+    });
+}

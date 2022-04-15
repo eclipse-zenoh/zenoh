@@ -3604,6 +3604,7 @@ dependencies = [
  "zenoh-link-tls",
  "zenoh-link-udp",
  "zenoh-link-unixsock_stream",
+ "zenoh-link-ws",
  "zenoh-protocol-core",
 ]
 

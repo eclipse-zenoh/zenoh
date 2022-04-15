@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::{net::SocketAddr, str::FromStr};
 use zenoh_link_commons::LocatorInspector;
@@ -51,16 +52,17 @@ zconfigurable! {
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-pub fn get_ws_addr(address: &Locator) -> ZResult<SocketAddr> {
-    match SocketAddr::from_str(address.address()) {
-        Ok(address) => Ok(address),
-        Err(e) => bail!("Couldn't resolve WebSocket locator address: {}: {}", address, e),
+pub async fn get_ws_addr(address: &Locator) -> ZResult<SocketAddr> {
+    let addr = address.address();
+    match addr.to_socket_addrs().await?.next() {
+        Some(addr) => Ok(addr),
+        None => bail!("Couldn't resolve WebSocket locator address: {}", address),
     }
 }
 
 
-pub fn get_ws_url(address: &Locator) -> ZResult<Url> {
-    match  Url::parse(&format!("{}://{}", address.protocol(), address.address())) {
+pub async fn get_ws_url(address: &Locator) -> ZResult<Url> {
+    match  Url::parse(&format!("{}://{}", address.protocol(), get_ws_addr(address).await?)) {
         Ok(url) => Ok(url),
         Err(e) => bail!("Couldn't resolve WebSocket locator address: {}: {}", address, e),
     }

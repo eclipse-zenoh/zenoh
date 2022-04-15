@@ -159,3 +159,40 @@ fn transport_unicast_defragmentation_tcp_only() {
         }
     });
 }
+
+
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_unicast_defragmentation_ws_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoint: EndPoint = "tcp/127.0.0.1:14448".parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}

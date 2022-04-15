@@ -113,7 +113,6 @@ impl LinkUnicastTrait for LinkUnicastWs {
         // WebSocket is message based, and a binary message requires to be Vec<u8> :(
         let msg = Message::Binary(buffer.to_vec());
 
-        // .map_err complains...
         guard.send(msg).await.map_err(|e| {
             let e = zerror!("Write error on WebSocket link {}: {}", self, e);
             log::trace!("{}", e);
@@ -132,14 +131,14 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.recv);
-
+        let size = buffer.len();
         match guard.next().await {
             Some(msg) => {
                 match msg {
                     Ok(msg) => {
                         match msg {
                             Message::Binary(bytes) => {
-                                buffer.clone_from_slice(&bytes);
+                                buffer[0..size].clone_from_slice(&bytes[0..size]);
                                 Ok(bytes.len())
                             }
                             _ => bail!("Received wrong message type from WebSocket link {}", self),
@@ -250,7 +249,7 @@ impl LinkManagerUnicastWs {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_url = get_ws_url(&endpoint.locator)?;
+        let dst_url = get_ws_url(&endpoint.locator).await?;
 
         let (stream, _) = tokio_tungstenite::connect_async(&dst_url)
             .await
@@ -273,7 +272,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_ws_addr(&endpoint.locator)?;
+        let addr = get_ws_addr(&endpoint.locator).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
@@ -312,7 +311,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_ws_addr(&endpoint.locator)?;
+        let addr = get_ws_addr(&endpoint.locator).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {

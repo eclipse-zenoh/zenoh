@@ -328,3 +328,23 @@ fn conduits_tcp_only() {
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
+
+
+#[cfg(feature = "transport_ws")]
+#[test]
+fn conduits_ws_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+    let mut channel = vec![];
+    for p in PRIORITY_ALL.iter() {
+        channel.push(Channel {
+            priority: *p,
+            reliability: Reliability::Reliable,
+        });
+    }
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec!["ws/127.0.0.1:13448".parse().unwrap()];
+    // Run
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
+}

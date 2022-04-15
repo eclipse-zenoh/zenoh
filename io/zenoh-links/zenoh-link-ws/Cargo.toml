@@ -38,7 +38,10 @@ zenoh-util = { path = "../../../commons/zenoh-util/" }
 zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
-async-std = { version = "=1.11.0", default-features = false }
+async-std = { version = "=1.11.0", default-features = false, features = [
+	"unstable",
+	"tokio1",
+] }
 tokio-tungstenite = "0.17.1"
 tokio = { version = "1.17.0", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 async-trait = "0.1.42"

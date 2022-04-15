@@ -391,3 +391,37 @@ fn transport_tcp_concurrent() {
         transport_concurrent(endpoint01, endpoint02).await;
     });
 }
+
+
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_ws_concurrent() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint01: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:7463".parse().unwrap(),
+        "ws/127.0.0.1:7464".parse().unwrap(),
+        "ws/127.0.0.1:7465".parse().unwrap(),
+        "ws/127.0.0.1:7466".parse().unwrap(),
+        "ws/127.0.0.1:7467".parse().unwrap(),
+        "ws/127.0.0.1:7468".parse().unwrap(),
+        "ws/127.0.0.1:7469".parse().unwrap(),
+        "ws/127.0.0.1:7470".parse().unwrap(),
+    ];
+    let endpoint02: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:7471".parse().unwrap(),
+        "ws/127.0.0.1:7472".parse().unwrap(),
+        "ws/127.0.0.1:7473".parse().unwrap(),
+        "ws/127.0.0.1:7474".parse().unwrap(),
+        "ws/127.0.0.1:7475".parse().unwrap(),
+        "ws/127.0.0.1:7476".parse().unwrap(),
+        "ws/127.0.0.1:7477".parse().unwrap(),
+        "ws/127.0.0.1:7478".parse().unwrap(),
+    ];
+
+    task::block_on(async {
+        transport_concurrent(endpoint01, endpoint02).await;
+    });
+}
