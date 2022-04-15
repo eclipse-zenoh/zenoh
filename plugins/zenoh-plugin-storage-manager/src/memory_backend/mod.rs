@@ -22,6 +22,7 @@ use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::utils::key_expr;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
+use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
@@ -136,7 +137,7 @@ impl Storage for MemoryStorage {
         self.config.to_json_value()
     }
 
-    async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+    async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
         trace!("on_sample for {}", sample.key_expr);
         sample.ensure_timestamp();
         let timestamp = sample.timestamp.unwrap();
@@ -147,6 +148,7 @@ impl Storage for MemoryStorage {
                         sample,
                         ts: timestamp,
                     });
+                    return Ok(StorageInsertionResult::Inserted);
                 }
                 Entry::Occupied(mut o) => {
                     let old_val = o.get();
@@ -163,8 +165,10 @@ impl Storage for MemoryStorage {
                             sample,
                             ts: timestamp,
                         });
+                        return Ok(StorageInsertionResult::Replaced);
                     } else {
                         debug!("PUT on {} dropped: out-of-date", sample.key_expr);
+                        return Ok(StorageInsertionResult::Outdated);
                     }
                 }
             },
@@ -178,33 +182,47 @@ impl Storage for MemoryStorage {
                         ts: timestamp,
                         cleanup_handle,
                     });
+                    return Ok(StorageInsertionResult::Deleted);
                 }
-                Entry::Occupied(mut o) => {
-                    match o.get() {
-                        Removed {
-                            ts: _,
-                            cleanup_handle: _,
-                        } => (), // nothing to do
-                        Present { sample: _, ts } => {
-                            if ts < &timestamp {
-                                let cleanup_handle =
-                                    self.schedule_cleanup(sample.key_expr.to_string()).await;
-                                o.insert(Removed {
-                                    ts: timestamp,
-                                    cleanup_handle,
-                                });
-                            } else {
-                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
-                            }
+                Entry::Occupied(mut o) => match o.get() {
+                    Removed {
+                        ts,
+                        cleanup_handle: _,
+                    } => {
+                        if ts < &timestamp {
+                            let cleanup_handle =
+                                self.schedule_cleanup(sample.key_expr.to_string()).await;
+                            o.insert(Removed {
+                                ts: timestamp,
+                                cleanup_handle,
+                            });
+                            return Ok(StorageInsertionResult::Deleted);
+                        } else {
+                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                            return Ok(StorageInsertionResult::Outdated);
                         }
                     }
-                }
+                    Present { sample: _, ts } => {
+                        if ts < &timestamp {
+                            let cleanup_handle =
+                                self.schedule_cleanup(sample.key_expr.to_string()).await;
+                            o.insert(Removed {
+                                ts: timestamp,
+                                cleanup_handle,
+                            });
+                            return Ok(StorageInsertionResult::Deleted);
+                        } else {
+                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                            return Ok(StorageInsertionResult::Outdated);
+                        }
+                    }
+                },
             },
             SampleKind::Patch => {
                 warn!("Received PATCH for {}: not yet supported", sample.key_expr);
+                return Ok(StorageInsertionResult::Outdated);
             }
         }
-        Ok(())
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
