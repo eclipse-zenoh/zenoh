@@ -1,0 +1,17 @@
+edition = "2018"
+use_try_shorthand = true
+use_field_init_shorthand = true
+
+# Unstable features below
+# unstable_features = true
+# version = "Two"
+# comment_width = 100             # default is 80
+# error_on_line_overflow = true
+# format_code_in_doc_comments = true
+# format_macro_bodies = true
+# format_macro_matchers = true
+# format_strings = true
+# imports_granularity = "Crate"
+# group_imports = "StdExternalCrate"
+# normalize_doc_attributes = true
+# wrap_comments = true
