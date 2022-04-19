@@ -26,9 +26,9 @@
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
-use crate::publication::PublisherBuilder;
+use crate::publication::PublishBuilder;
 use crate::queryable::{Query, QueryableBuilder};
-use crate::subscriber::SubscriberBuilder;
+use crate::subscriber::SubscribeBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
 use regex::Regex;
 use std::borrow::Cow;
@@ -925,7 +925,7 @@ pub trait EntityFactory {
     /// }).await;
     /// # })
     /// ```
-    fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'a>
+    fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscribeBuilder<'static, 'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
 
@@ -974,7 +974,7 @@ pub trait EntityFactory {
     /// publisher.send("value").unwrap();
     /// # })
     /// ```
-    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
 }

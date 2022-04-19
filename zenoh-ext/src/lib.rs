@@ -16,5 +16,5 @@ mod publication_cache;
 mod querying_subscriber;
 mod session_ext;
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
-pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
+pub use querying_subscriber::{QueryingSubscribeBuilder, QueryingSubscriber};
 pub use session_ext::SessionExt;

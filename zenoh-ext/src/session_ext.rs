@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
+use super::{PublicationCacheBuilder, QueryingSubscribeBuilder};
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -48,8 +48,8 @@ impl fmt::Debug for SessionRef<'_> {
 pub trait SessionExt {
     /// Create a [QueryingSubscriber](super::QueryingSubscriber) with the given key expression.
     ///
-    /// This operation returns a [QueryingSubscriberBuilder](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
-    /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscriberBuilder), the QueryingSubscriber
+    /// This operation returns a [QueryingSubscribeBuilder](QueryingSubscribeBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscribeBuilder), the QueryingSubscriber
     /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
     /// Later on, new queries can be issued again, calling [QueryingSubscriber::query()](super::QueryingSubscriber::query()) or
@@ -58,7 +58,7 @@ pub trait SessionExt {
     /// A typical usage of the QueryingSubscriber is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
     /// # Arguments
-    /// * `sub_key_expr` - The key expression to subscribe on (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
+    /// * `sub_key_expr` - The key expression to subscribe on (and to query on if not changed via the [QueryingSubscribeBuilder](QueryingSubscribeBuilder))
     ///
     /// # Examples
     /// ```no_run
@@ -77,7 +77,7 @@ pub trait SessionExt {
     fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
         sub_key_expr: IntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscribeBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>;
 
@@ -93,11 +93,11 @@ impl SessionExt for Session {
     fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
         sub_key_expr: IntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscribeBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        QueryingSubscriberBuilder::new(SessionRef::Borrow(self), sub_key_expr.into())
+        QueryingSubscribeBuilder::new(SessionRef::Borrow(self), sub_key_expr.into())
     }
 
     fn publication_cache<'a, 'b, IntoKeyExpr>(
@@ -115,11 +115,11 @@ impl SessionExt for Arc<Session> {
     fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
         &'a self,
         sub_key_expr: IntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscribeBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        QueryingSubscriberBuilder::new(SessionRef::Shared(self.clone()), sub_key_expr.into())
+        QueryingSubscribeBuilder::new(SessionRef::Shared(self.clone()), sub_key_expr.into())
     }
 
     fn publication_cache<'a, 'b, IntoKeyExpr>(

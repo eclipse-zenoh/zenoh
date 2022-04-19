@@ -314,7 +314,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct SubscriberBuilder<'a, 'b> {
+    pub struct SubscribeBuilder<'a, 'b> {
         pub(crate) session: SessionRef<'a>,
         pub(crate) key_expr: KeyExpr<'b>,
         pub(crate) reliability: Reliability,
@@ -324,14 +324,14 @@ derive_zfuture! {
     }
 }
 
-impl<'a, 'b> SubscriberBuilder<'a, 'b> {
+impl<'a, 'b> SubscribeBuilder<'a, 'b> {
     /// Make the built Subscriber a [`CallbackSubscriber`](CallbackSubscriber).
     #[inline]
-    pub fn callback<DataHandler>(self, handler: DataHandler) -> CallbackSubscriberBuilder<'a, 'b>
+    pub fn callback<DataHandler>(self, handler: DataHandler) -> CallbackSubscribeBuilder<'a, 'b>
     where
         DataHandler: FnMut(Sample) + Send + Sync + 'static,
     {
-        CallbackSubscriberBuilder {
+        CallbackSubscribeBuilder {
             session: self.session,
             key_expr: self.key_expr,
             reliability: self.reliability,
@@ -400,7 +400,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for SubscriberBuilder<'a, '_> {
+impl<'a> Runnable for SubscribeBuilder<'a, '_> {
     type Output = ZResult<Subscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {
@@ -465,7 +465,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Clone)]
-    pub struct CallbackSubscriberBuilder<'a, 'b> {
+    pub struct CallbackSubscribeBuilder<'a, 'b> {
         session: SessionRef<'a>,
         key_expr: KeyExpr<'b>,
         reliability: Reliability,
@@ -476,9 +476,9 @@ derive_zfuture! {
     }
 }
 
-impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
+impl fmt::Debug for CallbackSubscribeBuilder<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CallbackSubscriberBuilder")
+        f.debug_struct("CallbackSubscribeBuilder")
             .field("session", &self.session)
             .field("key_expr", &self.key_expr)
             .field("reliability", &self.reliability)
@@ -488,7 +488,7 @@ impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
     }
 }
 
-impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
+impl<'a, 'b> CallbackSubscribeBuilder<'a, 'b> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -547,7 +547,7 @@ impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
+impl<'a> Runnable for CallbackSubscribeBuilder<'a, '_> {
     type Output = ZResult<CallbackSubscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {

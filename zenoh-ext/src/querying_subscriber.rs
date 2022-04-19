@@ -37,7 +37,7 @@ const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
-pub struct QueryingSubscriberBuilder<'a, 'b> {
+pub struct QueryingSubscribeBuilder<'a, 'b> {
     session: SessionRef<'a>,
     sub_key_expr: KeyExpr<'b>,
     reliability: Reliability,
@@ -49,11 +49,11 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     query_consolidation: QueryConsolidation,
 }
 
-impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
+impl<'a, 'b> QueryingSubscribeBuilder<'a, 'b> {
     pub(crate) fn new(
         session: SessionRef<'a>,
         sub_key_expr: KeyExpr<'b>,
-    ) -> QueryingSubscriberBuilder<'a, 'b> {
+    ) -> QueryingSubscribeBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget {
             kind: PublicationCache::QUERYABLE_KIND | STORAGE,
@@ -64,7 +64,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         // (in history of publications is available)
         let query_consolidation = QueryConsolidation::none();
 
-        QueryingSubscriberBuilder {
+        QueryingSubscribeBuilder {
             session,
             sub_key_expr: sub_key_expr.clone(),
             reliability: Reliability::default(),
@@ -153,8 +153,8 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
-        QueryingSubscriberBuilder {
+    fn with_static_keys(self) -> QueryingSubscribeBuilder<'a, 'static> {
+        QueryingSubscribeBuilder {
             session: self.session,
             sub_key_expr: self.sub_key_expr.to_owned(),
             reliability: self.reliability,
@@ -168,7 +168,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Future for QueryingSubscriberBuilder<'a, 'b> {
+impl<'a, 'b> Future for QueryingSubscribeBuilder<'a, 'b> {
     type Output = ZResult<QueryingSubscriber<'a>>;
 
     #[inline]
@@ -179,7 +179,7 @@ impl<'a, 'b> Future for QueryingSubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
+impl<'a, 'b> ZFuture for QueryingSubscribeBuilder<'a, 'b> {
     #[inline]
     fn wait(self) -> ZResult<QueryingSubscriber<'a>> {
         QueryingSubscriber::new(self.with_static_keys())
@@ -187,13 +187,13 @@ impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
 }
 
 pub struct QueryingSubscriber<'a> {
-    conf: QueryingSubscriberBuilder<'a, 'a>,
+    conf: QueryingSubscribeBuilder<'a, 'a>,
     subscriber: Subscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
 impl<'a> QueryingSubscriber<'a> {
-    fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
+    fn new(conf: QueryingSubscribeBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
         use zenoh::prelude::EntityFactory;
         // declare subscriber at first
         let mut subscriber = match conf.session.clone() {

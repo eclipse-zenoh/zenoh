@@ -28,10 +28,29 @@ use zenoh_sync::{derive_zfuture, Runnable};
 /// The kind of congestion control.
 pub use zenoh_protocol_core::CongestionControl;
 
+/// A builder for initializing a [`delete`](crate::Session::delete) operation.
+///
+/// The `delete` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// session
+///     .delete("/key/expression")
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+pub type DeleteBuilder<'a> = PutBuilder<'a>;
+
 derive_zfuture! {
-    /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
+    /// A builder for initializing a [`put`](crate::Session::put) operation.
     ///
-    /// The `write` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
+    /// The `put` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
     ///
     /// # Examples
     /// ```
@@ -49,7 +68,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct Writer<'a> {
+    pub struct PutBuilder<'a> {
         pub(crate) session: SessionRef<'a>,
         pub(crate) key_expr: KeyExpr<'a>,
         pub(crate) value: Option<Value>,
@@ -60,7 +79,7 @@ derive_zfuture! {
     }
 }
 
-impl<'a> Writer<'a> {
+impl<'a> PutBuilder<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -144,7 +163,7 @@ impl<'a> Writer<'a> {
     }
 }
 
-impl Runnable for Writer<'_> {
+impl Runnable for PutBuilder<'_> {
     type Output = zenoh_core::Result<()>;
 
     #[inline]
@@ -187,7 +206,7 @@ use zenoh_core::zresult::Error;
 /// subscriber.forward(publisher).await.unwrap();
 /// # })
 /// ```
-pub type Publisher<'a> = Writer<'a>;
+pub type Publisher<'a> = PutBuilder<'a>;
 
 impl Publisher<'_> {
     /// Send a value.
@@ -260,12 +279,12 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct PublisherBuilder<'a> {
+    pub struct PublishBuilder<'a> {
         pub(crate) publisher: Option<Publisher<'a>>,
     }
 }
 
-impl<'a> PublisherBuilder<'a> {
+impl<'a> PublishBuilder<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -310,7 +329,7 @@ impl<'a> PublisherBuilder<'a> {
     }
 }
 
-impl<'a> Runnable for PublisherBuilder<'a> {
+impl<'a> Runnable for PublishBuilder<'a> {
     type Output = ZResult<Publisher<'a>>;
 
     #[inline]
