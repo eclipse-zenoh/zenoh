@@ -838,11 +838,11 @@ impl Session {
     pub fn subscribe<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b>
+    ) -> SubscribeBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        SubscriberBuilder {
+        SubscribeBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             reliability: Reliability::default(),
@@ -1056,11 +1056,11 @@ impl Session {
     /// publisher.send("value").unwrap();
     /// # })
     /// ```
-    pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        PublisherBuilder {
+        PublishBuilder {
             publisher: Some(Publisher {
                 session: SessionRef::Borrow(self),
                 key_expr: key_expr.into().to_owned(),
@@ -1073,12 +1073,12 @@ impl Session {
         }
     }
 
-    /// Write data.
+    /// Put data.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression matching resources to write
-    /// * `payload` - The value to write
+    /// * `key_expr` - The key expression matching resources to put
+    /// * `value` - The value to put
     ///
     /// # Examples
     /// ```
@@ -1095,12 +1095,12 @@ impl Session {
         &'a self,
         key_expr: IntoKeyExpr,
         value: IntoValue,
-    ) -> Writer<'a>
+    ) -> PutBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
         IntoValue: Into<Value>,
     {
-        Writer {
+        PutBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(value.into()),
@@ -1123,15 +1123,15 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// session.delete("/key/expression");
+    /// session.delete("/key/expression").await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> Writer<'a>
+    pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> DeleteBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
-        Writer {
+        DeleteBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             value: Some(Value::empty()),
@@ -1270,12 +1270,12 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> Getter<'a, 'b>
+    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
     where
         IntoSelector: Into<Selector<'b>>,
     {
         let selector = selector.into();
-        Getter {
+        GetBuilder {
             session: self,
             selector,
             target: Some(QueryTarget::default()),
@@ -1411,11 +1411,11 @@ impl EntityFactory for Arc<Session> {
     /// }).await;
     /// # })
     /// ```
-    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
+    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscribeBuilder<'static, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        SubscriberBuilder {
+        SubscribeBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.into(),
             reliability: Reliability::default(),
@@ -1478,11 +1478,11 @@ impl EntityFactory for Arc<Session> {
     /// publisher.send("value").unwrap();
     /// # })
     /// ```
-    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublisherBuilder<'a>
+    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
-        PublisherBuilder {
+        PublishBuilder {
             publisher: Some(Publisher {
                 session: SessionRef::Shared(self.clone()),
                 key_expr: key_expr.into().to_owned(),
