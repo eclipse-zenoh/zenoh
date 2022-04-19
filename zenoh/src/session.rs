@@ -243,19 +243,9 @@ impl Session {
         }
     }
 
-    pub(super) fn new<C: std::convert::TryInto<Config> + Send + 'static>(
-        config: C,
-    ) -> impl ZFuture<Output = ZResult<Session>>
-    where
-        <C as std::convert::TryInto<Config>>::Error: std::fmt::Debug,
-    {
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+    pub(super) fn new(config: Config) -> impl ZFuture<Output = ZResult<Session>> {
         zpinbox(async move {
-            let config: Config = match config.try_into() {
-                Ok(c) => c,
-                Err(e) => {
-                    bail!("invalid configuration {:?}", &e)
-                }
-            };
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.startup().subscribe().clone();
@@ -276,6 +266,32 @@ impl Session {
                 Err(err) => Err(err),
             }
         })
+    }
+
+    /// Initialize a Session with an existing Runtime.
+    /// This operation is used by the plugins to share the same Runtime than the router.
+    #[doc(hidden)]
+    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+    pub fn init(
+        runtime: Runtime,
+        local_routing: bool,
+        join_subscriptions: Vec<String>,
+        join_publications: Vec<String>,
+    ) -> impl ZFuture<Output = Session> {
+        let router = runtime.router.clone();
+        let state = Arc::new(RwLock::new(SessionState::new(
+            local_routing,
+            join_subscriptions,
+            join_publications,
+        )));
+        let session = Session {
+            runtime,
+            state: state.clone(),
+            alive: true,
+        };
+        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
+        zwrite!(state).primitives = primitives;
+        zready(session)
     }
 
     /// Consumes the given `Session`, returning a thread-safe reference-counting
@@ -348,32 +364,6 @@ impl Session {
 
     pub fn hlc(&self) -> Option<&HLC> {
         self.runtime.hlc.as_ref().map(Arc::as_ref)
-    }
-
-    /// Initialize a Session with an existing Runtime.
-    /// This operation is used by the plugins to share the same Runtime than the router.
-    #[doc(hidden)]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn init(
-        runtime: Runtime,
-        local_routing: bool,
-        join_subscriptions: Vec<String>,
-        join_publications: Vec<String>,
-    ) -> impl ZFuture<Output = Session> {
-        let router = runtime.router.clone();
-        let state = Arc::new(RwLock::new(SessionState::new(
-            local_routing,
-            join_subscriptions,
-            join_publications,
-        )));
-        let session = Session {
-            runtime,
-            state: state.clone(),
-            alive: true,
-        };
-        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-        zwrite!(state).primitives = primitives;
-        zready(session)
     }
 
     fn close_alive(self) -> impl ZFuture<Output = ZResult<()>> {

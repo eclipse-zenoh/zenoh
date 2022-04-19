@@ -73,14 +73,11 @@
 //!     }
 //! }
 //! ```
-
-// #[cfg(test)]
-// mod tests;
-
 #[macro_use]
 extern crate zenoh_core;
 
 use async_std::net::UdpSocket;
+use async_std::task;
 use flume::bounded;
 use futures::prelude::*;
 use git_version::git_version;
@@ -93,7 +90,7 @@ use prelude::*;
 use sync::{zready, ZFuture};
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_sync::zpinbox;
+use zenoh_sync::Runnable;
 
 /// A zenoh result.
 pub use zenoh_core::Result;
@@ -273,13 +270,13 @@ pub mod scouting {
 /// }
 /// # })
 /// ```
-pub fn scout<I: Into<WhatAmIMatcher>, IntoConfig>(
+pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
-    config: IntoConfig,
+    config: TryIntoConfig,
 ) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
 where
-    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     let what = what.into();
     let config: crate::config::Config = match config.try_into() {
@@ -367,18 +364,118 @@ where
 /// let session = zenoh::open(config).await.unwrap();
 /// # })
 /// ```
-pub fn open<IntoConfig>(config: IntoConfig) -> impl ZFuture<Output = ZResult<Session>>
+#[must_use = "OpenBuilder does nothing unless you `.wait()`, `.await` or poll it"]
+pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
-    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    Session::new(config)
+    OpenBuilder {
+        config: Some(config),
+    }
+}
+
+pub struct OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    config: Option<TryIntoConfig>,
+}
+
+impl<TryIntoConfig> Runnable for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Output = ZResult<Session>;
+
+    #[inline]
+    fn run(&mut self) -> Self::Output {
+        match self.config.take() {
+            Some(c) => {
+                let config: crate::config::Config = c
+                    .try_into()
+                    .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+                task::block_on(Session::new(config))
+            }
+            None => {
+                bail!("You can not run the same OpenBuilder more than once.")
+            }
+        }
+    }
+}
+
+impl<TryIntoConfig> futures_lite::Future for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + Unpin + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Output = <Self as Runnable>::Output;
+
+    #[inline]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut task::Context<'_>,
+    ) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+        std::task::Poll::Ready(self.run())
+    }
+}
+
+impl<TryIntoConfig> zenoh_sync::ZFuture for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + Unpin + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    #[inline]
+    fn wait(mut self) -> Self::Output {
+        self.run()
+    }
 }
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime than the router.
 #[doc(hidden)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-pub fn init(runtime: Runtime) -> impl ZFuture<Output = ZResult<Session>> {
-    zpinbox(async { Ok(Session::init(runtime, true, vec![], vec![]).await) })
+#[must_use = "InitBuilder does nothing unless you `.wait()`, `.await` or poll it"]
+pub fn init(runtime: Runtime) -> InitBuilder {
+    InitBuilder {
+        runtime: Some(runtime),
+    }
+}
+
+pub struct InitBuilder {
+    runtime: Option<Runtime>,
+}
+
+impl Runnable for InitBuilder {
+    type Output = ZResult<Session>;
+
+    #[inline]
+    fn run(&mut self) -> Self::Output {
+        match self.runtime.take() {
+            Some(r) => Ok(task::block_on(Session::init(r, true, vec![], vec![]))),
+            None => {
+                bail!("You can not run the same InitBuilder more than once.")
+            }
+        }
+    }
+}
+
+impl futures_lite::Future for InitBuilder {
+    type Output = <Self as Runnable>::Output;
+
+    #[inline]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut task::Context<'_>,
+    ) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+        std::task::Poll::Ready(self.run())
+    }
+}
+
+impl zenoh_sync::ZFuture for InitBuilder {
+    #[inline]
+    fn wait(mut self) -> Self::Output {
+        self.run()
+    }
 }
