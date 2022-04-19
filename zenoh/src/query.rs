@@ -193,7 +193,7 @@ derive_zfuture! {
     /// # })
     /// ```
     #[derive(Debug, Clone)]
-    pub struct Getter<'a, 'b> {
+    pub struct GetBuilder<'a, 'b> {
         pub(crate) session: &'a Session,
         pub(crate) selector: Selector<'b>,
         pub(crate) target: Option<QueryTarget>,
@@ -202,7 +202,7 @@ derive_zfuture! {
     }
 }
 
-impl<'a, 'b> Getter<'a, 'b> {
+impl<'a, 'b> GetBuilder<'a, 'b> {
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
@@ -225,7 +225,7 @@ impl<'a, 'b> Getter<'a, 'b> {
     }
 }
 
-impl Runnable for Getter<'_, '_> {
+impl Runnable for GetBuilder<'_, '_> {
     type Output = zenoh_core::Result<ReplyReceiver>;
 
     fn run(&mut self) -> Self::Output {
