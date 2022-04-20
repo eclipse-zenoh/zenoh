@@ -15,6 +15,7 @@ pub(crate) mod batch;
 pub(crate) mod conduit;
 pub(crate) mod defragmentation;
 pub(crate) mod pipeline;
+mod pipeline2;
 pub(crate) mod seq_num;
 #[cfg(feature = "stats")]
 pub(crate) mod stats;
