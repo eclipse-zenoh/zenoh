@@ -39,6 +39,7 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
+use zenoh_core::zresult::ZError;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::DataInfo;
 pub use zenoh_protocol::proto::{MessageReader, MessageWriter};
@@ -84,7 +85,7 @@ impl Value {
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
-            encoding: Encoding::APP_OCTET_STREAM,
+            encoding: KnownEncoding::AppOctetStream.into(),
         }
     }
 
@@ -92,7 +93,7 @@ impl Value {
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::default(),
-            encoding: Encoding::APP_OCTET_STREAM,
+            encoding: KnownEncoding::AppOctetStream.into(),
         }
     }
 
@@ -101,48 +102,6 @@ impl Value {
     pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
-    }
-
-    pub fn as_json(&self) -> Option<serde_json::Value> {
-        match self.encoding.prefix() {
-            KnownEncoding::AppJson | KnownEncoding::TextJson => serde::Deserialize::deserialize(
-                &mut serde_json::Deserializer::from_slice(&self.payload.contiguous()),
-            )
-            .ok(),
-            _ => None,
-        }
-    }
-
-    pub fn as_integer(&self) -> Option<i64> {
-        if *self.encoding.prefix() == KnownEncoding::AppInteger {
-            std::str::from_utf8(&self.payload.contiguous())
-                .ok()?
-                .parse()
-                .ok()
-        } else {
-            None
-        }
-    }
-
-    pub fn as_float(&self) -> Option<f64> {
-        if *self.encoding.prefix() == KnownEncoding::AppFloat {
-            std::str::from_utf8(&self.payload.contiguous())
-                .ok()?
-                .parse()
-                .ok()
-        } else {
-            None
-        }
-    }
-
-    pub fn as_properties(&self) -> Option<Properties> {
-        if *self.encoding.prefix() == KnownEncoding::AppProperties {
-            Some(Properties::from(
-                std::str::from_utf8(&self.payload.contiguous()).ok()?,
-            ))
-        } else {
-            None
-        }
     }
 }
 
@@ -168,21 +127,13 @@ impl fmt::Display for Value {
     }
 }
 
-impl From<ZBuf> for Value {
-    fn from(buf: ZBuf) -> Self {
-        Value {
-            payload: buf,
-            encoding: Encoding::APP_OCTET_STREAM,
-        }
-    }
-}
-
+// Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
         Value {
             payload: smb.into(),
-            encoding: Encoding::APP_OCTET_STREAM,
+            encoding: KnownEncoding::AppOctetStream.into(),
         }
     }
 }
@@ -192,7 +143,7 @@ impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
         Value {
             payload: smb.into(),
-            encoding: Encoding::APP_OCTET_STREAM,
+            encoding: KnownEncoding::AppOctetStream.into(),
         }
     }
 }
@@ -202,7 +153,59 @@ impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
         Value {
             payload: smb.into(),
-            encoding: Encoding::APP_OCTET_STREAM,
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
+    }
+}
+
+// Bytes conversion
+impl From<ZBuf> for Value {
+    fn from(buf: ZBuf) -> Self {
+        Value {
+            payload: buf,
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for ZBuf {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppOctetStream => Ok(v.payload.clone()),
+            unexpected => Err(zerror!(
+                "{:?} can not be converted into Cow<'a, [u8]>",
+                unexpected
+            )),
+        }
+    }
+}
+
+impl TryFrom<Value> for ZBuf {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(buf: &[u8]) -> Self {
+        Value::from(ZBuf::from(buf.to_vec()))
+    }
+}
+
+impl<'a> TryFrom<&'a Value> for Cow<'a, [u8]> {
+    type Error = ZError;
+
+    fn try_from(v: &'a Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppOctetStream => Ok(v.payload.contiguous()),
+            unexpected => Err(zerror!(
+                "{:?} can not be converted into Cow<'a, [u8]>",
+                unexpected
+            )),
         }
     }
 }
@@ -213,17 +216,34 @@ impl From<Vec<u8>> for Value {
     }
 }
 
-impl From<&[u8]> for Value {
-    fn from(buf: &[u8]) -> Self {
-        Value::from(ZBuf::from(buf.to_vec()))
+impl TryFrom<&Value> for Vec<u8> {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppOctetStream => Ok(v.payload.contiguous().to_vec()),
+            unexpected => Err(zerror!(
+                "{:?} can not be converted into Vec<u8>",
+                unexpected
+            )),
+        }
     }
 }
 
+impl TryFrom<Value> for Vec<u8> {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// String conversion
 impl From<String> for Value {
     fn from(s: String) -> Self {
         Value {
             payload: ZBuf::from(s.into_bytes()),
-            encoding: Encoding::STRING,
+            encoding: KnownEncoding::TextPlain.into(),
         }
     }
 }
@@ -232,25 +252,109 @@ impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value {
             payload: ZBuf::from(s.as_bytes().to_vec()),
-            encoding: Encoding::STRING,
+            encoding: KnownEncoding::TextPlain.into(),
         }
     }
 }
 
-impl From<Properties> for Value {
-    fn from(p: Properties) -> Self {
+impl TryFrom<&Value> for String {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::TextPlain => {
+                String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
+            }
+            unexpected => Err(zerror!("{:?} can not be converted into String", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for String {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// Sample conversion
+impl From<Sample> for Value {
+    fn from(s: Sample) -> Self {
+        s.value
+    }
+}
+
+// i64 conversion
+impl From<i64> for Value {
+    fn from(i: i64) -> Self {
         Value {
-            payload: ZBuf::from(p.to_string().as_bytes().to_vec()),
-            encoding: Encoding::APP_PROPERTIES,
+            payload: ZBuf::from(i.to_string().as_bytes().to_vec()),
+            encoding: KnownEncoding::AppInteger.into(),
         }
     }
 }
 
+impl TryFrom<&Value> for i64 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into i64", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for i64 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// f64 conversion
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Value {
+            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
+            encoding: KnownEncoding::AppFloat.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for f64 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into f64", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// JSON conversion
 impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
             payload: ZBuf::from(json.to_string().as_bytes().to_vec()),
-            encoding: Encoding::APP_JSON,
+            encoding: KnownEncoding::AppJson.into(),
         }
     }
 }
@@ -261,27 +365,64 @@ impl From<serde_json::Value> for Value {
     }
 }
 
-impl From<i64> for Value {
-    fn from(i: i64) -> Self {
-        Value {
-            payload: ZBuf::from(i.to_string().as_bytes().to_vec()),
-            encoding: Encoding::APP_INTEGER,
+impl TryFrom<&Value> for serde_json::Value {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppJson | KnownEncoding::TextJson => {
+                let r = serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
+                    &v.payload.contiguous(),
+                ));
+                r.map_err(|e| zerror!("{}", e))
+            }
+            unexpected => Err(zerror!(
+                "{:?} can not be converted into Properties",
+                unexpected
+            )),
         }
     }
 }
 
-impl From<f64> for Value {
-    fn from(f: f64) -> Self {
+impl TryFrom<Value> for serde_json::Value {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// Properties conversion
+impl From<Properties> for Value {
+    fn from(p: Properties) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
-            encoding: Encoding::APP_FLOAT,
+            payload: ZBuf::from(p.to_string().as_bytes().to_vec()),
+            encoding: KnownEncoding::AppProperties.into(),
         }
     }
 }
 
-impl From<Sample> for Value {
-    fn from(s: Sample) -> Self {
-        s.value
+impl TryFrom<&Value> for Properties {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match *v.encoding.prefix() {
+            KnownEncoding::AppProperties => Ok(Properties::from(
+                std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
+            )),
+            unexpected => Err(zerror!(
+                "{:?} can not be converted into Properties",
+                unexpected
+            )),
+        }
+    }
+}
+
+impl TryFrom<Value> for Properties {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
     }
 }
 

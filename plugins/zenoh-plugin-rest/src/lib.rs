@@ -32,18 +32,18 @@ pub use config::Config;
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(&Encoding::STRING) => {
+        p if p.starts_with(KnownEncoding::TextPlain) => {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(&Encoding::APP_PROPERTIES) => {
+        p if p.starts_with(KnownEncoding::AppProperties) => {
             // convert to Json string for special characters escaping
             serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(&Encoding::APP_JSON)
-            || p.starts_with(&Encoding::APP_X_WWW_FORM_URLENCODED)
-            || p.starts_with(&Encoding::APP_INTEGER)
-            || p.starts_with(&Encoding::APP_FLOAT) =>
+        p if p.starts_with(KnownEncoding::AppJson)
+            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded)
+            || p.starts_with(KnownEncoding::AppInteger)
+            || p.starts_with(KnownEncoding::AppFloat) =>
         {
             value.to_string()
         }

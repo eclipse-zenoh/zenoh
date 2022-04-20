@@ -15,9 +15,9 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::*;
 use zenoh::subscriber::SubMode;
 
 #[async_std::main]
@@ -47,7 +47,7 @@ async fn main() {
             sample = subscriber.next() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.payload.contiguous()));
+                    sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

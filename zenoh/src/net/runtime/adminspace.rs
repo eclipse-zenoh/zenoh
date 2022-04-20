@@ -26,7 +26,7 @@ use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KeyExpr, PeerId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    KeyExpr, KnownEncoding, PeerId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -414,7 +414,7 @@ impl Primitives for AdminSpace {
                         zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
                         let mut data_info = DataInfo::new();
-                        data_info.encoding = Some(Encoding::APP_JSON);
+                        data_info.encoding = Some(KnownEncoding::AppJson.into());
 
                         primitives.send_reply_data(
                             qid,
@@ -552,7 +552,7 @@ pub async fn router_data(
     log::trace!("AdminSpace router_data: {:?}", json);
     (
         ZBuf::from(json.to_string().as_bytes().to_vec()),
-        Encoding::APP_JSON,
+        KnownEncoding::AppJson.into(),
     )
 }
 
@@ -563,7 +563,7 @@ pub async fn linkstate_routers_data(
 ) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
 
-    let res = (
+    (
         ZBuf::from(
             tables
                 .routers_net
@@ -573,9 +573,8 @@ pub async fn linkstate_routers_data(
                 .as_bytes()
                 .to_vec(),
         ),
-        Encoding::TEXT_PLAIN,
-    );
-    res
+        KnownEncoding::TextPlain.into(),
+    )
 }
 
 pub async fn linkstate_peers_data(
@@ -594,7 +593,7 @@ pub async fn linkstate_peers_data(
         .unwrap()
         .dot()
         .into();
-    (ZBuf::from(data), Encoding::TEXT_PLAIN)
+    (ZBuf::from(data), KnownEncoding::TextPlain.into())
 }
 
 pub async fn plugins_status(

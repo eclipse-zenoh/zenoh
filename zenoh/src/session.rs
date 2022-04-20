@@ -1077,7 +1077,7 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session.put("/key/expression", "value")
-    ///        .encoding(Encoding::TEXT_PLAIN).await.unwrap();
+    ///        .encoding(KnownEncoding::TextPlain).await.unwrap();
     /// # })
     /// ```
     #[inline]

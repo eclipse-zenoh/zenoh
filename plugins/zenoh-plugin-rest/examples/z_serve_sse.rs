@@ -76,7 +76,7 @@ async fn main() {
     loop {
         session
             .put(expr_id, value)
-            .encoding(Encoding::TEXT_PLAIN)
+            .encoding(KnownEncoding::TextPlain)
             .congestion_control(CongestionControl::Block)
             .await
             .unwrap();
