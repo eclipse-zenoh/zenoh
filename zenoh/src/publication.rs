@@ -61,7 +61,7 @@ derive_zfuture! {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// session
     ///     .put("/key/expression", "value")
-    ///     .encoding(Encoding::TEXT_PLAIN)
+    ///     .encoding(KnownEncoding::TextPlain)
     ///     .congestion_control(CongestionControl::Block)
     ///     .await
     ///     .unwrap();
@@ -272,7 +272,7 @@ derive_zfuture! {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let publisher = session
     ///     .publish("/key/expression")
-    ///     .encoding(Encoding::TEXT_PLAIN)
+    ///     .encoding(KnownEncoding::TextPlain)
     ///     .congestion_control(CongestionControl::Block)
     ///     .await
     ///     .unwrap();

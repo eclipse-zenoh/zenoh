@@ -13,8 +13,8 @@
 //
 use clap::{App, Arg};
 use futures::prelude::*;
+use std::convert::TryFrom;
 use zenoh::config::Config;
-use zenoh::prelude::*;
 use zenoh::query::*;
 
 #[async_std::main]
@@ -34,12 +34,9 @@ async fn main() {
             Ok(sample) => println!(
                 ">> Received ('{}': '{}')",
                 sample.key_expr.as_str(),
-                String::from_utf8_lossy(&sample.payload.contiguous())
+                String::try_from(&sample.value).unwrap()
             ),
-            Err(err) => println!(
-                ">> Received (ERROR: '{}')",
-                String::from_utf8_lossy(&err.payload.contiguous())
-            ),
+            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
         }
     }
 }
