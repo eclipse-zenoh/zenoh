@@ -382,7 +382,7 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
 
     fn run(&mut self) -> Self::Output {
         log::trace!("queryable({:?}, {:?})", self.key_expr, self.kind);
-        let mut state = zwrite!(self.session.state);
+        let mut state = self.session.state.write();
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE);
         let qable_state = Arc::new(QueryableState {

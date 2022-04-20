@@ -16,9 +16,10 @@ use super::{
 };
 use crate::unicast::establishment::Cookie;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::{SplitBuffer, ZBufReader};
 use zenoh_config::Config;

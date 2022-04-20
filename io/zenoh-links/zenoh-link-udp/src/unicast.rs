@@ -17,14 +17,15 @@ use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use zenoh_collections::{RecyclingObject, RecyclingObjectPool};
 use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zasynclock, zerror, zlock, zread, zwrite};
+use zenoh_core::{bail, zasynclock, zerror};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
@@ -113,7 +114,7 @@ impl LinkUnicastUdpUnconnected {
 
     async fn close(&self, src_addr: SocketAddr, dst_addr: SocketAddr) -> ZResult<()> {
         // Delete the link from the list of links
-        zlock!(self.links).remove(&(src_addr, dst_addr));
+        self.links.lock().remove(&(src_addr, dst_addr));
         Ok(())
     }
 }
@@ -362,14 +363,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            c_listeners.write().remove(&c_addr);
             res
         });
 
         let locator = endpoint.locator.clone();
         let listener = ListenerUnicastUdp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        self.listeners.write().insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -378,7 +379,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let addr = get_udp_addr(&endpoint.locator).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = self.listeners.write().remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the UDP listener because it has not been found: {}",
                 addr
@@ -394,7 +395,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+        self.listeners
+            .read()
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
@@ -405,7 +407,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
-        let guard = zread!(self.listeners);
+        let guard = self.listeners.read();
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {
@@ -461,19 +463,19 @@ async fn accept_read_task(
 
     macro_rules! zaddlink {
         ($src:expr, $dst:expr, $link:expr) => {
-            zlock!(links).insert(($src, $dst), $link);
+            links.lock().insert(($src, $dst), $link);
         };
     }
 
     macro_rules! zdellink {
         ($src:expr, $dst:expr) => {
-            zlock!(links).remove(&($src, $dst));
+            links.lock().remove(&($src, $dst));
         };
     }
 
     macro_rules! zgetlink {
         ($src:expr, $dst:expr) => {
-            zlock!(links).get(&($src, $dst)).map(|link| link.clone())
+            links.lock().get(&($src, $dst)).map(|link| link.clone())
         };
     }
 

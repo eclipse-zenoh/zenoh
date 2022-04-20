@@ -19,7 +19,6 @@ use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
-use zenoh_core::zread;
 use zenoh_core::zresult::ZResult;
 use zenoh_protocol::proto::{data_kind, DataInfo, Options};
 use zenoh_protocol_core::Channel;
@@ -105,7 +104,7 @@ impl<'a> Writer<'a> {
 
     fn write(&self, value: Value) -> zenoh_core::Result<()> {
         log::trace!("write({:?}, [...])", self.key_expr);
-        let state = zread!(self.session.state);
+        let state = self.session.state.read();
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
 

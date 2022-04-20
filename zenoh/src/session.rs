@@ -34,15 +34,15 @@ use async_std::task;
 use flume::{bounded, Sender};
 use futures::StreamExt;
 use log::{error, trace, warn};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_core::{zconfigurable, zread, Result as ZResult};
+use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_protocol::{
     core::{
         key_expr, queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
@@ -372,7 +372,7 @@ impl Session {
             alive: true,
         };
         let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-        zwrite!(state).primitives = primitives;
+        state.write().primitives = primitives;
         zready(session)
     }
 
@@ -381,7 +381,7 @@ impl Session {
             trace!("close()");
             self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
+            let primitives = self.state.write().primitives.as_ref().unwrap().clone();
             primitives.send_close();
 
             Ok(())
@@ -528,7 +528,7 @@ impl Session {
     {
         let key_expr = key_expr.into();
         trace!("declare_expr({:?})", key_expr);
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
 
         zready(state.localkey_to_expr(&key_expr).map(|expr| {
             match state
@@ -578,7 +578,7 @@ impl Session {
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn undeclare_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
         trace!("undeclare_expr({:?})", expr_id);
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         state.local_resources.remove(&expr_id);
 
         let primitives = state.primitives.as_ref().unwrap().clone();
@@ -617,7 +617,7 @@ impl Session {
         let key_expr = key_expr.into();
         log::trace!("declare_publication({:?})", key_expr);
         zready({
-            let mut state = zwrite!(self.state);
+            let mut state = self.state.write();
             state.localkey_to_expr(&key_expr).map(|key_expr_str| {
                 if !state.publications.iter().any(|p| *p == key_expr_str) {
                     let declared_pub = if let Some(join_pub) = state
@@ -671,7 +671,7 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         zready(state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
             if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
                 trace!("undeclare_publication({:?})", key_expr_str);
@@ -712,7 +712,7 @@ impl Session {
         invoker: SubscriberInvoker,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
@@ -790,7 +790,7 @@ impl Session {
         key_expr: &KeyExpr,
         invoker: SubscriberInvoker,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
@@ -853,7 +853,7 @@ impl Session {
     }
 
     pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
             for res in state.local_resources.values_mut() {
@@ -983,7 +983,7 @@ impl Session {
     }
 
     pub(crate) fn close_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         zready(if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
@@ -1151,7 +1151,7 @@ impl Session {
     ) {
         match invoker {
             SubscriberInvoker::Handler(handler) => {
-                let handler = &mut *zwrite!(handler);
+                let handler = &mut *handler.write();
                 handler(Sample::with_info(key_expr.into(), payload, data_info));
             }
             SubscriberInvoker::Sender(sender) => {
@@ -1171,7 +1171,7 @@ impl Session {
         payload: ZBuf,
         local_routing: Option<bool>,
     ) {
-        let state = zread!(self.state);
+        let state = self.state.read();
         let local_routing = local_routing.unwrap_or(state.local_routing);
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, local) {
@@ -1243,7 +1243,7 @@ impl Session {
 
     pub(crate) fn pull(&self, key_expr: &KeyExpr) -> impl ZFuture<Output = ZResult<()>> {
         trace!("pull({:?})", key_expr);
-        let state = zread!(self.state);
+        let state = self.state.read();
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_pull(true, key_expr, 0, &None);
@@ -1294,7 +1294,7 @@ impl Session {
         _consolidation: ConsolidationStrategy,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
-            let state = zread!(self.state);
+            let state = self.state.read();
             match state.key_expr_to_expr(key_expr, local) {
                 Ok(key_expr) => {
                     let kinds_and_senders = state
@@ -1386,7 +1386,7 @@ impl Session {
     }
 
     pub fn key_expr_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
-        let state = zread!(self.state);
+        let state = self.state.read();
         state.remotekey_to_expr(key_expr)
     }
 }
@@ -1501,7 +1501,7 @@ impl EntityFactory for Arc<Session> {
 impl Primitives for Session {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
         trace!("recv Decl Resource {} {:?}", expr_id, key_expr);
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         match state.remotekey_to_expr(key_expr) {
             Ok(key_expr) => {
                 let mut res = Resource::new(key_expr.clone());
@@ -1618,7 +1618,7 @@ impl Primitives for Session {
             data_info,
             payload
         );
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         let key_expr = match state.remotekey_to_expr(&key_expr) {
             Ok(name) => name,
             Err(e) => {
@@ -1695,7 +1695,7 @@ impl Primitives for Session {
 
     fn send_reply_final(&self, qid: ZInt) {
         trace!("recv ReplyFinal {:?}", qid);
-        let mut state = zwrite!(self.state);
+        let mut state = self.state.write();
         match state.queries.get_mut(&qid) {
             Some(mut query) => {
                 query.nb_final -= 1;

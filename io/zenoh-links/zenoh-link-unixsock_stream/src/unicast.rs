@@ -20,17 +20,18 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::remove_file;
 use std::net::Shutdown;
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
+use zenoh_core::zerror;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -379,13 +380,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_path);
+            c_listeners.write().remove(&c_path);
             res
         });
 
         let locator = endpoint.locator.clone();
         let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
-        zwrite!(self.listeners).insert(local_path_str.to_owned(), listener);
+        self.listeners
+            .write()
+            .insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
     }
@@ -394,7 +397,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let path = get_unix_path_as_string(&endpoint.locator);
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+        let listener = self.listeners.write().remove(&path).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the UnixSocketStream listener because it has not been found: {}",
                 path
@@ -421,14 +424,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+        self.listeners
+            .read()
             .values()
             .map(|x| x.endpoint.clone())
             .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        zread!(self.listeners)
+        self.listeners
+            .read()
             .values()
             .map(|x| x.endpoint.locator.clone())
             .collect()

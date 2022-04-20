@@ -18,10 +18,10 @@ pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
 use async_std::task::JoinHandle;
+use parking_lot::{Mutex, RwLock};
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
-use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_link::Link;
@@ -220,7 +220,7 @@ impl Tables {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
-                let mut tables = zwrite!(tables_ref);
+                let mut tables = tables_ref.write();
 
                 log::trace!("Compute trees");
                 let new_childs = match net_type {
@@ -275,7 +275,7 @@ impl Router {
         peers_autoconnect: bool,
         routers_autoconnect_gossip: bool,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
             tables.pid,
@@ -302,7 +302,7 @@ impl Router {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
-                let mut tables = zwrite!(self.tables);
+                let mut tables = self.tables.write();
                 let pid = tables.pid;
                 tables
                     .open_face(pid, WhatAmI::Client, primitives)
@@ -316,7 +316,7 @@ impl Router {
         &self,
         transport: TransportUnicast,
     ) -> ZResult<Arc<LinkStateInterceptor>> {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         let whatami = transport.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
@@ -398,7 +398,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 if let Ok(pid) = self.transport.get_pid() {
-                    let mut tables = zwrite!(self.tables);
+                    let mut tables = self.tables.write();
                     let whatami = self.transport.get_whatami()?;
                     match (tables.whatami, whatami) {
                         (WhatAmI::Router, WhatAmI::Router) => {
@@ -464,7 +464,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         let tables_ref = self.tables.clone();
         match (self.transport.get_pid(), self.transport.get_whatami()) {
             (Ok(pid), Ok(whatami)) => {
-                let mut tables = zwrite!(tables_ref);
+                let mut tables = tables_ref.write();
                 match (tables.whatami, whatami) {
                     (WhatAmI::Router, WhatAmI::Router) => {
                         for (_, removed_node) in

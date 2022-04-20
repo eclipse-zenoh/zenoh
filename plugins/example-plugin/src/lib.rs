@@ -16,17 +16,18 @@
 use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
-    Arc, Mutex,
+    Arc,
 };
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
-use zenoh_core::{bail, zlock, Result as ZResult};
+use zenoh_core::{bail, Result as ZResult};
 
 pub struct ExamplePlugin {}
 
@@ -73,7 +74,7 @@ struct RunningPluginInner {
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> ValidationFunction {
-        let guard = zlock!(&self.0);
+        let guard = self.0.lock();
         let name = guard.name.clone();
         std::mem::drop(guard);
         let plugin = self.clone();
@@ -84,7 +85,7 @@ impl RunningPluginTrait for RunningPlugin {
                     (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
                         if os == ns => {}
                     (_, Some(serde_json::Value::String(selector))) => {
-                        let mut guard = zlock!(&plugin.0);
+                        let mut guard = plugin.0.lock();
                         guard.flag.store(false, Relaxed);
                         guard.flag = Arc::new(AtomicBool::new(true));
                         async_std::task::spawn(run(
@@ -95,7 +96,7 @@ impl RunningPluginTrait for RunningPlugin {
                         return Ok(None);
                     }
                     (_, None) => {
-                        let guard = zlock!(&plugin.0);
+                        let guard = &plugin.0.lock();
                         guard.flag.store(false, Relaxed);
                     }
                     _ => {
@@ -116,7 +117,7 @@ impl RunningPluginTrait for RunningPlugin {
 }
 impl Drop for RunningPlugin {
     fn drop(&mut self) {
-        zlock!(self.0).flag.store(false, Relaxed);
+        self.0.lock().flag.store(false, Relaxed);
     }
 }
 

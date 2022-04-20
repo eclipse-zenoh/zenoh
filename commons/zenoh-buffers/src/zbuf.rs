@@ -18,12 +18,14 @@ use super::ZSlice;
 use super::ZSliceBuffer;
 use crate::reader::Reader;
 use crate::SplitBuffer;
+#[cfg(feature = "shared-memory")]
+use parking_lot::RwLock;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
 use std::num::NonZeroUsize;
 #[cfg(feature = "shared-memory")]
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 

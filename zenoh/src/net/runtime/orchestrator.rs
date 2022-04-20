@@ -274,7 +274,7 @@ impl Runtime {
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                 {
-                    if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                    if let Some(endpoint) = &*orch_transport.endpoint.read() {
                         !peers.contains(endpoint)
                     } else {
                         true
@@ -296,7 +296,7 @@ impl Runtime {
                         .as_any()
                         .downcast_ref::<super::RuntimeSession>()
                     {
-                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                        if let Some(endpoint) = &*orch_transport.endpoint.read() {
                             return *endpoint == peer;
                         }
                     }
@@ -479,7 +479,7 @@ impl Runtime {
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                 {
-                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                    *orch_transport.endpoint.write() = Some(peer);
                 }
                 break;
             }
@@ -767,7 +767,7 @@ impl Runtime {
                 });
             }
             _ => {
-                if let Some(endpoint) = &*zread!(session.endpoint) {
+                if let Some(endpoint) = &*session.endpoint.read() {
                     let peers = { session.runtime.config.lock().connect().endpoints().clone() };
                     if peers.contains(endpoint) {
                         let endpoint = endpoint.clone();

@@ -15,7 +15,6 @@
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
-use zenoh_core::zread;
 
 impl TransportMulticastInner {
     fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
@@ -30,7 +29,7 @@ impl TransportMulticastInner {
             };
         }
 
-        let guard = zread!(self.link);
+        let guard = self.link.read();
         match guard.as_ref() {
             Some(l) => {
                 if let Some(pipeline) = l.pipeline.as_ref() {

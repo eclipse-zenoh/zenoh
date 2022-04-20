@@ -19,12 +19,13 @@ use crate::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_core::{bail, zread, zwrite, Result as ZResult};
+use zenoh_core::{bail, Result as ZResult};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
 use zenoh_protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
@@ -133,7 +134,7 @@ impl TransportMulticastInner {
             stats: Arc::new(TransportMulticastStatsAtomic::default()),
         };
 
-        let mut w_guard = zwrite!(ti.link);
+        let mut w_guard = ti.link.write();
         *w_guard = Some(TransportLinkMulticast::new(ti.clone(), config.link));
         drop(w_guard);
 
@@ -141,7 +142,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
-        let mut guard = zwrite!(self.callback);
+        let mut guard = self.callback.write();
         *guard = Some(callback);
     }
 
@@ -161,11 +162,11 @@ impl TransportMulticastInner {
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
-        zread!(self.callback).clone()
+        self.callback.read().clone()
     }
 
     pub(crate) fn get_link(&self) -> LinkMulticast {
-        zread!(self.link).as_ref().unwrap().link.clone()
+        self.link.read().as_ref().unwrap().link.clone()
     }
 
     /*************************************/
@@ -175,7 +176,7 @@ impl TransportMulticastInner {
         log::debug!("Closing multicast transport on {}", self.locator);
 
         // Notify the callback that we are going to close the transport
-        let callback = zwrite!(self.callback).take();
+        let callback = self.callback.write().take();
         if let Some(cb) = callback.as_ref() {
             cb.closing();
         }
@@ -184,7 +185,7 @@ impl TransportMulticastInner {
         let _ = self.manager.del_transport_multicast(&self.locator);
 
         // Close all the links
-        let mut link = zwrite!(self.link).take();
+        let mut link = self.link.write().take();
         if let Some(l) = link.take() {
             let _ = l.close().await;
         }
@@ -204,7 +205,9 @@ impl TransportMulticastInner {
             self.locator
         );
 
-        let pipeline = zread!(self.link)
+        let pipeline = self
+            .link
+            .read()
             .as_ref()
             .unwrap()
             .pipeline
@@ -252,7 +255,7 @@ impl TransportMulticastInner {
     /*               LINK                */
     /*************************************/
     pub(super) fn start_tx(&self, batch_size: u16) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+        let mut guard = self.link.write();
         match guard.as_mut() {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
@@ -280,7 +283,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn stop_tx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+        let mut guard = self.link.write();
         match guard.as_mut() {
             Some(l) => {
                 l.stop_tx();
@@ -297,7 +300,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn start_rx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+        let mut guard = self.link.write();
         match guard.as_mut() {
             Some(l) => {
                 l.start_rx();
@@ -314,7 +317,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn stop_rx(&self) -> ZResult<()> {
-        let mut guard = zwrite!(self.link);
+        let mut guard = self.link.write();
         match guard.as_mut() {
             Some(l) => {
                 l.stop_rx();
@@ -345,7 +348,7 @@ impl TransportMulticastInner {
             links: vec![link],
         };
 
-        let handler = match zread!(self.callback).as_ref() {
+        let handler = match self.callback.read().as_ref() {
             Some(cb) => cb.new_peer(peer.clone())?,
             None => return Ok(()),
         };
@@ -398,7 +401,7 @@ impl TransportMulticastInner {
             handler,
         };
         {
-            zwrite!(self.peers).insert(locator.clone(), peer);
+            self.peers.write().insert(locator.clone(), peer);
         }
 
         // Add the event to the timer
@@ -419,7 +422,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
-        let mut guard = zwrite!(self.peers);
+        let mut guard = self.peers.write();
         if let Some(peer) = guard.remove(locator) {
             log::debug!(
                 "Peer {}/{}/{} has left multicast {} with reason: {}",
@@ -439,7 +442,8 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn get_peers(&self) -> Vec<TransportPeer> {
-        zread!(self.peers)
+        self.peers
+            .read()
             .values()
             .map(|p| {
                 let mut link = Link::from(self.get_link());

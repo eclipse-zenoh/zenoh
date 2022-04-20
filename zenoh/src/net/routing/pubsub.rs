@@ -11,12 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use parking_lot::RwLock;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::RwLock;
-use zenoh_core::zread;
 use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
@@ -1154,7 +1153,7 @@ pub fn route_data(
                     send_to_first!(route, face, payload, channel, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
-                        let lock = zlock!(tables.pull_caches_lock);
+                        let lock = tables.pull_caches_lock.lock();
                         cache_data!(
                             matching_pulls,
                             prefix,
@@ -1186,7 +1185,7 @@ pub fn full_reentrant_route_data(
     payload: ZBuf,
     routing_context: Option<RoutingContext>,
 ) {
-    let tables = zread!(tables_ref);
+    let tables = tables_ref.read();
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(prefix) => {
             log::trace!(
@@ -1214,7 +1213,7 @@ pub fn full_reentrant_route_data(
                     send_to_first!(route, face, payload, channel, congestion_control, data_info);
                 } else {
                     if !matching_pulls.is_empty() {
-                        let lock = zlock!(tables.pull_caches_lock);
+                        let lock = tables.pull_caches_lock.lock();
                         cache_data!(
                             matching_pulls,
                             prefix,
@@ -1250,7 +1249,7 @@ pub fn pull_data(
                 match res.session_ctxs.get_mut(&face.id) {
                     Some(ctx) => match &ctx.subs {
                         Some(subinfo) => {
-                            let lock = zlock!(tables.pull_caches_lock);
+                            let lock = tables.pull_caches_lock.lock();
                             for (name, (info, data)) in &ctx.last_values {
                                 let key_expr =
                                     Resource::get_best_key(&tables.root_res, name, face.id);

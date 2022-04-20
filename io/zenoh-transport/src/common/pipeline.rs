@@ -17,13 +17,13 @@ use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::task;
+use parking_lot::{Condvar, Mutex, MutexGuard};
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 use zenoh_sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
 
@@ -36,7 +36,7 @@ macro_rules! zgetbatch {
             }
 
             // Refill the batches
-            let mut refill_guard = zlock!($self.stage_refill[$priority]);
+            let mut refill_guard = $self.stage_refill[$priority].lock();
             if refill_guard.is_empty() {
                 // Execute the dropping strategy if provided
                 if $is_droppable {
@@ -56,14 +56,14 @@ macro_rules! zgetbatch {
                     return false;
                 }
 
-                refill_guard = $self.cond_canrefill[$priority].wait(refill_guard).unwrap();
+                $self.cond_canrefill[$priority].wait(&mut refill_guard);
 
                 // Verify that the pipeline is still active
                 if !$self.active.load(Ordering::Acquire) {
                     return false;
                 }
 
-                $stage_in = zlock!($self.stage_in[$priority]);
+                $stage_in = $self.stage_in[$priority].lock();
             }
 
             // Drain all the empty batches
@@ -299,7 +299,7 @@ impl TransmissionPipeline {
     ) -> bool {
         // Check it is a valid conduit
         let priority = if self.is_qos() { priority as usize } else { 0 };
-        let mut in_guard = zlock!(self.stage_in[priority]);
+        let mut in_guard = self.stage_in[priority].lock();
 
         macro_rules! zserialize {
             () => {
@@ -322,7 +322,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty
-            let mut out_guard = zlock!(self.stage_out);
+            let mut out_guard = self.stage_out.lock();
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -350,12 +350,12 @@ impl TransmissionPipeline {
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut ch_guard = if message.is_reliable() {
-            zlock!(self.conduit[priority].reliable)
+            self.conduit[priority].reliable.lock()
         } else {
-            zlock!(self.conduit[priority].best_effort)
+            self.conduit[priority].best_effort.lock()
         };
         // Lock the stage in containing the serialization batches.
-        let mut in_guard = zlock!(self.stage_in[priority]);
+        let mut in_guard = self.stage_in[priority].lock();
 
         macro_rules! zserialize {
             () => {
@@ -381,7 +381,7 @@ impl TransmissionPipeline {
         //   2) add the batch to the OUT pipeline
         if let Some(batch) = in_guard.try_pull() {
             // The previous batch wasn't empty, move it to the stage OUT pipeline
-            let mut out_guard = zlock!(self.stage_out);
+            let mut out_guard = self.stage_out.lock();
             out_guard[priority].push(batch);
             drop(out_guard);
             self.cond_canpull.notify_one();
@@ -435,7 +435,7 @@ impl TransmissionPipeline {
             if written != 0 {
                 // Move the serialization batch into the OUT pipeline
                 let batch = in_guard.try_pull().unwrap();
-                let mut out_guard = zlock!(self.stage_out);
+                let mut out_guard = self.stage_out.lock();
                 out_guard[priority].push(batch);
                 drop(out_guard);
                 self.cond_canpull.notify_one();
@@ -459,7 +459,7 @@ impl TransmissionPipeline {
         loop {
             // Check first if we have complete batches available for transmission
             if self.batches_out[priority].load(Ordering::Acquire) > 0 {
-                let mut out_guard = zlock!(self.stage_out);
+                let mut out_guard = self.stage_out.lock();
                 return out_guard[priority].try_pull();
             }
 
@@ -479,13 +479,13 @@ impl TransmissionPipeline {
             if bytes_in_now == bytes_in_pre {
                 // No new bytes have been written on the batch, try to pull
                 // First try to pull from stage OUT
-                let mut out_guard = zlock!(self.stage_out);
+                let mut out_guard = self.stage_out.lock();
                 if let Some(batch) = out_guard[priority].try_pull() {
                     return Some(batch);
                 }
 
                 // An incomplete (non-empty) batch is available in the state IN pipeline.
-                if let Ok(mut in_guard) = self.stage_in[priority].try_lock() {
+                if let Some(mut in_guard) = self.stage_in[priority].try_lock() {
                     return in_guard.try_pull();
                 }
             }
@@ -512,7 +512,7 @@ impl TransmissionPipeline {
             }
 
             let action = {
-                let mut out_guard = zlock!(self.stage_out);
+                let mut out_guard = self.stage_out.lock();
                 let mut is_pipeline_really_empty = true;
                 for conduit in 0..out_guard.len() {
                     if let Some(batch) = out_guard[conduit].try_pull() {
@@ -520,7 +520,7 @@ impl TransmissionPipeline {
                     }
 
                     // Check if an incomplete (non-empty) batch is available in the state IN pipeline.
-                    if let Ok(mut in_guard) = self.stage_in[conduit].try_lock() {
+                    if let Some(mut in_guard) = self.stage_in[conduit].try_lock() {
                         if let Some(batch) = in_guard.try_pull() {
                             return Some((batch, conduit));
                         }
@@ -561,7 +561,7 @@ impl TransmissionPipeline {
     }
 
     pub(crate) fn refill(&self, batch: SerializationBatch, queue: usize) {
-        let mut refill_guard = zlock!(self.stage_refill[queue]);
+        let mut refill_guard = self.stage_refill[queue].lock();
         refill_guard.push(batch);
         drop(refill_guard);
         self.cond_canrefill[queue].notify_one();
@@ -574,10 +574,10 @@ impl TransmissionPipeline {
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
         let _in_guards: Vec<MutexGuard<'_, StageIn>> =
-            self.stage_in.iter().map(|x| zlock!(x)).collect();
-        let _out_guard = zlock!(self.stage_out);
+            self.stage_in.iter().map(|x| x.lock()).collect();
+        let _out_guard = self.stage_out.lock();
         let _re_guards: Vec<MutexGuard<'_, StageRefill>> =
-            self.stage_refill.iter().map(|x| zlock!(x)).collect();
+            self.stage_refill.iter().map(|x| x.lock()).collect();
 
         // Unblock waiting pushers
         for cr in self.cond_canrefill.iter() {
@@ -594,8 +594,8 @@ impl TransmissionPipeline {
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in disable to avoid deadlocks
         let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
-            self.stage_in.iter().map(|x| zlock!(x)).collect();
-        let mut out_guard = zlock!(self.stage_out);
+            self.stage_in.iter().map(|x| x.lock()).collect();
+        let mut out_guard = self.stage_out.lock();
 
         for priority in 0..out_guard.len() {
             // Drain first the batches in stage OUT

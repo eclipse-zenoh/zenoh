@@ -23,15 +23,16 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::stream::StreamExt;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zasynclock, zerror, zread, zwrite};
+use zenoh_core::{zasynclock, zerror};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -398,7 +399,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(quic_endpoint, acceptor, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            c_listeners.write().remove(&c_addr);
             res
         });
 
@@ -406,7 +407,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let locator = endpoint.locator.clone();
         let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        self.listeners.write().insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -415,7 +416,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let addr = get_quic_addr(&endpoint.locator).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = self.listeners.write().remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the QUIC listener because it has not been found: {}",
                 addr
@@ -431,7 +432,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+        self.listeners
+            .read()
             .values()
             .map(|x| x.endpoint.clone())
             .collect()
@@ -442,7 +444,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
-        let guard = zread!(self.listeners);
+        let guard = self.listeners.read();
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {

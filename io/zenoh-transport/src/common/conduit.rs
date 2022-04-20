@@ -14,8 +14,8 @@
 use super::defragmentation::DefragBuffer;
 use super::protocol::core::{ConduitSn, Reliability, ZInt};
 use super::seq_num::{SeqNum, SeqNumGenerator};
-use std::sync::{Arc, Mutex};
-use zenoh_core::zlock;
+use parking_lot::Mutex;
+use std::sync::Arc;
 use zenoh_core::zresult::ZResult;
 
 #[derive(Debug)]
@@ -85,8 +85,8 @@ impl TransportConduitTx {
     }
 
     pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
-        let _ = zlock!(self.reliable).sync(sn.reliable)?;
-        zlock!(self.best_effort).sync(sn.best_effort)
+        let _ = self.reliable.lock().sync(sn.reliable)?;
+        self.best_effort.lock().sync(sn.best_effort)
     }
 }
 
@@ -112,7 +112,7 @@ impl TransportConduitRx {
     }
 
     pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
-        let _ = zlock!(self.reliable).sync(sn.reliable)?;
-        zlock!(self.best_effort).sync(sn.best_effort)
+        let _ = self.reliable.lock().sync(sn.reliable)?;
+        self.best_effort.lock().sync(sn.best_effort)
     }
 }

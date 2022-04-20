@@ -11,12 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::session_ext::SessionRef;
 use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::StreamExt;
+use parking_lot::RwLock;
 use std::future::Future;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};
@@ -26,9 +28,6 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zread, zwrite};
-
-use crate::session_ext::SessionRef;
 
 use super::PublicationCache;
 
@@ -271,7 +270,7 @@ impl<'a> QueryingSubscriber<'a> {
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.receiver.state);
+        let mut state = self.receiver.state.write();
         log::debug!("Start query on {}", selector);
         match self
             .conf
@@ -355,7 +354,7 @@ impl Stream for QueryingSubscriberReceiver {
 
     #[inline(always)]
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         state.poll_next_unpin(cx)
     }
 }
@@ -363,7 +362,7 @@ impl Stream for QueryingSubscriberReceiver {
 impl futures::stream::FusedStream for QueryingSubscriberReceiver {
     #[inline(always)]
     fn is_terminated(&self) -> bool {
-        let state = &mut zread!(self.state);
+        let state = &mut self.state.read();
         state.is_terminated()
     }
 }
@@ -377,22 +376,22 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
     }
 
     fn recv(&self) -> Result<Sample, RecvError> {
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         state.recv()
     }
 
     fn try_recv(&self) -> Result<Sample, TryRecvError> {
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         state.try_recv()
     }
 
     fn recv_timeout(&self, timeout: Duration) -> Result<Sample, RecvTimeoutError> {
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         state.recv_timeout(timeout)
     }
 
     fn recv_deadline(&self, deadline: Instant) -> Result<Sample, RecvTimeoutError> {
-        let state = &mut zwrite!(self.state);
+        let state = &mut self.state.write();
         state.recv_deadline(deadline)
     }
 }

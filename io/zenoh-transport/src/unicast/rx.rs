@@ -20,10 +20,10 @@ use super::protocol::proto::{
 };
 use super::transport::TransportUnicastInner;
 use async_std::task;
-use std::sync::MutexGuard;
+use parking_lot::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
+use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::LinkUnicast;
 
 /*************************************/
@@ -61,7 +61,7 @@ impl TransportUnicastInner {
             }
         }
 
-        let callback = zread!(self.callback).clone();
+        let callback = self.callback.read().clone();
         if let Some(callback) = callback.as_ref() {
             #[cfg(feature = "shared-memory")]
             let _ = msg.map_to_shmbuf(self.config.manager.shmr.clone())?;
@@ -188,10 +188,8 @@ impl TransportUnicastInner {
                 };
 
                 match channel.reliability {
-                    Reliability::Reliable => self.handle_frame(sn, payload, zlock!(c.reliable)),
-                    Reliability::BestEffort => {
-                        self.handle_frame(sn, payload, zlock!(c.best_effort))
-                    }
+                    Reliability::Reliable => self.handle_frame(sn, payload, c.reliable.lock()),
+                    Reliability::BestEffort => self.handle_frame(sn, payload, c.best_effort.lock()),
                 }
             }
             TransportBody::Close(Close {

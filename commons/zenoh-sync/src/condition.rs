@@ -13,7 +13,7 @@
 //
 use async_std::sync::MutexGuard as AysncMutexGuard;
 use event_listener::{Event, EventListener};
-use std::sync::MutexGuard;
+use parking_lot::MutexGuard;
 
 pub type ConditionWaiter = EventListener;
 /// This is a Condition Variable similar to that provided by POSIX.

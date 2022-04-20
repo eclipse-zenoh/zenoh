@@ -16,7 +16,9 @@ use super::io::SharedMemoryReader;
 #[cfg(feature = "shared-memory")]
 use super::msg::*;
 #[cfg(feature = "shared-memory")]
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 

@@ -17,12 +17,12 @@ use async_std::channel::Sender;
 use async_std::task;
 use libloading::Library;
 use memory_backend::create_memory_backend;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::sync::Mutex;
 use storages_mgt::StorageMessage;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
@@ -31,8 +31,8 @@ use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
+use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zlock};
 use zenoh_util::LibLoader;
 
 mod backends_mgt;
@@ -289,7 +289,7 @@ impl From<StorageRuntimeInner> for StorageRuntime {
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 impl RunningPluginTrait for StorageRuntime {
     fn config_checker(&self) -> ValidationFunction {
-        let name = { zlock!(self.0).name.clone() };
+        let name = { self.0.lock().name.clone() };
         let runtime = self.0.clone();
         Arc::new(move |_path, old, new| {
             let old = PluginConfig::try_from((&name, old))?;
@@ -298,7 +298,7 @@ impl RunningPluginTrait for StorageRuntime {
             log::info!("new: {:?}", &new);
             let diffs = ConfigDiff::diffs(old, new);
             log::info!("diff: {:?}", &diffs);
-            { zlock!(runtime).update(diffs) }?;
+            { runtime.lock().update(diffs) }?;
             Ok(None)
         })
     }
@@ -319,7 +319,7 @@ impl RunningPluginTrait for StorageRuntime {
                 })
             }
         });
-        let guard = self.0.lock().unwrap();
+        let guard = self.0.lock();
         with_extended_string(&mut key, &["/volumes/"], |key| {
             for (volume_id, volume) in &guard.volumes {
                 with_extended_string(key, &[volume_id], |key| {

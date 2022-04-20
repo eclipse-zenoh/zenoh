@@ -240,7 +240,7 @@ impl Runnable for Getter<'_, '_> {
             self.target,
             self.consolidation
         );
-        let mut state = zwrite!(self.session.state);
+        let mut state = self.session.state.write();
         let target = self.target.take().unwrap();
         let consolidation = match self.consolidation.take().unwrap() {
             QueryConsolidation::Auto => {

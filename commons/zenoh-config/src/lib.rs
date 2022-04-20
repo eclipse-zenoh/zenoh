@@ -15,19 +15,13 @@
 //! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
 //! and associated constants.
 mod defaults;
+use parking_lot::{Mutex, MutexGuard};
 use serde_json::Value;
-use std::{
-    any::Any,
-    collections::HashMap,
-    io::Read,
-    net::SocketAddr,
-    path::Path,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::{any::Any, collections::HashMap, io::Read, net::SocketAddr, path::Path, sync::Arc};
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
-use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+use zenoh_core::{bail, zerror, Result as ZResult};
 pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI};
 use zenoh_util::LibLoader;
 
@@ -453,7 +447,7 @@ impl Notifier<Config> {
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
         let key = key.as_ref();
         {
-            let mut guard = zlock!(self.inner.inner);
+            let mut guard = self.inner.inner.lock();
             guard.remove(key)?;
         }
         self.notify(key);
@@ -472,14 +466,14 @@ impl<T: ValidatedMap> Notifier<T> {
     pub fn subscribe(&self) -> flume::Receiver<Notification> {
         let (tx, rx) = flume::unbounded();
         {
-            zlock!(self.inner.subscribers).push(tx);
+            self.inner.subscribers.lock().push(tx);
         }
         rx
     }
     pub fn notify<K: AsRef<str>>(&self, key: K) {
         let key: Arc<str> = Arc::from(key.as_ref());
         let mut marked = Vec::new();
-        let mut guard = zlock!(self.inner.subscribers);
+        let mut guard = self.inner.subscribers.lock();
         for (i, sub) in guard.iter().enumerate() {
             if sub.send(key.clone()).is_err() {
                 marked.push(i)
@@ -491,7 +485,7 @@ impl<T: ValidatedMap> Notifier<T> {
     }
 
     pub fn lock(&self) -> MutexGuard<T> {
-        zlock!(self.inner.inner)
+        self.inner.inner.lock()
     }
     /// Since this type is fully interior-mutable, this method can be used to obtain a mutable reference for trait-compatibility with [`validated_struct::ValidatedMap`]
     /// # Safety
@@ -517,7 +511,7 @@ where
         validated_struct::InsertionError: From<D::Error>,
     {
         {
-            let mut guard = zlock!(self.inner.inner);
+            let mut guard = self.inner.inner.lock();
             guard.insert(key, value)?;
         }
         self.notify(key);
@@ -528,7 +522,7 @@ where
         key: &str,
     ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
-        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
+        let guard: MutexGuard<'a, T> = self.inner.inner.lock();
         // Safety: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {

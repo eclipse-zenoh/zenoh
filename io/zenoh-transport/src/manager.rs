@@ -25,11 +25,11 @@ use super::unicast::manager::{
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
 use async_std::sync::Mutex as AsyncMutex;
+#[cfg(feature = "shared-memory")]
+use parking_lot::RwLock;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};

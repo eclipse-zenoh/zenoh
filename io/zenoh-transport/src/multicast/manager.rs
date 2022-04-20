@@ -14,12 +14,13 @@
 use crate::multicast::transport::TransportMulticastInner;
 use crate::multicast::TransportMulticast;
 use crate::TransportManager;
+use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_config::Config;
+use zenoh_core::zerror;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock};
 use zenoh_link::*;
 use zenoh_protocol::proto::tmsg;
 use zenoh_protocol_core::locators::LocatorProtocol;
@@ -138,9 +139,13 @@ impl TransportManager {
     pub async fn close_multicast(&self) {
         log::trace!("TransportManagerMulticast::clear())");
 
-        zlock!(self.state.multicast.protocols).clear();
+        self.state.multicast.protocols.lock().clear();
 
-        let mut tm_guard = zlock!(self.state.multicast.transports)
+        let mut tm_guard = self
+            .state
+            .multicast
+            .transports
+            .lock()
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportMulticastInner>>>();
@@ -156,7 +161,7 @@ impl TransportManager {
         &self,
         protocol: &LocatorProtocol,
     ) -> ZResult<LinkManagerMulticast> {
-        let mut w_guard = zlock!(self.state.multicast.protocols);
+        let mut w_guard = self.state.multicast.protocols.lock();
         match w_guard.get(protocol) {
             Some(lm) => Ok(lm.clone()),
             None => {
@@ -168,7 +173,7 @@ impl TransportManager {
     }
 
     fn del_link_manager_multicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
-        match zlock!(self.state.multicast.protocols).remove(protocol) {
+        match self.state.multicast.protocols.lock().remove(protocol) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -216,20 +221,26 @@ impl TransportManager {
     }
 
     pub fn get_transport_multicast(&self, locator: &Locator) -> Option<TransportMulticast> {
-        zlock!(self.state.multicast.transports)
+        self.state
+            .multicast
+            .transports
+            .lock()
             .get(locator)
             .map(|t| t.into())
     }
 
     pub fn get_transports_multicast(&self) -> Vec<TransportMulticast> {
-        zlock!(self.state.multicast.transports)
+        self.state
+            .multicast
+            .transports
+            .lock()
             .values()
             .map(|t| t.into())
             .collect()
     }
 
     pub(super) fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
-        let mut guard = zlock!(self.state.multicast.transports);
+        let mut guard = self.state.multicast.transports.lock();
         let res = guard.remove(locator);
 
         let proto = locator.protocol();

@@ -15,8 +15,8 @@ use crate::multicast::{TransportMulticast, TransportMulticastConfig, TransportMu
 use crate::TransportManager;
 use rand::Rng;
 use std::sync::Arc;
+use zenoh_core::zasynclock;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{zasynclock, zlock};
 use zenoh_link::LinkMulticast;
 use zenoh_protocol_core::{ConduitSn, ConduitSnList, Priority};
 
@@ -55,12 +55,17 @@ pub(crate) async fn open_link(
 
     // Store the active transport
     let transport: TransportMulticast = (&ti).into();
-    zlock!(manager.state.multicast.transports).insert(locator.to_owned(), ti.clone());
+    manager
+        .state
+        .multicast
+        .transports
+        .lock()
+        .insert(locator.to_owned(), ti.clone());
 
     // Notify the transport event handler
     let batch_size = manager.config.batch_size.min(link.get_mtu());
     ti.start_tx(batch_size).map_err(|e| {
-        zlock!(manager.state.multicast.transports).remove(locator);
+        manager.state.multicast.transports.lock().remove(locator);
         let _ = ti.stop_tx();
         e
     })?;
@@ -69,13 +74,13 @@ pub(crate) async fn open_link(
         .handler
         .new_multicast(transport.clone())
         .map_err(|e| {
-            zlock!(manager.state.multicast.transports).remove(locator);
+            manager.state.multicast.transports.lock().remove(locator);
             let _ = ti.stop_tx();
             e
         })?;
     ti.set_callback(callback);
     ti.start_rx().map_err(|e| {
-        zlock!(manager.state.multicast.transports).remove(locator);
+        manager.state.multicast.transports.lock().remove(locator);
         let _ = ti.stop_rx();
         e
     })?;

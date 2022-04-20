@@ -29,8 +29,8 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
+use zenoh_core::zerror;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{zerror, zread};
 use zenoh_link::Link;
 
 /*************************************/
@@ -169,7 +169,9 @@ impl fmt::Debug for TransportMulticast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_transport() {
             Ok(transport) => {
-                let peers: String = zread!(transport.peers)
+                let peers: String = transport
+                    .peers
+                    .read()
                     .iter()
                     .map(|(l, p)| {
                         format!("(locator: {}, pid: {}, whatami: {})", l, p.pid, p.whatami)

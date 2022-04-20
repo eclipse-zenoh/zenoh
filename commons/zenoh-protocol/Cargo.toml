@@ -40,6 +40,7 @@ zenoh-buffers = { path = "../zenoh-buffers/" }
 
 log = "0.4"
 uhlc = "0.4.0"
+parking_lot = "0.12.0"
 
 [dev-dependencies]
 rand = "0.8.3"

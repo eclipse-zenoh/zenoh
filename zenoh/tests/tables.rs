@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh::net::routing::router::*;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
-use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::intersect;
@@ -360,20 +361,20 @@ fn clean_test() {
 }
 
 pub struct ClientPrimitives {
-    data: std::sync::Mutex<Option<KeyExpr<'static>>>,
-    mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
+    data: Mutex<Option<KeyExpr<'static>>>,
+    mapping: Mutex<HashMap<ZInt, String>>,
 }
 
 impl ClientPrimitives {
     pub fn new() -> ClientPrimitives {
         ClientPrimitives {
-            data: std::sync::Mutex::new(None),
-            mapping: std::sync::Mutex::new(std::collections::HashMap::new()),
+            data: Mutex::new(None),
+            mapping: Mutex::new(HashMap::new()),
         }
     }
 
     pub fn clear_data(&self) {
-        *self.data.lock().unwrap() = None;
+        *self.data.lock() = None;
     }
 }
 
@@ -385,7 +386,7 @@ impl Default for ClientPrimitives {
 
 impl ClientPrimitives {
     fn get_name(&self, key_expr: &KeyExpr) -> String {
-        let mapping = self.mapping.lock().unwrap();
+        let mapping = self.mapping.lock();
         let (scope, suffix) = key_expr.as_id_and_suffix();
         if scope == EMPTY_EXPR_ID {
             suffix.to_string()
@@ -397,27 +398,23 @@ impl ClientPrimitives {
     }
 
     fn get_last_name(&self) -> Option<String> {
-        self.data
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|data| self.get_name(data))
+        self.data.lock().as_ref().map(|data| self.get_name(data))
     }
 
     #[allow(dead_code)]
     fn get_last_key(&self) -> Option<KeyExpr> {
-        self.data.lock().unwrap().as_ref().cloned()
+        self.data.lock().as_ref().cloned()
     }
 }
 
 impl Primitives for ClientPrimitives {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
         let name = self.get_name(key_expr);
-        zlock!(self.mapping).insert(expr_id, name);
+        self.mapping.lock().insert(expr_id, name);
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
-        zlock!(self.mapping).remove(&expr_id);
+        self.mapping.lock().remove(&expr_id);
     }
 
     fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
@@ -457,7 +454,7 @@ impl Primitives for ClientPrimitives {
         _info: Option<DataInfo>,
         _routing_context: Option<RoutingContext>,
     ) {
-        *zlock!(self.data) = Some(key_expr.to_owned());
+        *self.data.lock() = Some(key_expr.to_owned());
     }
 
     fn send_query(

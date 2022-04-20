@@ -16,15 +16,16 @@ use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
+use zenoh_core::zerror;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -266,14 +267,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            c_listeners.write().remove(&c_addr);
             res
         });
 
         let locator = endpoint.locator.clone();
         let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        self.listeners.write().insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -282,7 +283,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let addr = get_tcp_addr(&endpoint.locator).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = self.listeners.write().remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the TCP listener because it has not been found: {}",
                 addr
@@ -298,7 +299,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+        self.listeners
+            .read()
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
@@ -309,7 +311,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
         let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
-        let guard = zread!(self.listeners);
+        let guard = self.listeners.read();
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
             if key.ip() == default_ipv4 {

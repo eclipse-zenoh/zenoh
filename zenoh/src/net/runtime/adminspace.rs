@@ -17,10 +17,10 @@ use crate::prelude::Selector;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
+use parking_lot::Mutex;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
@@ -136,7 +136,7 @@ impl AdminSpace {
                         }
                         diffs.push(PluginDiff::Start(request))
                     }
-                    let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
+                    let mut plugins_mgr = admin.context.plugins_mgr.lock();
                     for diff in diffs {
                         match diff {
                             PluginDiff::Delete(plugin) => {
@@ -196,7 +196,7 @@ impl AdminSpace {
         });
 
         let primitives = runtime.router.new_primitives(admin.clone());
-        zlock!(admin.primitives).replace(primitives.clone());
+        admin.primitives.lock().replace(primitives.clone());
 
         primitives.decl_queryable(
             &[&root_key, "/**"].concat().into(),
@@ -219,9 +219,10 @@ impl AdminSpace {
         if key_expr.scope == EMPTY_EXPR_ID {
             Some(key_expr.suffix.to_string())
         } else if key_expr.suffix.is_empty() {
-            zlock!(self.mappings).get(&key_expr.scope).cloned()
+            self.mappings.lock().get(&key_expr.scope).cloned()
         } else {
-            zlock!(self.mappings)
+            self.mappings
+                .lock()
                 .get(&key_expr.scope)
                 .map(|prefix| format!("{}{}", prefix, key_expr.suffix.as_ref()))
         }
@@ -233,7 +234,7 @@ impl Primitives for AdminSpace {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Some(s) => {
-                zlock!(self.mappings).insert(expr_id, s);
+                self.mappings.lock().insert(expr_id, s);
             }
             None => error!("Unknown expr_id {}!", expr_id),
         }
@@ -369,7 +370,7 @@ impl Primitives for AdminSpace {
         let plugin_key = format!("/@/router/{}/status/plugins/**", &pid);
         let mut ask_plugins = false;
         let context = self.context.clone();
-        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+        let primitives = self.primitives.lock().as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
@@ -488,7 +489,9 @@ pub async fn router_data(
 
     // plugins info
     let plugins: Vec<serde_json::Value> = {
-        zlock!(context.plugins_mgr)
+        context
+            .plugins_mgr
+            .lock()
             .running_plugins_info()
             .iter()
             .map(|(name, path)| {
@@ -561,7 +564,7 @@ pub async fn linkstate_routers_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    let tables = zread!(context.runtime.router.tables);
+    let tables = context.runtime.router.tables.read();
 
     let res = (
         ZBuf::from(
@@ -588,7 +591,6 @@ pub async fn linkstate_peers_data(
         .router
         .tables
         .read()
-        .unwrap()
         .peers_net
         .as_ref()
         .unwrap()
@@ -606,7 +608,7 @@ pub async fn plugins_status(
         key_selector: key.clone(),
         value_selector: args.into(),
     };
-    let guard = zlock!(context.plugins_mgr);
+    let guard = context.plugins_mgr.lock();
     let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);
     let mut responses = Vec::new();
     for (name, (path, plugin)) in guard.running_plugins() {

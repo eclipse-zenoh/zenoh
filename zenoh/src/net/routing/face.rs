@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::router::*;
+use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
@@ -165,12 +165,12 @@ pub struct Face {
 
 impl Primitives for Face {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         unregister_expr(&mut tables, &mut self.state.clone(), expr_id);
     }
 
@@ -180,7 +180,7 @@ impl Primitives for Face {
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 if let Some(router) = self.state.get_router(&tables, routing_context) {
@@ -216,7 +216,7 @@ impl Primitives for Face {
     }
 
     fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 if let Some(router) = self.state.get_router(&tables, routing_context) {
@@ -250,7 +250,7 @@ impl Primitives for Face {
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 if let Some(router) = self.state.get_router(&tables, routing_context) {
@@ -294,7 +294,7 @@ impl Primitives for Face {
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 if let Some(router) = self.state.get_router(&tables, routing_context) {
@@ -375,7 +375,7 @@ impl Primitives for Face {
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         route_send_reply_data(
             &mut tables,
             &mut self.state.clone(),
@@ -389,7 +389,7 @@ impl Primitives for Face {
     }
 
     fn send_reply_final(&self, qid: ZInt) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         route_send_reply_final(&mut tables, &mut self.state.clone(), qid);
     }
 
@@ -400,7 +400,7 @@ impl Primitives for Face {
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = self.tables.write();
         pull_data(
             &mut tables,
             &self.state.clone(),
@@ -412,7 +412,7 @@ impl Primitives for Face {
     }
 
     fn send_close(&self) {
-        zwrite!(self.tables).close_face(&Arc::downgrade(&self.state));
+        self.tables.write().close_face(&Arc::downgrade(&self.state));
     }
 }
 

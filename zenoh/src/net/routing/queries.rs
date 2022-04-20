@@ -13,11 +13,11 @@
 //
 use async_trait::async_trait;
 use ordered_float::OrderedFloat;
+use parking_lot::RwLock;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::{RwLock, Weak};
+use std::sync::{Arc, Weak};
 // use std::time::Instant;
 // use zenoh_collections::{Timed, TimedEvent};
 use zenoh_collections::Timed;
@@ -1332,7 +1332,7 @@ struct QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
-            let mut _tables = zwrite!(self.tables);
+            let mut _tables = self.tables.write();
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
@@ -1360,7 +1360,7 @@ pub fn route_query(
     consolidation: ConsolidationStrategy,
     routing_context: Option<RoutingContext>,
 ) {
-    let tables = zwrite!(tables_ref);
+    let tables = tables_ref.write();
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
             log::debug!(

@@ -19,9 +19,9 @@ use super::protocol::proto::{
     Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
-use std::sync::MutexGuard;
-use zenoh_core::{bail, zerror, zread};
-use zenoh_core::{zlock, Result as ZResult};
+use parking_lot::MutexGuard;
+use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, zerror};
 use zenoh_protocol_core::Locator;
 
 /*************************************/
@@ -146,7 +146,7 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn handle_join_from_unknown(&self, join: Join, locator: &Locator) -> ZResult<()> {
-        if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
+        if self.peers.read().len() >= self.manager.config.multicast.max_sessions {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
@@ -194,7 +194,7 @@ impl TransportMulticastInner {
 
     pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
         // Process the received message
-        let r_guard = zread!(self.peers);
+        let r_guard = self.peers.read();
         match r_guard.get(locator) {
             Some(peer) => {
                 peer.active();
@@ -220,8 +220,8 @@ impl TransportMulticastInner {
                         };
 
                         let guard = match channel.reliability {
-                            Reliability::Reliable => zlock!(c.reliable),
-                            Reliability::BestEffort => zlock!(c.best_effort),
+                            Reliability::Reliable => c.reliable.lock(),
+                            Reliability::BestEffort => c.best_effort.lock(),
                         };
                         self.handle_frame(sn, payload, guard, peer)
                     }

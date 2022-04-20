@@ -22,9 +22,10 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
+use zenoh_core::{bail, zasynclock, zerror, Result as ZResult};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 
 macro_rules! zlinkget {
@@ -118,7 +119,7 @@ impl TransportUnicastInner {
     }
 
     pub(super) fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
-        let mut guard = zwrite!(self.callback);
+        let mut guard = self.callback.write();
         *guard = Some(callback);
     }
 
@@ -167,7 +168,7 @@ impl TransportUnicastInner {
         *a_guard = false;
 
         // Notify the callback that we are going to close the transport
-        let callback = zwrite!(self.callback).take();
+        let callback = self.callback.write().take();
         if let Some(cb) = callback.as_ref() {
             cb.closing();
         }
@@ -181,7 +182,7 @@ impl TransportUnicastInner {
 
         // Close all the links
         let mut links = {
-            let mut l_guard = zwrite!(self.links);
+            let mut l_guard = self.links.write();
             let links = l_guard.to_vec();
             *l_guard = vec![].into_boxed_slice();
             links
@@ -207,7 +208,7 @@ impl TransportUnicastInner {
         direction: LinkUnicastDirection,
     ) -> ZResult<()> {
         // Add the link to the channel
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
 
         // Check if we can add more inbound links
         if let LinkUnicastDirection::Inbound = direction {
@@ -244,7 +245,7 @@ impl TransportUnicastInner {
         keep_alive: Duration,
         batch_size: u16,
     ) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
@@ -262,7 +263,7 @@ impl TransportUnicastInner {
     }
 
     pub(super) fn stop_tx(&self, link: &LinkUnicast) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.stop_tx();
@@ -279,7 +280,7 @@ impl TransportUnicastInner {
     }
 
     pub(super) fn start_rx(&self, link: &LinkUnicast, lease: Duration) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.start_rx(lease);
@@ -296,7 +297,7 @@ impl TransportUnicastInner {
     }
 
     pub(super) fn stop_rx(&self, link: &LinkUnicast) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
+        let mut guard = self.links.write();
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.stop_rx();
@@ -320,7 +321,7 @@ impl TransportUnicastInner {
 
         // Try to remove the link
         let target = {
-            let mut guard = zwrite!(self.links);
+            let mut guard = self.links.write();
 
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
@@ -335,7 +336,7 @@ impl TransportUnicastInner {
                     *guard = links.into_boxed_slice();
                     drop(guard);
                     // Notify the callback
-                    if let Some(callback) = zread!(self.callback).as_ref() {
+                    if let Some(callback) = self.callback.read().as_ref() {
                         callback.del_link(Link::from(link));
                     }
                     Target::Link(stl.into())
@@ -381,7 +382,7 @@ impl TransportUnicastInner {
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
-        zread!(self.callback).clone()
+        self.callback.read().clone()
     }
 
     /*************************************/
@@ -390,7 +391,7 @@ impl TransportUnicastInner {
     pub(crate) async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.pid);
 
-        let guard = zread!(self.links);
+        let guard = self.links.read();
         if let Some(l) = zlinkget!(guard, link) {
             let mut pipeline = l.pipeline.clone();
             // Drop the guard
@@ -418,7 +419,9 @@ impl TransportUnicastInner {
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing transport with peer: {}", self.config.pid);
 
-        let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
+        let mut pipelines: Vec<Arc<TransmissionPipeline>> = self
+            .links
+            .read()
             .iter()
             .filter_map(|sl| sl.pipeline.clone())
             .collect();
@@ -461,6 +464,6 @@ impl TransportUnicastInner {
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {
-        zread!(self.links).iter().map(|l| l.link.clone()).collect()
+        self.links.read().iter().map(|l| l.link.clone()).collect()
     }
 }

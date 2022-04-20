@@ -17,7 +17,6 @@ use super::protocol::proto::ZenohMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::zread;
 
 impl TransportUnicastInner {
     fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
@@ -32,7 +31,7 @@ impl TransportUnicastInner {
             };
         }
 
-        let guard = zread!(self.links);
+        let guard = self.links.read();
         // First try to find the best match between msg and link reliability
         for tl in guard.iter() {
             if let Some(pipeline) = tl.pipeline.as_ref() {

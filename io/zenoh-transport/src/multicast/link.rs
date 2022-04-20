@@ -27,8 +27,8 @@ use zenoh_buffers::buffer::InsertBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_collections::RecyclingObjectPool;
+use zenoh_core::zerror;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::proto::{MessageReader, TransportMessage};
 use zenoh_protocol_core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
@@ -84,8 +84,8 @@ impl TransportLinkMulticast {
         let initial_sns: Vec<ConduitSn> = conduit_tx
             .iter()
             .map(|x| ConduitSn {
-                reliable: zlock!(x.reliable).sn.now(),
-                best_effort: zlock!(x.best_effort).sn.now(),
+                reliable: x.reliable.lock().sn.now(),
+                best_effort: x.best_effort.lock().sn.now(),
             })
             .collect();
 

@@ -23,6 +23,7 @@ pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
+use parking_lot::RwLock;
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,7 +50,7 @@ pub struct RuntimeState {
     pub config: Notifier<Config>,
     pub manager: TransportManager,
     pub hlc: Option<Arc<HLC>>,
-    pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
+    pub(crate) stop_source: RwLock<Option<StopSource>>,
 }
 
 #[derive(Clone)]
@@ -110,7 +111,7 @@ impl Runtime {
         ));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
-            runtime: std::sync::RwLock::new(None),
+            runtime: RwLock::new(None),
         });
 
         let transport_manager = TransportManager::builder()
@@ -130,10 +131,10 @@ impl Runtime {
                 config: config.clone(),
                 manager: transport_manager,
                 hlc,
-                stop_source: std::sync::RwLock::new(Some(StopSource::new())),
+                stop_source: RwLock::new(Some(StopSource::new())),
             }),
         };
-        *handler.runtime.write().unwrap() = Some(runtime.clone());
+        *handler.runtime.write() = Some(runtime.clone());
         if use_link_state {
             get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
                 runtime.clone(),
@@ -170,7 +171,7 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        drop(self.stop_source.write().unwrap().take());
+        drop(self.stop_source.write().take());
         self.manager().close().await;
         Ok(())
     }
@@ -190,14 +191,13 @@ impl Runtime {
     {
         self.stop_source
             .read()
-            .unwrap()
             .as_ref()
             .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
     }
 }
 
 struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+    runtime: RwLock<Option<Runtime>>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -206,10 +206,10 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         _peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match self.runtime.read().as_ref() {
             Some(runtime) => Ok(Arc::new(RuntimeSession {
                 runtime: runtime.clone(),
-                endpoint: std::sync::RwLock::new(None),
+                endpoint: RwLock::new(None),
                 sub_event_handler: runtime.router.new_transport_unicast(transport).unwrap(),
             })),
             None => bail!("Runtime not yet ready!"),
@@ -227,7 +227,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
-    pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
+    pub(super) endpoint: RwLock<Option<EndPoint>>,
     pub(super) sub_event_handler: Arc<LinkStateInterceptor>,
 }
 

@@ -13,6 +13,8 @@
 //
 #[cfg(feature = "shared-memory")]
 use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
+#[cfg(feature = "shared-memory")]
+use parking_lot::RwLock;
 use std::convert::AsRef;
 use std::fmt;
 use std::io::IoSlice;
@@ -20,11 +22,9 @@ use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
 use std::sync::Arc;
-#[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
 use zenoh_collections::RecyclingObject;
 #[cfg(feature = "shared-memory")]
-use zenoh_core::{zread, zwrite, Result as ZResult};
+use zenoh_core::Result as ZResult;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
@@ -286,11 +286,11 @@ impl ZSlice {
                 let shmbinfo = SharedMemoryBufInfo::deserialize(info)?;
 
                 // First, try in read mode allowing concurrenct lookups
-                let r_guard = zread!(shmr);
+                let r_guard = shmr.read();
                 let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
                     // Next, try in write mode to eventual link the remote shm
                     drop(r_guard);
-                    let mut w_guard = zwrite!(shmr);
+                    let mut w_guard = shmr.write();
                     w_guard.read_shmbuf(&shmbinfo)
                 })?;
 

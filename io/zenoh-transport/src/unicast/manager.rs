@@ -21,14 +21,13 @@ use crate::TransportManager;
 use async_std::prelude::FutureExt;
 use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
+use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use zenoh_cfg_properties::config::*;
 use zenoh_config::Config;
-use zenoh_core::{
-    bail, zasynclock, zasyncread, zasyncwrite, zerror, zlock, zparse, Result as ZResult,
-};
+use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror, zparse, Result as ZResult};
 use zenoh_link::*;
 use zenoh_protocol::proto::tmsg;
 use zenoh_protocol_core::locators::LocatorProtocol;
@@ -254,7 +253,11 @@ impl TransportManager {
             let _ = pa.close().await;
         }
 
-        let mut pl_guard = zlock!(self.state.unicast.protocols)
+        let mut pl_guard = self
+            .state
+            .unicast
+            .protocols
+            .lock()
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<dyn LinkManagerUnicastTrait>>>();
@@ -265,7 +268,11 @@ impl TransportManager {
             }
         }
 
-        let mut tu_guard = zlock!(self.state.unicast.transports)
+        let mut tu_guard = self
+            .state
+            .unicast
+            .transports
+            .lock()
             .drain()
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportUnicastInner>>>();
@@ -278,7 +285,7 @@ impl TransportManager {
     /*            LINK MANAGER           */
     /*************************************/
     fn new_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
-        let mut w_guard = zlock!(self.state.unicast.protocols);
+        let mut w_guard = self.state.unicast.protocols.lock();
         if let Some(lm) = w_guard.get(protocol) {
             Ok(lm.clone())
         } else {
@@ -290,7 +297,7 @@ impl TransportManager {
     }
 
     fn get_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
-        match zlock!(self.state.unicast.protocols).get(protocol) {
+        match self.state.unicast.protocols.lock().get(protocol) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
                 "Can not get the link manager for protocol ({}) because it has not been found",
@@ -300,7 +307,7 @@ impl TransportManager {
     }
 
     fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
-        match zlock!(self.state.unicast.protocols).remove(protocol) {
+        match self.state.unicast.protocols.lock().remove(protocol) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -332,7 +339,7 @@ impl TransportManager {
 
     pub fn get_listeners_unicast(&self) -> Vec<EndPoint> {
         let mut vec: Vec<EndPoint> = vec![];
-        for p in zlock!(self.state.unicast.protocols).values() {
+        for p in self.state.unicast.protocols.lock().values() {
             vec.extend_from_slice(&p.get_listeners());
         }
         vec
@@ -340,7 +347,7 @@ impl TransportManager {
 
     pub fn get_locators_unicast(&self) -> Vec<Locator> {
         let mut vec: Vec<Locator> = vec![];
-        for p in zlock!(self.state.unicast.protocols).values() {
+        for p in self.state.unicast.protocols.lock().values() {
             vec.extend_from_slice(&p.get_locators());
         }
         vec
@@ -353,7 +360,7 @@ impl TransportManager {
         &self,
         config: TransportConfigUnicast,
     ) -> ZResult<TransportUnicast> {
-        let mut guard = zlock!(self.state.unicast.transports);
+        let mut guard = self.state.unicast.transports.lock();
 
         // First verify if the transport already exists
         match guard.get(&config.peer) {
@@ -482,20 +489,30 @@ impl TransportManager {
     }
 
     pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
-        zlock!(self.state.unicast.transports)
+        self.state
+            .unicast
+            .transports
+            .lock()
             .get(peer)
             .map(|t| t.into())
     }
 
     pub fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
-        zlock!(self.state.unicast.transports)
+        self.state
+            .unicast
+            .transports
+            .lock()
             .values()
             .map(|t| t.into())
             .collect()
     }
 
     pub(super) async fn del_transport_unicast(&self, peer: &PeerId) -> ZResult<()> {
-        let _ = zlock!(self.state.unicast.transports)
+        let _ = self
+            .state
+            .unicast
+            .transports
+            .lock()
             .remove(peer)
             .ok_or_else(|| {
                 let e = zerror!("Can not delete the transport of peer: {}", peer);
