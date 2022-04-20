@@ -36,6 +36,7 @@ use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
+use std::ops::{Deref, DerefMut};
 pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
@@ -477,6 +478,20 @@ impl Sample {
         if self.timestamp.is_none() {
             self.timestamp = Some(new_reception_timestamp());
         }
+    }
+}
+
+impl Deref for Sample {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for Sample {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
