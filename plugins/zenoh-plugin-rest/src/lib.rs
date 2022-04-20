@@ -95,7 +95,7 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.value.payload.contiguous())
+        String::from_utf8_lossy(&sample.payload.contiguous())
     )
 }
 

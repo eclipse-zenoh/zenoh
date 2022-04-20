@@ -250,7 +250,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                     match reply.sample {
                                         Ok(sample) => {
                                             match bincode::deserialize::<Member>(
-                                                &sample.value.payload.contiguous(),
+                                                &sample.payload.contiguous(),
                                             ) {
                                                 Ok(m) => {
                                                     let mut expiry = Instant::now();
