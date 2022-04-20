@@ -25,6 +25,7 @@ members = [
   "commons/zenoh-sync",
   "commons/zenoh-util",
   "commons/zenoh-macros",
+  "commons/zenoh-async-rt",
   "io/zenoh-link-commons",
   "io/zenoh-links/zenoh-link-udp/",
   "io/zenoh-links/zenoh-link-tcp/",

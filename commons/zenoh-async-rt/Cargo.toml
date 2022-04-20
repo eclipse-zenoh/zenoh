@@ -1,0 +1,8 @@
+[package]
+name = "zenoh-async-rt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-std = { version = "=1.11.0", features = ["attributes", "unstable"] }
+futures = "0.3.21"
