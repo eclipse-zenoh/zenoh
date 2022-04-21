@@ -18,7 +18,7 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion};
 use std::sync::Arc;
 use zenoh::net::protocol::core::{
-    Channel, CongestionControl, PeerId, Reliability, SubInfo, SubMode, WhatAmI,
+    Channel, CongestionControl, Reliability, SubInfo, SubMode, WhatAmI, ZenohId,
 };
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::routing::pubsub::*;
@@ -29,14 +29,18 @@ use zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(
-        PeerId::new(0, [0; 16]),
+        ZenohId::new(0, [0; 16]),
         WhatAmI::Router,
         None,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives {});
 
-    let face0 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives.clone());
+    let face0 = tables.open_face(
+        ZenohId::new(0, [0; 16]),
+        WhatAmI::Client,
+        primitives.clone(),
+    );
     register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -50,7 +54,7 @@ fn tables_bench(c: &mut Criterion) {
         &"/bench/tables/*".into(),
     );
 
-    let face1 = tables.open_face(PeerId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face1 = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {

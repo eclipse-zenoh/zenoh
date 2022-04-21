@@ -21,7 +21,7 @@ use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_transport::{
@@ -103,8 +103,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-    let peer_id02 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let peer_id01 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let peer_id02 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new());

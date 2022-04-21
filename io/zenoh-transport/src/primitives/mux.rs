@@ -13,8 +13,8 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTAK, QueryableInfo,
-    SubInfo, ZInt,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo, SubInfo,
+    ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{
@@ -184,7 +184,7 @@ impl Primitives for Mux {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,

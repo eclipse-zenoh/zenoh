@@ -22,8 +22,8 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, KeyExpr, PeerId, Priority, Reliability, SubInfo, SubMode, WhatAmI,
-    ZInt,
+    Channel, CongestionControl, KeyExpr, Priority, Reliability, SubInfo, SubMode, WhatAmI, ZInt,
+    ZenohId,
 };
 
 use super::face::FaceState;
@@ -90,7 +90,7 @@ fn propagate_sourced_subscription(
     res: &Arc<Resource>,
     sub_info: &SubInfo,
     src_face: Option<&Arc<FaceState>>,
-    source: &PeerId,
+    source: &ZenohId,
     net_type: WhatAmI,
 ) {
     let net = tables.get_net(net_type).unwrap();
@@ -128,7 +128,7 @@ fn register_router_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubInfo,
-    router: PeerId,
+    router: ZenohId,
 ) {
     if !res.context().router_subs.contains(&router) {
         // Register router subscription
@@ -162,7 +162,7 @@ pub fn declare_router_subscription(
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
     sub_info: &SubInfo,
-    router: PeerId,
+    router: ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
@@ -184,7 +184,7 @@ fn register_peer_subscription(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
     sub_info: &SubInfo,
-    peer: PeerId,
+    peer: ZenohId,
 ) {
     if !res.context().peer_subs.contains(&peer) {
         // Register peer subscription
@@ -204,7 +204,7 @@ pub fn declare_peer_subscription(
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
     sub_info: &SubInfo,
-    peer: PeerId,
+    peer: ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
@@ -386,7 +386,7 @@ fn propagate_forget_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    source: &PeerId,
+    source: &ZenohId,
     net_type: WhatAmI,
 ) {
     let net = tables.get_net(net_type).unwrap();
@@ -418,7 +418,7 @@ fn propagate_forget_sourced_subscription(
     }
 }
 
-fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &PeerId) {
+fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
     log::debug!(
         "Unregister router subscription {} (router: {})",
         res.expr(),
@@ -441,7 +441,7 @@ fn undeclare_router_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    router: &PeerId,
+    router: &ZenohId,
 ) {
     if res.context().router_subs.contains(router) {
         unregister_router_subscription(tables, res, router);
@@ -453,7 +453,7 @@ pub fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
-    router: &PeerId,
+    router: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
@@ -469,7 +469,7 @@ pub fn forget_router_subscription(
     }
 }
 
-fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &PeerId) {
+fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
     log::debug!(
         "Unregister peer subscription {} (peer: {})",
         res.expr(),
@@ -489,7 +489,7 @@ fn undeclare_peer_subscription(
     tables: &mut Tables,
     face: Option<&Arc<FaceState>>,
     res: &mut Arc<Resource>,
-    peer: &PeerId,
+    peer: &ZenohId,
 ) {
     if res.context().peer_subs.contains(peer) {
         unregister_peer_subscription(tables, res, peer);
@@ -501,7 +501,7 @@ pub fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     expr: &KeyExpr,
-    peer: &PeerId,
+    peer: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
@@ -609,7 +609,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     }
 }
 
-pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &PeerId, net_type: WhatAmI) {
+pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             for mut res in tables
@@ -709,7 +709,7 @@ fn insert_faces_for_subs(
     tables: &Tables,
     net: &Network,
     source: usize,
-    subs: &HashSet<PeerId>,
+    subs: &HashSet<ZenohId>,
 ) {
     if net.trees.len() > source {
         for sub in subs {

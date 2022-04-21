@@ -22,7 +22,7 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::protocol;
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::proto::{tmsg, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 pub use manager::*;
@@ -79,7 +79,7 @@ stats_struct! {
 /*************************************/
 #[derive(Clone, Copy)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) peer: PeerId,
+    pub(crate) peer: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
@@ -101,7 +101,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_pid(&self) -> ZResult<PeerId> {
+    pub fn get_pid(&self) -> ZResult<ZenohId> {
         let transport = self.get_inner()?;
         Ok(transport.get_pid())
     }

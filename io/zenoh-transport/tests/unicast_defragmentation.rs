@@ -19,7 +19,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -36,8 +36,8 @@ macro_rules! ztimeout {
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()

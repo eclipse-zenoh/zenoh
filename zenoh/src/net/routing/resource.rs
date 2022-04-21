@@ -20,7 +20,7 @@ use std::sync::{Arc, Weak};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr;
-use zenoh_protocol_core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
+use zenoh_protocol_core::{KeyExpr, QueryableInfo, SubInfo, ZInt, ZenohId};
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
@@ -48,10 +48,10 @@ pub(super) struct SessionContext {
 }
 
 pub(super) struct ResourceContext {
-    pub(super) router_subs: HashSet<PeerId>,
-    pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
-    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
+    pub(super) router_subs: HashSet<ZenohId>,
+    pub(super) peer_subs: HashSet<ZenohId>,
+    pub(super) router_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
+    pub(super) peer_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -604,7 +604,7 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
 // }
 
 #[inline]
-pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [PeerId]) -> &'a PeerId {
+pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {
     if routers.len() == 1 {
         &routers[0]
     } else {

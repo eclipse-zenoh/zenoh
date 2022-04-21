@@ -14,7 +14,7 @@
 use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
-use super::{PeerId, WBuf, ZBuf, ZInt};
+use super::{WBuf, ZBuf, ZInt, ZenohId};
 use crate::unicast::establishment::Cookie;
 use async_std::sync::Mutex;
 use async_trait::async_trait;
@@ -172,7 +172,7 @@ impl ZPubKey for ZBufReader<'_> {
 struct InnerState {
     prng: PseudoRng,
     known_keys: Option<Vec<RsaPublicKey>>,
-    authenticated: HashMap<PeerId, Option<RsaPublicKey>>,
+    authenticated: HashMap<ZenohId, Option<RsaPublicKey>>,
 }
 
 pub struct PubKeyAuthenticator {
@@ -298,7 +298,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     async fn get_init_syn_properties(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: MULTILINK_VERSION,
@@ -429,7 +429,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -565,7 +565,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         }
     }
 
-    async fn handle_close(&self, peer_id: &PeerId) {
+    async fn handle_close(&self, peer_id: &ZenohId) {
         zasynclock!(self.state).authenticated.remove(peer_id);
     }
 }

@@ -62,16 +62,16 @@ pub struct Property {
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
-pub struct PeerId {
+pub struct ZenohId {
     size: usize,
-    id: [u8; PeerId::MAX_SIZE],
+    id: [u8; ZenohId::MAX_SIZE],
 }
 
-impl PeerId {
+impl ZenohId {
     pub const MAX_SIZE: usize = 16;
 
-    pub fn new(size: usize, id: [u8; PeerId::MAX_SIZE]) -> PeerId {
-        PeerId { size, id }
+    pub fn new(size: usize, id: [u8; ZenohId::MAX_SIZE]) -> ZenohId {
+        ZenohId { size, id }
     }
 
     #[inline]
@@ -84,22 +84,22 @@ impl PeerId {
         &self.id[..self.size]
     }
 
-    pub fn rand() -> PeerId {
-        PeerId::from(Uuid::new_v4())
+    pub fn rand() -> ZenohId {
+        ZenohId::from(Uuid::new_v4())
     }
 }
 
-impl From<uuid::Uuid> for PeerId {
+impl From<uuid::Uuid> for ZenohId {
     #[inline]
     fn from(uuid: uuid::Uuid) -> Self {
-        PeerId {
+        ZenohId {
             size: 16,
             id: *uuid.as_bytes(),
         }
     }
 }
 
-impl FromStr for PeerId {
+impl FromStr for ZenohId {
     type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -107,43 +107,47 @@ impl FromStr for PeerId {
         let s = s.replace('-', "");
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
         let size = vec.len();
-        if size > PeerId::MAX_SIZE {
-            bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
+        if size > ZenohId::MAX_SIZE {
+            bail!(
+                "Invalid id size: {} ({} bytes max)",
+                size,
+                ZenohId::MAX_SIZE
+            )
         }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         id[..size].copy_from_slice(vec.as_slice());
-        Ok(PeerId::new(size, id))
+        Ok(ZenohId::new(size, id))
     }
 }
 
-impl PartialEq for PeerId {
+impl PartialEq for ZenohId {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.size == other.size && self.as_slice() == other.as_slice()
     }
 }
 
-impl Hash for PeerId {
+impl Hash for ZenohId {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state);
     }
 }
 
-impl fmt::Debug for PeerId {
+impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", hex::encode_upper(self.as_slice()))
     }
 }
 
-impl fmt::Display for PeerId {
+impl fmt::Display for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
 // A PeerID can be converted into a Timestamp's ID
-impl From<&PeerId> for uhlc::ID {
-    fn from(pid: &PeerId) -> Self {
+impl From<&ZenohId> for uhlc::ID {
+    fn from(pid: &ZenohId) -> Self {
         uhlc::ID::new(pid.size, pid.id)
     }
 }

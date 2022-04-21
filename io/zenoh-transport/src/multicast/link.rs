@@ -31,12 +31,12 @@ use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zerror, zlock};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::proto::{MessageReader, TransportMessage};
-use zenoh_protocol_core::{ConduitSn, ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use zenoh_protocol_core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) version: u8,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) keep_alive: Duration,

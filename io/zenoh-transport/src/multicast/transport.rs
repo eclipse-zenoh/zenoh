@@ -26,7 +26,7 @@ use std::time::Duration;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::{bail, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkMulticast, Locator};
-use zenoh_protocol::core::{ConduitSnList, PeerId, Priority, WhatAmI, ZInt};
+use zenoh_protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 
 /*************************************/
@@ -36,7 +36,7 @@ use zenoh_protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 pub(super) struct TransportMulticastPeer {
     pub(super) version: u8,
     pub(super) locator: Locator,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) lease: Duration,

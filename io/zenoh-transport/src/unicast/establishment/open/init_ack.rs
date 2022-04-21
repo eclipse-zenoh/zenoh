@@ -20,7 +20,7 @@ use crate::unicast::establishment::{
 use crate::TransportManager;
 use zenoh_core::{zasyncread, zerror};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::io::ZSlice;
 use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
 
@@ -28,7 +28,7 @@ use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
 /*              OPEN                 */
 /*************************************/
 pub(super) struct Output {
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,

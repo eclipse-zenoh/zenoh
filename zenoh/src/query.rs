@@ -116,7 +116,7 @@ pub struct Reply {
     /// The result of this Reply.
     pub sample: Result<Sample, Value>,
     /// The id of the zenoh instance that answered this Reply.
-    pub replier_id: PeerId,
+    pub replier_id: ZenohId,
 }
 
 #[derive(Clone, Debug)]

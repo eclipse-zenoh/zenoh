@@ -19,14 +19,14 @@ use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, PeerId, QueryTAK, QueryableInfo,
-    SubInfo, WhatAmI, ZInt,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo, SubInfo,
+    WhatAmI, ZInt, ZenohId,
 };
 use zenoh_transport::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
@@ -43,7 +43,7 @@ pub struct FaceState {
 impl FaceState {
     pub(super) fn new(
         id: usize,
-        pid: PeerId,
+        pid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
@@ -86,7 +86,7 @@ impl FaceState {
         &self,
         tables: &Tables,
         routing_context: Option<RoutingContext>,
-    ) -> Option<PeerId> {
+    ) -> Option<ZenohId> {
         match routing_context {
             Some(routing_context) => {
                 match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
@@ -120,7 +120,7 @@ impl FaceState {
         &self,
         tables: &Tables,
         routing_context: Option<RoutingContext>,
-    ) -> Option<PeerId> {
+    ) -> Option<ZenohId> {
         match routing_context {
             Some(routing_context) => {
                 match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
@@ -370,7 +370,7 @@ impl Primitives for Face {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,

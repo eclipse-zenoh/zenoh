@@ -30,7 +30,7 @@ use zenoh_protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, WBufCodec, ZBuf, ZBufCodec,
     ZSlice,
 };
-use zenoh_protocol_core::{PeerId, ZInt};
+use zenoh_protocol_core::{ZInt, ZenohId};
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;
@@ -198,7 +198,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn get_init_syn_properties(
         &self,
         _link: &AuthenticatedPeerLink,
-        _peer_id: &PeerId,
+        _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
@@ -273,7 +273,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_init_ack(
         &self,
         link: &AuthenticatedPeerLink,
-        peer_id: &PeerId,
+        peer_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -366,7 +366,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
     async fn handle_link_err(&self, _link: &AuthenticatedPeerLink) {}
 
-    async fn handle_close(&self, _peer_id: &PeerId) {}
+    async fn handle_close(&self, _peer_id: &ZenohId) {}
 }
 
 impl From<Arc<SharedMemoryAuthenticator>> for PeerAuthenticator {

@@ -59,7 +59,7 @@ pub use zenoh_protocol_core::Locator;
 pub use zenoh_protocol_core::{Encoding, KnownEncoding};
 
 /// The global unique id of a zenoh peer.
-pub use zenoh_protocol_core::PeerId;
+pub use zenoh_protocol_core::ZenohId;
 
 /// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
 pub use zenoh_protocol_core::ExprId;
@@ -429,12 +429,12 @@ impl TryFrom<Value> for Properties {
 /// Informations on the source of a zenoh [`Sample`].
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
-    /// The [`PeerId`] of the zenoh instance that published the concerned [`Sample`].
-    pub source_id: Option<PeerId>,
+    /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
+    pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<ZInt>,
-    /// The [`PeerId`] of the first zenoh router that routed this [`Sample`].
-    pub first_router_id: Option<PeerId>,
+    /// The [`ZenohId`] of the first zenoh router that routed this [`Sample`].
+    pub first_router_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the first zenoh router that routed it.
     pub first_router_sn: Option<ZInt>,
 }

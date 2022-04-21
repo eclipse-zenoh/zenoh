@@ -22,7 +22,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -42,12 +42,12 @@ macro_rules! ztimeout {
 
 // Transport Handler for the router
 struct SHPeer {
-    pid: PeerId,
+    pid: ZenohId,
     count: Arc<AtomicUsize>,
 }
 
 impl SHPeer {
-    fn new(pid: PeerId) -> Self {
+    fn new(pid: ZenohId) -> Self {
         Self {
             pid,
             count: Arc::new(AtomicUsize::new(0)),
@@ -135,8 +135,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-    let peer_id02 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+    let peer_id01 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let peer_id02 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new(peer_id01));
