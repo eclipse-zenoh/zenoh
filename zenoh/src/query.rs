@@ -159,7 +159,7 @@ zreceiver! {
     ///
     /// ### async
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// # use futures::prelude::*;
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
@@ -182,7 +182,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     /// use zenoh::query::*;

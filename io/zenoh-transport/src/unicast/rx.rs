@@ -19,8 +19,8 @@ use super::protocol::proto::{
     Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;
-use async_std::task;
 use std::sync::MutexGuard;
+use zenoh_async_rt::spawn;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
@@ -105,7 +105,7 @@ impl TransportUnicastInner {
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
-        task::spawn(async move {
+        spawn(async move {
             if link_only {
                 let _ = c_transport.del_link(&c_link).await;
             } else {

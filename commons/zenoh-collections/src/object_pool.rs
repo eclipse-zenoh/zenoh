@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::LifoQueue;
-use async_std::task;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Drop};
 use std::sync::{Arc, Weak};
+use zenoh_async_rt::block_on;
 
 /// Provides a pool of pre-allocated s that are automaticlaly reinserted into
 /// the pool when dropped.
@@ -109,7 +109,7 @@ impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                task::block_on(pool.push(obj));
+                block_on(pool.push(obj));
             }
         }
     }

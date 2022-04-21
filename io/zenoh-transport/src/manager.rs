@@ -31,6 +31,7 @@ use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, spawn};
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
 use zenoh_core::Result as ZResult;
@@ -319,7 +320,7 @@ impl TransportExecutor {
         for _ in 0..num_threads {
             let exec = executor.clone();
             let recv = receiver.clone();
-            std::thread::spawn(move || async_std::task::block_on(exec.run(recv.recv())));
+            std::thread::spawn(move || block_on(exec.run(recv.recv())));
         }
         Self { executor, sender }
     }
@@ -374,7 +375,7 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
-        async_std::task::spawn({
+        spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {

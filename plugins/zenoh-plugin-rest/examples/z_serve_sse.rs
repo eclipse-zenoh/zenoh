@@ -18,6 +18,7 @@ use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 use zenoh::queryable::EVAL;
+use zenoh_async_rt::{sleep, spawn};
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -32,7 +33,7 @@ if(typeof(EventSource) !== "undefined") {
 }
 </script>"#;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -47,7 +48,7 @@ async fn main() {
     println!("Creating Queryable on '{}'...", key);
     let mut queryable = session.queryable(key).kind(EVAL).await.unwrap();
 
-    async_std::task::spawn(
+    spawn(
         queryable
             .receiver()
             .clone()
@@ -80,7 +81,7 @@ async fn main() {
             .congestion_control(CongestionControl::Block)
             .await
             .unwrap();
-        async_std::task::sleep(std::time::Duration::new(1, 0)).await;
+        sleep(std::time::Duration::new(1, 0)).await;
     }
 }
 

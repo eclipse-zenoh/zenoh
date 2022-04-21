@@ -49,6 +49,7 @@ log = "0.4"
 
 [dev-dependencies]
 rand = "0.8.3"
+zenoh-async-rt = { version = "0.1.0", path = "../commons/zenoh-async-rt" }
 
 [build-dependencies]
 rustc_version = "0.4.0"

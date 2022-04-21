@@ -47,6 +47,7 @@ git-version = "0.3.4"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
 log = "0.4"
+zenoh-async-rt = { version = "0.1.0", path = "../commons/zenoh-async-rt" }
 
 [dev-dependencies]
 rand = "0.8.3"

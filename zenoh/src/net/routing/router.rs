@@ -17,13 +17,13 @@ pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
-use async_std::task::JoinHandle;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_async_rt::{sleep, spawn, JoinHandle};
 use zenoh_link::Link;
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_protocol_core::{PeerId, WhatAmI, ZInt};
@@ -217,9 +217,8 @@ impl Tables {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
-                    .await;
+            let task = Some(spawn(async move {
+                sleep(Duration::from_millis(*TREES_COMPUTATION_DELAY)).await;
                 let mut tables = zwrite!(tables_ref);
 
                 log::trace!("Compute trees");

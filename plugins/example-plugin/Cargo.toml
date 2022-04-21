@@ -39,3 +39,4 @@ zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait" }
 serde_json = "1.0"
+zenoh-async-rt = { version = "0.1.0", path = "../../commons/zenoh-async-rt" }

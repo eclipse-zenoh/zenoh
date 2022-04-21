@@ -20,7 +20,6 @@ use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{Config, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
-use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
@@ -29,6 +28,7 @@ use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
+use zenoh_async_rt::{spawn, JoinHandle};
 use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
@@ -192,7 +192,7 @@ impl Runtime {
             .read()
             .unwrap()
             .as_ref()
-            .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+            .map(|source| spawn(future.timeout_at(source.token())))
     }
 }
 

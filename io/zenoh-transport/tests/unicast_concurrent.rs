@@ -13,11 +13,11 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::sync::Barrier;
-use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep, spawn};
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
@@ -138,7 +138,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_pid02 = peer_id02;
     let c_end01 = endpoint01.clone();
     let c_end02 = endpoint02.clone();
-    let peer01_task = task::spawn(async move {
+    let peer01_task = spawn(async move {
         // Add the endpoints on the first peer
         for e in c_end01.iter() {
             let res = ztimeout!(peer01_manager.add_listener(e.clone()));
@@ -158,7 +158,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             let cc_barod = c_barod.clone();
             let c_p01m = peer01_manager.clone();
             let c_end = e.clone();
-            task::spawn(async move {
+            spawn(async move {
                 println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
@@ -223,7 +223,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Wait for the messages to arrive to the other side
         ztimeout!(async {
             while peer_sh02.get_count() != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
             }
         });
 
@@ -246,7 +246,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_pid01 = peer_id01;
     let c_end01 = endpoint01.clone();
     let c_end02 = endpoint02.clone();
-    let peer02_task = task::spawn(async move {
+    let peer02_task = spawn(async move {
         // Add the endpoints on the first peer
         for e in c_end02.iter() {
             let res = ztimeout!(peer02_manager.add_listener(e.clone()));
@@ -266,7 +266,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             let cc_barod = c_barod.clone();
             let c_p02m = peer02_manager.clone();
             let c_end = e.clone();
-            task::spawn(async move {
+            spawn(async move {
                 println!("[Transport Peer 02c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
@@ -335,7 +335,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Wait for the messages to arrive to the other side
         ztimeout!(async {
             while peer_sh01.get_count() != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
             }
         });
 
@@ -356,13 +356,13 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     println!("[Transport Current 02] => ...Stopped");
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_concurrent() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -387,7 +387,7 @@ fn transport_tcp_concurrent() {
         "tcp/127.0.0.1:7462".parse().unwrap(),
     ];
 
-    task::block_on(async {
+    block_on(async {
         transport_concurrent(endpoint01, endpoint02).await;
     });
 }
@@ -395,7 +395,7 @@ fn transport_tcp_concurrent() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_concurrent() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -420,7 +420,7 @@ fn transport_ws_concurrent() {
         "ws/127.0.0.1:7478".parse().unwrap(),
     ];
 
-    task::block_on(async {
+    block_on(async {
         transport_concurrent(endpoint01, endpoint02).await;
     });
 }

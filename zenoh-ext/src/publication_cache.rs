@@ -12,20 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::pin::Pin;
-use async_std::task;
-use async_std::task::{Context, Poll};
 use futures::select;
 use futures::FutureExt;
 use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use zenoh::prelude::*;
 use zenoh::queryable::Queryable;
 use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
+use zenoh_async_rt::spawn;
 use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 
@@ -139,7 +139,7 @@ impl<'a> PublicationCache<'a> {
         let history = conf.history;
 
         let (stoptx, mut stoprx) = bounded::<bool>(1);
-        task::spawn(async move {
+        spawn(async move {
             let mut cache: HashMap<String, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
             let limit = resources_limit.unwrap_or(usize::MAX);

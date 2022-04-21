@@ -17,11 +17,11 @@
 #[cfg(target_os = "macos")]
 mod tests {
     use async_std::prelude::FutureExt;
-    use async_std::task;
     use std::any::Any;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
+    use zenoh_async_rt::{block_on, sleep};
     use zenoh_cfg_properties::config::*;
     use zenoh_core::zasync_executor_init;
     use zenoh_core::Result as ZResult;
@@ -177,7 +177,7 @@ mod tests {
             .unwrap();
         ztimeout!(async {
             while peer01_transport.get_peers().unwrap().is_empty() {
-                task::sleep(SLEEP_COUNT).await;
+                sleep(SLEEP_COUNT).await;
             }
         });
 
@@ -186,7 +186,7 @@ mod tests {
             .unwrap();
         ztimeout!(async {
             while peer02_transport.get_peers().unwrap().is_empty() {
-                task::sleep(SLEEP_COUNT).await;
+                sleep(SLEEP_COUNT).await;
             }
         });
 
@@ -221,7 +221,7 @@ mod tests {
         assert!(peer02.manager.get_transports_multicast().is_empty());
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
     }
 
     async fn test_transport(
@@ -260,21 +260,21 @@ mod tests {
             Reliability::Reliable => {
                 ztimeout!(async {
                     while peer02.handler.get_count() != MSG_COUNT {
-                        task::sleep(SLEEP_COUNT).await;
+                        sleep(SLEEP_COUNT).await;
                     }
                 });
             }
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while peer02.handler.get_count() == 0 {
-                        task::sleep(SLEEP_COUNT).await;
+                        sleep(SLEEP_COUNT).await;
                     }
                 });
             }
         };
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
     }
 
     async fn run_single(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
@@ -307,7 +307,7 @@ mod tests {
     fn transport_multicast_udp_only() {
         env_logger::init();
 
-        task::block_on(async {
+        block_on(async {
             zasync_executor_init!();
         });
 
@@ -334,6 +334,6 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
+        block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
     }
 }

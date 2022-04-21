@@ -79,13 +79,15 @@ zreceiver! {
     ///
     /// Examples:
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # use zenoh_async_rt::spawn;
+    /// # use zenoh_async_rt::sleep;
+    /// # zenoh_async_rt::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     /// let session = zenoh::open(config::peer()).await.unwrap();
     ///
     /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// let task1 = async_std::task::spawn({
+    /// let task1 = spawn({
     ///     let mut receiver = subscriber.receiver().clone();
     ///     async move {
     ///         while let Some(sample) = receiver.next().await {
@@ -93,7 +95,7 @@ zreceiver! {
     ///         }
     ///     }
     /// });
-    /// let task2 = async_std::task::spawn({
+    /// let task2 = spawn({
     ///     let mut receiver = subscriber.receiver().clone();
     ///     async move {
     ///         while let Some(sample) = receiver.next().await {
@@ -102,7 +104,7 @@ zreceiver! {
     ///     }
     /// });
     ///
-    /// async_std::task::sleep(std::time::Duration::from_secs(1)).await;
+    /// sleep(std::time::Duration::from_secs(1)).await;
     /// subscriber.close().await.unwrap();
     /// futures::join!(task1, task2);
     /// # })
@@ -138,7 +140,7 @@ zreceiver! {
     ///
     /// ### async
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// # use futures::prelude::*;
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
@@ -168,7 +170,8 @@ impl Subscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # use zenoh_async_rt::spawn;
+    /// # zenoh_async_rt::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     /// use zenoh::subscriber::SubMode;
@@ -176,7 +179,7 @@ impl Subscriber<'_> {
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut subscriber = session.subscribe("/key/expression")
     ///                             .mode(SubMode::Pull).await.unwrap();
-    /// async_std::task::spawn(subscriber.receiver().clone().for_each(
+    /// spawn(subscriber.receiver().clone().for_each(
     ///     move |sample| async move { println!("Received : {:?}", sample); }
     /// ));
     /// subscriber.pull();
@@ -194,7 +197,7 @@ impl Subscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -238,7 +241,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     /// use zenoh::subscriber::SubMode;
     ///
@@ -261,7 +264,7 @@ impl CallbackSubscriber<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -301,7 +304,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -451,7 +454,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();

@@ -33,7 +33,7 @@
 //! ```
 //! use zenoh::prelude::*;
 //!
-//! #[async_std::main]
+//! #[zenoh_async_rt::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
 //!     session.put("/key/expression", "value").await.unwrap();
@@ -47,7 +47,7 @@
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;
 //!
-//! #[async_std::main]
+//! #[zenoh_async_rt::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
@@ -64,7 +64,7 @@
 //! use futures::prelude::*;
 //! use zenoh::prelude::*;
 //!
-//! #[async_std::main]
+//! #[zenoh_async_rt::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
 //!     let mut replies = session.get("/key/expression").await.unwrap();
@@ -91,6 +91,7 @@ use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use sync::{zready, ZFuture};
+use zenoh_async_rt::spawn;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zerror, Result as ZResult};
 use zenoh_sync::zpinbox;
@@ -196,7 +197,7 @@ pub mod properties {
 /// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// #[async_std::main]
+/// #[zenoh_async_rt::main]
 /// async fn main() {
 ///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).await.unwrap();
 ///     while let Some(hello) = receiver.next().await {
@@ -262,7 +263,7 @@ pub mod scouting {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # zenoh_async_rt::block_on(async {
 /// use futures::prelude::*;
 /// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
@@ -319,7 +320,7 @@ where
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
-            async_std::task::spawn(async move {
+            spawn(async move {
                 let hello_sender = &hello_sender;
                 let mut stop_receiver = stop_receiver.stream();
                 let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
@@ -349,7 +350,7 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # zenoh_async_rt::block_on(async {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -357,7 +358,7 @@ where
 /// ```
 ///
 /// ```
-/// # async_std::task::block_on(async {
+/// # zenoh_async_rt::block_on(async {
 /// use zenoh::prelude::*;
 ///
 /// let mut config = config::peer();

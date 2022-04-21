@@ -48,3 +48,4 @@ async-trait = "0.1.42"
 log = "0.4"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 url = "2.2.2"
+zenoh-async-rt = { version = "0.1.0", path = "../../../commons/zenoh-async-rt" }

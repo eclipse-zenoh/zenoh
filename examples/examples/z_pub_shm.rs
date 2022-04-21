@@ -11,16 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
+use zenoh_async_rt::{block_on, sleep, spawn, spawn_blocking, JoinHandle};
 
 const N: usize = 10;
 const K: u32 = 3;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initiate logging
     env_logger::init();

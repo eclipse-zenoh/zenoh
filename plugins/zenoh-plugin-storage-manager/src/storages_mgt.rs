@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::task;
 use futures::select;
 use futures::stream::StreamExt;
 use futures::FutureExt;
@@ -22,6 +21,7 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, Target};
 use zenoh::queryable;
 use zenoh::Session;
+use zenoh_async_rt::spawn;
 use zenoh_backend_traits::Query;
 use zenoh_core::Result as ZResult;
 
@@ -41,7 +41,7 @@ pub(crate) async fn start_storage(
     debug!("Start storage {} on {}", admin_key, key_expr);
 
     let (tx, rx) = bounded(1);
-    task::spawn(async move {
+    spawn(async move {
         // subscribe on key_expr
         let mut storage_sub = match zenoh.subscribe(&key_expr).await {
             Ok(storage_sub) => storage_sub,

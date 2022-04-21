@@ -13,8 +13,6 @@
 //
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
-use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -23,6 +21,7 @@ use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use zenoh_async_rt::{sleep, spawn, JoinHandle};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
@@ -263,7 +262,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
-        let handle = task::spawn(async move {
+        let handle = spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
@@ -397,7 +396,7 @@ async fn accept_task(
                 //       Linux systems this limit can be changed by using the "ulimit" command line
                 //       tool. In case of systemd-based systems, this can be changed by using the
                 //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
                 continue;
             }
         };

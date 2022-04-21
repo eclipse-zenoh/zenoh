@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,6 +11,8 @@ use std::collections::HashMap;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::HashMap;
+
 #[allow(unused_imports)]
 use std::sync::Arc;
 

@@ -16,13 +16,13 @@ use super::conduit::{TransportChannelTx, TransportConduitTx};
 use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
-use async_std::task;
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_async_rt::sleep;
 use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 use zenoh_sync::{Condition as AsyncCondvar, ConditionWaiter as AsyncCondvarWaiter};
@@ -505,7 +505,7 @@ impl TransmissionPipeline {
 
             // Batch is being filled up, let's backoff and retry
             bytes_in_pre = bytes_in_now;
-            task::sleep(backoff).await;
+            sleep(backoff).await;
             backoff = 2 * backoff;
         }
     }
@@ -566,7 +566,7 @@ impl TransmissionPipeline {
                 }
                 Action::Sleep => {
                     // Batches are being filled up, let's backoff and retry
-                    task::sleep(backoff).await;
+                    sleep(backoff).await;
                     backoff = 2 * backoff;
                 }
             }
@@ -637,11 +637,11 @@ impl fmt::Debug for TransmissionPipeline {
 mod tests {
     use super::*;
     use async_std::prelude::FutureExt;
-    use async_std::task;
     use std::convert::TryFrom;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use zenoh_async_rt::{block_on, sleep, spawn, spawn_blocking};
     use zenoh_buffers::reader::HasReader;
     use zenoh_protocol::io::ZBuf;
     use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
@@ -754,7 +754,7 @@ mod tests {
         // Payload size of the messages
         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-        task::block_on(async {
+        block_on(async {
             for ps in payload_sizes.iter() {
                 if ZInt::try_from(*ps).is_err() {
                     break;
@@ -764,13 +764,13 @@ mod tests {
                 let num_msg = max_msgs.min(bytes / ps);
 
                 let c_queue = queue.clone();
-                let t_c = task::spawn(async move {
+                let t_c = spawn(async move {
                     consume(c_queue, num_msg).await;
                 });
 
                 let c_queue = queue.clone();
                 let c_ps = *ps;
-                let t_s = task::spawn(async move {
+                let t_s = spawn(async move {
                     schedule(c_queue, num_msg, c_ps);
                 });
 
@@ -843,17 +843,17 @@ mod tests {
 
         let c_queue = queue.clone();
         let c_counter = counter.clone();
-        let h1 = task::spawn_blocking(move || {
+        let h1 = spawn_blocking(move || {
             schedule(c_queue, c_counter, 1);
         });
 
         let c_queue = queue.clone();
         let c_counter = counter.clone();
-        let h2 = task::spawn_blocking(move || {
+        let h2 = spawn_blocking(move || {
             schedule(c_queue, c_counter, 2);
         });
 
-        task::block_on(async {
+        block_on(async {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
@@ -861,13 +861,13 @@ mod tests {
             );
             let check = async {
                 while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
-                    task::sleep(SLEEP).await;
+                    sleep(SLEEP).await;
                 }
             };
             check.timeout(TIMEOUT).await.unwrap();
 
             // Disable and drain the queue
-            task::spawn_blocking(move || {
+            spawn_blocking(move || {
                 println!("Pipeline Blocking [---]: disabling the queue");
                 queue.disable();
                 println!("Pipeline Blocking [---]: draining the queue");
@@ -946,7 +946,7 @@ mod tests {
         schedule(c_queue, c_counter);
 
         let c_queue = queue.clone();
-        let h1 = task::spawn(async move {
+        let h1 = spawn(async move {
             loop {
                 if c_queue.pull().await.is_none() {
                     println!("Pipeline Blocking [---]: pull unblocked");
@@ -955,7 +955,7 @@ mod tests {
             }
         });
 
-        task::block_on(async {
+        block_on(async {
             // Wait to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
@@ -963,13 +963,13 @@ mod tests {
             );
             let check = async {
                 while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
-                    task::sleep(SLEEP).await;
+                    sleep(SLEEP).await;
                 }
             };
             check.timeout(TIMEOUT).await.unwrap();
 
             // Disable and drain the queue
-            task::spawn_blocking(move || {
+            spawn_blocking(move || {
                 println!("Pipeline Blocking [---]: disabling the queue");
                 queue.disable();
                 println!("Pipeline Blocking [---]: draining the queue");
@@ -997,7 +997,7 @@ mod tests {
 
         let c_pipeline = pipeline.clone();
         let c_size = size.clone();
-        task::spawn(async move {
+        spawn(async move {
             loop {
                 let payload_sizes: [usize; 16] = [
                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
@@ -1041,16 +1041,16 @@ mod tests {
 
         let c_pipeline = pipeline;
         let c_count = count.clone();
-        task::spawn(async move {
+        spawn(async move {
             loop {
                 let (batch, priority) = c_pipeline.pull().await.unwrap();
                 c_count.fetch_add(batch.len(), Ordering::AcqRel);
-                task::sleep(Duration::from_nanos(100)).await;
+                sleep(Duration::from_nanos(100)).await;
                 c_pipeline.refill(batch, priority);
             }
         });
 
-        task::block_on(async {
+        block_on(async {
             let mut prev_size: usize = usize::MAX;
             loop {
                 let received = count.swap(0, Ordering::AcqRel);
@@ -1060,7 +1060,7 @@ mod tests {
                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
                 }
                 prev_size = current;
-                task::sleep(Duration::from_millis(500)).await;
+                sleep(Duration::from_millis(500)).await;
             }
         });
     }

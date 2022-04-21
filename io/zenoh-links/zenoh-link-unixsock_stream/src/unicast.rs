@@ -15,8 +15,6 @@ use super::UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::PathBuf;
 use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
@@ -29,6 +27,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uuid::Uuid;
+use zenoh_async_rt::{sleep, spawn, JoinHandle};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
@@ -376,7 +375,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_path = local_path_str.to_owned();
-        let handle = task::spawn(async move {
+        let handle = spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_path);
@@ -500,7 +499,7 @@ async fn accept_task(
                 //       Linux systems this limit can be changed by using the "ulimit" command line
                 //       tool. In case of systemd-based systems, this can be changed by using the
                 //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
+                sleep(Duration::from_micros(*UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME)).await;
                 continue;
             }
         };

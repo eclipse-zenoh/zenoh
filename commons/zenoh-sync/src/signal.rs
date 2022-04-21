@@ -69,26 +69,26 @@ impl Default for Signal {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::task;
     use std::time::Duration;
+    use zenoh_async_rt::{sleep, spawn, timeout};
 
-    #[async_std::test]
+    #[zenoh_async_rt::test]
     async fn signal_test() {
         let signal = Signal::new();
 
         // spawn publisher
-        let r#pub = task::spawn({
+        let r#pub = spawn({
             let signal = signal.clone();
 
             async move {
-                task::sleep(Duration::from_millis(200)).await;
+                sleep(Duration::from_millis(200)).await;
                 signal.trigger();
                 signal.trigger(); // second trigger should not break
             }
         });
 
         // spawn subscriber that waits immediately
-        let fast_sub = task::spawn({
+        let fast_sub = spawn({
             let signal = signal.clone();
 
             async move {
@@ -97,17 +97,17 @@ mod tests {
         });
 
         // spawn subscriber that waits after the publisher triggers the signal
-        let slow_sub = task::spawn({
+        let slow_sub = spawn({
             let signal = signal.clone();
 
             async move {
-                task::sleep(Duration::from_millis(400)).await;
+                sleep(Duration::from_millis(400)).await;
                 signal.wait().await;
             }
         });
 
         // check that the slow subscriber does not half
-        let result = async_std::future::timeout(
+        let result = timeout(
             Duration::from_millis(50000),
             futures::future::join3(r#pub, fast_sub, slow_sub),
         )

@@ -18,7 +18,7 @@ use zenoh::prelude::*;
 use zenoh::query::*;
 use zenoh::queryable;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() {
     // initiate logging
     env_logger::init();

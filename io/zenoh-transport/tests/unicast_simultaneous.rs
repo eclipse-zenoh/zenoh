@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use async_std::task;
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep, spawn};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
@@ -190,7 +190,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
 
     // Peer01
     let c_p01m = peer01_manager.clone();
-    let peer01_task = task::spawn(async move {
+    let peer01_task = spawn(async move {
         // Open the transport with the second peer
         // These open should succeed
         for e in c_ep02.iter() {
@@ -205,12 +205,12 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
             assert!(res.is_err());
         }
 
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
 
         let tp02 = ztimeout!(async {
             let mut tp02 = None;
             while tp02.is_none() {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 println!(
                     "[Simultaneous 01e] => Transports: {:?}",
                     peer01_manager.get_transports()
@@ -226,7 +226,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
             let expected = endpoint01.len() + c_ep02.len();
             let mut tl02 = vec![];
             while tl02.len() != expected {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 tl02 = tp02.get_links().unwrap();
                 println!("[Simultaneous 01f] => Links {}/{}", tl02.len(), expected);
             }
@@ -236,7 +236,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
         ztimeout!(async {
             let mut check = 0;
             while check != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 check = peer_sh01.get_count();
                 println!("[Simultaneous 01g] => Received {:?}/{:?}", check, MSG_COUNT);
             }
@@ -245,7 +245,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
 
     // Peer02
     let c_p02m = peer02_manager.clone();
-    let peer02_task = task::spawn(async move {
+    let peer02_task = spawn(async move {
         // Open the transport with the first peer
         // These open should succeed
         for e in c_ep01.iter() {
@@ -261,12 +261,12 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
         }
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
 
         let tp01 = ztimeout!(async {
             let mut tp01 = None;
             while tp01.is_none() {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 println!(
                     "[Simultaneous 02e] => Transports: {:?}",
                     peer02_manager.get_transports()
@@ -281,7 +281,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
             let expected = c_ep01.len() + endpoint02.len();
             let mut tl01 = vec![];
             while tl01.len() != expected {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 tl01 = tp01.get_links().unwrap();
                 println!("[Simultaneous 02f] => Links {}/{}", tl01.len(), expected);
             }
@@ -291,7 +291,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
         ztimeout!(async {
             let mut check = 0;
             while check != MSG_COUNT {
-                task::sleep(SLEEP).await;
+                sleep(SLEEP).await;
                 check = peer_sh02.get_count();
                 println!("[Simultaneous 02g] => Received {:?}/{:?}", check, MSG_COUNT);
             }
@@ -303,13 +303,13 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     println!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_simultaneous() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -328,7 +328,7 @@ fn transport_tcp_simultaneous() {
         "tcp/127.0.0.1:15456".parse().unwrap(),
     ];
 
-    task::block_on(async {
+    block_on(async {
         transport_simultaneous(endpoint01, endpoint02).await;
     });
 }
@@ -336,7 +336,7 @@ fn transport_tcp_simultaneous() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_simultaneous() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -355,7 +355,7 @@ fn transport_ws_simultaneous() {
         "ws/127.0.0.1:16456".parse().unwrap(),
     ];
 
-    task::block_on(async {
+    block_on(async {
         transport_simultaneous(endpoint01, endpoint02).await;
     });
 }

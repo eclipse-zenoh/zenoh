@@ -16,6 +16,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
+use zenoh_async_rt::sleep;
 use zenoh_link::Locator;
 use zenoh_protocol::core::{PeerId, WhatAmI, ZInt};
 use zenoh_protocol::proto::{LinkState, ZenohMessage};
@@ -480,7 +481,7 @@ impl Network {
                         let locators = locators.clone();
                         self.runtime.spawn(async move {
                             // random backoff
-                            async_std::task::sleep(std::time::Duration::from_millis(
+                            sleep(std::time::Duration::from_millis(
                                 rand::random::<u64>() % 100,
                             ))
                             .await;

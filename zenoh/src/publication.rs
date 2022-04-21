@@ -35,7 +35,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     /// use zenoh::publication::CongestionControl;
     ///
@@ -165,7 +165,7 @@ use zenoh_core::zresult::Error;
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # zenoh_async_rt::block_on(async {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
@@ -178,7 +178,7 @@ use zenoh_core::zresult::Error;
 /// `Publisher` implements the `Sink` trait which is useful to forward
 /// streams to zenoh.
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # zenoh_async_rt::block_on(async {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
@@ -194,7 +194,7 @@ impl Publisher<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
@@ -246,7 +246,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     /// use zenoh::publication::CongestionControl;
     ///

@@ -13,16 +13,15 @@
 //
 use async_std::prelude::*;
 use async_std::sync::Mutex;
-use async_std::task;
 use async_trait::async_trait;
 use flume::{bounded, Receiver, RecvError, Sender};
-use std::sync::{Arc, Weak};
-use zenoh_core::zconfigurable;
-
 use std::cmp::Ordering as ComparisonOrdering;
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
+use zenoh_async_rt::{block_on, sleep, spawn, spawn_blocking};
+use zenoh_core::zconfigurable;
 
 zconfigurable! {
     static ref TIMER_EVENTS_CHANNEL_SIZE: usize = 1;
@@ -128,7 +127,7 @@ async fn timer_task(
                     let next = next.clone();
                     let now = Instant::now();
                     if next.when > now {
-                        task::sleep(next.when - now).await;
+                        sleep(next.when - now).await;
                     }
                     Ok((false, next))
                 };
@@ -187,7 +186,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new(spawn_blocking: bool) -> Timer {
+    pub fn new(blocking: bool) -> Timer {
         // Create the channels
         let (ev_sender, ev_receiver) = bounded::<(bool, TimedEvent)>(*TIMER_EVENTS_CHANNEL_SIZE);
         let (sl_sender, sl_receiver) = bounded::<()>(1);
@@ -208,17 +207,17 @@ impl Timer {
                 .await;
             log::trace!("A - Timer task no longer running...");
         };
-        if spawn_blocking {
-            task::spawn_blocking(|| task::block_on(fut));
+        if blocking {
+            spawn_blocking(|| block_on(fut));
         } else {
-            task::spawn(fut);
+            spawn(fut);
         }
 
         // Return the timer object
         timer
     }
 
-    pub fn start(&mut self, spawn_blocking: bool) {
+    pub fn start(&mut self, blocking: bool) {
         if self.sl_sender.is_none() {
             // Create the channels
             let (ev_sender, ev_receiver) =
@@ -238,10 +237,10 @@ impl Timer {
                     .await;
                 log::trace!("A - Timer task no longer running...");
             };
-            if spawn_blocking {
-                task::spawn_blocking(|| task::block_on(fut));
+            if blocking {
+                spawn_blocking(|| block_on(fut));
             } else {
-                task::spawn(fut);
+                spawn(fut);
             }
         }
     }
@@ -298,11 +297,11 @@ mod tests {
     #[test]
     fn timer() {
         use super::{Timed, TimedEvent, Timer};
-        use async_std::task;
         use async_trait::async_trait;
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
         use std::time::{Duration, Instant};
+        use zenoh_async_rt::{block_on, sleep};
 
         #[derive(Clone)]
         struct MyEvent {
@@ -341,7 +340,7 @@ mod tests {
             timer.add_async(event).await;
 
             // Wait for the event to occur
-            task::sleep(3 * interval).await;
+            sleep(3 * interval).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -360,7 +359,7 @@ mod tests {
             handle.defuse();
 
             // Wait for the event to occur
-            task::sleep(3 * interval).await;
+            sleep(3 * interval).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -382,7 +381,7 @@ mod tests {
             timer.add_async(event).await;
 
             // Wait for the events to occur
-            task::sleep(to_elapse + interval).await;
+            sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -393,7 +392,7 @@ mod tests {
             handle.defuse();
 
             // Wait a bit more to verify that not more events have been fired
-            task::sleep(to_elapse).await;
+            sleep(to_elapse).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -408,7 +407,7 @@ mod tests {
             timer.add_async(event).await;
 
             // Wait for the events to occur
-            task::sleep(to_elapse + interval).await;
+            sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -418,7 +417,7 @@ mod tests {
             timer.stop_async().await;
 
             // Wait some time
-            task::sleep(to_elapse).await;
+            sleep(to_elapse).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
@@ -428,13 +427,13 @@ mod tests {
             timer.start_async(false).await;
 
             // Wait for the events to occur
-            task::sleep(to_elapse).await;
+            sleep(to_elapse).await;
 
             // Load and reset the counter value
             let value = counter.swap(0, Ordering::SeqCst);
             assert_eq!(value, amount);
         }
 
-        task::block_on(run());
+        block_on(run());
     }
 }

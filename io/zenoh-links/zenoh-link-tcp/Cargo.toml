@@ -41,3 +41,4 @@ zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 async-std = { version = "=1.11.0", default-features = false }
 async-trait = "0.1.42"
 log = "0.4"
+zenoh-async-rt = { version = "0.1.0", path = "../../../commons/zenoh-async-rt" }

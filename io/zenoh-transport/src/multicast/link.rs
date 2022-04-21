@@ -18,11 +18,10 @@ use super::TransportMulticastStatsAtomic;
 use crate::common::batch::SerializationBatch;
 use crate::common::pipeline::TransmissionPipelineConf;
 use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use zenoh_async_rt::{sleep, spawn, JoinHandle};
 use zenoh_buffers::buffer::InsertBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{ZBuf, ZSlice};
@@ -103,7 +102,7 @@ impl TransportLinkMulticast {
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
-            let handle = task::spawn(async move {
+            let handle = spawn(async move {
                 let res = tx_task(
                     pipeline.clone(),
                     c_link.clone(),
@@ -118,7 +117,7 @@ impl TransportLinkMulticast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.delete().await });
+                    spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -139,7 +138,7 @@ impl TransportLinkMulticast {
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
-            let handle = task::spawn(async move {
+            let handle = spawn(async move {
                 // Start the consume task
                 let res = rx_task(
                     c_link.clone(),
@@ -153,7 +152,7 @@ impl TransportLinkMulticast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.delete().await });
+                    spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -216,7 +215,7 @@ async fn tx_task(
         let target = last_join + join_interval;
         if now < target {
             let left = target - now;
-            task::sleep(left).await;
+            sleep(left).await;
         }
         Action::Join
     }

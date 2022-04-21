@@ -144,13 +144,15 @@ zreceiver! {
     ///
     /// Examples:
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # use zenoh_async_rt::spawn;
+    /// # use zenoh_async_rt::sleep;
+    /// # zenoh_async_rt::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     /// let session = zenoh::open(config::peer()).await.unwrap();
     ///
     /// let mut queryable = session.queryable("/key/expression").wait().unwrap();
-    /// let task1 = async_std::task::spawn({
+    /// let task1 = spawn({
     ///     let mut receiver = queryable.receiver().clone();
     ///     async move {
     ///         while let Some(query) = receiver.next().await {
@@ -158,7 +160,7 @@ zreceiver! {
     ///         }
     ///     }
     /// });
-    /// let task2 = async_std::task::spawn({
+    /// let task2 = spawn({
     ///     let mut receiver = queryable.receiver().clone();
     ///     async move {
     ///         while let Some(query) = receiver.next().await {
@@ -167,7 +169,7 @@ zreceiver! {
     ///     }
     /// });
     ///
-    /// async_std::task::sleep(std::time::Duration::from_secs(1)).await;
+    /// sleep(std::time::Duration::from_secs(1)).await;
     /// queryable.close().await.unwrap();
     /// futures::join!(task1, task2);
     /// # })
@@ -202,7 +204,7 @@ zreceiver! {
     ///
     /// ### async
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// # use futures::prelude::*;
     /// # use zenoh::prelude::*;
     /// # let session = zenoh::open(config::peer()).await.unwrap();
@@ -235,7 +237,7 @@ impl Queryable<'_> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -339,7 +341,7 @@ derive_zfuture! {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # zenoh_async_rt::block_on(async {
     /// use futures::prelude::*;
     /// use zenoh::prelude::*;
     /// use zenoh::queryable;

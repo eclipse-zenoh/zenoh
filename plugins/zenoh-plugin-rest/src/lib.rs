@@ -25,6 +25,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
+use zenoh_async_rt::spawn;
 use zenoh_core::{zerror, Result as ZResult};
 
 mod config;
@@ -156,7 +157,7 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf.clone()));
+        spawn(run(runtime.clone(), conf.clone()));
         Ok(Box::new(RunningPlugin(conf)))
     }
 }
@@ -231,11 +232,11 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
                 let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
-                async_std::task::spawn(async move {
+                spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
                         key_expr,
-                        async_std::task::current().id()
+                        zenoh_async_rt::current().id()
                     );
                     let sender = &sender;
                     let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
@@ -251,7 +252,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 log::debug!(
                                     "SSE error ({})! Unsubscribe and terminate (task {})",
                                     e,
-                                    async_std::task::current().id()
+                                    zenoh_async_rt::current().id()
                                 );
                                 if let Err(e) = sub.close().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
@@ -261,7 +262,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                             Err(_) => {
                                 log::debug!(
                                     "SSE timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
+                                    zenoh_async_rt::current().id()
                                 );
                                 if let Err(e) = sub.close().await {
                                     log::error!("Error undeclaring subscriber: {}", e);

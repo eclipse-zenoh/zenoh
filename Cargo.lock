@@ -3468,6 +3468,7 @@ dependencies = [
  "uhlc",
  "uuid",
  "vec_map",
+ "zenoh-async-rt",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-collections",
@@ -3481,6 +3482,14 @@ dependencies = [
  "zenoh-sync",
  "zenoh-transport",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-async-rt"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "futures",
 ]
 
 [[package]]
@@ -3513,6 +3522,7 @@ dependencies = [
  "async-trait",
  "flume",
  "log",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-sync",
 ]
@@ -3568,6 +3578,7 @@ dependencies = [
  "rand 0.8.5",
  "rustc_version 0.4.0",
  "zenoh",
+ "zenoh-async-rt",
 ]
 
 [[package]]
@@ -3583,6 +3594,7 @@ dependencies = [
  "log",
  "serde",
  "zenoh",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-sync",
  "zenoh-util",
@@ -3635,6 +3647,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pemfile 0.3.0",
  "webpki 0.22.0",
+ "zenoh-async-rt",
  "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
@@ -3651,6 +3664,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "log",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3667,6 +3681,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "zenoh-async-rt",
  "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
@@ -3684,6 +3699,7 @@ dependencies = [
  "async-trait",
  "log",
  "socket2",
+ "zenoh-async-rt",
  "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
@@ -3702,6 +3718,7 @@ dependencies = [
  "log",
  "nix 0.23.1",
  "uuid",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3719,6 +3736,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "url",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3754,6 +3772,7 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",
@@ -3773,6 +3792,7 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
+ "zenoh-async-rt",
  "zenoh-collections",
  "zenoh-core",
  "zenoh-plugin-trait",
@@ -3829,6 +3849,7 @@ dependencies = [
  "flume",
  "futures",
  "tokio",
+ "zenoh-async-rt",
  "zenoh-core",
 ]
 
@@ -3847,6 +3868,7 @@ dependencies = [
  "rand 0.8.5",
  "rsa",
  "serde",
+ "zenoh-async-rt",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-collections",
@@ -3911,6 +3933,7 @@ dependencies = [
  "rand 0.8.5",
  "rustc_version 0.4.0",
  "zenoh",
+ "zenoh-async-rt",
 ]
 
 [[package]]
@@ -3945,6 +3968,7 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
+ "zenoh-async-rt",
  "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",

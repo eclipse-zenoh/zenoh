@@ -17,6 +17,7 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
+use zenoh_async_rt::{sleep, spawn};
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
@@ -29,7 +30,6 @@ use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, PeerId, WhatAmI};
 use zenoh_transport::TransportUnicast;
-
 const RCV_BUF_SIZE: usize = 65536;
 const SEND_BUF_INITIAL_SIZE: usize = 8;
 const SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
@@ -185,7 +185,7 @@ impl Runtime {
                 }
             }
         }
-        async_std::task::sleep(delay).await;
+        sleep(delay).await;
         Ok(())
     }
 
@@ -250,7 +250,7 @@ impl Runtime {
                             .await;
                         });
                     } else {
-                        async_std::task::spawn(async move {
+                        spawn(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
@@ -486,7 +486,7 @@ impl Runtime {
                 peer,
                 delay
             );
-            async_std::task::sleep(Duration::from_millis(delay)).await;
+            sleep(Duration::from_millis(delay)).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
             if delay > CONNECTION_RETRY_MAX_PERIOD {
                 delay = CONNECTION_RETRY_MAX_PERIOD;
@@ -533,7 +533,7 @@ impl Runtime {
                         );
                     }
                 }
-                async_std::task::sleep(Duration::from_millis(delay)).await;
+                sleep(Duration::from_millis(delay)).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
                     delay *= SCOUT_PERIOD_INCREASE_FACTOR;
                 }
@@ -638,7 +638,7 @@ impl Runtime {
             Ok(())
         };
         let timeout = async {
-            async_std::task::sleep(timeout).await;
+            sleep(timeout).await;
             bail!("timeout")
         };
         async_std::prelude::FutureExt::race(scout, timeout).await
@@ -756,7 +756,7 @@ impl Runtime {
                 session.runtime.spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
                     while runtime.start_client().await.is_err() {
-                        async_std::task::sleep(std::time::Duration::from_millis(delay)).await;
+                        sleep(std::time::Duration::from_millis(delay)).await;
                         delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
                         if delay > CONNECTION_RETRY_MAX_PERIOD {
                             delay = CONNECTION_RETRY_MAX_PERIOD;

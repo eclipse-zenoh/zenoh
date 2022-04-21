@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use async_std::task;
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep};
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::EndPoint;
@@ -167,7 +167,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                     assert_eq!(links.len(), links_num);
                     break;
                 }
-                None => task::sleep(SLEEP).await,
+                None => sleep(SLEEP).await,
             }
         }
     });
@@ -207,7 +207,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             if links.len() == links_num {
                 break;
             }
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -231,7 +231,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [3d1]");
     ztimeout!(async {
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
         let s = transports
@@ -264,7 +264,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             if index.is_none() {
                 break;
             }
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -291,7 +291,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     // Verify that the transport has been open on the router
     println!("Transport Open Close [5d1]");
     ztimeout!(async {
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
         let s = transports
@@ -317,7 +317,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [6c1]");
     ztimeout!(async {
-        task::sleep(SLEEP).await;
+        sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
         let s = transports
@@ -347,7 +347,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             if transports.is_empty() {
                 break;
             }
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -384,7 +384,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                     assert_eq!(links.len(), links_num);
                     break;
                 }
-                None => task::sleep(SLEEP).await,
+                None => sleep(SLEEP).await,
             }
         }
     });
@@ -408,7 +408,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             if transports.is_empty() {
                 break;
             }
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -421,58 +421,58 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
     ztimeout!(client02_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn openclose_tcp_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "tcp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn openclose_udp_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "udp/127.0.0.1:8447".parse().unwrap();
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn openclose_ws_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "ws/127.0.0.1:8448".parse().unwrap();
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn openclose_unix_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -480,7 +480,7 @@ fn openclose_unix_only() {
     let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-9.sock"
         .parse()
         .unwrap();
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
 }
@@ -490,7 +490,7 @@ fn openclose_unix_only() {
 fn openclose_tls_only() {
     use zenoh_link::tls::config::*;
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -579,7 +579,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
 
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -587,7 +587,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 fn openclose_quic_only() {
     use zenoh_link::quic::config::*;
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -677,5 +677,5 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
 
-    task::block_on(openclose_transport(&endpoint));
+    block_on(openclose_transport(&endpoint));
 }

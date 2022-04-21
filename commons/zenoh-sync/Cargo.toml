@@ -34,6 +34,4 @@ event-listener = "2.5.1"
 flume = "0.10.5"
 futures = "0.3.21"
 tokio = { version = "1.17.0", features = ["sync"] }
-
-[dev-dependencies]
-async-std = { version = "=1.11.0", features = ["unstable", "attributes"] }
+zenoh-async-rt = { path = "../zenoh-async-rt" }

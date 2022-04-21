@@ -40,6 +40,7 @@ zenoh = { path = "../zenoh" }
 zenoh-util = { path = "../commons/zenoh-util" }
 zenoh-sync = { path = "../commons/zenoh-sync" }
 zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-async-rt = { version = "0.1.0", path = "../commons/zenoh-async-rt" }
 
 [dev-dependencies]
 clap = "2.33.3"

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use async_std::task;
 #[cfg(feature = "auth_pubkey")]
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 use std::any::Any;
@@ -22,6 +21,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep};
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
@@ -369,7 +369,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -406,7 +406,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -447,7 +447,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -488,7 +488,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -501,7 +501,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -510,7 +510,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     ztimeout!(client01_spoof_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "auth_usrpwd")]
@@ -619,7 +619,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -672,7 +672,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -685,12 +685,12 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "shared-memory")]
@@ -752,7 +752,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -765,11 +765,11 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 async fn run(endpoint: &EndPoint) {
@@ -784,40 +784,40 @@ async fn run(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn authenticator_ws() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "ws/127.0.0.1:11449".parse().unwrap();
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -825,7 +825,7 @@ fn authenticator_unix() {
     let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-10.sock"
         .parse()
         .unwrap();
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
 }
@@ -835,7 +835,7 @@ fn authenticator_unix() {
 fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -925,7 +925,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
 
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -933,7 +933,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -1023,5 +1023,5 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
 
-    task::block_on(run(&endpoint));
+    block_on(run(&endpoint));
 }

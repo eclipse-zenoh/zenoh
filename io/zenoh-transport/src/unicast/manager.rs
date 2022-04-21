@@ -20,10 +20,10 @@ use crate::unicast::{
 use crate::TransportManager;
 use async_std::prelude::FutureExt;
 use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh_async_rt::spawn;
 use zenoh_cfg_properties::config::*;
 use zenoh_config::Config;
 use zenoh_core::{
@@ -558,7 +558,7 @@ impl TransportManager {
 
         // Spawn a task to accept the link
         let c_manager = self.clone();
-        task::spawn(async move {
+        spawn(async move {
             let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src().to_owned(),
                 dst: link.get_dst().to_owned(),

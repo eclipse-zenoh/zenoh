@@ -1,5 +1,4 @@
 use async_std::sync::Mutex;
-use async_std::task::JoinHandle;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use futures::select;
@@ -12,6 +11,7 @@ use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
 use zenoh::queryable::EVAL;
 use zenoh::Session;
+use zenoh_async_rt::{sleep, spawn, JoinHandle};
 use zenoh_sync::Condition;
 
 const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
@@ -144,7 +144,7 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
         .lease
         .mul_f32(state.local_member.refresh_ratio);
     loop {
-        async_std::task::sleep(period).await;
+        sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
         let _ = z
             .put(&state.event_expr, buf.clone())
@@ -156,7 +156,7 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
 fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
     let watch_dog = async move {
         loop {
-            async_std::task::sleep(period).await;
+            sleep(period).await;
             let now = Instant::now();
             let mut ms = s.members.lock().await;
             let expired_members: Vec<String> = ms
@@ -179,7 +179,7 @@ fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
             }
         }
     };
-    async_std::task::spawn(watch_dog)
+    spawn(watch_dog)
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
@@ -316,10 +316,10 @@ impl Group {
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {
-            async_std::task::spawn(keep_alive_task(z.clone(), state.clone()));
+            spawn(keep_alive_task(z.clone(), state.clone()));
         }
-        let _ = async_std::task::spawn(net_event_handler(z.clone(), state.clone()));
-        let _ = async_std::task::spawn(query_handler(z.clone(), state.clone()));
+        let _ = spawn(net_event_handler(z.clone(), state.clone()));
+        let _ = spawn(query_handler(z.clone(), state.clone()));
         let _ = spawn_watchdog(state.clone(), Duration::from_secs(1));
         Group { state }
     }
@@ -376,7 +376,7 @@ impl Group {
             };
             let r: bool = select! {
                 p = f.fuse() => p,
-                _ = async_std::task::sleep(timeout).fuse() => false,
+                _ = sleep(timeout).fuse() => false,
             };
             r
         }

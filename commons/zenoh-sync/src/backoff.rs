@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task;
 use std::fmt;
 use std::hint::spin_loop;
+use zenoh_async_rt::yield_now;
 
 const SPIN_LIMIT: usize = 6;
 const YIELD_LIMIT: usize = 10;
@@ -56,7 +56,7 @@ impl Backoff {
                 spin_loop();
             }
         } else {
-            task::yield_now().await;
+            yield_now().await;
         }
 
         if self.step <= YIELD_LIMIT {

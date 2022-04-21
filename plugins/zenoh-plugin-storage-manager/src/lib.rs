@@ -14,7 +14,6 @@
 #![recursion_limit = "512"]
 
 use async_std::channel::Sender;
-use async_std::task;
 use libloading::Library;
 use memory_backend::create_memory_backend;
 use std::collections::HashMap;
@@ -28,6 +27,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::Session;
+use zenoh_async_rt::block_on;
 use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
@@ -130,7 +130,7 @@ impl StorageRuntimeInner {
     }
     fn kill_volume(&mut self, volume: VolumeConfig) {
         if let Some(storages) = self.storages.remove(&volume.name) {
-            async_std::task::block_on(futures::future::join_all(
+            block_on(futures::future::join_all(
                 storages
                     .into_iter()
                     .map(|(_, s)| async move { s.send(StorageMessage::Stop).await }),
@@ -229,7 +229,7 @@ impl StorageRuntimeInner {
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
                 log::debug!("Closing storage {} from volume {}", config.name, volume);
-                let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
+                let _ = block_on(storage.send(StorageMessage::Stop));
             }
         }
     }
@@ -240,7 +240,7 @@ impl StorageRuntimeInner {
             let storage_name = storage.name.clone();
             let in_interceptor = backend.backend.incoming_data_interceptor();
             let out_interceptor = backend.backend.outgoing_data_interceptor();
-            let stopper = async_std::task::block_on(create_and_start_storage(
+            let stopper = block_on(create_and_start_storage(
                 admin_key,
                 storage,
                 &mut backend.backend,
@@ -345,7 +345,7 @@ impl RunningPluginTrait for StorageRuntime {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
                         if zenoh::utils::key_expr::intersect(key, key_selector) {
-                            if let Ok(value) = task::block_on(async {
+                            if let Ok(value) = block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
                                 let _ = handle.send(StorageMessage::GetStatus(tx)).await;
                                 rx.recv().await

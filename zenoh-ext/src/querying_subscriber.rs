@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::pin::Pin;
-use async_std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::StreamExt;
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver, Target};

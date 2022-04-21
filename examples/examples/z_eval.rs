@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
@@ -19,8 +18,9 @@ use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::queryable::EVAL;
+use zenoh_async_rt::sleep;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() {
     // initiate logging
     env_logger::init();

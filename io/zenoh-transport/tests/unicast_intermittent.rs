@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use async_std::task;
 use std::any::Any;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep, spawn, spawn_blocking};
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
@@ -213,7 +213,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_client02_manager = client02_manager.clone();
     let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
-    let c2_handle = task::spawn(async move {
+    let c2_handle = spawn(async move {
         loop {
             print!("+");
             std::io::stdout().flush().unwrap();
@@ -223,21 +223,21 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             assert_eq!(c_client02_manager.get_transports().len(), 1);
             assert_eq!(c_ses2.get_pid().unwrap(), c_router_id);
 
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
 
             print!("-");
             std::io::stdout().flush().unwrap();
 
             ztimeout!(c_ses2.close()).unwrap();
 
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
     let c_client03_manager = client03_manager.clone();
     let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
-    let c3_handle = task::spawn(async move {
+    let c3_handle = spawn(async move {
         loop {
             print!("*");
             std::io::stdout().flush().unwrap();
@@ -247,21 +247,21 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             assert_eq!(c_client03_manager.get_transports().len(), 1);
             assert_eq!(c_ses3.get_pid().unwrap(), c_router_id);
 
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
 
             print!("/");
             std::io::stdout().flush().unwrap();
 
             ztimeout!(c_ses3.close()).unwrap();
 
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
     /* [4] */
     println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
-    ztimeout!(task::spawn_blocking(move || {
+    ztimeout!(spawn_blocking(move || {
         // Create the message to send
         let key = "/test".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
@@ -332,7 +332,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
                 break;
             }
             println!("Transport Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -360,7 +360,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             if transports.is_empty() {
                 break;
             }
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -370,7 +370,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
@@ -378,7 +378,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     ztimeout!(client03_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -386,12 +386,12 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 fn transport_tcp_intermittent() {
     env_logger::init();
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint));
+    block_on(transport_intermittent(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -399,10 +399,10 @@ fn transport_tcp_intermittent() {
 fn transport_ws_intermittent() {
     env_logger::init();
 
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "ws/127.0.0.1:12448".parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint));
+    block_on(transport_intermittent(&endpoint));
 }

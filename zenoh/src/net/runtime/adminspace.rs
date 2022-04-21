@@ -14,13 +14,13 @@ use super::routing::face::Face;
 use super::Runtime;
 use crate::plugins::PluginsManager;
 use crate::prelude::Selector;
-use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
+use zenoh_async_rt::spawn;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
@@ -103,7 +103,7 @@ impl AdminSpace {
         });
 
         let cfg_rx = admin.context.runtime.config.subscribe();
-        task::spawn({
+        spawn({
             let admin = admin.clone();
             async move {
                 while let Ok(change) = cfg_rx.recv_async().await {
@@ -388,7 +388,7 @@ impl Primitives for AdminSpace {
         let value_selector = value_selector.to_string();
 
         // router is not re-entrant
-        task::spawn(async move {
+        spawn(async move {
             let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
                 |(key, handler)| async {
                     let handler = handler;

@@ -12,10 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
@@ -31,6 +29,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use zenoh_async_rt::{block_on, sleep, spawn, JoinHandle};
 use zenoh_core::bail;
 use zenoh_core::zasynclock;
 use zenoh_core::Result as ZResult;
@@ -222,7 +221,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
 impl Drop for LinkUnicastWs {
     fn drop(&mut self) {
-        task::block_on(async {
+        block_on(async {
             let mut guard = zasynclock!(self.send);
             // Close the underlying TCP socket
             guard.close().await.unwrap_or_else(|e| {
@@ -356,7 +355,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
-        let handle = task::spawn(async move {
+        let handle = spawn(async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
@@ -493,7 +492,7 @@ async fn accept_task(
                 //       Linux systems this limit can be changed by using the "ulimit" command line
                 //       tool. In case of systemd-based systems, this can be changed by using the
                 //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
                 continue;
             }
         };

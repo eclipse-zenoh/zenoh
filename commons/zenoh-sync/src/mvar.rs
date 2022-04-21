@@ -95,9 +95,9 @@ mod tests {
     fn mvar() {
         use super::Mvar;
         use async_std::prelude::FutureExt;
-        use async_std::task;
         use std::sync::Arc;
         use std::time::Duration;
+        use zenoh_async_rt::{block_on, spawn};
 
         const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -105,21 +105,21 @@ mod tests {
         let mvar: Arc<Mvar<usize>> = Arc::new(Mvar::new());
 
         let c_mvar = mvar.clone();
-        let ch = task::spawn(async move {
+        let ch = spawn(async move {
             for _ in 0..count {
                 let n = c_mvar.take().await;
                 print!("-{} ", n);
             }
         });
 
-        let ph = task::spawn(async move {
+        let ph = spawn(async move {
             for i in 0..count {
                 mvar.put(i).await;
                 print!("+{} ", i);
             }
         });
 
-        task::block_on(async {
+        block_on(async {
             ph.timeout(TIMEOUT).await.unwrap();
             ch.timeout(TIMEOUT).await.unwrap();
         });

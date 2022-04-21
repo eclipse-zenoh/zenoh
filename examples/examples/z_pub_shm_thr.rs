@@ -16,7 +16,7 @@ use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
 use zenoh::publication::CongestionControl;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() {
     // initiate logging
     env_logger::init();

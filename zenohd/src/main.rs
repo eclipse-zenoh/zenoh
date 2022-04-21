@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
 use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
+use zenoh_async_rt::block_on;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -28,7 +28,7 @@ lazy_static::lazy_static!(
 const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
 
 fn main() {
-    task::block_on(async {
+    block_on(async {
         let mut log_builder =
             env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
         #[cfg(feature = "stats")]

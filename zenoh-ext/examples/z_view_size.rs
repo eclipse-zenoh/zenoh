@@ -4,7 +4,7 @@ use std::time::Duration;
 use zenoh::config::Config;
 use zenoh_ext::group::*;
 
-#[async_std::main]
+#[zenoh_async_rt::main]
 async fn main() {
     env_logger::init();
 

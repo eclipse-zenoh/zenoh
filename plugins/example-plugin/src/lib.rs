@@ -26,6 +26,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin
 use zenoh::prelude::*;
 use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
+use zenoh_async_rt::spawn;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -67,7 +68,7 @@ impl Plugin for ExamplePlugin {
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
         // spawn the task running the plugin's loop
-        async_std::task::spawn(run(runtime.clone(), selector.into(), flag.clone()));
+        spawn(run(runtime.clone(), selector.into(), flag.clone()));
         // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
@@ -106,7 +107,7 @@ impl RunningPluginTrait for RunningPlugin {
                         let mut guard = zlock!(&plugin.0);
                         guard.flag.store(false, Relaxed);
                         guard.flag = Arc::new(AtomicBool::new(true));
-                        async_std::task::spawn(run(
+                        spawn(run(
                             guard.runtime.clone(),
                             selector.clone().into(),
                             guard.flag.clone(),

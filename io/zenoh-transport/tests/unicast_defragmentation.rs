@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use async_std::task;
 use std::sync::Arc;
 use std::time::Duration;
+use zenoh_async_rt::{block_on, sleep};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
@@ -93,14 +93,14 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Wait that the client transport has been closed
     ztimeout!(async {
         while client_transport.get_pid().is_ok() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
         while !router_manager.get_transports_unicast().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
@@ -111,23 +111,23 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Wait a little bit
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            sleep(SLEEP).await;
         }
     });
 
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    sleep(SLEEP).await;
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_unicast_defragmentation_tcp_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -153,7 +153,7 @@ fn transport_unicast_defragmentation_tcp_only() {
         },
     ];
     // Run
-    task::block_on(async {
+    block_on(async {
         for ch in channel.iter() {
             run(&endpoint, *ch, MSG_SIZE).await;
         }
@@ -163,7 +163,7 @@ fn transport_unicast_defragmentation_tcp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_unicast_defragmentation_ws_only() {
-    task::block_on(async {
+    block_on(async {
         zasync_executor_init!();
     });
 
@@ -189,7 +189,7 @@ fn transport_unicast_defragmentation_ws_only() {
         },
     ];
     // Run
-    task::block_on(async {
+    block_on(async {
         for ch in channel.iter() {
             run(&endpoint, *ch, MSG_SIZE).await;
         }
