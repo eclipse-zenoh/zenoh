@@ -61,6 +61,12 @@ impl From<KnownEncoding> for u8 {
     }
 }
 
+impl From<KnownEncoding> for &str {
+    fn from(val: KnownEncoding) -> Self {
+        consts::MIMES[usize::from(val)]
+    }
+}
+
 impl From<KnownEncoding> for usize {
     fn from(val: KnownEncoding) -> Self {
         u8::from(val) as usize
