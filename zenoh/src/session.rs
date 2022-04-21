@@ -51,8 +51,8 @@ use zenoh_protocol::{
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
 };
-use zenoh_protocol_core::PeerId;
 use zenoh_protocol_core::WhatAmI;
+use zenoh_protocol_core::ZenohId;
 use zenoh_protocol_core::EMPTY_EXPR_ID;
 use zenoh_sync::zpinbox;
 
@@ -1592,7 +1592,7 @@ impl Primitives for Session {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,

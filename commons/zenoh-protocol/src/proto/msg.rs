@@ -399,7 +399,7 @@ impl Attachment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplierInfo {
     pub kind: ZInt,
-    pub id: PeerId,
+    pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplyContext {
@@ -533,9 +533,9 @@ pub struct DataInfo {
     pub kind: Option<ZInt>,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<PeerId>,
+    pub source_id: Option<ZenohId>,
     pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<PeerId>,
+    pub first_router_id: Option<ZenohId>,
     pub first_router_sn: Option<ZInt>,
 }
 
@@ -1025,7 +1025,7 @@ impl Header for Query {
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
     pub links: Vec<ZInt>,
@@ -1351,7 +1351,7 @@ impl Header for Scout {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
 }
@@ -1434,7 +1434,7 @@ impl fmt::Display for Hello {
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
@@ -1470,7 +1470,7 @@ impl Options for InitSyn {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub sn_resolution: Option<ZInt>,
     pub is_qos: bool,
     pub cookie: ZSlice,
@@ -1610,7 +1610,7 @@ impl Header for OpenAck {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub lease: Duration,
     pub sn_resolution: ZInt,
     pub next_sns: ConduitSnList,
@@ -1685,7 +1685,7 @@ impl Options for Join {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
     pub reason: u8,
     pub link_only: bool,
 }
@@ -1809,7 +1809,7 @@ impl Header for AckNack {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeepAlive {
-    pub pid: Option<PeerId>,
+    pub pid: Option<ZenohId>,
 }
 
 impl Header for KeepAlive {
@@ -2010,7 +2010,7 @@ impl TransportMessage {
     }
 
     pub fn make_hello(
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
@@ -2030,7 +2030,7 @@ impl TransportMessage {
     pub fn make_init_syn(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
@@ -2051,7 +2051,7 @@ impl TransportMessage {
 
     pub fn make_init_ack(
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         sn_resolution: Option<ZInt>,
         is_qos: bool,
         cookie: ZSlice,
@@ -2105,7 +2105,7 @@ impl TransportMessage {
     pub fn make_join(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        pid: ZenohId,
         lease: Duration,
         sn_resolution: ZInt,
         next_sns: ConduitSnList,
@@ -2127,7 +2127,7 @@ impl TransportMessage {
     }
 
     pub fn make_close(
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
@@ -2176,7 +2176,7 @@ impl TransportMessage {
     }
 
     pub fn make_keep_alive(
-        pid: Option<PeerId>,
+        pid: Option<ZenohId>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {

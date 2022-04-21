@@ -16,7 +16,7 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use super::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
@@ -101,7 +101,7 @@ pub(super) fn properties_from_attachment(att: Attachment) -> ZResult<Establishme
 /*************************************/
 pub struct Cookie {
     whatami: WhatAmI,
-    pid: PeerId,
+    pid: ZenohId,
     sn_resolution: ZInt,
     is_qos: bool,
     nonce: ZInt,
@@ -204,7 +204,7 @@ pub(super) async fn close_link(
 /*            TRANSPORT              */
 /*************************************/
 pub(super) struct InputInit {
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_shm: bool,

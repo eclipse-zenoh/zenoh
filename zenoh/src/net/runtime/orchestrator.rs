@@ -27,7 +27,7 @@ use zenoh_link::Locator;
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
-use zenoh_protocol_core::{whatami::WhatAmIMatcher, PeerId, WhatAmI};
+use zenoh_protocol_core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = 65536;
@@ -588,7 +588,7 @@ impl Runtime {
         None
     }
 
-    pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
+    pub async fn connect_peer(&self, pid: &ZenohId, locators: &[Locator]) {
         if pid != &self.manager().pid() {
             if self.manager().get_transport(pid).is_none() {
                 log::debug!("Try to connect to peer {} via any of {:?}", pid, locators);

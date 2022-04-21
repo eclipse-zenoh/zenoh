@@ -26,7 +26,7 @@ use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KeyExpr, KnownEncoding, PeerId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    KeyExpr, KnownEncoding, ZenohId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -44,7 +44,7 @@ type Handler = Box<
 >;
 
 pub struct AdminSpace {
-    pid: PeerId,
+    pid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<String, Arc<Handler>>,
@@ -438,7 +438,7 @@ impl Primitives for AdminSpace {
         &self,
         qid: ZInt,
         replier_kind: ZInt,
-        replier_id: PeerId,
+        replier_id: ZenohId,
         key_expr: KeyExpr,
         info: Option<DataInfo>,
         payload: ZBuf,

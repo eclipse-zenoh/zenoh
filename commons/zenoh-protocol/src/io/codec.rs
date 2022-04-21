@@ -21,7 +21,7 @@ use zenoh_buffers::{
     SplitBuffer, ZBufReader,
 };
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
-use zenoh_protocol_core::{Locator, PeerId, Property, Timestamp, ZInt};
+use zenoh_protocol_core::{Locator, ZenohId, Property, Timestamp, ZInt};
 
 #[cfg(feature = "shared-memory")]
 mod zslice {
@@ -122,22 +122,22 @@ impl<R: Reader> Decoder<String, R> for ZenohCodec {
         String::from_utf8(vec).map_err(|e| zerror!("{}", e).into())
     }
 }
-impl<R: Reader> Decoder<PeerId, R> for ZenohCodec {
+impl<R: Reader> Decoder<ZenohId, R> for ZenohCodec {
     type Err = zenoh_core::Error;
-    fn read(&self, reader: &mut R) -> Result<PeerId, Self::Err> {
+    fn read(&self, reader: &mut R) -> Result<ZenohId, Self::Err> {
         let size: usize = self.read(reader)?;
-        if size > PeerId::MAX_SIZE {
+        if size > ZenohId::MAX_SIZE {
             bail!(
-                "Reading a PeerId size that exceed {} bytes: {}",
-                PeerId::MAX_SIZE,
+                "Reading a ZenohId size that exceed {} bytes: {}",
+                ZenohId::MAX_SIZE,
                 size
             )
         }
-        let mut id = [0; PeerId::MAX_SIZE];
+        let mut id = [0; ZenohId::MAX_SIZE];
         if !reader.read_exact(&mut id[..size]) {
             return Err(InsufficientDataErr.into());
         }
-        Ok(PeerId::new(size, id))
+        Ok(ZenohId::new(size, id))
     }
 }
 impl<R: Reader> Decoder<Timestamp, R> for ZenohCodec {
@@ -152,7 +152,7 @@ impl<R: Reader> Decoder<Timestamp, R> for ZenohCodec {
                 size
             );
         }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         if !reader.read_exact(&mut id[..size]) {
             return Err(InsufficientDataErr.into());
         }
@@ -252,7 +252,7 @@ pub trait ZBufCodec {
     // Same as read_bytes but with array length before the bytes.
     fn read_bytes_array(&mut self) -> Option<Vec<u8>>;
     fn read_string(&mut self) -> Option<String>;
-    fn read_peeexpr_id(&mut self) -> Option<PeerId>;
+    fn read_peeexpr_id(&mut self) -> Option<ZenohId>;
     fn read_locator(&mut self) -> Option<Locator>;
     fn read_locators(&mut self) -> Option<Vec<Locator>>;
     fn read_zslice_array(&mut self) -> Option<ZSlice>;
@@ -327,7 +327,7 @@ impl ZBufCodec for ZBufReader<'_> {
         ZenohCodec.read(self).ok()
     }
     #[inline(always)]
-    fn read_peeexpr_id(&mut self) -> Option<PeerId> {
+    fn read_peeexpr_id(&mut self) -> Option<ZenohId> {
         ZenohCodec.read(self).ok()
     }
     #[inline(always)]
@@ -434,7 +434,7 @@ impl ZBufCodec for ZBufReader<'_> {
             );
             return None;
         }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         if self.read_exact(&mut id[..size]) {
             Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
         } else {
@@ -528,9 +528,9 @@ impl<W: CopyBuffer> Encoder<W, &str> for ZenohCodec {
         self.write(writer, value.as_bytes())
     }
 }
-impl<W: CopyBuffer> Encoder<W, &PeerId> for ZenohCodec {
+impl<W: CopyBuffer> Encoder<W, &ZenohId> for ZenohCodec {
     type Err = WriteRefusedErr<W>;
-    fn write(&self, writer: &mut W, value: &PeerId) -> Result<usize, Self::Err> {
+    fn write(&self, writer: &mut W, value: &ZenohId) -> Result<usize, Self::Err> {
         self.write(writer, value.as_slice())
     }
 }
@@ -568,7 +568,7 @@ pub trait WBufCodec {
     fn write_usize_as_zint(&mut self, v: usize) -> bool;
     fn write_bytes_array(&mut self, s: &[u8]) -> bool;
     fn write_string(&mut self, s: &str) -> bool;
-    fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool;
+    fn write_peeexpr_id(&mut self, pid: &ZenohId) -> bool;
     fn write_locator(&mut self, locator: &Locator) -> bool;
     fn write_locators(&mut self, locators: &[Locator]) -> bool;
     fn write_zslice_array(&mut self, slice: ZSlice) -> bool;
@@ -614,7 +614,7 @@ impl WBufCodec for WBuf {
     }
 
     #[inline(always)]
-    fn write_peeexpr_id(&mut self, pid: &PeerId) -> bool {
+    fn write_peeexpr_id(&mut self, pid: &ZenohId) -> bool {
         ZenohCodec.write(self, pid).is_ok()
     }
 

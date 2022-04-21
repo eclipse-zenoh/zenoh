@@ -33,7 +33,7 @@ use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol;
-use zenoh_protocol::core::{PeerId, WhatAmI};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport;
@@ -43,7 +43,7 @@ use zenoh_transport::{
 };
 
 pub struct RuntimeState {
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
@@ -74,7 +74,7 @@ impl Runtime {
         let pid = if let Some(s) = config.id() {
             s.parse()?
         } else {
-            PeerId::from(uuid::Uuid::new_v4())
+            ZenohId::from(uuid::Uuid::new_v4())
         };
 
         log::info!("Using PID: {}", pid);

@@ -25,7 +25,7 @@ mod tests {
     use zenoh_core::zasync_executor_init;
     use zenoh_core::Result as ZResult;
     use zenoh_link::{EndPoint, Link};
-    use zenoh_protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
+    use zenoh_protocol::core::{Channel, ZenohId, Priority, Reliability, WhatAmI};
     use zenoh_protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh_protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh_protocol_core::CongestionControl;
@@ -132,9 +132,9 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+        let peer_shm02 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+        let peer_net01 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();

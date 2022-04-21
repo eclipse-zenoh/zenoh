@@ -15,7 +15,7 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{PeerId, WhatAmI, ZInt};
+use super::protocol::core::{ZenohId, WhatAmI, ZInt};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
 use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
@@ -43,7 +43,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 /// ```
 /// use async_std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol_core::{PeerId, WhatAmI, whatami};
+/// use zenoh_protocol_core::{ZenohId, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_core::Result as ZResult;
 ///
@@ -81,7 +81,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 ///         .max_links(1)    // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
-///         .pid(PeerId::rand())
+///         .pid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
@@ -92,7 +92,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub pid: PeerId,
+    pub pid: ZenohId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: u16,
@@ -119,7 +119,7 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    pid: PeerId,
+    pid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: u16,
@@ -134,7 +134,7 @@ pub struct TransportManagerBuilder {
 }
 
 impl TransportManagerBuilder {
-    pub fn pid(mut self, pid: PeerId) -> Self {
+    pub fn pid(mut self, pid: ZenohId) -> Self {
         self.pid = pid;
         self
     }
@@ -290,7 +290,7 @@ impl Default for TransportManagerBuilder {
         let backoff = queue.backoff().unwrap();
         Self {
             version: VERSION,
-            pid: PeerId::rand(),
+            pid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
@@ -390,7 +390,7 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn pid(&self) -> PeerId {
+    pub fn pid(&self) -> ZenohId {
         self.config.pid
     }
 
@@ -443,7 +443,7 @@ impl TransportManager {
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
-    pub fn get_transport(&self, peer: &PeerId) -> Option<TransportUnicast> {
+    pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         self.get_transport_unicast(peer)
         // @TODO: multicast
     }

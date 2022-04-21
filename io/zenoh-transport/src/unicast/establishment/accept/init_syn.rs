@@ -16,7 +16,7 @@ use super::AResult;
 use crate::TransportManager;
 use zenoh_core::zerror;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{PeerId, WhatAmI, ZInt};
+use zenoh_protocol::core::{ZenohId, WhatAmI, ZInt};
 use zenoh_protocol::proto::{tmsg, TransportBody};
 
 /*************************************/
@@ -26,7 +26,7 @@ use zenoh_protocol::proto::{tmsg, TransportBody};
 // Read and eventually accept an InitSyn
 pub(super) struct Output {
     pub(super) whatami: WhatAmI,
-    pub(super) pid: PeerId,
+    pub(super) pid: ZenohId,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
     pub(super) init_syn_properties: EstablishmentProperties,
@@ -65,7 +65,7 @@ pub(super) async fn recv(
         Some(pid) => {
             if pid != init_syn.pid {
                 let e = zerror!(
-                    "Inconsistent PeerId in InitSyn on {}: {:?} {:?}",
+                    "Inconsistent ZenohId in InitSyn on {}: {:?} {:?}",
                     link,
                     pid,
                     init_syn.pid

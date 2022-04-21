@@ -20,7 +20,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{PeerId, WhatAmI};
+use zenoh_protocol_core::{ZenohId, WhatAmI};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -81,7 +81,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .pid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
         .build(Arc::new(SH::default()))
         .unwrap();
 

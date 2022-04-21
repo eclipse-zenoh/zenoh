@@ -17,7 +17,7 @@ use super::common::{
     pipeline::TransmissionPipeline,
 };
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, ZenohId, Priority, WhatAmI, ZInt};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -51,7 +51,7 @@ macro_rules! zlinkindex {
 #[derive(Clone)]
 pub(crate) struct TransportUnicastConfig {
     pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
+    pub(crate) pid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
@@ -360,7 +360,7 @@ impl TransportUnicastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
+    pub(crate) fn get_pid(&self) -> ZenohId {
         self.config.pid
     }
 
