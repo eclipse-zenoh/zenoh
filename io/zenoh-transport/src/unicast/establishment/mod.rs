@@ -16,7 +16,7 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{ZenohId, Property, WhatAmI, ZInt};
+use super::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};

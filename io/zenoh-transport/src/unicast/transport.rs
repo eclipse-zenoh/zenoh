@@ -17,7 +17,7 @@ use super::common::{
     pipeline::TransmissionPipeline,
 };
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, ZenohId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;

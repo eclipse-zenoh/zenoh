@@ -22,8 +22,8 @@ use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::intersect;
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, ZenohId, QueryTAK, QueryableInfo,
-    Reliability, SubInfo, SubMode, WhatAmI, ZInt, EMPTY_EXPR_ID,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo,
+    Reliability, SubInfo, SubMode, WhatAmI, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 

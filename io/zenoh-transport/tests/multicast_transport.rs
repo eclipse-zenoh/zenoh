@@ -29,7 +29,9 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::io::ZBuf;
     use zenoh_protocol::proto::ZenohMessage;
-    use zenoh_protocol_core::{Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI};
+    use zenoh_protocol_core::{
+        Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
+    };
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,

@@ -14,7 +14,7 @@
 use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
-use super::{Locator, ZenohId, WBuf, ZBuf, ZInt};
+use super::{Locator, WBuf, ZBuf, ZInt, ZenohId};
 use crate::unicast::establishment::Cookie;
 use async_std::fs;
 use async_std::sync::{Mutex, RwLock};

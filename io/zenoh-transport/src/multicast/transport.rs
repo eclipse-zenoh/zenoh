@@ -26,7 +26,7 @@ use std::time::Duration;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::{bail, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkMulticast, Locator};
-use zenoh_protocol::core::{ConduitSnList, ZenohId, Priority, WhatAmI, ZInt};
+use zenoh_protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
 
 /*************************************/

@@ -21,7 +21,7 @@ use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI};
+use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::ZenohMessage;
 use zenoh_transport::{

@@ -22,7 +22,7 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::protocol;
-use super::protocol::core::{ZenohId, WhatAmI, ZInt};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 use super::protocol::proto::{tmsg, ZenohMessage};
 use super::{TransportPeer, TransportPeerEventHandler};
 pub use manager::*;

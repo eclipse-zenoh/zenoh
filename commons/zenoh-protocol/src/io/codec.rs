@@ -21,7 +21,7 @@ use zenoh_buffers::{
     SplitBuffer, ZBufReader,
 };
 use zenoh_core::{bail, zcheck, zerror, Result as ZResult};
-use zenoh_protocol_core::{Locator, ZenohId, Property, Timestamp, ZInt};
+use zenoh_protocol_core::{Locator, Property, Timestamp, ZInt, ZenohId};
 
 #[cfg(feature = "shared-memory")]
 mod zslice {

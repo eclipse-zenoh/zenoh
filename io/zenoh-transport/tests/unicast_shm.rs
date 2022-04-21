@@ -25,7 +25,7 @@ mod tests {
     use zenoh_core::zasync_executor_init;
     use zenoh_core::Result as ZResult;
     use zenoh_link::{EndPoint, Link};
-    use zenoh_protocol::core::{Channel, ZenohId, Priority, Reliability, WhatAmI};
+    use zenoh_protocol::core::{Channel, Priority, Reliability, WhatAmI, ZenohId};
     use zenoh_protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh_protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh_protocol_core::CongestionControl;

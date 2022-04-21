@@ -26,7 +26,7 @@ use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KeyExpr, KnownEncoding, ZenohId, QueryTAK, QueryableInfo, SubInfo, ZInt, EMPTY_EXPR_ID,
+    KeyExpr, KnownEncoding, QueryTAK, QueryableInfo, SubInfo, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 

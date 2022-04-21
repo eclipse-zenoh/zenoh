@@ -16,7 +16,7 @@ use super::AResult;
 use crate::TransportManager;
 use zenoh_core::zerror;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{ZenohId, WhatAmI, ZInt};
+use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::proto::{tmsg, TransportBody};
 
 /*************************************/

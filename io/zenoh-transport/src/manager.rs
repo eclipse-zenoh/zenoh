@@ -15,7 +15,7 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{ZenohId, WhatAmI, ZInt};
+use super::protocol::core::{WhatAmI, ZInt, ZenohId};
 #[cfg(feature = "shared-memory")]
 use super::protocol::io::SharedMemoryReader;
 use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};

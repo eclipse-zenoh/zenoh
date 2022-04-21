@@ -20,7 +20,7 @@ use crate::unicast::establishment::{
 use crate::TransportManager;
 use zenoh_core::{zasyncread, zerror};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{ZenohId, Property, WhatAmI, ZInt};
+use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::io::ZSlice;
 use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
 

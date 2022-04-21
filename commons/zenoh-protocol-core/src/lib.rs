@@ -108,7 +108,11 @@ impl FromStr for ZenohId {
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
         let size = vec.len();
         if size > ZenohId::MAX_SIZE {
-            bail!("Invalid id size: {} ({} bytes max)", size, ZenohId::MAX_SIZE)
+            bail!(
+                "Invalid id size: {} ({} bytes max)",
+                size,
+                ZenohId::MAX_SIZE
+            )
         }
         let mut id = [0_u8; ZenohId::MAX_SIZE];
         id[..size].copy_from_slice(vec.as_slice());

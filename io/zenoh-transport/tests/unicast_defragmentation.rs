@@ -19,7 +19,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, ZenohId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
 const TIMEOUT: Duration = Duration::from_secs(60);

@@ -13,8 +13,8 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, ZenohId, QueryTAK, QueryableInfo,
-    SubInfo, ZInt,
+    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo, SubInfo,
+    ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{

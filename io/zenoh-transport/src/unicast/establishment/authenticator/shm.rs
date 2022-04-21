@@ -30,7 +30,7 @@ use zenoh_protocol::io::{
     SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, WBufCodec, ZBuf, ZBufCodec,
     ZSlice,
 };
-use zenoh_protocol_core::{ZenohId, ZInt};
+use zenoh_protocol_core::{ZInt, ZenohId};
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;

@@ -25,7 +25,7 @@ use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{ZenohId, WhatAmI};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::proto::ZenohMessage;
 #[cfg(feature = "auth_pubkey")]
 use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{ZenohId, Priority, Reliability, ZInt};
+use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
 #[cfg(feature = "stats")]
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::{
