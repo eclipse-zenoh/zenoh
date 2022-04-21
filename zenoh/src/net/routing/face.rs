@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::router::*;
-use async_std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};

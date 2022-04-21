@@ -18,7 +18,7 @@ pub use flume::{Iter, RecvError, RecvTimeoutError, TryIter, TryRecvError};
 
 /// A trait that mimics the [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver).
 ///
-/// Most structs implementing this trait in zenoh also implement the [`Stream`](async_std::stream::Stream)
+/// Most structs implementing this trait in zenoh also implement the [`Stream`](futures::stream::Stream)
 /// trait so that values can be accessed synchronously or asynchronously.
 pub trait Receiver<T> {
     /// Asynchronously receive a value on this receiver, returning an error if all
@@ -170,13 +170,13 @@ macro_rules! zreceiver{
             }
         }
 
-        impl$(<$( $lt ),+>)? async_std::stream::Stream for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? futures::stream::Stream for $struct_name$(<$( $lt ),+>)? {
             type Item = $recv_type;
 
             #[inline(always)]
             fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                use futures_lite::StreamExt;
-                self.stream.poll_next(cx)
+                use ::futures::stream::StreamExt;
+                self.stream.poll_next_unpin(cx)
             }
         }
 

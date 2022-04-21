@@ -18,8 +18,8 @@ use crate::unicast::{
     TransportConfigUnicast, TransportUnicast,
 };
 use crate::TransportManager;
-use async_std::prelude::*;
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use async_std::prelude::FutureExt;
+use async_std::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use async_std::task;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -50,11 +50,11 @@ pub struct TransportManagerConfigUnicast {
 
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
-    pub(super) incoming: AsyncArc<AsyncMutex<usize>>,
+    pub(super) incoming: Arc<AsyncMutex<usize>>,
     // Active peer authenticators
-    pub(super) peer_authenticator: AsyncArc<AsyncRwLock<HashSet<PeerAuthenticator>>>,
+    pub(super) peer_authenticator: Arc<AsyncRwLock<HashSet<PeerAuthenticator>>>,
     // Active link authenticators
-    pub(super) link_authenticator: AsyncArc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
+    pub(super) link_authenticator: Arc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
@@ -201,11 +201,11 @@ impl TransportManagerBuilderUnicast {
         }
 
         let state = TransportManagerStateUnicast {
-            incoming: AsyncArc::new(AsyncMutex::new(0)),
+            incoming: Arc::new(AsyncMutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            link_authenticator: AsyncArc::new(AsyncRwLock::new(self.link_authenticator)),
-            peer_authenticator: AsyncArc::new(AsyncRwLock::new(self.peer_authenticator)),
+            link_authenticator: Arc::new(AsyncRwLock::new(self.link_authenticator)),
+            peer_authenticator: Arc::new(AsyncRwLock::new(self.peer_authenticator)),
         };
 
         let params = TransportManagerParamsUnicast { config, state };

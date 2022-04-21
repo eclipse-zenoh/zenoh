@@ -51,3 +51,4 @@ rustls = "0.20.4"
 rustls-native-certs = "0.6.1"
 rustls-pemfile = "0.3.0"
 webpki = { version = "0.22.0", features = ["std"] }
+futures = "0.3.21"

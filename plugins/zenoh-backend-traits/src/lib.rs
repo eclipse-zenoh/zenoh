@@ -84,7 +84,7 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<()> {
+//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
 //!         // When receiving a Sample (i.e. on PUT or DELETE operations)
 //!         // extract Timestamp from sample
 //!         sample.ensure_timestamp();
@@ -96,20 +96,24 @@
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: store (key, sample)
+//!                 return Ok(StorageInsertionResult::Inserted);
 //!                 //  - if not: drop the sample
+//!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!             SampleKind::Delete => {
 //!                 let _key = sample.key_expr;
 //!                 // @TODO:
 //!                 //  - check if timestamp is newer than the stored one for the same key
 //!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
+//!                 return Ok(StorageInsertionResult::Deleted);
 //!                 //  - if not: drop the sample
+//!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!             SampleKind::Patch => {
 //!                 println!("Received PATCH for {}: not yet supported", sample.key_expr);
+//!                 return Ok(StorageInsertionResult::Outdated);
 //!             }
 //!         }
-//!         Ok(())
 //!     }
 //!
 //!     // When receiving a Query (i.e. on GET operations)
@@ -126,8 +130,8 @@
 //! }
 //! ```
 
-use async_std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 pub use zenoh::Result as ZResult;
 use zenoh::{
     prelude::{KeyExpr, Sample, Selector},
@@ -141,6 +145,14 @@ use config::{StorageConfig, VolumeConfig};
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
 pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
 pub type CreateVolume = fn(VolumeConfig) -> ZResult<Box<dyn Volume>>;
+
+///
+pub enum StorageInsertionResult {
+    Outdated,
+    Inserted,
+    Replaced,
+    Deleted,
+}
 
 /// Trait to be implemented by a Backend.
 ///
@@ -170,7 +182,7 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<()>;
+    async fn on_sample(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming query matching this storage's keys exp.
     /// This storage should reply with data matching the query calling [`Query::reply()`].

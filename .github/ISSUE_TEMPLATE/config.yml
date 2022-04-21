@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/eclipse-zenoh/roadmap/discussions/categories/zenoh
+    about: Open to the Zenoh community. Share your feedback with the Zenoh team.

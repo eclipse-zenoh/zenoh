@@ -406,7 +406,7 @@ where
     }
 }
 
-impl<TryIntoConfig> futures_lite::Future for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> ::std::future::Future for OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + Unpin + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
@@ -417,7 +417,7 @@ where
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
         _cx: &mut task::Context<'_>,
-    ) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
         std::task::Poll::Ready(self.run())
     }
 }
@@ -461,14 +461,14 @@ impl Runnable for InitBuilder {
     }
 }
 
-impl futures_lite::Future for InitBuilder {
+impl ::std::future::Future for InitBuilder {
     type Output = <Self as Runnable>::Output;
 
     #[inline]
     fn poll(
         mut self: std::pin::Pin<&mut Self>,
         _cx: &mut task::Context<'_>,
-    ) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
         std::task::Poll::Ready(self.run())
     }
 }

@@ -1,0 +1,38 @@
+name: Report a bug
+description: |
+  Create a bug report to help us improve Zenoh.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Describe the bug"
+      description: |
+        A clear and concise description of the expected behaviour and what the bug is.
+      placeholder: |
+        E.g. zenoh peers can not automatically establish a connection.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: To reproduce
+      description: "Steps to reproduce the behavior:"
+      placeholder: | 
+        1. Start a subscriber "..."
+        2. Start a publisher "...."
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: system
+    attributes:
+      label: System info
+      description: "Please complete the following information:"
+      placeholder: |
+        - Platform: [e.g. Ubuntu 20.04 64-bit]
+        - CPU [e.g. AMD Ryzen 3800X]
+        - Zenoh version/commit [e.g. 6f172ea985d42d20d423a192a2d0d46bb0ce0d11]
+    validations:
+      required: true

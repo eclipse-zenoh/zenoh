@@ -24,7 +24,7 @@ use super::unicast::manager::{
 };
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use async_std::sync::{Arc as AsyncArc, Mutex as AsyncMutex};
+use async_std::sync::Mutex as AsyncMutex;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 
 /// # Examples
 /// ```
-/// use async_std::sync::Arc;
+/// use std::sync::Arc;
 /// use std::time::Duration;
 /// use zenoh_protocol_core::{PeerId, WhatAmI, whatami};
 /// use zenoh_transport::*;
@@ -340,7 +340,7 @@ impl TransportExecutor {
 pub struct TransportManager {
     pub config: Arc<TransportManagerConfig>,
     pub(crate) state: Arc<TransportManagerState>,
-    pub(crate) prng: AsyncArc<AsyncMutex<PseudoRng>>,
+    pub(crate) prng: Arc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,
     #[cfg(feature = "shared-memory")]
     pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
@@ -364,7 +364,7 @@ impl TransportManager {
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),
-            prng: AsyncArc::new(AsyncMutex::new(prng)),
+            prng: Arc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
             #[cfg(feature = "shared-memory")]
             shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use futures_lite::FutureExt;
+use futures::FutureExt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -105,7 +105,7 @@ impl<T> Future for ZPinBoxFuture<T> {
 
     #[inline]
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.0.poll(cx)
+        self.0.poll_unpin(cx)
     }
 }
 
@@ -147,11 +147,11 @@ macro_rules! derive_zfuture{
             )*
         }
 
-        impl$(<$( $lt ),+>)? futures_lite::Future for $struct_name$(<$( $lt ),+>)? {
+        impl$(<$( $lt ),+>)? ::std::future::Future for $struct_name$(<$( $lt ),+>)? {
             type Output = <Self as Runnable>::Output;
 
             #[inline]
-            fn poll(mut self: std::pin::Pin<&mut Self>, _cx: &mut async_std::task::Context<'_>) -> std::task::Poll<<Self as futures_lite::Future>::Output> {
+            fn poll(mut self: std::pin::Pin<&mut Self>, _cx: &mut async_std::task::Context<'_>) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
                 std::task::Poll::Ready(self.run())
             }
         }

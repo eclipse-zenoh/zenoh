@@ -17,11 +17,12 @@ use crate::{
     QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use futures::stream::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::BufReader;
