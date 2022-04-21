@@ -195,9 +195,7 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        if let Some(v) = config.id() {
-            self = self.pid(zparse!(v)?);
-        }
+        self = self.pid(*config.id());
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }

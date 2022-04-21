@@ -143,7 +143,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
     }
     if args.occurrences_of("id") > 0 {
         config
-            .set_id(args.value_of("id").map(|s| s.to_string()))
+            .set_id(args.value_of("id").unwrap().parse().unwrap())
             .unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwritting config),

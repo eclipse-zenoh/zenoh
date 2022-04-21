@@ -28,7 +28,7 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI};
+pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -99,7 +99,7 @@ validated_struct::validator! {
     #[serde(deny_unknown_fields)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
-        id: Option<String>,
+        id: ZenohId,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
