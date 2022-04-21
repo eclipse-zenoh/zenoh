@@ -234,13 +234,20 @@ impl TransmissionPipeline {
 
         let cond_canpull = AsyncCondvar::new();
 
-        // Build the stage REFILL
-        let mut stage_refill = Vec::with_capacity(conduit.len());
-        for i in 0..conduit.len() {
-            stage_refill.push(Mutex::new(StageRefill::new(config.queue_size[i])));
-        }
+        let default_queue = [Priority::default() as usize];
+        let capacity_iter = if conduit.len() == 1 {
+            default_queue.iter()
+        } else {
+            config.queue_size.iter()
+        };
 
-        let stage_refill = stage_refill.into_boxed_slice();
+        // Build the stage REFILL
+        let stage_refill = capacity_iter
+            .clone()
+            .enumerate()
+            .map(|(_, &capacity)| Mutex::new(StageRefill::new(capacity)))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
         // Batches to be pulled from stage OUT
         let mut batches_out = vec![];
@@ -248,11 +255,14 @@ impl TransmissionPipeline {
         let batches_out: Arc<[AtomicUsize]> = batches_out.into_boxed_slice().into();
 
         // Build the stage OUT
-        let mut stage_out = Vec::with_capacity(conduit.len());
-        for i in 0..conduit.len() {
-            stage_out.push(StageOut::new(i, config.queue_size[i], batches_out.clone()));
-        }
-        let stage_out = Mutex::new(stage_out.into_boxed_slice());
+        let stage_out = Mutex::new(
+            capacity_iter
+                .clone()
+                .enumerate()
+                .map(|(priority, &capacity)| StageOut::new(priority, capacity, batches_out.clone()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        );
 
         // Bytes to be pulled from stage IN
         let mut bytes_in = vec![];
@@ -260,17 +270,20 @@ impl TransmissionPipeline {
         let bytes_in: Arc<[AtomicUsize]> = bytes_in.into_boxed_slice().into();
 
         // Build the stage IN
-        let mut stage_in = Vec::with_capacity(conduit.len());
-        for i in 0..conduit.len() {
-            stage_in.push(Mutex::new(StageIn::new(
-                i,
-                config.queue_size[i],
-                config.batch_size,
-                config.is_streamed,
-                bytes_in.clone(),
-            )));
-        }
-        let stage_in = stage_in.into_boxed_slice();
+        let stage_in = capacity_iter
+            .clone()
+            .enumerate()
+            .map(|(priority, &capacity)| {
+                Mutex::new(StageIn::new(
+                    priority,
+                    capacity,
+                    config.batch_size,
+                    config.is_streamed,
+                    bytes_in.clone(),
+                ))
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
         TransmissionPipeline {
             active: AtomicBool::new(true),
