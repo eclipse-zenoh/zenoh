@@ -89,6 +89,12 @@ impl ZenohId {
     }
 }
 
+impl Default for ZenohId {
+    fn default() -> Self {
+        Self::rand()
+    }
+}
+
 impl From<uuid::Uuid> for ZenohId {
     #[inline]
     fn from(uuid: uuid::Uuid) -> Self {
@@ -107,12 +113,8 @@ impl FromStr for ZenohId {
         let s = s.replace('-', "");
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
         let size = vec.len();
-        if size > ZenohId::MAX_SIZE {
-            bail!(
-                "Invalid id size: {} ({} bytes max)",
-                size,
-                ZenohId::MAX_SIZE
-            )
+        if !(1..=ZenohId::MAX_SIZE).contains(&size) {
+            bail!("Invalid id size: {} (1-{} bytes)", size, ZenohId::MAX_SIZE);
         }
         let mut id = [0_u8; ZenohId::MAX_SIZE];
         id[..size].copy_from_slice(vec.as_slice());
@@ -149,6 +151,55 @@ impl fmt::Display for ZenohId {
 impl From<&ZenohId> for uhlc::ID {
     fn from(pid: &ZenohId) -> Self {
         uhlc::ID::new(pid.size, pid.id)
+    }
+}
+
+impl serde::Serialize for ZenohId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ZenohId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ZenohIdVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ZenohIdVisitor {
+            type Value = ZenohId;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(&format!("An hex string of 1-{} bytes", ZenohId::MAX_SIZE))
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                v.parse().map_err(serde::de::Error::custom)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(v)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_str(ZenohIdVisitor)
     }
 }
 

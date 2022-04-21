@@ -71,11 +71,7 @@ impl Runtime {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
-        let pid = if let Some(s) = config.id() {
-            s.parse()?
-        } else {
-            ZenohId::from(uuid::Uuid::new_v4())
-        };
+        let pid = *config.id();
 
         log::info!("Using PID: {}", pid);
 
