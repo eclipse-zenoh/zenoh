@@ -87,10 +87,6 @@ impl ZenohId {
     pub fn rand() -> ZenohId {
         ZenohId::from(Uuid::new_v4())
     }
-
-    pub fn to_string(self) -> String {
-        hex::encode_upper(self.as_slice())
-    }
 }
 
 impl Default for ZenohId {
@@ -117,7 +113,7 @@ impl FromStr for ZenohId {
         let s = s.replace('-', "");
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
         let size = vec.len();
-        if !(1 <= size && size <= ZenohId::MAX_SIZE) {
+        if !(1..=ZenohId::MAX_SIZE).contains(&size) {
             bail!("Invalid id size: {} (1-{} bytes)", size, ZenohId::MAX_SIZE);
         }
         let mut id = [0_u8; ZenohId::MAX_SIZE];
@@ -141,7 +137,7 @@ impl Hash for ZenohId {
 
 impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", hex::encode_upper(self.as_slice()))
     }
 }
 
