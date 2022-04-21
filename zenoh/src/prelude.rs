@@ -30,13 +30,13 @@ use crate::publication::PublishBuilder;
 use crate::queryable::{Query, QueryableBuilder};
 use crate::subscriber::SubscribeBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
-#[cfg(feature = "shared-memory")]
-use async_std::sync::Arc;
 use regex::Regex;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
 pub use zenoh_buffers::SplitBuffer;
 use zenoh_core::bail;
 use zenoh_core::zresult::ZError;
@@ -251,7 +251,7 @@ impl From<String> for Value {
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value {
-            payload: ZBuf::from(s.as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(s)),
             encoding: KnownEncoding::TextPlain.into(),
         }
     }
@@ -289,7 +289,7 @@ impl From<Sample> for Value {
 impl From<i64> for Value {
     fn from(i: i64) -> Self {
         Value {
-            payload: ZBuf::from(i.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
             encoding: KnownEncoding::AppInteger.into(),
         }
     }
@@ -353,7 +353,7 @@ impl TryFrom<Value> for f64 {
 impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
-            payload: ZBuf::from(json.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(json.to_string())),
             encoding: KnownEncoding::AppJson.into(),
         }
     }
@@ -396,7 +396,7 @@ impl TryFrom<Value> for serde_json::Value {
 impl From<Properties> for Value {
     fn from(p: Properties) -> Self {
         Value {
-            payload: ZBuf::from(p.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(p.to_string())),
             encoding: KnownEncoding::AppProperties.into(),
         }
     }

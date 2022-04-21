@@ -13,10 +13,10 @@
 //
 use super::face::FaceState;
 use super::router::Tables;
-use async_std::sync::{Arc, Weak};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Weak};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr;

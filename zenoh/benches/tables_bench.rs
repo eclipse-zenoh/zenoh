@@ -15,8 +15,8 @@
 extern crate criterion;
 use std::time::Duration;
 
-use async_std::sync::Arc;
 use criterion::{BenchmarkId, Criterion};
+use std::sync::Arc;
 use zenoh::net::protocol::core::{
     Channel, CongestionControl, Reliability, SubInfo, SubMode, WhatAmI, ZenohId,
 };

@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering::*};
+use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 #[derive(Debug, Clone)]

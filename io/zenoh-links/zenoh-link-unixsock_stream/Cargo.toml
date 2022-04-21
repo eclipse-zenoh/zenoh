@@ -42,3 +42,4 @@ async-trait = "0.1.42"
 log = "0.4"
 nix = { version = "0.23.0" }
 uuid = { version = "0.8.2", features = ["v4"] }
+futures = "0.3.21"

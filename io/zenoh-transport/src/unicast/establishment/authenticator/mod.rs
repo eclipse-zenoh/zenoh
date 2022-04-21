@@ -19,7 +19,6 @@ mod shm;
 mod userpassword;
 
 use crate::unicast::establishment::Cookie;
-use async_std::sync::Arc;
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
 pub use pubkey::*;
@@ -29,6 +28,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
+use std::sync::Arc;
 #[cfg(feature = "auth_usrpwd")]
 pub use userpassword::*;
 use zenoh_config::Config;

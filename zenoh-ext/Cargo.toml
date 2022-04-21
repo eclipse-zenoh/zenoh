@@ -34,7 +34,6 @@ bincode = "1.3.3"
 env_logger = "0.9.0"
 flume = "0.10.7"
 futures = "0.3.12"
-futures-lite = "1.11.3"
 log = "0.4"
 serde = "1.0.126"
 zenoh = { path = "../zenoh" }

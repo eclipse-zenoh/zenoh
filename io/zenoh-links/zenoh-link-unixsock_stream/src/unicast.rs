@@ -14,10 +14,12 @@
 use super::UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME;
 use async_std::os::unix::net::{UnixListener, UnixStream};
 use async_std::path::PathBuf;
-use async_std::prelude::*;
+use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use futures::io::AsyncReadExt;
+use futures::io::AsyncWriteExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::remove_file;

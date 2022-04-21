@@ -14,8 +14,8 @@
 #[macro_use]
 extern crate criterion;
 
-use async_std::sync::Arc;
 use criterion::Criterion;
+use std::sync::Arc;
 
 use zenoh::net::protocol::core::Encoding;
 use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, ZenohId};

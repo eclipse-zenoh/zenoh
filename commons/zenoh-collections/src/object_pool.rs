@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::LifoQueue;
-use async_std::sync::{Arc, Weak};
 use async_std::task;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Drop};
+use std::sync::{Arc, Weak};
 
 /// Provides a pool of pre-allocated s that are automaticlaly reinserted into
 /// the pool when dropped.

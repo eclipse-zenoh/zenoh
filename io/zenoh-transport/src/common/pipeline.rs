@@ -623,7 +623,7 @@ impl fmt::Debug for TransmissionPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::prelude::*;
+    use async_std::prelude::FutureExt;
     use async_std::task;
     use std::convert::TryFrom;
     use std::sync::atomic::{AtomicUsize, Ordering};

@@ -14,7 +14,6 @@
 #![recursion_limit = "512"]
 
 use async_std::channel::Sender;
-use async_std::sync::Arc;
 use async_std::task;
 use libloading::Library;
 use memory_backend::create_memory_backend;
@@ -22,6 +21,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
 use zenoh::net::runtime::Runtime;
