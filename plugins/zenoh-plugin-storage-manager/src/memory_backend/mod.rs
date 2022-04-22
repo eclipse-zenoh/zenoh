@@ -227,11 +227,6 @@ impl Storage for MemoryStorage {
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         trace!("on_query for {}", query.key_selector());
-        // Note: uncomment these lines to test get_all_entries API
-        // warn!(
-        //     "just dumping here for debuggin... {:?}",
-        //     self.get_all_entries().await
-        // );
         if !query.key_selector().as_str().contains('*') {
             if let Some(Present { sample, ts: _ }) =
                 self.map.read().await.get(query.key_selector().as_str())
@@ -253,10 +248,10 @@ impl Storage for MemoryStorage {
     }
 
     async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
-        let mut result = Vec::new();
         let map = self.map.read().await;
-        for k in map.keys() {
-            result.push((k.to_string(), *map.get(k).unwrap().ts()));
+        let mut result = Vec::with_capacity(map.len());
+        for (k, v) in map.iter() {
+            result.push((k.to_string(), *v.ts()));
         }
         Ok(result)
     }
