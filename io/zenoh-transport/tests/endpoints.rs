@@ -267,7 +267,6 @@ fn endpoint_ws() {
     task::block_on(run(&endpoints));
 }
 
-
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn endpoint_tcp_udp() {

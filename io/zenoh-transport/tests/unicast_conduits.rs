@@ -329,7 +329,6 @@ fn conduits_tcp_only() {
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
 
-
 #[cfg(feature = "transport_ws")]
 #[test]
 fn conduits_ws_only() {

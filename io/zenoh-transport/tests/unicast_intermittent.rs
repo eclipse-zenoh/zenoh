@@ -399,7 +399,6 @@ fn transport_tcp_intermittent() {
     task::block_on(transport_intermittent(&endpoint));
 }
 
-
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_intermittent() {

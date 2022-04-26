@@ -13,23 +13,26 @@
 //
 
 use async_std::prelude::*;
+use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
-use async_std::sync::Mutex as AsyncMutex;
 use async_trait::async_trait;
 use futures_util::stream::SplitSink;
 use futures_util::stream::SplitStream;
-use futures_util::{StreamExt};
-use futures_util::{SinkExt};
-use tokio_tungstenite::accept_async;
-use zenoh_core::bail;
-use zenoh_core::zasynclock;
+use futures_util::SinkExt;
+use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::accept_async;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use zenoh_core::bail;
+use zenoh_core::zasynclock;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
@@ -37,17 +40,10 @@ use zenoh_link_commons::{
 };
 use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
-use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::{WebSocketStream, MaybeTlsStream};
-use tokio_tungstenite::tungstenite::Message;
 
-use super::{
-    get_ws_addr, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX, get_ws_url,
-};
+use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
 
 pub struct LinkUnicastWs {
-    // The underlying socket as returned from the tokio_tungstenite library
-    // socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
     // The inbound message stream as returned from the futures_util::stream::StreamExt::split method
     recv: AsyncMutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     // // The outbound message stream as returned from the futures_util::stream::StreamExt::split method
@@ -58,14 +54,16 @@ pub struct LinkUnicastWs {
     // The destination socket address of this link (address used on the remote host)
     dst_addr: SocketAddr,
     dst_locator: Locator,
+    // The leftovers if reading less than what available on the web socket.
+    leftovers: AsyncMutex<Option<(Vec<u8>, usize, usize)>>,
 }
 
 impl LinkUnicastWs {
-    fn new(socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
-            src_addr: SocketAddr,
-            dst_addr: SocketAddr
-        ) -> LinkUnicastWs {
-
+    fn new(
+        socket: WebSocketStream<MaybeTlsStream<TcpStream>>,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+    ) -> LinkUnicastWs {
         // Set the TCP nodelay option
         if let Err(err) = get_stream(&socket).set_nodelay(true) {
             log::warn!(
@@ -80,9 +78,7 @@ impl LinkUnicastWs {
         let send = AsyncMutex::new(send);
         let recv = AsyncMutex::new(recv);
 
-        // let socket = Mutex::new(socket);
-
-        // Build the Tcp object
+        // Build the LinkUnicastWs object
         LinkUnicastWs {
             // socket,
             recv,
@@ -91,6 +87,40 @@ impl LinkUnicastWs {
             src_locator: Locator::new(WS_LOCATOR_PREFIX, &src_addr),
             dst_addr,
             dst_locator: Locator::new(WS_LOCATOR_PREFIX, &dst_addr),
+            leftovers: AsyncMutex::new(None),
+        }
+    }
+
+    async fn recv(&self) -> ZResult<Vec<u8>> {
+        let mut guard = zasynclock!(self.recv);
+
+        match guard.next().await {
+            Some(msg) => match msg {
+                Ok(msg) => match msg {
+                    Message::Binary(ws_bytes) => Ok(ws_bytes),
+                    Message::Ping(_) => bail!(
+                        "Received wrong message type (Ping) from WebSocket link {}",
+                        self
+                    ),
+                    Message::Pong(_) => bail!(
+                        "Received wrong message type (Pong) from WebSocket link {}",
+                        self
+                    ),
+                    Message::Text(_) => bail!(
+                        "Received wrong message type (Text) from WebSocket link {}",
+                        self
+                    ),
+                    Message::Frame(_) => bail!(
+                        "Received wrong message type (Frame) from WebSocket link {}",
+                        self
+                    ),
+                    Message::Close(_) => {
+                        bail!("Receiving from an already closed WS Link: {}", self)
+                    }
+                },
+                Err(e) => bail!("Error when receiving from WebSocket link {}: {}", self, e),
+            },
+            None => bail!("Error when receiving from WebSocket link {}: None", self),
         }
     }
 }
@@ -110,8 +140,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
-        // WebSocket is message based, and a binary message requires to be Vec<u8> :(
-        let msg = Message::Binary(buffer.to_vec());
+        let msg = buffer.into();
 
         guard.send(msg).await.map_err(|e| {
             let e = zerror!("Write error on WebSocket link {}: {}", self, e);
@@ -120,39 +149,48 @@ impl LinkUnicastTrait for LinkUnicastWs {
         })?;
 
         Ok(buffer.len())
-
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        self.write(buffer).await?;
+        let mut written: usize = 0;
+        while written < buffer.len() {
+            written += self.write(&buffer[written..]).await?;
+        }
         Ok(())
-
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.recv);
-        let size = buffer.len();
-        match guard.next().await {
-            Some(msg) => {
-                match msg {
-                    Ok(msg) => {
-                        match msg {
-                            Message::Binary(bytes) => {
-                                buffer[0..size].clone_from_slice(&bytes[0..size]);
-                                Ok(bytes.len())
-                            }
-                            _ => bail!("Received wrong message type from WebSocket link {}", self),
-                        }
-                    }
-                    Err(e) => bail!("Error when receiving from WebSocket link {}: {}", self, e),
-                }
+        let mut leftovers_guard = zasynclock!(self.leftovers);
+
+        let (slice, start, len) = match leftovers_guard.take() {
+            Some(tuple) => tuple,
+            None => {
+                let ws_bytes = self.recv().await?;
+                let ws_size = ws_bytes.len();
+                (ws_bytes, 0usize, ws_size)
             }
-            None =>  bail!("Error when receiving from WebSocket link {}: None", self),
+        };
+
+        // Copy the read bytes into the target buffer
+        let len_min = (len - start).min(buffer.len());
+        let end = start + len_min;
+        buffer[0..len_min].copy_from_slice(&slice[start..end]);
+        if end < len {
+            // Store the leftover
+            *leftovers_guard = Some((slice, end, len));
+        } else {
+            // Remove any leftover
+            *leftovers_guard = None;
         }
+        Ok(len_min)
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        self.read(buffer).await?;
+        let mut read: usize = 0;
+        while read < buffer.len() {
+            let n = self.read(&mut buffer[read..]).await?;
+            read += n;
+        }
         Ok(())
     }
 
@@ -178,15 +216,19 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        true
+        false
     }
 }
 
 impl Drop for LinkUnicastWs {
     fn drop(&mut self) {
-        // Close the underlying WebSocket socket
-        // let mut guard = zlock!(self.send);
-        // guard.close();
+        task::block_on(async {
+            let mut guard = zasynclock!(self.send);
+            // Close the underlying TCP socket
+            guard.close().await.unwrap_or_else(|e| {
+                log::warn!("`LinkUnicastWs::Drop` error when closing WebSocket {}", e)
+            });
+        })
     }
 }
 
@@ -253,20 +295,31 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
         let (stream, _) = tokio_tungstenite::connect_async(&dst_url)
             .await
-            .map_err(|e| zerror!("Can not create a new WebSocket link bound to {}: {}", dst_url, e))?;
+            .map_err(|e| {
+                zerror!(
+                    "Can not create a new WebSocket link bound to {}: {}",
+                    dst_url,
+                    e
+                )
+            })?;
 
-        let src_addr = get_stream(&stream)
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new WebSocket link bound to {}: {}", dst_url, e))?;
+        let src_addr = get_stream(&stream).local_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new WebSocket link bound to {}: {}",
+                dst_url,
+                e
+            )
+        })?;
 
-        let dst_addr = get_stream(&stream)
-            .peer_addr()
-            .map_err(|e| zerror!("Can not create a new WebSocket link bound to {}: {}", dst_url, e))?;
+        let dst_addr = get_stream(&stream).peer_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new WebSocket link bound to {}: {}",
+                dst_url,
+                e
+            )
+        })?;
 
-        let link = Arc::new(LinkUnicastWs::new(
-            stream,
-            src_addr,
-            dst_addr));
+        let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
         Ok(LinkUnicast(link))
     }
@@ -275,13 +328,21 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let addr = get_ws_addr(&endpoint.locator).await?;
 
         // Bind the TCP socket
-        let socket = TcpListener::bind(addr)
-            .await
-            .map_err(|e| zerror!("Can not create a new TCP (WebSocket) listener on {}: {}", addr, e))?;
+        let socket = TcpListener::bind(addr).await.map_err(|e| {
+            zerror!(
+                "Can not create a new TCP (WebSocket) listener on {}: {}",
+                addr,
+                e
+            )
+        })?;
 
-        let local_addr = socket
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new TCP (WebSocket) listener on {}: {}", addr, e))?;
+        let local_addr = socket.local_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new TCP (WebSocket) listener on {}: {}",
+                addr,
+                e
+            )
+        })?;
 
         // Update the endpoint locator address
         assert!(endpoint.set_addr(&format!("{}", local_addr)));
@@ -413,7 +474,10 @@ async fn accept_task(
         e
     })?;
 
-    log::trace!("Ready to accept TCP (WebSocket) connections on: {:?}", src_addr);
+    log::trace!(
+        "Ready to accept TCP (WebSocket) connections on: {:?}",
+        src_addr
+    );
     while active.load(Ordering::Acquire) {
         // Wait for incoming connections
         let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
@@ -434,16 +498,21 @@ async fn accept_task(
             }
         };
 
-        log::debug!("Accepted TCP (WebSocket) connection on {:?}: {:?}", src_addr, dst_addr);
+        log::debug!(
+            "Accepted TCP (WebSocket) connection on {:?}: {:?}",
+            src_addr,
+            dst_addr
+        );
 
-        let stream = accept_async(MaybeTlsStream::Plain(stream)).await.map_err(|e| {
-            let e = zerror!("Error when craating the WebSocket session: {}", e);
-            log::trace!("{}", e);
-            e
-        })?;
+        let stream = accept_async(MaybeTlsStream::Plain(stream))
+            .await
+            .map_err(|e| {
+                let e = zerror!("Error when creating the WebSocket session: {}", e);
+                log::trace!("{}", e);
+                e
+            })?;
         // Create the new link object
         let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
-
 
         // Communicate the new link to the initial transport manager
         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
@@ -454,10 +523,11 @@ async fn accept_task(
     Ok(())
 }
 
-
 fn get_stream(ws_stream: &WebSocketStream<MaybeTlsStream<TcpStream>>) -> &TcpStream {
     match ws_stream.get_ref() {
         MaybeTlsStream::Plain(s) => s,
+        // This two are available only if the TLS features are enabled for
+        // tokio_tungstenite.
         // MaybeTlsStream::NativeTls(s) => s.get_ref().get_ref(),
         // MaybeTlsStream::Rustls(s) => s.get_ref().0
         _ => panic!(),

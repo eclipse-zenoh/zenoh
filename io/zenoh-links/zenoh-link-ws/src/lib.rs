@@ -14,11 +14,11 @@
 
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
-use std::{net::SocketAddr, str::FromStr};
-use zenoh_link_commons::LocatorInspector;
-use zenoh_core::{bail, zconfigurable, Result as ZResult};
-use zenoh_protocol_core::Locator;
+use std::net::SocketAddr;
 use url::Url;
+use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_link_commons::LocatorInspector;
+use zenoh_protocol_core::Locator;
 mod unicast;
 pub use unicast::*;
 
@@ -60,10 +60,17 @@ pub async fn get_ws_addr(address: &Locator) -> ZResult<SocketAddr> {
     }
 }
 
-
 pub async fn get_ws_url(address: &Locator) -> ZResult<Url> {
-    match  Url::parse(&format!("{}://{}", address.protocol(), get_ws_addr(address).await?)) {
+    match Url::parse(&format!(
+        "{}://{}",
+        address.protocol(),
+        get_ws_addr(address).await?
+    )) {
         Ok(url) => Ok(url),
-        Err(e) => bail!("Couldn't resolve WebSocket locator address: {}: {}", address, e),
+        Err(e) => bail!(
+            "Couldn't resolve WebSocket locator address: {}: {}",
+            address,
+            e
+        ),
     }
 }

@@ -392,7 +392,6 @@ fn transport_tcp_concurrent() {
     });
 }
 
-
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_concurrent() {

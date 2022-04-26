@@ -333,7 +333,6 @@ fn transport_tcp_simultaneous() {
     });
 }
 
-
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_simultaneous() {

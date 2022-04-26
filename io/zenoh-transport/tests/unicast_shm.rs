@@ -349,7 +349,6 @@ mod tests {
         task::block_on(run(&endpoint));
     }
 
-
     #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
     #[test]
     fn transport_ws_shm() {

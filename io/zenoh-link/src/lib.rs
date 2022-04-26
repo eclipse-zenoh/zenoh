@@ -68,7 +68,6 @@ pub struct LocatorInspector {
     udp_inspector: UdpLocatorInspector,
     #[cfg(feature = "transport_ws")]
     ws_inspector: WsLocatorInspector,
-
 }
 impl LocatorInspector {
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
@@ -156,7 +155,7 @@ impl LinkManagerBuilderUnicast {
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             UNIXSOCKSTREAM_LOCATOR_PREFIX => {
                 Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(_manager)))
-            },
+            }
             #[cfg(feature = "transport_ws")]
             WS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastWs::new(_manager))),
             _ => bail!("Unicast not supported for {} protocol", protocol),
