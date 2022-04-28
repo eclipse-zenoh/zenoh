@@ -31,9 +31,14 @@ use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::{Mvar, Signal};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_serial::{DataBits, FlowControl, Parity, SerialPort, SerialPortBuilderExt, SerialStream, ClearBuffer};
+use tokio_serial::{DataBits, FlowControl, Parity, SerialPort, SerialPortBuilderExt, SerialStream, ClearBuffer, StopBits};
+
 
 use super::{get_unix_path, get_unix_path_as_string, SERIAL_DEFAULT_MTU, SERIAL_LOCATOR_PREFIX};
+
+
+
+
 
 struct LinkUnicastSerial {
     // The underlying serial port
@@ -72,13 +77,23 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-
+        log::error!("TO SERIAL {} : {:02X?}", buffer.len(), buffer);
         let mut guard = zasynclock!(self.port);
-        Ok(guard.write(buffer).await.map_err(|e| {
-            let e = zerror!("Write error on Serial link {}: {}", self, e);
-            log::trace!("{}", e);
-            e
-        })?)
+        guard.flush().await.unwrap();
+        // Ok(guard.write(buffer).await.map_err(|e| {
+        //     let e = zerror!("Write error on Serial link {}: {}", self, e);
+        //     log::trace!("{}", e);
+        //     e
+        // })?)
+        guard.write_all(buffer).await.map_err(|e| {
+                let e = zerror!("Write error on Serial link {}: {}", self, e);
+                log::trace!("{}", e);
+                e
+            })?;
+
+        log::error!("ACTUALLY WRITTEN {} bytes", buffer.len());
+        guard.flush().await.unwrap();
+        Ok(buffer.len())
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
@@ -91,11 +106,18 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         let mut guard = zasynclock!(self.port);
-        Ok(guard.read(buffer).await.map_err(|e| {
+        // Ok(guard.read(buffer).await.map_err(|e| {
+        //     let e = zerror!("Read error on Serial link {}: {}", self, e);
+        //     log::trace!("{}", e);
+        //     e
+        // })?)
+        let read = guard.read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on Serial link {}: {}", self, e);
             log::trace!("{}", e);
             e
-        })?)
+        })?;
+        log::error!("FROM SERIAL: {:02X?}", &buffer[0..read]);
+        Ok(read)
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
@@ -199,7 +221,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let path = get_unix_path_as_string(&endpoint.locator);
 
-        let port = tokio_serial::new(&path, 9600)
+        let port = tokio_serial::new(&path, 9_600)
+            .data_bits(DataBits::Eight)
+            .flow_control(FlowControl::None)
+            .parity(Parity::Odd)
+            .stop_bits(StopBits::Two)
             .open_native_async()
             .map_err(|e| {
                 let e = zerror!(
@@ -221,7 +247,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(&endpoint.locator);
 
         // Open the serial port
-        let port = tokio_serial::new(&path, 9600)
+        let port = tokio_serial::new(&path, 9_600)
+            .data_bits(DataBits::Eight)
+            .flow_control(FlowControl::None)
+            .parity(Parity::Odd)
+            .stop_bits(StopBits::Two)
             .open_native_async()
             .map_err(|e| {
                 let e = zerror!(
