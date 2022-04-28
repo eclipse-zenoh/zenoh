@@ -44,6 +44,7 @@ transport_quic = ["zenoh-link/transport_quic"]
 transport_tcp = ["zenoh-link/transport_tcp"]
 transport_tls = ["zenoh-link/transport_tls"]
 transport_udp = ["zenoh-link/transport_udp"]
+transport_ws = ["zenoh-link/transport_ws"]
 stats = []
 
 [dependencies]

@@ -251,6 +251,22 @@ fn endpoint_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock.lock");
 }
 
+#[cfg(feature = "transport_ws")]
+#[test]
+fn endpoint_ws() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "ws/127.0.0.1:11447".parse().unwrap(),
+        "ws/[::1]:11447".parse().unwrap(),
+        "ws/localhost:11448".parse().unwrap(),
+    ];
+    task::block_on(run(&endpoints));
+}
+
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn endpoint_tcp_udp() {

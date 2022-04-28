@@ -815,6 +815,17 @@ fn authenticator_udp() {
     task::block_on(run(&endpoint));
 }
 
+#[cfg(feature = "transport_ws")]
+#[test]
+fn authenticator_ws() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "ws/127.0.0.1:11449".parse().unwrap();
+    task::block_on(run(&endpoint));
+}
+
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {

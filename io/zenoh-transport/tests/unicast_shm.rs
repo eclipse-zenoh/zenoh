@@ -348,4 +348,15 @@ mod tests {
         let endpoint: EndPoint = "tcp/127.0.0.1:16447".parse().unwrap();
         task::block_on(run(&endpoint));
     }
+
+    #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+    #[test]
+    fn transport_ws_shm() {
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "ws/127.0.0.1:16448".parse().unwrap();
+        task::block_on(run(&endpoint));
+    }
 }

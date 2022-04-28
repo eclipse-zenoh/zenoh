@@ -398,3 +398,16 @@ fn transport_tcp_intermittent() {
     let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }
+
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_ws_intermittent() {
+    env_logger::init();
+
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "ws/127.0.0.1:12448".parse().unwrap();
+    task::block_on(transport_intermittent(&endpoint));
+}
