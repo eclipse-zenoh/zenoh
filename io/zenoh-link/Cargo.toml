@@ -35,6 +35,7 @@ transport_tcp = ["zenoh-link-tcp"]
 transport_tls = ["zenoh-link-tls"]
 transport_udp = ["zenoh-link-udp"]
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
+transport_ws = ["zenoh-link-ws"]
 transport_serial = ["zenoh-link-serial"]
 
 [dependencies]

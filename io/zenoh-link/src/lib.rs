@@ -47,7 +47,10 @@ pub use zenoh_link_unixsock_stream as unixsock_stream;
 use zenoh_link_unixsock_stream::{
     LinkManagerUnicastUnixSocketStream, UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
-
+#[cfg(feature = "transport_ws")]
+pub use zenoh_link_ws as ws;
+#[cfg(feature = "transport_ws")]
+use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
 #[cfg(feature = "transport_serial")]
 pub use zenoh_link_serial as serial;
 #[cfg(feature = "transport_serial")]
