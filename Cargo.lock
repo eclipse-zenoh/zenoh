@@ -3,6 +3,27 @@
 version = 3
 
 [[package]]
+name = "CoreFoundation-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0e9889e6db118d49d88d84728d0e964d973a5680befb5f85f55141beea5c20b"
+dependencies = [
+ "libc",
+ "mach 0.1.2",
+]
+
+[[package]]
+name = "IOKit-sys"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99696c398cbaf669d2368076bdb3d627fb0ce51a26899d7c61228c5c0af3bf4a"
+dependencies = [
+ "CoreFoundation-sys",
+ "libc",
+ "mach 0.1.2",
+]
+
+[[package]]
 name = "aead"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1502,6 +1523,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fd13ee2dd61cc82833ba05ade5a30bb3d63f7ced605ef827063c63078302de9"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "mach"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1537,7 +1576,29 @@ dependencies = [
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys",
+ "winapi",
+]
+
+[[package]]
+name = "mio-serial"
+version = "5.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531e0f6dc55a5aa7b8d320407c5c4ced464e23815c60f6a1e6d9e225d2b45905"
+dependencies = [
+ "log",
+ "mio 0.8.2",
+ "nix 0.23.1",
+ "serialport",
+ "winapi",
+]
+
+[[package]]
+name = "miow"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -2510,6 +2571,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "serialport"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc52fd78198e211d0e39928cbca339da52f679f4a964cdf335b33fc1855f63f"
+dependencies = [
+ "CoreFoundation-sys",
+ "IOKit-sys",
+ "bitflags",
+ "cfg-if 1.0.0",
+ "mach 0.3.2",
+ "nix 0.23.1",
+ "regex",
+ "winapi",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2954,15 +3031,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-tungstenite"
-version = "0.17.2"
+name = "tokio-serial"
+version = "5.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
+checksum = "e5488e0c75c70e880823aebc3ad4ac0a6da6f48d95bc1b9a52bd3200d6f1e724"
 dependencies = [
- "futures-util",
+ "cfg-if 1.0.0",
+ "futures",
  "log",
+ "mio-serial",
  "tokio",
- "tungstenite",
 ]
 
 [[package]]
@@ -3039,7 +3117,7 @@ dependencies = [
  "lazy_static",
  "log",
  "serde",
- "uuid",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -3122,6 +3200,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom 0.2.7",
+]
+
+[[package]]
+name = "uuid"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cfcd319456c4d6ea10087ed423473267e1a071f3bc0aa89f80d60997843c6f0"
+dependencies = [
+ "getrandom 0.2.6",
 ]
 
 [[package]]
@@ -3488,7 +3575,7 @@ dependencies = [
  "socket2",
  "stop-token",
  "uhlc",
- "uuid",
+ "uuid 0.8.2",
  "vec_map",
  "zenoh-buffers",
  "zenoh-cfg-properties",
@@ -3624,6 +3711,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-link-quic",
+ "zenoh-link-serial",
  "zenoh-link-tcp",
  "zenoh-link-tls",
  "zenoh-link-udp",
@@ -3661,6 +3749,25 @@ dependencies = [
  "webpki 0.22.0",
  "zenoh-cfg-properties",
  "zenoh-config",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-link-serial"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "log",
+ "tokio",
+ "tokio-serial",
+ "uuid 1.0.0",
+ "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3724,8 +3831,8 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
- "nix 0.24.2",
- "uuid",
+ "nix 0.23.1",
+ "uuid 0.8.2",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3824,7 +3931,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "uhlc",
- "uuid",
+ "uuid 0.8.2",
  "zenoh-buffers",
  "zenoh-core",
  "zenoh-protocol-core",
@@ -3841,7 +3948,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "uhlc",
- "uuid",
+ "uuid 0.8.2",
  "zenoh-core",
 ]
 

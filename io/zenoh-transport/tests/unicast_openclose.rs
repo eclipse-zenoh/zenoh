@@ -680,3 +680,158 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     task::block_on(openclose_transport(&endpoint));
 }
+
+#[cfg(all(feature = "transport_serial", target_os = "linux"))]
+#[test]
+fn openclose_serial_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    env_logger::try_init().unwrap_or_else(|_| log::warn!("`env_logger` already initialized"));
+
+    async fn create_ports() {
+        let args = [
+            "PTY,link=ttyVIRT0".to_string(),
+            "PTY,link=ttyVIRT1".to_string(),
+        ];
+        log::trace!("starting process: socat {} {}", args[0], args[1]);
+
+        let process = std::process::Command::new("socat")
+            .args(&args)
+            .spawn()
+            .expect("unable to spawn socat process");
+        log::trace!(".... done! (pid: {:?})", process.id());
+    }
+
+    task::spawn(create_ports());
+
+
+
+    task::block_on(async move {
+        let endpoint_router: EndPoint = "serial/ttyVIRT0".parse().unwrap();
+        let endpoint_client: EndPoint = "serial/ttyVIRT1".parse().unwrap();
+        async_std::task::sleep(std::time::Duration::from_secs(10)).await;
+        openclose_serial_transport(&endpoint_router, &endpoint_client).await;
+
+    });
+}
+
+
+#[cfg(all(feature = "transport_serial", target_os = "linux"))]
+async fn openclose_serial_transport(router_endpoint: &EndPoint, client_endpoint: &EndPoint) {
+    /* [ROUTER] */
+    let router_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
+
+    let router_handler = Arc::new(SHRouterOpenClose::default());
+    // Create the router transport manager
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
+    let router_manager = TransportManager::builder()
+        .whatami(WhatAmI::Router)
+        .pid(router_id)
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
+
+    /* [CLIENT] */
+    let client01_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client02_id = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+
+    // Create the transport transport manager for the first client
+    let unicast = TransportManager::config_unicast()
+        .max_links(2)
+        .max_sessions(1);
+    let client01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .pid(client01_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
+
+    // Create the transport transport manager for the second client
+    let unicast = TransportManager::config_unicast()
+        .max_links(1)
+        .max_sessions(1);
+    let client02_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .pid(client02_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
+
+    /* [1] */
+    println!("\nTransport Open Close [1a1]");
+    // Add the locator on the router
+    let res = ztimeout!(router_manager.add_listener(router_endpoint.clone()));
+    println!("Transport Open Close [1a1]: {:?}", res);
+    assert!(res.is_ok());
+    println!("Transport Open Close [1a2]");
+    let locators = router_manager.get_listeners();
+    println!("Transport Open Close [1a2]: {:?}", locators);
+    assert_eq!(locators.len(), 1);
+
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    let mut links_num = 1;
+
+    println!("Transport Open Close [1c1]");
+    let res = ztimeout!(client01_manager.open_transport(client_endpoint.clone()));
+    println!("Transport Open Close [1c2]: {:?}", res);
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
+    println!("Transport Open Close [1d1]");
+    let transports = client01_manager.get_transports();
+    println!("Transport Open Close [1d2]: {:?}", transports);
+    assert_eq!(transports.len(), 1);
+    assert_eq!(c_ses1.get_pid().unwrap(), router_id);
+    println!("Transport Open Close [1e1]");
+    let links = c_ses1.get_links().unwrap();
+    println!("Transport Open Close [1e2]: {:?}", links);
+    assert_eq!(links.len(), links_num);
+
+    // Verify that the transport has been open on the router
+    println!("Transport Open Close [1f1]");
+    let res = ztimeout!(async {
+        loop {
+            let transports = router_manager.get_transports();
+            let s = transports
+                .iter()
+                .find(|s| s.get_pid().unwrap() == client01_id);
+
+            match s {
+                Some(s) => {
+                    let links = s.get_links().unwrap();
+                    assert_eq!(links.len(), links_num);
+                    break;
+                }
+                None => task::sleep(SLEEP).await,
+            }
+        }
+    });
+    println!("Transport Open Close [1f2]: {:?}", res);
+
+
+    /* [10] */
+    // Perform clean up of the open locators
+    println!("\nTransport Open Close [10a1]");
+    let res = ztimeout!(router_manager.del_listener(router_endpoint));
+    println!("Transport Open Close [10a2]: {:?}", res);
+    assert!(res.is_ok());
+
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+}

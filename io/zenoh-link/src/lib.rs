@@ -48,10 +48,10 @@ use zenoh_link_unixsock_stream::{
     LinkManagerUnicastUnixSocketStream, UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
 
-#[cfg(feature = "transport_ws")]
-pub use zenoh_link_ws as ws;
-#[cfg(feature = "transport_ws")]
-use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
+#[cfg(feature = "transport_serial")]
+pub use zenoh_link_serial as serial;
+#[cfg(feature = "transport_serial")]
+use zenoh_link_serial::{LinkManagerUnicastSerial, SERIAL_LOCATOR_PREFIX};
 
 pub use zenoh_link_commons::*;
 pub use zenoh_protocol_core::{EndPoint, Locator};
@@ -83,6 +83,8 @@ impl LocatorInspector {
             TLS_LOCATOR_PREFIX => self.tls_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_quic")]
             QUIC_LOCATOR_PREFIX => self.quic_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_serial")]
+            SERIAL_LOCATOR_PREFIX => Ok(false),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(false),
             #[cfg(feature = "transport_ws")]
@@ -152,6 +154,8 @@ impl LinkManagerBuilderUnicast {
             TLS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastTls::new(_manager))),
             #[cfg(feature = "transport_quic")]
             QUIC_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastQuic::new(_manager))),
+            #[cfg(feature = "transport_serial")]
+            SERIAL_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastSerial::new(_manager))),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
             UNIXSOCKSTREAM_LOCATOR_PREFIX => {
                 Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(_manager)))
