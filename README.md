@@ -138,4 +138,4 @@ This plugin allows you to easily define storages. These will store key-value pai
 ## Troubleshooting
 
 In case of troubles, please first check on [this page](https://zenoh.io/docs/getting-started/troubleshooting/) if the trouble and cause are already known.  
-Otherwise, you can ask a question on the [zenoh Gitter channel](https://gitter.im/atolab/zenoh), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
+Otherwise, you can ask a question on the [zenoh Discord server](https://discord.gg/vSDSpqnbkm), or [create an issue](https://github.com/eclipse-zenoh/zenoh/issues).
