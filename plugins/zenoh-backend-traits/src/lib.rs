@@ -25,6 +25,7 @@
 //! use async_trait::async_trait;
 //! use zenoh::prelude::*;
 //! use zenoh::properties::properties_to_json_value;
+//! use zenoh::time::Timestamp;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;
 //! use zenoh::Result as ZResult;
@@ -127,16 +128,21 @@
 //!         // NOTE: in case query.value_selector() is not empty something smarter should be done with returned samples...
 //!         Ok(())
 //!     }
+//!
+//!     // To get all entries in the datastore
+//!     async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
+//!         // @TODO: get the list of (key, timestamp) in the datastore
+//!         Ok(Vec::new())
+//!     }
 //! }
 //! ```
 
 use async_trait::async_trait;
 use std::sync::Arc;
+use zenoh::prelude::{KeyExpr, Sample, Selector};
+use zenoh::queryable::ReplyBuilder;
+use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
-use zenoh::{
-    prelude::{KeyExpr, Sample, Selector},
-    queryable::ReplyBuilder,
-};
 
 pub mod config;
 pub mod utils;
@@ -187,6 +193,10 @@ pub trait Storage: Send + Sync {
     /// Function called for each incoming query matching this storage's keys exp.
     /// This storage should reply with data matching the query calling [`Query::reply()`].
     async fn on_query(&mut self, query: Query) -> ZResult<()>;
+
+    /// Function called to get the list of all storage content (key, timestamp)
+    /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
+    async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>>;
 }
 
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the

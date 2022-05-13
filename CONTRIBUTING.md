@@ -46,6 +46,6 @@ Contact the project developers via the project's "dev" list.
 
 * https://accounts.eclipse.org/mailing-list/zenoh-dev
 
-Or via the Gitter channel.
+Or via the Discord server.
 
-* https://gitter.im/atolab/zenoh
+* https://discord.gg/vSDSpqnbkm

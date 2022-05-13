@@ -467,6 +467,17 @@ fn openclose_udp_only() {
     task::block_on(openclose_transport(&endpoint));
 }
 
+#[cfg(feature = "transport_ws")]
+#[test]
+fn openclose_ws_only() {
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "ws/127.0.0.1:8448".parse().unwrap();
+    task::block_on(openclose_transport(&endpoint));
+}
+
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn openclose_unix_only() {

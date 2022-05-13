@@ -43,15 +43,15 @@ fn main() {
             .long_version(LONG_VERSION.as_str()).args(
                 &[
 clap::arg!(-c --config [FILE] "The configuration file. Currently, this file must be a valid JSON5 or YAML file."),
-clap::arg!(-l --listen [ENDPOINT] ... r"A locator on which this router will listen for incoming sessions.
-Repeat this option to open several listeners."),
-clap::arg!(-e --connect [ENDPOINT] ... r"A peer locator this router will try to connect to.
-Repeat this option to connect to several peers."),
-clap::arg!(-i --id [HEX_STRING] r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use. If not set, a random UUIDv4 will be used.
+clap::Arg::new("listen").short('l').long("listen").value_name("ENDPOINT]").help(r"A locator on which this router will listen for incoming sessions.
+Repeat this option to open several listeners.").takes_value(true).multiple_occurrences(true),
+clap::Arg::new("connect").short('e').long("connect").value_name("ENDPOINT").help(r"A peer locator this router will try to connect to.
+Repeat this option to connect to several peers.").takes_value(true).multiple_occurrences(true),
+clap::Arg::new("id").short('i').long("id").value_name("HEX_STRING").help(r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use. If not set, a random UUIDv4 will be used.
 WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!").multiple_values(false).multiple_occurrences(false),
-clap::arg!(-P --plugin [PLUGIN] ... r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+clap::Arg::new("plugin").short('P').long("plugin").value_name("PLUGIN").takes_value(true).multiple_occurrences(true).help(r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzplugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
 Repeat this option to load several plugins. If loading failed, zenohd will exit."#),
-clap::arg!(--"plugin-search-dir" [DIRECTORY] ... r"A directory where to search for plugins libraries to load.
+clap::Arg::new("plugin-search-dir").long("plugin-search-dir").takes_value(true).multiple_occurrences(true).value_name("DIRECTORY").help(r"A directory where to search for plugins libraries to load.
 Repeat this option to specify several search directories."),
 clap::arg!(--"no-timestamp" r"By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature."),
 clap::arg!(--"no-multicast-scouting" r"By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature."),

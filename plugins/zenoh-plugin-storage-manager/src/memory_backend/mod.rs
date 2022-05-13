@@ -246,6 +246,15 @@ impl Storage for MemoryStorage {
         }
         Ok(())
     }
+
+    async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
+        let map = self.map.read().await;
+        let mut result = Vec::with_capacity(map.len());
+        for (k, v) in map.iter() {
+            result.push((k.to_string(), *v.ts()));
+        }
+        Ok(result)
+    }
 }
 
 impl Drop for MemoryStorage {

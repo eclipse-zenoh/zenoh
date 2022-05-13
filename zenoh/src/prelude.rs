@@ -518,15 +518,15 @@ impl From<ZInt> for SampleKind {
 /// A zenoh sample.
 #[derive(Clone, Debug)]
 pub struct Sample {
-    // The key expression on which this Sample was published.
+    /// The key expression on which this Sample was published.
     pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
     pub value: Value,
-    // The kind of this Sample.
+    /// The kind of this Sample.
     pub kind: SampleKind,
-    // The [`Timestamp`] of this Sample.
+    /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
-    // Infos on the source of this Sample.
+    /// Infos on the source of this Sample.
     pub source_info: SourceInfo,
 }
 
@@ -579,7 +579,11 @@ impl Sample {
     #[inline]
     pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
         let info = DataInfo {
-            kind: None,
+            kind: if self.kind == SampleKind::Put {
+                None
+            } else {
+                Some(self.kind as u64)
+            },
             encoding: Some(self.value.encoding),
             timestamp: self.timestamp,
             #[cfg(feature = "shared-memory")]
