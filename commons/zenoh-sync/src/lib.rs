@@ -31,6 +31,7 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
 }
 
 /// A future which output can be accessed synchronously or asynchronously.
+#[deprecated]
 pub trait ZFuture: Future + Send {
     /// Synchronously waits for the output of this future.
     fn wait(self) -> Self::Output;

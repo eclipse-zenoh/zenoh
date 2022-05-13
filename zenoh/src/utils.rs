@@ -17,3 +17,19 @@
 /// Helpers to manipulate and compare key expressions.
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_protocol_core::key_expr;
+
+pub(crate) struct ClosureResolve<F>(pub F);
+impl<Output, F: FnOnce() -> Output> zenoh_core::Resolvable for ClosureResolve<F> {
+    type Output = Output;
+}
+impl<Output: Send, F: FnOnce() -> Output> zenoh_core::SyncResolve for ClosureResolve<F> {
+    fn res_sync(self) -> Self::Output {
+        self.0()
+    }
+}
+impl<Output: Send, F: FnOnce() -> Output> zenoh_core::AsyncResolve for ClosureResolve<F> {
+    type Future = futures::future::Ready<Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.0())
+    }
+}

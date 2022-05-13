@@ -18,6 +18,7 @@ use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::subscriber::SubMode;
 
 #[async_std::main]
@@ -54,7 +55,7 @@ async fn main() {
                 match input[0] {
                     b'q' => break,
                     0 => sleep(Duration::from_secs(1)).await,
-                    _ => subscriber.pull().await.unwrap(),
+                    _ => subscriber.pull().res().await.unwrap(),
                 }
             }
         );

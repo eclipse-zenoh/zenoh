@@ -24,7 +24,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, ReplyReceiver};
 use zenoh::Session;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
 mod config;
 pub use config::Config;
@@ -284,7 +284,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.close().await {
+                            if let Err(e) = sub.undeclare().res_async().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;

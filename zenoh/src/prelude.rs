@@ -22,6 +22,15 @@
 //! use zenoh::prelude::*;
 //! ```
 
+pub mod sync {
+    pub use super::*;
+    pub use zenoh_core::SyncResolve;
+}
+pub mod r#async {
+    pub use super::*;
+    pub use zenoh_core::AsyncResolve;
+}
+
 #[cfg(feature = "shared-memory")]
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;

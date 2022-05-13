@@ -18,3 +18,13 @@ mod session_ext;
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
 pub use session_ext::SessionExt;
+pub mod compress {
+    // pub struct Compress<T>(pub T);
+    // impl<T: Into<zenoh::prelude::Value>> Into<zenoh::prelude::Value> for Compress<T> {
+    //     fn into(self) -> zenoh::prelude::Value {
+    //         let mut value = self.0.into();
+    // 		value.;
+    //         value
+    //     }
+    // }
+}

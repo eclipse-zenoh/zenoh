@@ -22,7 +22,7 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::Session;
 use zenoh_backend_traits::Query;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{Result as ZResult, SyncResolve};
 
 pub(crate) enum StorageMessage {
     Stop,
@@ -90,7 +90,7 @@ pub(crate) async fn start_storage(
         }
 
         // answer to queries on key_expr
-        let mut storage_queryable = match zenoh.queryable(&key_expr).await {
+        let mut storage_queryable = match zenoh.queryable(&key_expr).res_sync() {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);

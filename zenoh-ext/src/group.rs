@@ -11,6 +11,8 @@ use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
 use zenoh::Session;
+use zenoh_core::AsyncResolve;
+use zenoh_core::SyncResolve;
 use zenoh_sync::Condition;
 
 const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
@@ -175,12 +177,13 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.queryable(&qres).await.unwrap();
+    let mut queryable = z.queryable(&qres).res_sync().unwrap();
 
     while let Some(query) = queryable.next().await {
         log::debug!("Serving query for: {}", &qres);
         query
             .reply(Ok(Sample::new(qres.clone(), buf.clone())))
+            .res_async()
             .await
             .unwrap();
     }

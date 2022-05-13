@@ -24,6 +24,7 @@ use crate::query::*;
 use crate::queryable::*;
 use crate::subscriber::*;
 use crate::sync::zready;
+use crate::utils::ClosureResolve;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
@@ -42,6 +43,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_core::Resolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
@@ -842,63 +844,68 @@ impl Session {
         }
     }
 
-    pub(crate) fn unsubscribe(&self, sid: usize) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
-        zready(if let Some(sub_state) = state.subscribers.remove(&sid) {
-            trace!("unsubscribe({:?})", sub_state);
-            for res in state.local_resources.values_mut() {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
-            }
-            for res in state.remote_resources.values_mut() {
-                res.subscribers.retain(|sub| sub.id != sub_state.id);
-            }
+    pub(crate) fn unsubscribe<'a>(
+        &'a self,
+        sid: usize,
+    ) -> ClosureResolve<impl FnOnce() -> ZResult<()> + 'a> {
+        ClosureResolve(move || {
+            let mut state = zwrite!(self.state);
+            if let Some(sub_state) = state.subscribers.remove(&sid) {
+                trace!("unsubscribe({:?})", sub_state);
+                for res in state.local_resources.values_mut() {
+                    res.subscribers.retain(|sub| sub.id != sub_state.id);
+                }
+                for res in state.remote_resources.values_mut() {
+                    res.subscribers.retain(|sub| sub.id != sub_state.id);
+                }
 
-            // Note: there might be several Subscribers on the same KeyExpr.
-            // Before calling forget_subscriber(key_expr), check if this was the last one.
-            state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
-                match state
-                    .join_subscriptions
-                    .iter()
-                    .find(|s| key_expr::include(s, &key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            key_expr::include(
-                                join_sub,
-                                &state.localkey_to_expr(&s.key_expr).unwrap(),
-                            )
-                        });
-                        if !joined_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            let key_expr = join_sub.clone().into();
-                            drop(state);
-                            primitives.forget_subscriber(&key_expr, None);
+                // Note: there might be several Subscribers on the same KeyExpr.
+                // Before calling forget_subscriber(key_expr), check if this was the last one.
+                state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
+                    match state
+                        .join_subscriptions
+                        .iter()
+                        .find(|s| key_expr::include(s, &key_expr))
+                    {
+                        Some(join_sub) => {
+                            let joined_sub = state.subscribers.values().any(|s| {
+                                key_expr::include(
+                                    join_sub,
+                                    &state.localkey_to_expr(&s.key_expr).unwrap(),
+                                )
+                            });
+                            if !joined_sub {
+                                let primitives = state.primitives.as_ref().unwrap().clone();
+                                let key_expr = join_sub.clone().into();
+                                drop(state);
+                                primitives.forget_subscriber(&key_expr, None);
+                            }
                         }
-                    }
-                    None => {
-                        let twin_sub = state.subscribers.values().any(|s| {
-                            state.localkey_to_expr(&s.key_expr).unwrap()
-                                == state.localkey_to_expr(&sub_state.key_expr).unwrap()
-                        });
-                        if !twin_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            drop(state);
-                            primitives.forget_subscriber(&sub_state.key_expr, None);
+                        None => {
+                            let twin_sub = state.subscribers.values().any(|s| {
+                                state.localkey_to_expr(&s.key_expr).unwrap()
+                                    == state.localkey_to_expr(&sub_state.key_expr).unwrap()
+                            });
+                            if !twin_sub {
+                                let primitives = state.primitives.as_ref().unwrap().clone();
+                                drop(state);
+                                primitives.forget_subscriber(&sub_state.key_expr, None);
+                            }
                         }
-                    }
-                };
-            })
-        } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
-            trace!("unsubscribe({:?})", sub_state);
-            for res in state.local_resources.values_mut() {
-                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+                    };
+                })
+            } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
+                trace!("unsubscribe({:?})", sub_state);
+                for res in state.local_resources.values_mut() {
+                    res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+                }
+                for res in state.remote_resources.values_mut() {
+                    res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+                }
+                Ok(())
+            } else {
+                Err(zerror!("Unable to find subscriber").into())
             }
-            for res in state.remote_resources.values_mut() {
-                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
-            }
-            Ok(())
-        } else {
-            Err(zerror!("Unable to find subscriber").into())
         })
     }
 
@@ -972,9 +979,9 @@ impl Session {
         }
     }
 
-    pub(crate) fn close_queryable(&self, qid: usize) -> impl ZFuture<Output = ZResult<()>> {
+    pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
-        zready(if let Some(qable_state) = state.queryables.remove(&qid) {
+        if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
                 // There still exist Queryables on the same KeyExpr.
@@ -1027,7 +1034,7 @@ impl Session {
             Ok(())
         } else {
             Err(zerror!("Unable to find queryable").into())
-        })
+        }
     }
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
@@ -1231,13 +1238,15 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull(&self, key_expr: &KeyExpr) -> impl ZFuture<Output = ZResult<()>> {
-        trace!("pull({:?})", key_expr);
-        let state = zread!(self.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.send_pull(true, key_expr, 0, &None);
-        zready(Ok(()))
+    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
+        ClosureResolve(move || {
+            trace!("pull({:?})", key_expr);
+            let state = zread!(self.state);
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.send_pull(true, key_expr, 0, &None);
+            Ok(())
+        })
     }
 
     /// Query data from the matching queryables in the system.

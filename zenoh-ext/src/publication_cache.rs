@@ -26,8 +26,8 @@ use zenoh::subscriber::Subscriber;
 use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
-use zenoh_core::bail;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, AsyncResolve};
+use zenoh_core::{Result as ZResult, SyncResolve};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -122,7 +122,7 @@ impl<'a> PublicationCache<'a> {
         } else {
             conf.pub_key_expr.clone()
         };
-        let mut queryable = conf.session.queryable(&queryable_key_expr).wait()?;
+        let mut queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let mut sub_recv = local_sub.receiver().clone();
@@ -171,7 +171,7 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_selector.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {
-                                        if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
                                     }
@@ -180,7 +180,7 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                                         for sample in queue {
-                                            if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
                                         }

@@ -106,6 +106,8 @@ pub mod net;
 
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+#[allow(pub_use_of_private_extern_crate, clippy::useless_attribute)]
+pub use zenoh_core as core;
 pub mod info;
 pub mod prelude;
 pub mod publication;

@@ -21,6 +21,8 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::utils::key_expr;
 
@@ -40,7 +42,7 @@ async fn main() {
     let mut subscriber = session.subscribe(&key_expr).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).await.unwrap();
+    let mut queryable = session.queryable(&key_expr).res_sync().unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -63,7 +65,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
-                        query.reply(Ok(sample.clone())).await.unwrap();
+                        query.reply(Ok(sample.clone())).res_async().await.unwrap();
                     }
                 }
             },

@@ -17,6 +17,7 @@ use futures::prelude::*;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
+use zenoh_core::{AsyncResolve, SyncResolve};
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -44,7 +45,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let mut queryable = session.queryable(key).await.unwrap();
+    let mut queryable = session.queryable(key).res_sync().unwrap();
 
     async_std::task::spawn(
         queryable
@@ -53,6 +54,7 @@ async fn main() {
             .for_each(move |request| async move {
                 request
                     .reply(Ok(Sample::new(key.to_string(), HTML)))
+                    .res_async()
                     .await
                     .unwrap();
             }),

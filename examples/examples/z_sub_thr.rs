@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 
 fn main() {
@@ -47,7 +48,7 @@ fn main() {
                 }
             }
         })
-        .wait()
+        .res()
         .unwrap();
 
     // Stop forever

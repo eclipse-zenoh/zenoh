@@ -17,15 +17,18 @@ use crate::prelude::{Id, KeyExpr, Sample};
 use crate::sync::channel::Receiver;
 use crate::sync::ZFuture;
 use crate::time::Period;
+use crate::utils::ClosureResolve;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use flume::r#async::RecvFut;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
+use futures::FutureExt;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol_core::SubInfo;
 use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
 
@@ -150,14 +153,12 @@ zreceiver! {
     /// # })
     /// ```
     pub struct Subscriber<'a> : Receiver<Sample> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) state: Arc<SubscriberState>,
-        pub(crate) alive: bool,
+        pub(crate) inner: CallbackSubscriber<'a>,
         pub(crate) sample_receiver: SampleReceiver,
     }
 }
 
-impl Subscriber<'_> {
+impl<'l> Subscriber<'l> {
     /// Returns a `Clonable` [`SampleReceiver`] which lifetime is not bound to
     /// the associated `Subscriber` lifetime.
     pub fn receiver(&mut self) -> &mut SampleReceiver {
@@ -183,8 +184,8 @@ impl Subscriber<'_> {
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
-        self.session.pull(&self.state.key_expr)
+    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
+        self.inner.pull()
     }
 
     /// Close a [`Subscriber`](Subscriber) previously created with [`subscribe`](crate::Session::subscribe).
@@ -204,23 +205,14 @@ impl Subscriber<'_> {
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
-        self.alive = false;
-        self.session.unsubscribe(self.state.id)
-    }
-}
-
-impl Drop for Subscriber<'_> {
-    fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.unsubscribe(self.state.id).wait();
-        }
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
+        self.inner.undeclare()
     }
 }
 
 impl fmt::Debug for Subscriber<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
+        self.inner.state.fmt(f)
     }
 }
 
@@ -230,10 +222,9 @@ impl fmt::Debug for Subscriber<'_> {
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
-    pub(crate) alive: bool,
 }
 
-impl CallbackSubscriber<'_> {
+impl<'l> CallbackSubscriber<'l> {
     /// Pull available data for a pull-mode [`CallbackSubscriber`](CallbackSubscriber).
     ///
     /// # Examples
@@ -249,8 +240,7 @@ impl CallbackSubscriber<'_> {
     /// subscriber.pull();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn pull(&self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.session.pull(&self.state.key_expr)
     }
 
@@ -273,17 +263,43 @@ impl CallbackSubscriber<'_> {
     /// ```
     #[inline]
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare(mut self) -> impl ZFuture<Output = ZResult<()>> {
-        self.alive = false;
-        self.session.unsubscribe(self.state.id)
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
+        CallbackSubscriberUndeclare {
+            s: std::mem::ManuallyDrop::new(self),
+            alive: true,
+        }
     }
 }
-
-impl Drop for CallbackSubscriber<'_> {
+struct CallbackSubscriberUndeclare<'a> {
+    s: std::mem::ManuallyDrop<CallbackSubscriber<'a>>,
+    alive: bool,
+}
+impl Resolvable for CallbackSubscriberUndeclare<'_> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for CallbackSubscriberUndeclare<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        self.alive = false;
+        self.s.session.unsubscribe(self.s.state.id).res_sync()
+    }
+}
+impl AsyncResolve for CallbackSubscriberUndeclare<'_> {
+    type Future = futures::future::Ready<ZResult<()>>;
+    fn res_async(mut self) -> Self::Future {
+        self.alive = false;
+        self.s.session.unsubscribe(self.s.state.id).res_async()
+    }
+}
+impl Drop for CallbackSubscriberUndeclare<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unsubscribe(self.state.id).wait();
+            unsafe { std::mem::ManuallyDrop::drop(&mut self.s) }
         }
+    }
+}
+impl Drop for CallbackSubscriber<'_> {
+    fn drop(&mut self) {
+        let _ = self.session.unsubscribe(self.state.id).res_sync();
     }
 }
 
@@ -412,9 +428,10 @@ impl<'a> Runnable for SubscribeBuilder<'a, '_> {
                 .declare_any_local_subscriber(&self.key_expr, SubscriberInvoker::Sender(sender))
                 .map(|sub_state| {
                     Subscriber::new(
-                        self.session.clone(),
-                        sub_state,
-                        true,
+                        CallbackSubscriber {
+                            session: self.session.clone(),
+                            state: sub_state,
+                        },
                         SampleReceiver::new(receiver.clone()),
                         receiver,
                     )
@@ -432,9 +449,10 @@ impl<'a> Runnable for SubscribeBuilder<'a, '_> {
                 )
                 .map(|sub_state| {
                     Subscriber::new(
-                        self.session.clone(),
-                        sub_state,
-                        true,
+                        CallbackSubscriber {
+                            session: self.session.clone(),
+                            state: sub_state,
+                        },
                         SampleReceiver::new(receiver.clone()),
                         receiver,
                     )
@@ -443,37 +461,35 @@ impl<'a> Runnable for SubscribeBuilder<'a, '_> {
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/key/expression")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Clone)]
-    pub struct CallbackSubscribeBuilder<'a, 'b> {
-        session: SessionRef<'a>,
-        key_expr: KeyExpr<'b>,
-        reliability: Reliability,
-        mode: SubMode,
-        period: Option<Period>,
-        local: bool,
-        handler: Arc<RwLock<DataHandler>>,
-    }
+/// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let subscriber = session
+///     .subscribe("/key/expression")
+///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .best_effort()
+///     .pull_mode()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Clone)]
+pub struct CallbackSubscribeBuilder<'a, 'b> {
+    session: SessionRef<'a>,
+    key_expr: KeyExpr<'b>,
+    reliability: Reliability,
+    mode: SubMode,
+    period: Option<Period>,
+    local: bool,
+    handler: Arc<RwLock<DataHandler>>,
 }
 
 impl fmt::Debug for CallbackSubscribeBuilder<'_, '_> {
@@ -547,10 +563,11 @@ impl<'a, 'b> CallbackSubscribeBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for CallbackSubscribeBuilder<'a, '_> {
+impl<'a> Resolvable for CallbackSubscribeBuilder<'a, '_> {
     type Output = ZResult<CallbackSubscriber<'a>>;
-
-    fn run(&mut self) -> Self::Output {
+}
+impl SyncResolve for CallbackSubscribeBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
         log::trace!("declare_callback_subscriber({:?})", self.key_expr);
 
         if self.local {
@@ -562,7 +579,6 @@ impl<'a> Runnable for CallbackSubscribeBuilder<'a, '_> {
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
-                    alive: true,
                 })
         } else {
             self.session
@@ -578,8 +594,20 @@ impl<'a> Runnable for CallbackSubscribeBuilder<'a, '_> {
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
-                    alive: true,
                 })
         }
+    }
+}
+pub struct CallbackSubscribeFuture<'a>(futures::future::Ready<ZResult<CallbackSubscriber<'a>>>);
+impl<'a> std::future::Future for CallbackSubscribeFuture<'a> {
+    type Output = ZResult<CallbackSubscriber<'a>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().0.poll_unpin(cx)
+    }
+}
+impl<'a> AsyncResolve for CallbackSubscribeBuilder<'a, '_> {
+    type Future = CallbackSubscribeFuture<'a>;
+    fn res_async(self) -> Self::Future {
+        CallbackSubscribeFuture(futures::future::ready(self.res_sync()))
     }
 }

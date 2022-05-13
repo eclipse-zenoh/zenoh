@@ -17,20 +17,23 @@
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::channel::Receiver;
-use crate::sync::ZFuture;
 use crate::Session;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use flume::r#async::RecvFut;
 use flume::{bounded, Iter, RecvError, RecvTimeoutError, Sender, TryIter, TryRecvError};
-use futures::{Future, FutureExt};
+use futures::FutureExt;
 use std::fmt;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use zenoh_core::AsyncResolve;
+use zenoh_core::Resolvable;
+use zenoh_core::Resolve;
+use zenoh_core::SyncResolve;
 use zenoh_protocol_core::QueryableInfo;
-use zenoh_sync::{derive_zfuture, zreceiver, Runnable};
+use zenoh_sync::zreceiver;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
@@ -72,7 +75,7 @@ impl Query {
     pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
         ReplyBuilder {
             query: self,
-            result: ResOrFut::Result(result),
+            result,
         }
     }
 }
@@ -97,64 +100,53 @@ impl fmt::Display for Query {
     }
 }
 
-enum ResOrFut<'a> {
-    Result(Result<Sample, Value>),
-    Fut(flume::r#async::SendFut<'a, (ZInt, Sample)>),
-    Empty(),
-}
-
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
-    result: ResOrFut<'a>,
+    result: Result<Sample, Value>,
 }
 
-impl Future for ReplyBuilder<'_> {
+impl Resolvable for ReplyBuilder<'_> {
     type Output = zenoh_core::Result<()>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if matches!(self.result, ResOrFut::Result(_)) {
-            let result = std::mem::replace(&mut self.result, ResOrFut::Empty());
-            if let ResOrFut::Result(result) = result {
-                match result {
-                    Ok(sample) => {
-                        self.result = ResOrFut::Fut(
-                            self.query
-                                .replies_sender
-                                .send_async((self.query.kind, sample)),
-                        );
-                    }
-                    Err(_) => {
-                        return Poll::Ready(Err(
-                            zerror!("Replying errors is not yet supported!").into()
-                        ))
-                    }
-                }
-            }
-        }
-
-        if let ResOrFut::Fut(fut) = &mut self.result {
-            fut.poll_unpin(cx).map_err(|e| zerror!("{}", e).into())
-        } else {
-            Poll::Ready(Err(zerror!("Not a future!").into()))
+}
+impl SyncResolve for ReplyBuilder<'_> {
+    fn res_sync(self) -> Self::Output {
+        match self.result {
+            Ok(sample) => self
+                .query
+                .replies_sender
+                .send((self.query.kind, sample))
+                .map_err(|e| zerror!("{}", e).into()),
+            Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
     }
 }
-
-impl ZFuture for ReplyBuilder<'_> {
-    fn wait(self) -> Self::Output {
-        if let ResOrFut::Result(result) = self.result {
-            match result {
-                Ok(sample) => self
-                    .query
-                    .replies_sender
-                    .send((self.query.kind, sample))
-                    .map_err(|e| zerror!("{}", e).into()),
-                Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
-            }
-        } else {
-            Err(zerror!("Not a result!").into())
+pub struct ReplyFuture<'a>(
+    Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
+);
+impl std::future::Future for ReplyFuture<'_> {
+    type Output = zenoh_core::Result<()>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match &mut self.get_mut().0 {
+            Ok(sender) => sender.poll_unpin(cx).map_err(|e| zerror!(e).into()),
+            Err(e) => Poll::Ready(Err(e
+                .take()
+                .unwrap_or_else(|| zerror!("Overpolling of ReplyFuture detected").into()))),
         }
+    }
+}
+impl<'a> AsyncResolve for ReplyBuilder<'a> {
+    type Future = ReplyFuture<'a>;
+    fn res_async(self) -> Self::Future {
+        ReplyFuture(match self.result {
+            Ok(sample) => Ok(self
+                .query
+                .replies_sender
+                .send_async((self.query.kind, sample))),
+            Err(_) => Err(Some(
+                zerror!("Replying errors is not yet supported!").into(),
+            )),
+        })
     }
 }
 
@@ -267,12 +259,11 @@ zreceiver! {
     pub struct Queryable<'a> : Receiver<Query> {
         pub(crate) session: SessionRef<'a>,
         pub(crate) state: Arc<QueryableState>,
-        pub(crate) alive: bool,
         pub(crate) query_receiver: QueryReceiver,
     }
 }
 
-impl Queryable<'_> {
+impl<'a> Queryable<'a> {
     /// Returns a `Clonable` [`QueryReceiver`] which lifetime is not bound to
     /// the associated `Queryable` lifetime.
     pub fn receiver(&mut self) -> &mut QueryReceiver {
@@ -295,18 +286,52 @@ impl Queryable<'_> {
     /// # })
     /// ```
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = crate::Result<()>> {
+    pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
+        QueryableCloser {
+            queryable: std::mem::ManuallyDrop::new(self),
+            alive: true,
+        }
+    }
+}
+pub struct QueryableCloser<'a> {
+    queryable: std::mem::ManuallyDrop<Queryable<'a>>,
+    alive: bool,
+}
+impl Resolvable for QueryableCloser<'_> {
+    type Output = crate::Result<()>;
+}
+impl SyncResolve for QueryableCloser<'_> {
+    fn res_sync(mut self) -> Self::Output {
         self.alive = false;
-        self.session.close_queryable(self.state.id)
+        self.queryable
+            .session
+            .close_queryable(self.queryable.state.id)
+    }
+}
+pub struct QueryableCloserFuture(futures::future::Ready<crate::Result<()>>);
+impl std::future::Future for QueryableCloserFuture {
+    type Output = crate::Result<()>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().0.poll_unpin(cx)
+    }
+}
+impl AsyncResolve for QueryableCloser<'_> {
+    type Future = QueryableCloserFuture;
+    fn res_async(self) -> Self::Future {
+        QueryableCloserFuture(futures::future::ready(self.res_sync()))
+    }
+}
+impl Drop for QueryableCloser<'_> {
+    fn drop(&mut self) {
+        if self.alive {
+            unsafe { std::mem::ManuallyDrop::drop(&mut self.queryable) }
+        }
     }
 }
 
 impl Drop for Queryable<'_> {
     fn drop(&mut self) {
-        if self.alive {
-            let _ = self.session.close_queryable(self.state.id).wait();
-        }
+        let _ = self.session.close_queryable(self.state.id);
     }
 }
 
@@ -316,33 +341,31 @@ impl fmt::Debug for Queryable<'_> {
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Queryable`](Queryable).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    /// use zenoh::queryable;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session
-    ///     .queryable("/key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct QueryableBuilder<'a, 'b> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'b>,
-        pub(crate) kind: ZInt,
-        pub(crate) complete: bool,
-    }
+/// A builder for initializing a [`Queryable`](Queryable).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::queryable;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let mut queryable = session
+///     .queryable("/key/expression")
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct QueryableBuilder<'a, 'b> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) kind: ZInt,
+    pub(crate) complete: bool,
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
@@ -353,11 +376,11 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         self
     }
 }
-
-impl<'a> Runnable for QueryableBuilder<'a, '_> {
+impl<'a> Resolvable for QueryableBuilder<'a, '_> {
     type Output = crate::Result<Queryable<'a>>;
-
-    fn run(&mut self) -> Self::Output {
+}
+impl SyncResolve for QueryableBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
         log::trace!("queryable({:?})", self.key_expr);
         let mut state = zwrite!(self.session.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -411,9 +434,21 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
         Ok(Queryable::new(
             self.session.clone(),
             qable_state,
-            true,
             QueryReceiver::new(receiver.clone()),
             receiver,
         ))
+    }
+}
+pub struct QueryableBuilderFuture<'a>(futures::future::Ready<crate::Result<Queryable<'a>>>);
+impl<'a> std::future::Future for QueryableBuilderFuture<'a> {
+    type Output = crate::Result<Queryable<'a>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.get_mut().0.poll_unpin(cx)
+    }
+}
+impl<'a> AsyncResolve for QueryableBuilder<'a, '_> {
+    type Future = QueryableBuilderFuture<'a>;
+    fn res_async(self) -> Self::Future {
+        QueryableBuilderFuture(futures::future::ready(self.res_sync()))
     }
 }
