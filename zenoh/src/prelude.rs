@@ -437,7 +437,11 @@ impl Sample {
     #[inline]
     pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
         let info = DataInfo {
-            kind: None,
+            kind: if self.kind == SampleKind::Put {
+                None
+            } else {
+                Some(self.kind as u64)
+            },
             encoding: Some(self.value.encoding),
             timestamp: self.timestamp,
             #[cfg(feature = "shared-memory")]
