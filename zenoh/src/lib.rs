@@ -67,8 +67,8 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut replies = session.get("/key/expression").await.unwrap();
-//!     while let Some(reply) = replies.next().await {
+//!     let replies = session.get("/key/expression").await.unwrap();
+//!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.sample);
 //!     }
 //! }

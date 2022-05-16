@@ -252,6 +252,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
 impl<'a> Resolvable for SubscriberBuilder<'a, '_> {
     type Output = ZResult<HandlerSubscriber<'a, flume::Receiver<Sample>>>;
 }
+
 impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
     fn res_sync(self) -> Self::Output {
         log::trace!("subscribe({:?})", self.key_expr);
@@ -295,6 +296,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
     Callback: FnMut(Sample) + Send + Sync + 'static,
@@ -388,10 +390,10 @@ where
 impl<'a, F: FnMut(Sample) + Send + Sync> Resolvable for CallbackSubscriberBuilder<'a, '_, F> {
     type Output = ZResult<CallbackSubscriber<'a>>;
 }
+
 impl<F: FnMut(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(mut self) -> Self::Output {
         log::trace!("declare_callback_subscriber({:?})", self.key_expr);
-
         if self.local {
             self.session
                 .declare_local_subscriber(

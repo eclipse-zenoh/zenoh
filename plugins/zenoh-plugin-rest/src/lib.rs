@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use futures::prelude::*;
+use futures::StreamExt;
 use http_types::Method;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,7 +22,7 @@ use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::Session;
 use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
@@ -82,8 +82,9 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
     }
 }
 
-async fn to_json(results: ReplyReceiver) -> String {
+async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
+        .stream()
         .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
         .collect::<Vec<String>>()
         .await
@@ -111,8 +112,9 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
     }
 }
 
-async fn to_html(results: ReplyReceiver) -> String {
+async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
+        .stream()
         .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
         .collect::<Vec<String>>()
         .await

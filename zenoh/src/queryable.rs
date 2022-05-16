@@ -393,6 +393,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
     Callback: FnMut(Query) + Send + Sync + 'static,
@@ -476,6 +477,8 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 ///     .unwrap();
 /// # })
 /// ```
+#[derive(Clone)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerQueryableBuilder<'a, 'b, Receiver> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,

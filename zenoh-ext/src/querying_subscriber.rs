@@ -19,7 +19,7 @@ use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
-use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver};
+use zenoh::query::{QueryConsolidation, QueryTarget, Reply};
 use zenoh::subscriber::{FlumeSubscriber, Reliability, SubMode};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::time::Period;
@@ -393,7 +393,7 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
 
 struct InnerState {
     subscriber_recv: flume::Receiver<Sample>,
-    replies_recv_queue: Vec<ReplyReceiver>,
+    replies_recv_queue: Vec<flume::Receiver<Reply>>,
     merge_queue: Vec<Sample>,
 }
 
@@ -409,7 +409,8 @@ impl Stream for InnerState {
             let mut i = 0;
             while i < mself.replies_recv_queue.len() {
                 loop {
-                    match mself.replies_recv_queue[i].poll_next_unpin(cx) {
+                    let next = mself.replies_recv_queue[i].stream().poll_next_unpin(cx);
+                    match next {
                         Poll::Ready(Some(reply)) => match reply.sample {
                             Ok(mut sample) => {
                                 log::trace!("Reply received: {}", sample.key_expr);
