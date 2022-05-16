@@ -252,7 +252,6 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
     type Output = ZResult<HandlerSubscriber<'a, flume::Receiver<Sample>>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("subscribe({:?})", self.key_expr);
         HandlerSubscriberBuilder {
             session: self.session.clone(),
             key_expr: self.key_expr.clone(),
@@ -409,8 +408,6 @@ where
     type Output = ZResult<CallbackSubscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("declare_callback_subscriber({:?})", self.key_expr);
-
         if self.local {
             self.session
                 .declare_local_subscriber(
@@ -609,7 +606,6 @@ impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
     type Output = ZResult<HandlerSubscriber<'a, Receiver>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("declare_handler_subscriber({:?})", self.key_expr);
         let (callback, receiver) = self.handler.take().unwrap();
 
         let subscriber = if self.local {

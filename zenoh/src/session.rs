@@ -704,6 +704,7 @@ impl Session {
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
+        log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
@@ -782,6 +783,7 @@ impl Session {
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
+        log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
@@ -910,8 +912,8 @@ impl Session {
         complete: bool,
         callback: Callback<Query>,
     ) -> ZResult<Arc<QueryableState>> {
-        log::trace!("queryable({:?})", key_expr);
         let mut state = zwrite!(self.state);
+        log::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
         let qable_state = Arc::new(QueryableState {
             id,
