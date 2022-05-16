@@ -1291,6 +1291,74 @@ impl Session {
         zready(Ok(()))
     }
 
+    pub(crate) fn query(
+        &self,
+        selector: &Selector<'_>,
+        target: QueryTarget,
+        consolidation: QueryConsolidation,
+        local_routing: Option<bool>,
+        callback: Callback<Option<Reply>>,
+    ) -> ZResult<()> {
+        log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
+        let mut state = zwrite!(self.state);
+        let consolidation = match consolidation {
+            QueryConsolidation::Auto => {
+                if selector.has_time_range() {
+                    ConsolidationStrategy::none()
+                } else {
+                    ConsolidationStrategy::default()
+                }
+            }
+            QueryConsolidation::Manual(strategy) => strategy,
+        };
+        let local_routing = local_routing.unwrap_or(state.local_routing);
+        let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        let nb_final = if local_routing { 2 } else { 1 };
+        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        state.queries.insert(
+            qid,
+            QueryState {
+                nb_final,
+                reception_mode: consolidation.reception,
+                replies: if consolidation.reception != ConsolidationMode::None {
+                    Some(HashMap::new())
+                } else {
+                    None
+                },
+                callback,
+            },
+        );
+
+        let primitives = state.primitives.as_ref().unwrap().clone();
+
+        drop(state);
+        primitives.send_query(
+            &selector.key_selector,
+            selector.value_selector.as_ref(),
+            qid,
+            zenoh_protocol_core::QueryTAK {
+                kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                target: target.clone(),
+            },
+            consolidation.clone(),
+            None,
+        );
+        if local_routing {
+            self.handle_query(
+                true,
+                &selector.key_selector,
+                selector.value_selector.as_ref(),
+                qid,
+                zenoh_protocol_core::QueryTAK {
+                    kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                    target,
+                },
+                consolidation,
+            );
+        }
+        Ok(())
+    }
+
     /// Query data from the matching queryables in the system.
     /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
     ///
@@ -1305,8 +1373,8 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut replies = session.get("/key/expression").await.unwrap();
-    /// while let Some(reply) = replies.next().await {
+    /// let replies = session.get("/key/expression").await.unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.sample);
     /// }
     /// # })
@@ -1674,7 +1742,8 @@ impl Primitives for Session {
                 };
                 match query.reception_mode {
                     ConsolidationMode::None => {
-                        let _ = query.rep_sender.send(new_reply);
+                        let callback = &mut *zwrite!(query.callback);
+                        let _ = callback(Some(new_reply));
                     }
                     ConsolidationMode::Lazy => {
                         match query
@@ -1691,7 +1760,8 @@ impl Primitives for Session {
                                         new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                         new_reply.clone(),
                                     );
-                                    let _ = query.rep_sender.send(new_reply);
+                                    let callback = &mut *zwrite!(query.callback);
+                                    let _ = callback(Some(new_reply));
                                 }
                             }
                             None => {
@@ -1699,7 +1769,8 @@ impl Primitives for Session {
                                     new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                     new_reply.clone(),
                                 );
-                                let _ = query.rep_sender.send(new_reply);
+                                let callback = &mut *zwrite!(query.callback);
+                                let _ = callback(Some(new_reply));
                             }
                         }
                     }
@@ -1744,12 +1815,14 @@ impl Primitives for Session {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
+                    let callback = &mut *zwrite!(query.callback);
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            let _ = query.rep_sender.send(reply);
+                            let _ = callback(Some(reply));
                         }
                     }
                     trace!("Close query {}", qid);
+                    let _ = callback(None);
                 }
             }
             None => {

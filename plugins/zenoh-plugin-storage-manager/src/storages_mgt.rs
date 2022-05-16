@@ -14,7 +14,6 @@
 use async_std::channel::{bounded, Sender};
 use async_std::task;
 use futures::select;
-use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
 use std::sync::Arc;
@@ -52,7 +51,7 @@ pub(crate) async fn start_storage(
 
         // align with other storages, querying them on key_expr,
         // with starttime to get historical data (in case of time-series)
-        let mut replies = match zenoh
+        let replies = match zenoh
             .get(&Selector::from(&key_expr).with_value_selector("?(starttime=0)"))
             .target(QueryTarget::All)
             .consolidation(QueryConsolidation::none())
@@ -64,7 +63,7 @@ pub(crate) async fn start_storage(
                 return;
             }
         };
-        while let Some(reply) = replies.next().await {
+        while let Ok(reply) = replies.recv_async().await {
             match reply.sample {
                 Ok(sample) => {
                     log::trace!("Storage {} aligns data {}", admin_key, sample.key_expr);

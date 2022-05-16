@@ -238,9 +238,9 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 // @TODO: we could also send this member info
                                 let qc = QueryConsolidation::none();
                                 log::debug!("Issuing Query for {}", &qres);
-                                let mut receiver = z.get(&qres).consolidation(qc).await.unwrap();
+                                let receiver = z.get(&qres).consolidation(qc).await.unwrap();
 
-                                while let Some(reply) = receiver.next().await {
+                                while let Ok(reply) = receiver.recv_async().await {
                                     match reply.sample {
                                         Ok(sample) => {
                                             match bincode::deserialize::<Member>(
