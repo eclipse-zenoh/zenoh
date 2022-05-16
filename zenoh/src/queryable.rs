@@ -15,7 +15,6 @@
 //! Queryable primitives.
 
 use crate::prelude::*;
-use crate::sync::ZFuture;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::FutureExt;
@@ -204,7 +203,6 @@ impl fmt::Debug for QueryableState {
 pub struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
-    pub(crate) alive: bool,
 }
 
 impl<'a> CallbackQueryable<'a> {
@@ -351,10 +349,11 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for QueryableBuilder<'a, '_> {
+impl<'a> Resolvable for QueryableBuilder<'a, '_> {
     type Output = crate::Result<HandlerQueryable<'a, flume::Receiver<Query>>>;
-
-    fn run(&mut self) -> Self::Output {
+}
+impl SyncResolve for QueryableBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
         let (callback, receiver) = flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE).into_handler();
         self.session
             .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
@@ -362,10 +361,15 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
                 queryable: CallbackQueryable {
                     session: self.session.clone(),
                     state: qable_state,
-                    alive: true,
                 },
                 receiver,
             })
+    }
+}
+impl AsyncResolve for QueryableBuilder<'_, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -429,7 +433,6 @@ where
             .map(|qable_state| CallbackQueryable {
                 session: self.session.clone(),
                 state: qable_state,
-                alive: true,
             })
     }
 }
@@ -439,10 +442,9 @@ pub struct HandlerQueryable<'a, Receiver> {
     pub receiver: Receiver,
 }
 
-impl<Receiver> HandlerQueryable<'_, Receiver> {
+impl<'a, Receiver> HandlerQueryable<'a, Receiver> {
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(self) -> impl ZFuture<Output = crate::Result<()>> {
+    pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
         self.queryable.close()
     }
 }
@@ -491,31 +493,6 @@ impl<'a, 'b, Receiver> HandlerQueryableBuilder<'a, 'b, Receiver> {
     }
 }
 
-impl<'a, 'b, U> std::future::Future for HandlerQueryableBuilder<'a, 'b, U>
-where
-    U: Unpin,
-{
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut async_std::task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl<'a, 'b, U> zenoh_sync::ZFuture for HandlerQueryableBuilder<'a, 'b, U>
-where
-    U: Send + Sync + Unpin,
-{
-    #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
-    }
-}
-
 impl<U> fmt::Debug for HandlerQueryableBuilder<'_, '_, U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerQueryableBuilder")
@@ -525,10 +502,12 @@ impl<U> fmt::Debug for HandlerQueryableBuilder<'_, '_, U> {
     }
 }
 
-impl<'a, Receiver> Runnable for HandlerQueryableBuilder<'a, '_, Receiver> {
+impl<'a, Receiver> Resolvable for HandlerQueryableBuilder<'a, '_, Receiver> {
     type Output = crate::Result<HandlerQueryable<'a, Receiver>>;
+}
 
-    fn run(&mut self) -> Self::Output {
+impl<'a, Receiver: Send> SyncResolve for HandlerQueryableBuilder<'a, '_, Receiver> {
+    fn res_sync(mut self) -> Self::Output {
         let (callback, receiver) = self.handler.take().unwrap();
         self.session
             .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
@@ -536,10 +515,15 @@ impl<'a, Receiver> Runnable for HandlerQueryableBuilder<'a, '_, Receiver> {
                 queryable: CallbackQueryable {
                     session: self.session.clone(),
                     state: qable_state,
-                    alive: true,
                 },
                 receiver,
             })
+    }
+}
+impl<Receiver: Send> AsyncResolve for HandlerQueryableBuilder<'_, '_, Receiver> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 

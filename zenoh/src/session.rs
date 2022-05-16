@@ -931,7 +931,7 @@ impl Session {
         {
             state.queryables.insert(id, qable_state.clone());
 
-            if self.complete {
+            if complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 let complete = Session::complete_twin_qabls(&state, key_expr, kind);
                 drop(state);

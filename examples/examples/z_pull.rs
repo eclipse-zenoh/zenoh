@@ -36,6 +36,7 @@ async fn main() {
     let subscriber = session
         .subscribe(&key_expr)
         .mode(SubMode::Pull)
+        .res_async()
         .await
         .unwrap();
 

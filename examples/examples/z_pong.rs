@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
@@ -30,7 +31,7 @@ fn main() {
     // The key expression to echo the data back
     let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
 
-    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
+    let sub = session.subscribe(&key_expr_ping).res_sync().unwrap();
 
     while let Ok(sample) = sub.recv() {
         session

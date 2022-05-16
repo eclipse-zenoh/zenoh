@@ -25,7 +25,7 @@ use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zread, zwrite, Resolve};
+use zenoh_core::{zread, zwrite, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
@@ -196,13 +196,13 @@ impl<'a> QueryingSubscriber<'a> {
                 .reliability(conf.reliability)
                 .mode(conf.mode)
                 .period(conf.period)
-                .wait()?,
+                .res_sync()?,
             SessionRef::Shared(session) => session
                 .subscribe(&conf.sub_key_expr)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
                 .period(conf.period)
-                .wait()?,
+                .res_sync()?,
         };
 
         let receiver = QueryingSubscriberReceiver::new(subscriber.receiver.clone());
@@ -222,7 +222,7 @@ impl<'a> QueryingSubscriber<'a> {
     /// Close this QueryingSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.undeclare()
+        self.subscriber.close()
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.

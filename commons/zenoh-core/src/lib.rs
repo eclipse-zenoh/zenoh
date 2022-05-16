@@ -38,6 +38,7 @@ pub trait SyncResolve: Sized + Resolvable + AsyncResolve {
 /// Many builder patterns in Zenoh can be resolved with either [`SyncResolve`] or [`AsyncResolve`],
 /// we advise sticking to either one or the other, rather than mixing them up.
 pub trait AsyncResolve: Sized + Resolvable {
+    /// This type is only exposed because trait functions can't return `impl Future<Self::Output> + Send`, do not rely on it being stable
     type Future: std::future::Future<Output = Self::Output> + Send;
     fn res_async(self) -> Self::Future;
     /// Resolves the builder pattern asynchronously

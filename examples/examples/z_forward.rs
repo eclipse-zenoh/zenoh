@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-use zenoh::config::Config;
+use zenoh::{config::Config, core::AsyncResolve};
 
 #[async_std::main]
 async fn main() {
@@ -25,7 +25,7 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
+    let mut subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
     let publisher = session.publish(&forward).await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);

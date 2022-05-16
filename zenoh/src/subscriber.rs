@@ -14,20 +14,15 @@
 
 //! Subscribing primitives.
 use crate::prelude::{Callback, Id, IntoHandler, KeyExpr, Sample};
-use crate::sync::ZFuture;
 use crate::time::Period;
-use crate::utils::ClosureResolve;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
 use std::ops::Deref;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::task::{Context, Poll};
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol_core::SubInfo;
-use zenoh_sync::{derive_zfuture, Runnable};
 
 /// The subscription mode.
 pub use zenoh_protocol_core::SubMode;
@@ -145,35 +140,14 @@ impl fmt::Debug for CallbackSubscriber<'_> {
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Subscriber`](Subscriber).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/key/expression")
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct SubscriberBuilder<'a, 'b> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'b>,
-        pub(crate) reliability: Reliability,
-        pub(crate) mode: SubMode,
-        pub(crate) period: Option<Period>,
-        pub(crate) local: bool,
-    }
+#[derive(Debug, Clone)]
+pub struct SubscriberBuilder<'a, 'b> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) reliability: Reliability,
+    pub(crate) mode: SubMode,
+    pub(crate) period: Option<Period>,
+    pub(crate) local: bool,
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
@@ -275,10 +249,11 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for SubscriberBuilder<'a, '_> {
+impl<'a> Resolvable for SubscriberBuilder<'a, '_> {
     type Output = ZResult<HandlerSubscriber<'a, flume::Receiver<Sample>>>;
-
-    fn run(&mut self) -> Self::Output {
+}
+impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
+    fn res_sync(self) -> Self::Output {
         log::trace!("subscribe({:?})", self.key_expr);
         HandlerSubscriberBuilder {
             session: self.session.clone(),
@@ -289,7 +264,13 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
             local: self.local,
             handler: Some(flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_handler()),
         }
-        .run()
+        .res_sync()
+    }
+}
+impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -408,7 +389,7 @@ impl<'a, F: FnMut(Sample) + Send + Sync> Resolvable for CallbackSubscriberBuilde
     type Output = ZResult<CallbackSubscriber<'a>>;
 }
 impl<F: FnMut(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(mut self) -> Self::Output {
         log::trace!("declare_callback_subscriber({:?})", self.key_expr);
 
         if self.local {
@@ -456,31 +437,6 @@ pub struct HandlerSubscriberBuilder<'a, 'b, Receiver> {
     period: Option<Period>,
     local: bool,
     handler: Option<crate::prelude::Handler<Sample, Receiver>>,
-}
-
-impl<'a, 'b, Receiver> std::future::Future for HandlerSubscriberBuilder<'a, 'b, Receiver>
-where
-    Receiver: Unpin,
-{
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut async_std::task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl<'a, 'b, Receiver> zenoh_sync::ZFuture for HandlerSubscriberBuilder<'a, 'b, Receiver>
-where
-    Receiver: Send + Sync + Unpin,
-{
-    #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
-    }
 }
 
 impl<Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, Receiver> {
@@ -607,10 +563,12 @@ impl HandlerSubscriber<'_, flume::Receiver<Sample>> {
     }
 }
 
-impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, Receiver> Resolvable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
     type Output = ZResult<HandlerSubscriber<'a, Receiver>>;
+}
 
-    fn run(&mut self) -> Self::Output {
+impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+    fn res_sync(mut self) -> Self::Output {
         log::trace!("declare_handler_subscriber({:?})", self.key_expr);
         let (callback, receiver) = self.handler.take().unwrap();
 
@@ -642,6 +600,12 @@ impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
             subscriber,
             receiver,
         })
+    }
+}
+impl<'a, 'b, Receiver: Send> AsyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 

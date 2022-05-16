@@ -22,7 +22,6 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::core::AsyncResolve;
-use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::utils::key_expr;
 
@@ -39,10 +38,10 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let subscriber = session.subscribe(&key_expr).await.unwrap();
+    let subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).res_async().await.unwrap();
+    let queryable = session.queryable(&key_expr).res_async().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();

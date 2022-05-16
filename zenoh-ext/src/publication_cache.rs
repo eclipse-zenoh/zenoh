@@ -110,7 +110,11 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
+        let local_sub = conf
+            .session
+            .subscribe(&conf.pub_key_expr)
+            .local()
+            .res_sync()?;
 
         // declare the queryable that will answer to queries on cache
         let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {

@@ -130,7 +130,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Create Subscriber on {}", selector);
-    let sub = session.subscribe(&selector).await.unwrap();
+    let sub = session.subscribe(&selector).res_async().await.unwrap();
 
     debug!("Create Queryable on {}", selector);
     let mut queryable = session.queryable(&selector).res_sync().unwrap();

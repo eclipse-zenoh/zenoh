@@ -263,7 +263,13 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let sub = req.state().0.subscribe(&key_expr).await.unwrap();
+                    let sub = req
+                        .state()
+                        .0
+                        .subscribe(&key_expr)
+                        .res_async()
+                        .await
+                        .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let send = async {
@@ -284,7 +290,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.undeclare().res_async().await {
+                            if let Err(e) = sub.close().res_async().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;

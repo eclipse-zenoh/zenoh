@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
@@ -30,7 +31,7 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).wait().unwrap();
+    let sub = session.subscribe(&key_expr_pong).res_sync().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
