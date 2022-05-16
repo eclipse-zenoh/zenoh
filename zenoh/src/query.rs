@@ -158,6 +158,41 @@ derive_zfuture! {
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
+    /// Make the built query a [`CallbackGet`](CallbackGet).
+    #[inline]
+    pub fn callback<Callback>(self, callback: Callback) -> CallbackGetBuilder<'a, 'b, Callback>
+    where
+        Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+    {
+        CallbackGetBuilder {
+            session: self.session,
+            selector: self.selector,
+            target: self.target,
+            consolidation: self.consolidation,
+            local_routing: self.local_routing,
+            callback: Some(callback),
+        }
+    }
+
+    /// Make the built query a [`HandlerGet`](HandlerGet).
+    #[inline]
+    pub fn with<IntoHandler, Receiver>(
+        self,
+        handler: IntoHandler,
+    ) -> HandlerGetBuilder<'a, 'b, Receiver>
+    where
+        IntoHandler: crate::prelude::IntoHandler<Option<Reply>, Receiver>,
+    {
+        HandlerGetBuilder {
+            session: self.session,
+            selector: self.selector,
+            target: self.target,
+            consolidation: self.consolidation,
+            local_routing: self.local_routing,
+            handler: Some(handler.into_handler()),
+        }
+    }
+
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
@@ -236,6 +271,32 @@ where
     }
 }
 
+impl<'a, 'b, Callback> CallbackGetBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+{
+    /// Change the target of the query.
+    #[inline]
+    pub fn target(mut self, target: QueryTarget) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// Change the consolidation mode of the query.
+    #[inline]
+    pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
+        self.consolidation = Some(consolidation);
+        self
+    }
+
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
+        self
+    }
+}
+
 impl<Callback> Runnable for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
@@ -297,6 +358,32 @@ where
     #[inline]
     fn wait(mut self) -> Self::Output {
         self.run()
+    }
+}
+
+impl<'a, 'b, Receiver> HandlerGetBuilder<'a, 'b, Receiver>
+where
+    Receiver: Send + Sync,
+{
+    /// Change the target of the query.
+    #[inline]
+    pub fn target(mut self, target: QueryTarget) -> Self {
+        self.target = Some(target);
+        self
+    }
+
+    /// Change the consolidation mode of the query.
+    #[inline]
+    pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
+        self.consolidation = Some(consolidation);
+        self
+    }
+
+    /// Enable or disable local routing.
+    #[inline]
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
+        self
     }
 }
 
