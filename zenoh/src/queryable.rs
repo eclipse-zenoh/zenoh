@@ -26,6 +26,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::task::{Context, Poll};
 use zenoh_protocol_core::QueryableInfo;
 use zenoh_sync::{derive_zfuture, Runnable};
@@ -285,6 +286,39 @@ derive_zfuture! {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
+    /// Make the built Queryable a [`CallbackQueryable`](CallbackQueryable).
+    #[inline]
+    pub fn callback<Callback>(self, callback: Callback) -> CallbackQueryableBuilder<'a, 'b>
+    where
+        Callback: FnMut(Query) + Send + Sync + 'static,
+    {
+        CallbackQueryableBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            kind: self.kind,
+            complete: self.complete,
+            callback: Arc::new(RwLock::new(callback)),
+        }
+    }
+
+    /// Make the built Queryable a [`HandlerQueryable`](HandlerQueryable).
+    #[inline]
+    pub fn with<IntoHandler, Receiver>(
+        self,
+        handler: IntoHandler,
+    ) -> HandlerQueryableBuilder<'a, 'b, Receiver>
+    where
+        IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+    {
+        HandlerQueryableBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            kind: self.kind,
+            complete: self.complete,
+            handler: Some(handler.into_handler()),
+        }
+    }
+
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
