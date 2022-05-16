@@ -42,7 +42,7 @@ pub trait AsyncResolve: Sized + Resolvable {
     fn res_async(self) -> Self::Future;
     /// Resolves the builder pattern asynchronously
     ///
-    /// This method is just a convenience alias to [`SyncResolve::res_sync`]
+    /// This method is just a convenience alias to [`AsyncResolve::res_async`]
     fn res(self) -> Self::Future {
         self.res_async()
     }
@@ -56,6 +56,7 @@ pub trait Resolvable {
     type Output;
 }
 
+/// A convenience trait to ease notation on functions that return `impl Resolvable<Output = Output> + SyncResolve + AsyncResolve + Send`
 pub trait Resolve<Output>: Resolvable<Output = Output> + SyncResolve + AsyncResolve + Send {}
 impl<T, Output> Resolve<Output> for T where
     T: Resolvable<Output = Output> + SyncResolve + AsyncResolve + Send
