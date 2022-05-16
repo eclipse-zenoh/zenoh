@@ -697,7 +697,7 @@ impl Session {
         }))
     }
 
-    pub(crate) fn declare_any_subscriber(
+    pub(crate) fn declare_subscriber(
         &self,
         key_expr: &KeyExpr,
         callback: Callback<Sample>,
@@ -776,7 +776,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn declare_any_local_subscriber(
+    pub(crate) fn declare_local_subscriber(
         &self,
         key_expr: &KeyExpr,
         callback: Callback<Sample>,
@@ -901,6 +901,64 @@ impl Session {
         } else {
             Err(zerror!("Unable to find subscriber").into())
         })
+    }
+
+    pub(crate) fn declare_queryable(
+        &self,
+        key_expr: &KeyExpr,
+        kind: ZInt,
+        complete: bool,
+        callback: Callback<Query>,
+    ) -> ZResult<Arc<QueryableState>> {
+        log::trace!("queryable({:?})", key_expr);
+        let mut state = zwrite!(self.state);
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let qable_state = Arc::new(QueryableState {
+            id,
+            key_expr: key_expr.to_owned(),
+            kind,
+            complete,
+            callback: callback.clone(),
+        });
+        #[cfg(feature = "complete_n")]
+        {
+            state.queryables.insert(id, qable_state.clone());
+
+            if self.complete {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                let complete = Session::complete_twin_qabls(&state, key_expr, kind);
+                drop(state);
+                let qabl_info = QueryableInfo {
+                    complete,
+                    distance: 0,
+                };
+                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
+            }
+        }
+        #[cfg(not(feature = "complete_n"))]
+        {
+            let twin_qabl = Session::twin_qabl(&state, key_expr, kind);
+            let complete_twin_qabl =
+                twin_qabl && Session::complete_twin_qabl(&state, key_expr, kind);
+
+            state.queryables.insert(id, qable_state.clone());
+
+            if !twin_qabl || (!complete_twin_qabl && complete) {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                let complete = if !complete_twin_qabl && complete {
+                    1
+                } else {
+                    0
+                };
+                drop(state);
+                let qabl_info = QueryableInfo {
+                    complete,
+                    distance: 0,
+                };
+                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
+            }
+        }
+        Ok(qable_state)
     }
 
     pub(crate) fn twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {

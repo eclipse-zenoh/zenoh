@@ -14,21 +14,17 @@
 
 //! Queryable primitives.
 
-use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::sync::ZFuture;
-use crate::Session;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::{Future, FutureExt};
 use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::task::{Context, Poll};
-use zenoh_protocol_core::QueryableInfo;
 use zenoh_sync::{derive_zfuture, Runnable};
 
 /// Structs received by a [`Queryable`](Queryable).
@@ -288,7 +284,10 @@ derive_zfuture! {
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
     /// Make the built Queryable a [`CallbackQueryable`](CallbackQueryable).
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> CallbackQueryableBuilder<'a, 'b>
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> CallbackQueryableBuilder<'a, 'b, Callback>
     where
         Callback: FnMut(Query) + Send + Sync + 'static,
     {
@@ -297,7 +296,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
             key_expr: self.key_expr,
             kind: self.kind,
             complete: self.complete,
-            callback: Arc::new(RwLock::new(callback)),
+            callback: Some(callback),
         }
     }
 
@@ -331,53 +330,55 @@ impl<'a> Runnable for QueryableBuilder<'a, '_> {
     type Output = crate::Result<HandlerQueryable<'a, flume::Receiver<Query>>>;
 
     fn run(&mut self) -> Self::Output {
-        let (handler, receiver) = flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE).into_handler();
-        CallbackQueryableBuilder {
-            session: self.session.clone(),
-            key_expr: self.key_expr.clone(),
-            kind: self.kind,
-            complete: self.complete,
-            callback: handler,
-        }
-        .run()
-        .map(|queryable| HandlerQueryable {
-            queryable,
-            receiver,
-        })
+        let (callback, receiver) = flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE).into_handler();
+        self.session
+            .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
+            .map(|qable_state| HandlerQueryable {
+                queryable: CallbackQueryable {
+                    session: self.session.clone(),
+                    state: qable_state,
+                    alive: true,
+                },
+                receiver,
+            })
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Queryable`](Queryable).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    /// use zenoh::queryable;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session
-    ///     .queryable("/key/expression")
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Clone)]
-    pub struct CallbackQueryableBuilder<'a, 'b> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'b>,
-        pub(crate) kind: ZInt,
-        pub(crate) complete: bool,
-        pub(crate) callback: Callback<Query>,
-    }
+/// A builder for initializing a [`Queryable`](Queryable).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::queryable;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let mut queryable = session
+///     .queryable("/key/expression")
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Clone)]
+pub struct CallbackQueryableBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Query) + Send + Sync + 'static,
+{
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) kind: ZInt,
+    pub(crate) complete: bool,
+    pub(crate) callback: Option<Callback>,
 }
 
-impl<'a, 'b> CallbackQueryableBuilder<'a, 'b> {
+impl<'a, 'b, Callback> CallbackQueryableBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Query) + Send + Sync + 'static,
+{
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
@@ -386,64 +387,25 @@ impl<'a, 'b> CallbackQueryableBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for CallbackQueryableBuilder<'a, '_> {
+impl<'a, Callback> Runnable for CallbackQueryableBuilder<'a, '_, Callback>
+where
+    Callback: FnMut(Query) + Send + Sync + 'static,
+{
     type Output = crate::Result<CallbackQueryable<'a>>;
 
     fn run(&mut self) -> Self::Output {
-        log::trace!("queryable({:?})", self.key_expr);
-        let mut state = zwrite!(self.session.state);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let qable_state = Arc::new(QueryableState {
-            id,
-            key_expr: self.key_expr.to_owned(),
-            kind: self.kind,
-            complete: self.complete,
-            callback: self.callback.clone(),
-        });
-        #[cfg(feature = "complete_n")]
-        {
-            state.queryables.insert(id, qable_state.clone());
-
-            if self.complete {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, &self.key_expr, self.kind);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
-            }
-        }
-        #[cfg(not(feature = "complete_n"))]
-        {
-            let twin_qabl = Session::twin_qabl(&state, &self.key_expr, self.kind);
-            let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, &self.key_expr, self.kind);
-
-            state.queryables.insert(id, qable_state.clone());
-
-            if !twin_qabl || (!complete_twin_qabl && self.complete) {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = if !complete_twin_qabl && self.complete {
-                    1
-                } else {
-                    0
-                };
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.decl_queryable(&self.key_expr, self.kind, &qabl_info, None);
-            }
-        }
-
-        Ok(CallbackQueryable {
-            session: self.session.clone(),
-            state: qable_state,
-            alive: true,
-        })
+        self.session
+            .declare_queryable(
+                &self.key_expr,
+                self.kind,
+                self.complete,
+                Arc::new(RwLock::new(self.callback.take().unwrap())),
+            )
+            .map(|qable_state| CallbackQueryable {
+                session: self.session.clone(),
+                state: qable_state,
+                alive: true,
+            })
     }
 }
 
@@ -542,19 +504,17 @@ impl<'a, Receiver> Runnable for HandlerQueryableBuilder<'a, '_, Receiver> {
     type Output = crate::Result<HandlerQueryable<'a, Receiver>>;
 
     fn run(&mut self) -> Self::Output {
-        let (handler, receiver) = self.handler.take().unwrap();
-        CallbackQueryableBuilder {
-            session: self.session.clone(),
-            key_expr: self.key_expr.clone(),
-            kind: self.kind,
-            complete: self.complete,
-            callback: handler,
-        }
-        .run()
-        .map(|queryable| HandlerQueryable {
-            queryable,
-            receiver,
-        })
+        let (callback, receiver) = self.handler.take().unwrap();
+        self.session
+            .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
+            .map(|qable_state| HandlerQueryable {
+                queryable: CallbackQueryable {
+                    session: self.session.clone(),
+                    state: qable_state,
+                    alive: true,
+                },
+                receiver,
+            })
     }
 }
 

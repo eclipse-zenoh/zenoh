@@ -152,9 +152,12 @@ derive_zfuture! {
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     /// Make the built Subscriber a [`CallbackSubscriber`](CallbackSubscriber).
     #[inline]
-    pub fn callback<DataHandler>(self, handler: DataHandler) -> CallbackSubscriberBuilder<'a, 'b>
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> CallbackSubscriberBuilder<'a, 'b, Callback>
     where
-        DataHandler: FnMut(Sample) + Send + Sync + 'static,
+        Callback: FnMut(Sample) + Send + Sync + 'static,
     {
         CallbackSubscriberBuilder {
             session: self.session,
@@ -163,7 +166,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            handler: Arc::new(RwLock::new(handler)),
+            callback: Some(callback),
         }
     }
 
@@ -263,40 +266,69 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session
-    ///     .subscribe("/key/expression")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
-    ///     .best_effort()
-    ///     .pull_mode()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Clone)]
-    pub struct CallbackSubscriberBuilder<'a, 'b> {
-        session: SessionRef<'a>,
-        key_expr: KeyExpr<'b>,
-        reliability: Reliability,
-        mode: SubMode,
-        period: Option<Period>,
-        local: bool,
-        handler: Callback<Sample>,
+/// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
+///
+/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
+/// or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let subscriber = session
+///     .subscribe("/key/expression")
+///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .best_effort()
+///     .pull_mode()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Clone)]
+pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Sample) + Send + Sync + 'static,
+{
+    session: SessionRef<'a>,
+    key_expr: KeyExpr<'b>,
+    reliability: Reliability,
+    mode: SubMode,
+    period: Option<Period>,
+    local: bool,
+    callback: Option<Callback>,
+}
+
+impl<'a, 'b, Callback> std::future::Future for CallbackSubscriberBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Sample) + Unpin + Send + Sync + 'static,
+{
+    type Output = <Self as Runnable>::Output;
+
+    #[inline]
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        _cx: &mut async_std::task::Context<'_>,
+    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
+        std::task::Poll::Ready(self.run())
     }
 }
 
-impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
+impl<'a, 'b, Callback> zenoh_sync::ZFuture for CallbackSubscriberBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Sample) + Unpin + Send + Sync + 'static,
+{
+    #[inline]
+    fn wait(mut self) -> Self::Output {
+        self.run()
+    }
+}
+
+impl<Callback> fmt::Debug for CallbackSubscriberBuilder<'_, '_, Callback>
+where
+    Callback: FnMut(Sample) + Send + Sync + 'static,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
             .field("session", &self.session)
@@ -308,7 +340,10 @@ impl fmt::Debug for CallbackSubscriberBuilder<'_, '_> {
     }
 }
 
-impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
+impl<'a, 'b, Callback> CallbackSubscriberBuilder<'a, 'b, Callback>
+where
+    Callback: FnMut(Sample) + Send + Sync + 'static,
+{
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -367,7 +402,10 @@ impl<'a, 'b> CallbackSubscriberBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
+impl<'a, Callback> Runnable for CallbackSubscriberBuilder<'a, '_, Callback>
+where
+    Callback: FnMut(Sample) + Send + Sync + 'static,
+{
     type Output = ZResult<CallbackSubscriber<'a>>;
 
     fn run(&mut self) -> Self::Output {
@@ -375,7 +413,10 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
 
         if self.local {
             self.session
-                .declare_any_local_subscriber(&self.key_expr, self.handler.clone())
+                .declare_local_subscriber(
+                    &self.key_expr,
+                    Arc::new(RwLock::new(self.callback.take().unwrap())),
+                )
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
@@ -383,9 +424,9 @@ impl<'a> Runnable for CallbackSubscriberBuilder<'a, '_> {
                 })
         } else {
             self.session
-                .declare_any_subscriber(
+                .declare_subscriber(
                     &self.key_expr,
-                    self.handler.clone(),
+                    Arc::new(RwLock::new(self.callback.take().unwrap())),
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
@@ -569,11 +610,11 @@ impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
 
     fn run(&mut self) -> Self::Output {
         log::trace!("declare_handler_subscriber({:?})", self.key_expr);
-        let (handler, context) = self.handler.take().unwrap();
+        let (callback, receiver) = self.handler.take().unwrap();
 
         let subscriber = if self.local {
             self.session
-                .declare_any_local_subscriber(&self.key_expr, handler)
+                .declare_local_subscriber(&self.key_expr, callback)
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
@@ -581,9 +622,9 @@ impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
                 })
         } else {
             self.session
-                .declare_any_subscriber(
+                .declare_subscriber(
                     &self.key_expr,
-                    handler,
+                    callback,
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
@@ -599,7 +640,7 @@ impl<'a, 'b, Receiver> Runnable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
 
         subscriber.map(|subscriber| HandlerSubscriber {
             subscriber,
-            receiver: context,
+            receiver,
         })
     }
 }
