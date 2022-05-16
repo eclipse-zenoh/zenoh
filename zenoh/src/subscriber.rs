@@ -286,6 +286,7 @@ impl<'a> Runnable for SubscriberBuilder<'a, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
+#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
     Callback: FnMut(Sample) + Send + Sync + 'static,
