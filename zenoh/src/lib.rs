@@ -50,8 +50,8 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-//!     while let Some(sample) = subscriber.next().await {
+//!     let subscriber = session.subscribe("/key/expression").await.unwrap();
+//!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received : {}", sample);
 //!     };
 //! }

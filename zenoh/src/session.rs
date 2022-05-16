@@ -18,6 +18,7 @@ use crate::info::*;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
+use crate::prelude::Callback;
 use crate::prelude::EntityFactory;
 use crate::publication::*;
 use crate::query::*;
@@ -31,7 +32,7 @@ use crate::Selector;
 use crate::Value;
 use crate::ZFuture;
 use async_std::task;
-use flume::{bounded, Sender};
+use flume::bounded;
 use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
@@ -312,9 +313,9 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.next().await {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
@@ -344,9 +345,9 @@ impl Session {
     /// use zenoh::Session;
     ///
     /// let session = Session::leak(zenoh::open(config::peer()).await.unwrap());
-    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.next().await {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
@@ -699,7 +700,7 @@ impl Session {
     pub(crate) fn declare_any_subscriber(
         &self,
         key_expr: &KeyExpr,
-        invoker: SubscriberInvoker,
+        callback: Callback<Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -709,7 +710,7 @@ impl Session {
             id,
             key_expr: key_expr.to_owned(),
             key_expr_str,
-            invoker,
+            callback,
         });
         let declared_sub = match state
             .join_subscriptions
@@ -778,7 +779,7 @@ impl Session {
     pub(crate) fn declare_any_local_subscriber(
         &self,
         key_expr: &KeyExpr,
-        invoker: SubscriberInvoker,
+        callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
@@ -787,7 +788,7 @@ impl Session {
             id,
             key_expr: key_expr.to_owned(),
             key_expr_str,
-            invoker,
+            callback,
         });
         state
             .local_subscribers
@@ -819,8 +820,8 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-    /// while let Some(sample) = subscriber.next().await {
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
@@ -828,11 +829,11 @@ impl Session {
     pub fn subscribe<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
-    ) -> SubscribeBuilder<'a, 'b>
+    ) -> SubscriberBuilder<'a, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        SubscribeBuilder {
+        SubscriberBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.into(),
             reliability: Reliability::default(),
@@ -948,8 +949,8 @@ impl Session {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
-    /// while let Some(query) = queryable.next().await {
+    /// let queryable = session.queryable("/key/expression").await.unwrap();
+    /// while let Ok(query) = queryable.recv_async().await {
     ///     query.reply(Ok(Sample::new(
     ///         "/key/expression".to_string(),
     ///         "value",
@@ -1134,23 +1135,13 @@ impl Session {
 
     #[inline]
     fn invoke_subscriber(
-        invoker: &SubscriberInvoker,
+        callback: &Callback<Sample>,
         key_expr: String,
         payload: ZBuf,
         data_info: Option<DataInfo>,
     ) {
-        match invoker {
-            SubscriberInvoker::Handler(handler) => {
-                let handler = &mut *zwrite!(handler);
-                handler(Sample::with_info(key_expr.into(), payload, data_info));
-            }
-            SubscriberInvoker::Sender(sender) => {
-                if let Err(e) = sender.send(Sample::with_info(key_expr.into(), payload, data_info))
-                {
-                    error!("SubscriberInvoker error: {}", e);
-                }
-            }
-        }
+        let callback = &mut *zwrite!(callback);
+        callback(Sample::with_info(key_expr.into(), payload, data_info));
     }
 
     pub(crate) fn handle_data(
@@ -1168,12 +1159,12 @@ impl Session {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
-                        Session::invoke_subscriber(&sub.invoker, res.name.clone(), payload, info);
+                        Session::invoke_subscriber(&sub.callback, res.name.clone(), payload, info);
                     } else {
                         if !local || local_routing {
                             for sub in &res.subscribers {
                                 Session::invoke_subscriber(
-                                    &sub.invoker,
+                                    &sub.callback,
                                     res.name.clone(),
                                     payload.clone(),
                                     info.clone(),
@@ -1183,7 +1174,7 @@ impl Session {
                         if local {
                             for sub in &res.local_subscribers {
                                 Session::invoke_subscriber(
-                                    &sub.invoker,
+                                    &sub.callback,
                                     res.name.clone(),
                                     payload.clone(),
                                     info.clone(),
@@ -1203,7 +1194,7 @@ impl Session {
                         for sub in state.subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
-                                    &sub.invoker,
+                                    &sub.callback,
                                     key_expr.clone(),
                                     payload.clone(),
                                     info.clone(),
@@ -1215,7 +1206,7 @@ impl Session {
                         for sub in state.local_subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
                                 Session::invoke_subscriber(
-                                    &sub.invoker,
+                                    &sub.callback,
                                     key_expr.clone(),
                                     payload.clone(),
                                     info.clone(),
@@ -1307,8 +1298,8 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| (qable.kind, qable.sender.clone()))
-                        .collect::<Vec<(ZInt, Sender<Query>)>>();
+                        .map(|qable| (qable.kind, qable.callback.clone()))
+                        .collect::<Vec<(ZInt, Callback<Query>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr,
@@ -1328,7 +1319,8 @@ impl Session {
         let pid = self.runtime.pid; // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
-            let _ = req_sender.send(Query {
+            let req_sender = &mut *zwrite!(req_sender);
+            req_sender(Query {
                 key_selector: key_expr.clone().into(),
                 value_selector: value_selector.clone(),
                 kind,
@@ -1393,19 +1385,19 @@ impl EntityFactory for Arc<Session> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// let subscriber = session.subscribe("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.next().await {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
     /// # })
     /// ```
-    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscribeBuilder<'static, 'b>
+    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
     where
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
-        SubscribeBuilder {
+        SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.into(),
             reliability: Reliability::default(),
@@ -1429,9 +1421,9 @@ impl EntityFactory for Arc<Session> {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
+    /// let queryable = session.queryable("/key/expression").await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(query) = queryable.next().await {
+    ///     while let Ok(query) = queryable.recv_async().await {
     ///         query.reply(Ok(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",

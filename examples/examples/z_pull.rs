@@ -32,7 +32,7 @@ async fn main() {
 
     println!("Creating Subscriber on '{}'...", key_expr);
 
-    let mut subscriber = session
+    let subscriber = session
         .subscribe(&key_expr)
         .mode(SubMode::Pull)
         .await
@@ -44,7 +44,7 @@ async fn main() {
     let mut input = [0_u8];
     loop {
         select!(
-            sample = subscriber.next() => {
+            sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());

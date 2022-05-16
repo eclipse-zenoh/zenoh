@@ -30,14 +30,14 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).await.unwrap();
+    let queryable = session.queryable(&key_expr).await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(
-            query = queryable.next() => {
+            query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).await.unwrap();

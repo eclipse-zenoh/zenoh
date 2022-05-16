@@ -13,7 +13,6 @@
 //
 
 use clap::{App, Arg};
-use futures::prelude::*;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
@@ -44,19 +43,19 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let mut queryable = session.queryable(key).await.unwrap();
+    let queryable = session.queryable(key).await.unwrap();
 
-    async_std::task::spawn(
-        queryable
-            .receiver()
-            .clone()
-            .for_each(move |request| async move {
+    async_std::task::spawn({
+        let receiver = queryable.receiver.clone();
+        async move {
+            while let Ok(request) = receiver.recv_async().await {
                 request
                     .reply(Ok(Sample::new(key.to_string(), HTML)))
                     .await
                     .unwrap();
-            }),
-    );
+            }
+        }
+    });
 
     let event_key = [key, "/event"].concat();
 
