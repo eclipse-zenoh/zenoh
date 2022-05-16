@@ -39,17 +39,17 @@ async fn main() {
     let session = zenoh::open(config).await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
+    let subscriber = session.subscribe(&key_expr).await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).res_sync().unwrap();
+    let mut queryable = session.queryable(&key_expr).res_async().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0u8];
     loop {
         select!(
-            sample = subscriber.next() => {
+            sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
@@ -60,7 +60,7 @@ async fn main() {
                 }
             },
 
-            query = queryable.next() => {
+            query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {

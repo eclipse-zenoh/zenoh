@@ -42,7 +42,7 @@ pub(crate) async fn start_storage(
     let (tx, rx) = bounded(1);
     task::spawn(async move {
         // subscribe on key_expr
-        let mut storage_sub = match zenoh.subscribe(&key_expr).await {
+        let storage_sub = match zenoh.subscribe(&key_expr).await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);
@@ -101,7 +101,7 @@ pub(crate) async fn start_storage(
         loop {
             select!(
                 // on sample for key_expr
-                sample = storage_sub.next() => {
+                sample = storage_sub.recv_async() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
                         interceptor(sample.unwrap())
@@ -114,7 +114,7 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on query on key_expr
-                query = storage_queryable.next() => {
+                query = storage_queryable.recv_async() => {
                     let q = query.unwrap();
                     // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor

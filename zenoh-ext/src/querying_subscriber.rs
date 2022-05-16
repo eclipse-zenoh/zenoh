@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver};
-use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
+use zenoh::subscriber::{FlumeSubscriber, Reliability, SubMode};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
 use zenoh::time::Period;
@@ -182,7 +182,7 @@ impl<'a, 'b> ZFuture for QueryingSubscriberBuilder<'a, 'b> {
 
 pub struct QueryingSubscriber<'a> {
     conf: QueryingSubscriberBuilder<'a, 'a>,
-    subscriber: Subscriber<'a>,
+    subscriber: FlumeSubscriber<'a>,
     receiver: QueryingSubscriberReceiver,
 }
 
@@ -190,7 +190,7 @@ impl<'a> QueryingSubscriber<'a> {
     fn new(conf: QueryingSubscriberBuilder<'a, 'a>) -> ZResult<QueryingSubscriber<'a>> {
         use zenoh::prelude::EntityFactory;
         // declare subscriber at first
-        let mut subscriber = match conf.session.clone() {
+        let subscriber = match conf.session.clone() {
             SessionRef::Borrow(session) => session
                 .subscribe(&conf.sub_key_expr)
                 .reliability(conf.reliability)
@@ -205,7 +205,7 @@ impl<'a> QueryingSubscriber<'a> {
                 .wait()?,
         };
 
-        let receiver = QueryingSubscriberReceiver::new(subscriber.receiver().clone());
+        let receiver = QueryingSubscriberReceiver::new(subscriber.receiver.clone());
 
         let mut query_subscriber = QueryingSubscriber {
             conf,
@@ -333,7 +333,7 @@ pub struct QueryingSubscriberReceiver {
 }
 
 impl QueryingSubscriberReceiver {
-    fn new(subscriber_recv: SampleReceiver) -> QueryingSubscriberReceiver {
+    fn new(subscriber_recv: flume::Receiver<Sample>) -> QueryingSubscriberReceiver {
         QueryingSubscriberReceiver {
             state: Arc::new(RwLock::new(InnerState {
                 subscriber_recv,
@@ -392,7 +392,7 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
 }
 
 struct InnerState {
-    subscriber_recv: SampleReceiver,
+    subscriber_recv: flume::Receiver<Sample>,
     replies_recv_queue: Vec<ReplyReceiver>,
     merge_queue: Vec<Sample>,
 }
@@ -441,7 +441,9 @@ impl Stream for InnerState {
             );
 
             // get all publications received during the queries and add them to merge_queue
-            while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next_unpin(cx) {
+            while let Poll::Ready(Some(mut sample)) =
+                mself.subscriber_recv.stream().poll_next_unpin(cx)
+            {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
                 sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
@@ -464,7 +466,7 @@ impl Stream for InnerState {
         if mself.merge_queue.is_empty() {
             log::trace!("poll_next: receiving from subscriber...");
             // if merge_queue is empty, receive from subscriber
-            mself.subscriber_recv.poll_next_unpin(cx)
+            mself.subscriber_recv.stream().poll_next_unpin(cx)
         } else {
             log::trace!(
                 "poll_next: pop sample from merge_queue (len={})",
@@ -479,7 +481,7 @@ impl Stream for InnerState {
 impl futures::stream::FusedStream for InnerState {
     #[inline(always)]
     fn is_terminated(&self) -> bool {
-        self.replies_recv_queue.is_empty() && self.subscriber_recv.is_terminated()
+        self.replies_recv_queue.is_empty() && self.subscriber_recv.stream().is_terminated()
     }
 }
 

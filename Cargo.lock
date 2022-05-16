@@ -3561,6 +3561,7 @@ dependencies = [
  "async-std",
  "clap 2.34.0",
  "env_logger",
+ "flume",
  "futures",
  "git-version",
  "json5",

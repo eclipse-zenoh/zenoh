@@ -21,8 +21,8 @@ use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use zenoh::prelude::*;
-use zenoh::queryable::Queryable;
-use zenoh::subscriber::Subscriber;
+use zenoh::queryable::{HandlerQueryable, Query};
+use zenoh::subscriber::FlumeSubscriber;
 use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
@@ -87,8 +87,8 @@ impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
 }
 
 pub struct PublicationCache<'a> {
-    _local_sub: Subscriber<'a>,
-    _queryable: Queryable<'a>,
+    _local_sub: FlumeSubscriber<'a>,
+    _queryable: HandlerQueryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
 
@@ -110,7 +110,7 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let mut local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
+        let local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
 
         // declare the queryable that will answer to queries on cache
         let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
@@ -125,8 +125,8 @@ impl<'a> PublicationCache<'a> {
         let mut queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
-        let mut sub_recv = local_sub.receiver().clone();
-        let mut quer_recv = queryable.receiver().clone();
+        let sub_recv = local_sub.receiver.clone();
+        let quer_recv = queryable.receiver.clone();
         let pub_key_expr = conf.pub_key_expr.to_owned();
         let resources_limit = conf.resources_limit;
         let queryable_prefix = conf.queryable_prefix;
@@ -141,8 +141,8 @@ impl<'a> PublicationCache<'a> {
             loop {
                 select!(
                     // on publication received by the local subscriber, store it
-                    sample = sub_recv.next().fuse() => {
-                        if let Some(sample) = sample {
+                    sample = sub_recv.recv_async() => {
+                        if let Ok(sample) = sample {
                             let queryable_key_expr = if let Some(prefix) = &queryable_prefix {
                                 format!("{}{}", prefix, sample.key_expr)
                             } else {
@@ -166,8 +166,8 @@ impl<'a> PublicationCache<'a> {
                     },
 
                     // on query, reply with cach content
-                    query = quer_recv.next().fuse() => {
-                        if let Some(query) = query {
+                    query = quer_recv.recv_async() => {
+                        if let Ok(query) = query {
                             if !query.selector().key_selector.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {

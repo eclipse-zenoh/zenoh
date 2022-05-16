@@ -13,7 +13,6 @@
 //
 #![recursion_limit = "256"]
 
-use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
@@ -131,20 +130,20 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Create Subscriber on {}", selector);
-    let mut sub = session.subscribe(&selector).await.unwrap();
+    let sub = session.subscribe(&selector).await.unwrap();
 
     debug!("Create Queryable on {}", selector);
     let mut queryable = session.queryable(&selector).res_sync().unwrap();
 
     while flag.load(Relaxed) {
         select!(
-            sample = sub.next() => {
+            sample = sub.recv_async() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
                 stored.insert(sample.key_expr.to_string(), sample);
             },
 
-            query = queryable.next() => {
+            query = queryable.recv_async() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
