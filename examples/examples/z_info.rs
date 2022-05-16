@@ -24,7 +24,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    let info: Properties = session.info().await.into();
+    let info: Properties = session.info().res().await.into();
     for (key, value) in info.iter() {
         println!("{} : {}", key, value);
     }

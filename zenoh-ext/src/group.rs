@@ -177,7 +177,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     );
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let mut queryable = z.queryable(&qres).res_sync().unwrap();
+    let queryable = z.queryable(&qres).res_sync().unwrap();
 
     while let Ok(query) = queryable.recv_async().await {
         log::debug!("Serving query for: {}", &qres);
@@ -293,7 +293,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
-        let expr_id = z.declare_expr(&_group_expr).await.unwrap();
+        let expr_id = z.declare_expr(&_group_expr).res_async().await.unwrap();
         let event_expr = KeyExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
         let state = Arc::new(GroupState {
             gid: String::from(group),

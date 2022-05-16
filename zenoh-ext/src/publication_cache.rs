@@ -23,11 +23,11 @@ use std::future::Future;
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::sync::zready;
 use zenoh::utils::key_expr;
 use zenoh::Session;
 use zenoh_core::{bail, AsyncResolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_sync::zready;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -126,7 +126,7 @@ impl<'a> PublicationCache<'a> {
         } else {
             conf.pub_key_expr.clone()
         };
-        let mut queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
+        let queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();

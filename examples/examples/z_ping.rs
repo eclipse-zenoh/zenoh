@@ -26,10 +26,10 @@ fn main() {
     let session = zenoh::open(config).res().unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = session.declare_expr("/test/ping").res().unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
 
     let sub = session.subscribe(&key_expr_pong).res_sync().unwrap();
 

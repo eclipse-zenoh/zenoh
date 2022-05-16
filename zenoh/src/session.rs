@@ -24,8 +24,8 @@ use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
 use crate::subscriber::*;
-use crate::sync::zready;
 use crate::utils::ClosureResolve;
+use crate::utils::FutureResolve;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
@@ -46,6 +46,7 @@ use std::time::Duration;
 use uhlc::HLC;
 use zenoh_core::AsyncResolve;
 use zenoh_core::Resolve;
+use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
@@ -248,8 +249,8 @@ impl Session {
     }
 
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub(super) fn new(config: Config) -> impl ZFuture<Output = ZResult<Session>> {
-        zpinbox(async move {
+    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
+        FutureResolve(async {
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
             let join_subscriptions = config.startup().subscribe().clone();
@@ -364,9 +365,8 @@ impl Session {
     }
 
     /// Returns the identifier for this session.
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn id(&self) -> impl ZFuture<Output = String> {
-        zready(self.runtime.get_pid_str())
+    pub fn id(&self) -> String {
+        self.runtime.get_pid_str()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -448,35 +448,16 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn info(&self) -> impl ZFuture<Output = InfoProperties> {
-        trace!("info()");
-        let sessions = self.runtime.manager().get_transports();
-        let peer_pids = sessions
-            .iter()
-            .filter(|s| {
-                s.get_whatami()
-                    .ok()
-                    .map(|what| what == WhatAmI::Peer)
-                    .unwrap_or(false)
-            })
-            .filter_map(|s| {
-                s.get_pid()
-                    .ok()
-                    .map(|pid| hex::encode_upper(pid.as_slice()))
-            })
-            .collect::<Vec<String>>();
-        let mut router_pids = vec![];
-        if self.runtime.whatami == WhatAmI::Router {
-            router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
-        }
-        router_pids.extend(
-            sessions
+    pub fn info(&self) -> impl Resolve<InfoProperties> + '_ {
+        ClosureResolve(move || {
+            trace!("info()");
+            let sessions = self.runtime.manager().get_transports();
+            let peer_pids = sessions
                 .iter()
                 .filter(|s| {
                     s.get_whatami()
                         .ok()
-                        .map(|what| what == WhatAmI::Router)
+                        .map(|what| what == WhatAmI::Peer)
                         .unwrap_or(false)
                 })
                 .filter_map(|s| {
@@ -484,17 +465,37 @@ impl Session {
                         .ok()
                         .map(|pid| hex::encode_upper(pid.as_slice()))
                 })
-                .collect::<Vec<String>>(),
-        );
+                .collect::<Vec<String>>();
+            let mut router_pids = vec![];
+            if self.runtime.whatami == WhatAmI::Router {
+                router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
+            }
+            router_pids.extend(
+                sessions
+                    .iter()
+                    .filter(|s| {
+                        s.get_whatami()
+                            .ok()
+                            .map(|what| what == WhatAmI::Router)
+                            .unwrap_or(false)
+                    })
+                    .filter_map(|s| {
+                        s.get_pid()
+                            .ok()
+                            .map(|pid| hex::encode_upper(pid.as_slice()))
+                    })
+                    .collect::<Vec<String>>(),
+            );
 
-        let mut info = InfoProperties::default();
-        info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
-        info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
-        info.insert(
-            ZN_INFO_PID_KEY,
-            hex::encode_upper(self.runtime.pid.as_slice()),
-        );
-        zready(info)
+            let mut info = InfoProperties::default();
+            info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
+            info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
+            info.insert(
+                ZN_INFO_PID_KEY,
+                hex::encode_upper(self.runtime.pid.as_slice()),
+            );
+            info
+        })
     }
 
     /// Associate a numerical Id with the given key expression.
@@ -515,44 +516,45 @@ impl Session {
     /// let expr_id = session.declare_expr("/key/expression").await.unwrap();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub fn declare_expr<'a, IntoKeyExpr>(
-        &self,
+        &'a self,
         key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<ExprId>>
+    ) -> impl Resolve<ZResult<ExprId>> + 'a
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        trace!("declare_expr({:?})", key_expr);
-        let mut state = zwrite!(self.state);
+        ClosureResolve(move || {
+            trace!("declare_expr({:?})", key_expr);
+            let mut state = zwrite!(self.state);
 
-        zready(state.localkey_to_expr(&key_expr).map(|expr| {
-            match state
-                .local_resources
-                .iter()
-                .find(|(_expr_id, res)| res.name == expr)
-            {
-                Some((expr_id, _res)) => *expr_id,
-                None => {
-                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                    let mut res = Resource::new(expr.clone());
-                    for sub in state.subscribers.values() {
-                        if key_expr::matches(&expr, &sub.key_expr_str) {
-                            res.subscribers.push(sub.clone());
+            state.localkey_to_expr(&key_expr).map(|expr| {
+                match state
+                    .local_resources
+                    .iter()
+                    .find(|(_expr_id, res)| res.name == expr)
+                {
+                    Some((expr_id, _res)) => *expr_id,
+                    None => {
+                        let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                        let mut res = Resource::new(expr.clone());
+                        for sub in state.subscribers.values() {
+                            if key_expr::matches(&expr, &sub.key_expr_str) {
+                                res.subscribers.push(sub.clone());
+                            }
                         }
+
+                        state.local_resources.insert(expr_id, res);
+
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.decl_resource(expr_id, &key_expr);
+
+                        expr_id
                     }
-
-                    state.local_resources.insert(expr_id, res);
-
-                    let primitives = state.primitives.as_ref().unwrap().clone();
-                    drop(state);
-                    primitives.decl_resource(expr_id, &key_expr);
-
-                    expr_id
                 }
-            }
-        }))
+            })
+        })
     }
 
     /// Undeclare the *numerical Id/resource key* association previously declared
@@ -573,16 +575,18 @@ impl Session {
     /// # })
     /// ```
     #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn undeclare_expr(&self, expr_id: ExprId) -> impl ZFuture<Output = ZResult<()>> {
-        trace!("undeclare_expr({:?})", expr_id);
-        let mut state = zwrite!(self.state);
-        state.local_resources.remove(&expr_id);
+    pub fn undeclare_expr(&self, expr_id: ExprId) -> impl Resolve<ZResult<()>> + '_ {
+        ClosureResolve(move || {
+            trace!("undeclare_expr({:?})", expr_id);
+            let mut state = zwrite!(self.state);
+            state.local_resources.remove(&expr_id);
 
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-        primitives.forget_resource(expr_id);
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            primitives.forget_resource(expr_id);
 
-        zready(Ok(()))
+            Ok(())
+        })
     }
 
     /// Declare a publication for the given key expression.
@@ -605,15 +609,15 @@ impl Session {
     /// # })
     /// ```
     pub fn declare_publication<'a, IntoKeyExpr>(
-        &self,
+        &'a self,
         key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    ) -> impl Resolve<ZResult<()>> + 'a
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        log::trace!("declare_publication({:?})", key_expr);
-        zready({
+        ClosureResolve(move || {
+            log::trace!("declare_publication({:?})", key_expr);
             let mut state = zwrite!(self.state);
             state.localkey_to_expr(&key_expr).map(|key_expr_str| {
                 if !state.publications.iter().any(|p| *p == key_expr_str) {
@@ -661,46 +665,48 @@ impl Session {
     /// # })
     /// ```
     pub fn undeclare_publication<'a, IntoKeyExpr>(
-        &self,
+        &'a self,
         key_expr: IntoKeyExpr,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    ) -> impl Resolve<ZResult<()>> + 'a
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         let key_expr = key_expr.into();
-        let mut state = zwrite!(self.state);
-        zready(state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
-            if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
-                trace!("undeclare_publication({:?})", key_expr_str);
-                state.publications.remove(idx);
-                match state
-                    .join_publications
-                    .iter()
-                    .find(|s| key_expr::include(s, &key_expr_str))
-                {
-                    Some(join_pub) => {
-                        let joined_pub = state
-                            .publications
-                            .iter()
-                            .any(|p| key_expr::include(join_pub, p));
-                        if !joined_pub {
+        ClosureResolve(move || {
+            let mut state = zwrite!(self.state);
+            state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
+                if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
+                    trace!("undeclare_publication({:?})", key_expr_str);
+                    state.publications.remove(idx);
+                    match state
+                        .join_publications
+                        .iter()
+                        .find(|s| key_expr::include(s, &key_expr_str))
+                    {
+                        Some(join_pub) => {
+                            let joined_pub = state
+                                .publications
+                                .iter()
+                                .any(|p| key_expr::include(join_pub, p));
+                            if !joined_pub {
+                                let primitives = state.primitives.as_ref().unwrap().clone();
+                                let key_expr = join_pub.clone().into();
+                                drop(state);
+                                primitives.forget_publisher(&key_expr, None);
+                            }
+                        }
+                        None => {
                             let primitives = state.primitives.as_ref().unwrap().clone();
-                            let key_expr = join_pub.clone().into();
                             drop(state);
                             primitives.forget_publisher(&key_expr, None);
                         }
-                    }
-                    None => {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_publisher(&key_expr, None);
-                    }
-                };
-                Ok(())
-            } else {
-                bail!("Unable to find publication")
-            }
-        }))
+                    };
+                    Ok(())
+                } else {
+                    bail!("Unable to find publication")
+                }
+            })
+        })
     }
 
     pub(crate) fn declare_subscriber(
@@ -758,14 +764,16 @@ impl Session {
             let key_expr = if key_expr.scope == EMPTY_EXPR_ID {
                 match key_expr.suffix.as_ref().find('*') {
                     Some(pos) => {
-                        let scope = self.declare_expr(&key_expr.suffix.as_ref()[..pos]).wait()?;
+                        let scope = self
+                            .declare_expr(&key_expr.suffix.as_ref()[..pos])
+                            .res_sync()?;
                         KeyExpr {
                             scope,
                             suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
                         }
                     }
                     None => {
-                        let scope = self.declare_expr(key_expr.suffix.as_ref()).wait()?;
+                        let scope = self.declare_expr(key_expr.suffix.as_ref()).res_sync()?;
                         KeyExpr {
                             scope,
                             suffix: "".into(),
@@ -849,10 +857,10 @@ impl Session {
         }
     }
 
-    pub(crate) fn unsubscribe<'a>(
-        &'a self,
+    pub(crate) fn unsubscribe(
+        &self,
         sid: usize,
-    ) -> ClosureResolve<impl FnOnce() -> ZResult<()> + 'a> {
+    ) -> ClosureResolve<impl FnOnce() -> ZResult<()> + '_> {
         ClosureResolve(move || {
             let mut state = zwrite!(self.state);
             if let Some(sub_state) = state.subscribers.remove(&sid) {

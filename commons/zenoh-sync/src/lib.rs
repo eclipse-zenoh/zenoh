@@ -98,7 +98,6 @@ macro_rules! zready_try {
 }
 
 /// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct ZPinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 
 impl<T> Future for ZPinBoxFuture<T> {

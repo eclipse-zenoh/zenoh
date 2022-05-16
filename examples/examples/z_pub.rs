@@ -27,11 +27,11 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     print!("Declaring key expression '{}'...", key_expr);
-    let expr_id = session.declare_expr(&key_expr).await.unwrap();
+    let expr_id = session.declare_expr(&key_expr).res().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Declaring publication on '{}'...", expr_id);
-    session.declare_publication(expr_id).await.unwrap();
+    session.declare_publication(expr_id).res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;

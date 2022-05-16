@@ -14,6 +14,7 @@
 use async_std::prelude::FutureExt;
 use futures::stream::StreamExt;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::scouting::WhatAmI;
 
 #[async_std::main]
@@ -23,6 +24,7 @@ async fn main() {
 
     println!("Scouting...");
     let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
+        .res()
         .await
         .unwrap();
 

@@ -22,10 +22,10 @@ use zenoh::prelude::{KeyExpr, Receiver, Sample, Selector, ZFuture};
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyReceiver};
 use zenoh::subscriber::{FlumeSubscriber, Reliability, SubMode};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
-use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zread, zwrite, Resolve, SyncResolve};
+use zenoh_core::{zread, zwrite, SyncResolve};
+use zenoh_sync::zready;
 
 use crate::session_ext::SessionRef;
 
@@ -221,8 +221,8 @@ impl<'a> QueryingSubscriber<'a> {
 
     /// Close this QueryingSubscriber
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.close()
+    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+        zready(self.subscriber.close().res_sync())
     }
 
     /// Return the QueryingSubscriberReceiver associated to this subscriber.

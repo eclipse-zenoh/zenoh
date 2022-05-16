@@ -76,10 +76,9 @@
 #[macro_use]
 extern crate zenoh_core;
 
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use async_std::net::UdpSocket;
-use async_std::task;
 use flume::bounded;
 use futures::prelude::*;
 use git_version::git_version;
@@ -89,10 +88,10 @@ use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
-use sync::{zready, ZFuture};
+use sync::ZFuture;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_sync::Runnable;
+use zenoh_sync::{zpinbox, ZPinBoxFuture};
 
 /// A zenoh result.
 pub use zenoh_core::Result;
@@ -123,6 +122,8 @@ pub mod plugins;
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
 pub use zenoh_buffers as buf;
+
+use crate::utils::ClosureResolve;
 
 /// Time related types and functions.
 pub mod time {
@@ -207,10 +208,8 @@ pub mod properties {
 /// ```
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub mod sync {
-    pub use zenoh_sync::zready;
     pub use zenoh_sync::ZFuture;
     pub use zenoh_sync::ZPinBoxFuture;
-    pub use zenoh_sync::ZReady;
 
     /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
     pub mod channel {
@@ -277,69 +276,67 @@ pub mod scouting {
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
-) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
+) -> impl Resolve<ZResult<scouting::HelloReceiver>>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     let what = what.into();
-    let config: crate::config::Config = match config.try_into() {
-        Ok(config) => config,
-        Err(e) => return zready(Err(zerror!("invalid configuration {:?}", &e).into())),
-    };
+    let config: ZResult<crate::config::Config> = config
+        .try_into()
+        .map_err(|e| zerror!("invalid configuration {:?}", &e).into());
+    ClosureResolve(move || {
+        let config = config?;
+        trace!("scout({}, {})", what, &config);
 
-    trace!("scout({}, {})", what, &config);
+        let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
+            Ok(addr) => addr,
+            Err(e) => {
+                return Err(zerror!(
+                    "invalid default addr {}: {:?}",
+                    ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
+                    &e
+                )
+                .into())
+            }
+        };
 
-    let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            return zready(Err(zerror!(
-                "invalid default addr {}: {:?}",
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-                &e
-            )
-            .into()))
-        }
-    };
+        let addr = config.scouting.multicast.address().unwrap_or(default_addr);
+        let ifaces = config
+            .scouting
+            .multicast
+            .interface()
+            .as_ref()
+            .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
 
-    let addr = config.scouting.multicast.address().unwrap_or(default_addr);
-    let ifaces = config
-        .scouting
-        .multicast
-        .interface()
-        .as_ref()
-        .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
+        let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
+        let (stop_sender, stop_receiver) = bounded::<()>(1);
 
-    let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
-    let (stop_sender, stop_receiver) = bounded::<()>(1);
-
-    let ifaces = Runtime::get_interfaces(ifaces);
-    if !ifaces.is_empty() {
-        let sockets: Vec<UdpSocket> = ifaces
-            .into_iter()
-            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-            .collect();
-        if !sockets.is_empty() {
-            async_std::task::spawn(async move {
-                let hello_sender = &hello_sender;
-                let mut stop_receiver = stop_receiver.stream();
-                let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
-                    let _ = hello_sender.send_async(hello).await;
-                    Loop::Continue
+        let ifaces = Runtime::get_interfaces(ifaces);
+        if !ifaces.is_empty() {
+            let sockets: Vec<UdpSocket> = ifaces
+                .into_iter()
+                .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                .collect();
+            if !sockets.is_empty() {
+                async_std::task::spawn(async move {
+                    let hello_sender = &hello_sender;
+                    let mut stop_receiver = stop_receiver.stream();
+                    let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
+                        let _ = hello_sender.send_async(hello).await;
+                        Loop::Continue
+                    });
+                    let stop = async move {
+                        stop_receiver.next().await;
+                        trace!("stop scout({}, {})", what, &config);
+                    };
+                    async_std::prelude::FutureExt::race(scout, stop).await;
                 });
-                let stop = async move {
-                    stop_receiver.next().await;
-                    trace!("stop scout({}, {})", what, &config);
-                };
-                async_std::prelude::FutureExt::race(scout, stop).await;
-            });
+            }
         }
-    }
 
-    zready(Ok(scouting::HelloReceiver::new(
-        stop_sender,
-        hello_receiver,
-    )))
+        Ok(scouting::HelloReceiver::new(stop_sender, hello_receiver))
+    })
 }
 
 /// Open a zenoh [`Session`].
@@ -404,7 +401,7 @@ where
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        task::block_on(Session::new(config))
+        Session::new(config).res_sync()
     }
 }
 
@@ -413,10 +410,16 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = ZPinBoxFuture<Self::Output>;
 
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        zpinbox(async move {
+            let config: crate::config::Config = self
+                .config
+                .try_into()
+                .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+            Session::new(config).res_async().await
+        })
     }
 }
 

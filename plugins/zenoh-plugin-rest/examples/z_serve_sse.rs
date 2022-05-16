@@ -62,11 +62,15 @@ async fn main() {
     let event_key = [key, "/event"].concat();
 
     print!("Declaring key expression '{}'...", event_key);
-    let expr_id = session.declare_expr(&event_key).await.unwrap();
+    let expr_id = session.declare_expr(&event_key).res_async().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Declaring publication on '{}'...", expr_id);
-    session.declare_publication(expr_id).await.unwrap();
+    session
+        .declare_publication(expr_id)
+        .res_async()
+        .await
+        .unwrap();
 
     println!("Putting Data periodically ('{}': '{}')...", expr_id, value);
 
