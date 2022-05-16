@@ -41,10 +41,10 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res_async().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let mut queryable = session.queryable(key).res_sync().unwrap();
+    let queryable = session.queryable(key).res_sync().unwrap();
 
     async_std::task::spawn({
         let receiver = queryable.receiver.clone();

@@ -35,13 +35,13 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
+    let subscriber = session.subscribe(&key_expr).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let queryable = session.queryable(&key_expr).res_async().await.unwrap();
+    let queryable = session.queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -64,7 +64,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
-                        query.reply(Ok(sample.clone())).res_async().await.unwrap();
+                        query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
                 }
             },

@@ -387,7 +387,9 @@ pub async fn run(runtime: Runtime, conf: Config) {
     let _ = env_logger::try_init();
 
     let pid = runtime.get_pid_str();
-    let session = Session::init(runtime, true, vec![], vec![]).await;
+    let session = Session::init(runtime, true, vec![], vec![])
+        .res_async()
+        .await;
 
     let mut app = Server::with_state((Arc::new(session), pid));
     app.with(

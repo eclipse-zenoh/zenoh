@@ -18,6 +18,7 @@ use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh_core::AsyncResolve;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -28,7 +29,7 @@ async fn main() {
     let (config, key_expr, query) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!(
         "Creating a QueryingSubscriber on {} with an initial query on {}",

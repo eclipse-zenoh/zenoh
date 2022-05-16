@@ -23,7 +23,7 @@ fn main() {
 
     let config = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
     // The key expression to read the data from
     let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();

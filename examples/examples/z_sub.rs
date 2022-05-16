@@ -28,7 +28,7 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
 

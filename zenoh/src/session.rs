@@ -44,6 +44,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_core::AsyncResolve;
 use zenoh_core::Resolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
@@ -261,6 +262,7 @@ impl Session {
                         join_subscriptions,
                         join_publications,
                     )
+                    .res_async()
                     .await;
                     // Workaround for the declare_and_shoot problem
                     task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
@@ -280,21 +282,23 @@ impl Session {
         local_routing: bool,
         join_subscriptions: Vec<String>,
         join_publications: Vec<String>,
-    ) -> impl ZFuture<Output = Session> {
-        let router = runtime.router.clone();
-        let state = Arc::new(RwLock::new(SessionState::new(
-            local_routing,
-            join_subscriptions,
-            join_publications,
-        )));
-        let session = Session {
-            runtime,
-            state: state.clone(),
-            alive: true,
-        };
-        let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-        zwrite!(state).primitives = primitives;
-        zready(session)
+    ) -> impl Resolve<Session> {
+        ClosureResolve(move || {
+            let router = runtime.router.clone();
+            let state = Arc::new(RwLock::new(SessionState::new(
+                local_routing,
+                join_subscriptions,
+                join_publications,
+            )));
+            let session = Session {
+                runtime,
+                state: state.clone(),
+                alive: true,
+            };
+            let primitives = Some(router.new_primitives(Arc::new(session.clone())));
+            zwrite!(state).primitives = primitives;
+            session
+        })
     }
 
     /// Consumes the given `Session`, returning a thread-safe reference-counting

@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::publication::CongestionControl;
 
 #[async_std::main]
@@ -22,7 +23,7 @@ async fn main() {
     env_logger::init();
     let (config, sm_size, size) = parse_args();
 
-    let z = zenoh::open(config).await.unwrap();
+    let z = zenoh::open(config).res().await.unwrap();
     let id = z.id().await;
     let mut shm = SharedMemoryManager::make(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();

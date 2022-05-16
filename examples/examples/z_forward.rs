@@ -22,10 +22,10 @@ async fn main() {
     let (config, key_expr, forward) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
+    let mut subscriber = session.subscribe(&key_expr).res().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
     let publisher = session.publish(&forward).await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);

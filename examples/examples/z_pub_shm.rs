@@ -16,6 +16,7 @@ use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 
 const N: usize = 10;
 const K: u32 = 3;
@@ -28,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Shared Memory Manager...");
     let id = session.id().await;

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-use zenoh::{config::Config, prelude::*};
+use zenoh::{config::Config, core::AsyncResolve, prelude::*};
 
 #[async_std::main]
 async fn main() {
@@ -22,7 +22,7 @@ async fn main() {
     let config = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     let info: Properties = session.info().await.into();
     for (key, value) in info.iter() {

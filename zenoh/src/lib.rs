@@ -76,6 +76,8 @@
 #[macro_use]
 extern crate zenoh_core;
 
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+
 use async_std::net::UdpSocket;
 use async_std::task;
 use flume::bounded;
@@ -372,9 +374,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder {
-        config: Some(config),
-    }
+    OpenBuilder { config }
 }
 
 pub struct OpenBuilder<TryIntoConfig>
@@ -382,102 +382,68 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    config: Option<TryIntoConfig>,
+    config: TryIntoConfig,
 }
 
-impl<TryIntoConfig> Runnable for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     type Output = ZResult<Session>;
-
-    #[inline]
-    fn run(&mut self) -> Self::Output {
-        match self.config.take() {
-            Some(c) => {
-                let config: crate::config::Config = c
-                    .try_into()
-                    .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-                task::block_on(Session::new(config))
-            }
-            None => {
-                bail!("You can not run the same OpenBuilder more than once.")
-            }
-        }
-    }
 }
 
-impl<TryIntoConfig> ::std::future::Future for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
 where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + Unpin + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl<TryIntoConfig> zenoh_sync::ZFuture for OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + Unpin + 'static,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
+    fn res_sync(self) -> Self::Output {
+        let config: crate::config::Config = self
+            .config
+            .try_into()
+            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+        task::block_on(Session::new(config))
+    }
+}
+
+impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Future = futures::future::Ready<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
 /// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime than the router.
+/// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
-#[must_use = "InitBuilder does nothing unless you `.wait()`, `.await` or poll it"]
 pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder {
-        runtime: Some(runtime),
-    }
+    InitBuilder { runtime }
 }
 
 pub struct InitBuilder {
-    runtime: Option<Runtime>,
+    runtime: Runtime,
 }
 
-impl Runnable for InitBuilder {
+impl Resolvable for InitBuilder {
     type Output = ZResult<Session>;
-
+}
+impl SyncResolve for InitBuilder {
     #[inline]
-    fn run(&mut self) -> Self::Output {
-        match self.runtime.take() {
-            Some(r) => Ok(task::block_on(Session::init(r, true, vec![], vec![]))),
-            None => {
-                bail!("You can not run the same InitBuilder more than once.")
-            }
-        }
+    fn res_sync(self) -> Self::Output {
+        Ok(Session::init(self.runtime, true, vec![], vec![]).res_sync())
     }
 }
 
-impl ::std::future::Future for InitBuilder {
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl zenoh_sync::ZFuture for InitBuilder {
-    #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
+impl AsyncResolve for InitBuilder {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }

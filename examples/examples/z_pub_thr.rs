@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
@@ -27,7 +28,7 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
     let key_expr = session.declare_expr("/test/thr").wait().unwrap();
 

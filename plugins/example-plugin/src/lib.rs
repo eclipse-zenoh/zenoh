@@ -123,7 +123,9 @@ impl Drop for RunningPlugin {
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
-    let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
+    let session = zenoh::Session::init(runtime, true, vec![], vec![])
+        .res_async()
+        .await;
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
@@ -133,7 +135,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     let sub = session.subscribe(&selector).res_async().await.unwrap();
 
     debug!("Create Queryable on {}", selector);
-    let mut queryable = session.queryable(&selector).res_sync().unwrap();
+    let queryable = session.queryable(&selector).res_sync().unwrap();
 
     while flag.load(Relaxed) {
         select!(
