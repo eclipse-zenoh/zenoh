@@ -920,7 +920,7 @@ impl Session {
             key_expr: key_expr.to_owned(),
             kind,
             complete,
-            callback: callback.clone(),
+            callback: callback.into(),
         });
         #[cfg(feature = "complete_n")]
         {
@@ -1412,7 +1412,7 @@ impl Session {
                             },
                         )
                         .map(|qable| (qable.kind, qable.callback.clone()))
-                        .collect::<Vec<(ZInt, Callback<Query>)>>();
+                        .collect::<Vec<(ZInt, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr,

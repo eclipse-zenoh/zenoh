@@ -19,7 +19,6 @@ use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zresult::ZResult;
 use zenoh_sync::{derive_zfuture, Runnable};
@@ -116,7 +115,6 @@ pub struct Reply {
     pub replier_id: ZenohId,
 }
 
-#[derive(Clone)]
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) reception_mode: ConsolidationMode,
@@ -321,12 +319,11 @@ where
             self.target.take().unwrap(),
             self.consolidation.take().unwrap(),
             self.local_routing,
-            Arc::new(self.callback.take().unwrap()),
+            Box::new(self.callback.take().unwrap()),
         )
     }
 }
 
-#[derive(Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerGetBuilder<'a, 'b, Receiver> {
     pub(crate) session: &'a Session,
@@ -423,7 +420,7 @@ impl crate::prelude::IntoHandler<Option<Reply>, flume::Receiver<Reply>>
         let (sender, receiver) = self;
         let sender = RwLock::new(Some(sender));
         (
-            Arc::new(move |s| {
+            Box::new(move |s| {
                 if let Some(s) = s {
                     if let Some(sender) = &*zread!(sender) {
                         if let Err(e) = sender.send(s) {

@@ -1139,7 +1139,7 @@ pub trait EntityFactory {
         IntoKeyExpr: Into<KeyExpr<'a>>;
 }
 
-pub type Dyn<T> = std::sync::Arc<T>;
+pub type Dyn<T> = std::boxed::Box<T>;
 pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
 pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
 

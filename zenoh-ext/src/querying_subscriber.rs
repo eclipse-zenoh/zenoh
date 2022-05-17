@@ -248,7 +248,7 @@ where
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(CallbackQueryingSubscriber::new(
             self.builder.clone().with_static_keys(),
-            Arc::new(self.callback.take().unwrap()),
+            Box::new(self.callback.take().unwrap()),
         ))
     }
 }
@@ -261,7 +261,7 @@ where
     fn wait(mut self) -> ZResult<CallbackQueryingSubscriber<'a>> {
         CallbackQueryingSubscriber::new(
             self.builder.with_static_keys(),
-            Arc::new(self.callback.take().unwrap()),
+            Box::new(self.callback.take().unwrap()),
         )
     }
 }
@@ -356,7 +356,7 @@ pub struct CallbackQueryingSubscriber<'a> {
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     subscriber: CallbackSubscriber<'a>,
-    callback: Callback<Sample>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
     state: Arc<RwLock<InnerState>>,
 }
 
@@ -369,6 +369,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             pending_queries: 1,
             merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
         }));
+        let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
 
         let sub_callback = {
             let state = state.clone();
@@ -507,7 +508,6 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     }
 }
 
-#[derive(Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
     builder: QueryingSubscriberBuilder<'a, 'b>,

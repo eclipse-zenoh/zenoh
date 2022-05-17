@@ -422,7 +422,7 @@ where
     fn run(&mut self) -> Self::Output {
         if self.local {
             self.session
-                .declare_local_subscriber(&self.key_expr, Arc::new(self.callback.take().unwrap()))
+                .declare_local_subscriber(&self.key_expr, Box::new(self.callback.take().unwrap()))
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
@@ -432,7 +432,7 @@ where
             self.session
                 .declare_subscriber(
                     &self.key_expr,
-                    Arc::new(self.callback.take().unwrap()),
+                    Box::new(self.callback.take().unwrap()),
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
@@ -448,7 +448,6 @@ where
     }
 }
 
-#[derive(Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerSubscriberBuilder<'a, 'b, Receiver> {
     session: SessionRef<'a>,
@@ -656,7 +655,7 @@ impl crate::prelude::IntoHandler<Sample, flume::Receiver<Sample>>
     fn into_handler(self) -> crate::prelude::Handler<Sample, flume::Receiver<Sample>> {
         let (sender, receiver) = self;
         (
-            std::sync::Arc::new(move |s| {
+            Box::new(move |s| {
                 if let Err(e) = sender.send(s) {
                     log::warn!("Error sending sample into flume channel: {}", e)
                 }
