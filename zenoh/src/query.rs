@@ -118,7 +118,7 @@ pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<String, Reply>>,
-    pub(crate) callback: Callback<Option<Reply>>,
+    pub(crate) callback: Callback<Reply>,
 }
 
 derive_zfuture! {
@@ -159,7 +159,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> CallbackGetBuilder<'a, 'b, Callback>
     where
-        Callback: Fn(Option<Reply>) + Send + Sync + 'static,
+        Callback: Fn(Reply) + Send + Sync + 'static,
     {
         CallbackGetBuilder {
             session: self.session,
@@ -176,9 +176,9 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> CallbackGetBuilder<'a, 'b, impl Fn(Option<Reply>) + Send + Sync + 'static>
+    ) -> CallbackGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
     where
-        CallbackMut: FnMut(Option<Reply>) + Send + Sync + 'static,
+        CallbackMut: FnMut(Reply) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
@@ -190,7 +190,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         handler: IntoHandler,
     ) -> HandlerGetBuilder<'a, 'b, Receiver>
     where
-        IntoHandler: crate::prelude::IntoHandler<Option<Reply>, Receiver>,
+        IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
     {
         HandlerGetBuilder {
             session: self.session,
@@ -245,7 +245,7 @@ impl Runnable for GetBuilder<'_, '_> {
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Reply) + Send + Sync + 'static,
 {
     pub(crate) session: &'a Session,
     pub(crate) selector: Selector<'b>,
@@ -257,7 +257,7 @@ where
 
 impl<'a, 'b, Callback> std::future::Future for CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: Fn(Option<Reply>) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Reply) + Unpin + Send + Sync + 'static,
 {
     type Output = <Self as Runnable>::Output;
 
@@ -272,7 +272,7 @@ where
 
 impl<'a, 'b, Callback> zenoh_sync::ZFuture for CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: Fn(Option<Reply>) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Reply) + Unpin + Send + Sync + 'static,
 {
     #[inline]
     fn wait(mut self) -> Self::Output {
@@ -282,7 +282,7 @@ where
 
 impl<'a, 'b, Callback> CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Reply) + Send + Sync + 'static,
 {
     /// Change the target of the query.
     #[inline]
@@ -308,7 +308,7 @@ where
 
 impl<Callback> Runnable for CallbackGetBuilder<'_, '_, Callback>
 where
-    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Reply) + Send + Sync + 'static,
 {
     type Output = zenoh_core::Result<()>;
 
@@ -330,7 +330,7 @@ pub struct HandlerGetBuilder<'a, 'b, Receiver> {
     pub(crate) target: Option<QueryTarget>,
     pub(crate) consolidation: Option<QueryConsolidation>,
     pub(crate) local_routing: Option<bool>,
-    handler: Option<crate::prelude::Handler<Option<Reply>, Receiver>>,
+    handler: Option<crate::prelude::Handler<Reply, Receiver>>,
 }
 
 impl<Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, Receiver> {
@@ -412,17 +412,15 @@ impl<Receiver> Runnable for HandlerGetBuilder<'_, '_, Receiver> {
     }
 }
 
-impl crate::prelude::IntoHandler<Option<Reply>, flume::Receiver<Reply>>
+impl crate::prelude::IntoHandler<Reply, flume::Receiver<Reply>>
     for (flume::Sender<Reply>, flume::Receiver<Reply>)
 {
-    fn into_handler(self) -> crate::prelude::Handler<Option<Reply>, flume::Receiver<Reply>> {
+    fn into_handler(self) -> crate::prelude::Handler<Reply, flume::Receiver<Reply>> {
         let (sender, receiver) = self;
         (
             Box::new(move |s| {
-                if let Some(s) = s {
-                    if let Err(e) = sender.send(s) {
-                        log::warn!("Error sending reply into flume channel: {}", e)
-                    }
+                if let Err(e) = sender.send(s) {
+                    log::warn!("Error sending reply into flume channel: {}", e)
                 }
             }),
             receiver,

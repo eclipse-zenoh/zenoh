@@ -467,33 +467,15 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             .target(target)
             .consolidation(consolidation)
             .callback({
-                let state = self.state.clone();
-                let callback = self.callback.clone();
+                let handler = RepliesHandler {
+                    state: self.state.clone(),
+                    callback: self.callback.clone(),
+                };
                 move |r| {
-                    let mut state = zwrite!(state);
-                    if let Some(r) = r {
-                        match r.sample {
-                            Ok(s) => state.merge_queue.push(s),
-                            Err(v) => log::debug!("Received error {}", v),
-                        }
-                    } else {
-                        state.pending_queries -= 1;
-                        if state.pending_queries == 0 {
-                            state
-                                .merge_queue
-                                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-                            state
-                                .merge_queue
-                                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-                            state.merge_queue.reverse();
-                            log::debug!(
-                                "Merged received publications - {} samples to propagate",
-                                state.merge_queue.len()
-                            );
-                            for s in state.merge_queue.drain(..) {
-                                callback(s);
-                            }
-                        }
+                    let mut state = zwrite!(handler.state);
+                    match r.sample {
+                        Ok(s) => state.merge_queue.push(s),
+                        Err(v) => log::debug!("Received error {}", v),
                     }
                 }
             })
@@ -504,6 +486,34 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 zready(Ok(()))
             }
             Err(err) => zready(Err(err)),
+        }
+    }
+}
+
+struct RepliesHandler {
+    state: Arc<RwLock<InnerState>>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+}
+
+impl Drop for RepliesHandler {
+    fn drop(&mut self) {
+        let mut state = zwrite!(self.state);
+        state.pending_queries -= 1;
+        if state.pending_queries == 0 {
+            state
+                .merge_queue
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
+            state
+                .merge_queue
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
+            state.merge_queue.reverse();
+            log::debug!(
+                "Merged received publications - {} samples to propagate",
+                state.merge_queue.len()
+            );
+            for s in state.merge_queue.drain(..) {
+                (self.callback)(s);
+            }
         }
     }
 }
