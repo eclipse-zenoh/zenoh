@@ -1193,16 +1193,6 @@ impl Session {
         }
     }
 
-    #[inline]
-    fn invoke_subscriber(
-        callback: &Callback<Sample>,
-        key_expr: String,
-        payload: ZBuf,
-        data_info: Option<DataInfo>,
-    ) {
-        callback(Sample::with_info(key_expr.into(), payload, data_info));
-    }
-
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1218,26 +1208,24 @@ impl Session {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
-                        Session::invoke_subscriber(&sub.callback, res.name.clone(), payload, info);
+                        (sub.callback)(Sample::with_info(res.name.clone().into(), payload, info));
                     } else {
                         if !local || local_routing {
                             for sub in &res.subscribers {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    res.name.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    res.name.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                         if local {
                             for sub in &res.local_subscribers {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    res.name.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    res.name.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
@@ -1252,24 +1240,22 @@ impl Session {
                     if !local || local_routing {
                         for sub in state.subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    key_expr.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
                     if local {
                         for sub in state.local_subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    key_expr.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
