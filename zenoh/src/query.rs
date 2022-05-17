@@ -162,7 +162,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> CallbackGetBuilder<'a, 'b, Callback>
     where
-        Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+        Callback: Fn(Option<Reply>) + Send + Sync + 'static,
     {
         CallbackGetBuilder {
             session: self.session,
@@ -172,6 +172,18 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
             local_routing: self.local_routing,
             callback: Some(callback),
         }
+    }
+
+    /// Make the built query a [`CallbackGet`](CallbackGet).
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> CallbackGetBuilder<'a, 'b, impl Fn(Option<Reply>) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Option<Reply>) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
     }
 
     /// Make the built query a [`HandlerGet`](HandlerGet).
@@ -236,7 +248,7 @@ impl Runnable for GetBuilder<'_, '_> {
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
 {
     pub(crate) session: &'a Session,
     pub(crate) selector: Selector<'b>,
@@ -248,7 +260,7 @@ where
 
 impl<'a, 'b, Callback> std::future::Future for CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Option<Reply>) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Option<Reply>) + Unpin + Send + Sync + 'static,
 {
     type Output = <Self as Runnable>::Output;
 
@@ -263,7 +275,7 @@ where
 
 impl<'a, 'b, Callback> zenoh_sync::ZFuture for CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Option<Reply>) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Option<Reply>) + Unpin + Send + Sync + 'static,
 {
     #[inline]
     fn wait(mut self) -> Self::Output {
@@ -273,7 +285,7 @@ where
 
 impl<'a, 'b, Callback> CallbackGetBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
 {
     /// Change the target of the query.
     #[inline]
@@ -299,7 +311,7 @@ where
 
 impl<Callback> Runnable for CallbackGetBuilder<'_, '_, Callback>
 where
-    Callback: FnMut(Option<Reply>) + Send + Sync + 'static,
+    Callback: Fn(Option<Reply>) + Send + Sync + 'static,
 {
     type Output = zenoh_core::Result<()>;
 
@@ -309,7 +321,7 @@ where
             self.target.take().unwrap(),
             self.consolidation.take().unwrap(),
             self.local_routing,
-            Arc::new(RwLock::new(self.callback.take().unwrap())),
+            Arc::new(self.callback.take().unwrap()),
         )
     }
 }
@@ -409,19 +421,19 @@ impl crate::prelude::IntoHandler<Option<Reply>, flume::Receiver<Reply>>
 {
     fn into_handler(self) -> crate::prelude::Handler<Option<Reply>, flume::Receiver<Reply>> {
         let (sender, receiver) = self;
-        let mut sender = Some(sender);
+        let sender = RwLock::new(Some(sender));
         (
-            std::sync::Arc::new(std::sync::RwLock::new(move |s| {
+            Arc::new(move |s| {
                 if let Some(s) = s {
-                    if let Some(sender) = &mut sender {
+                    if let Some(sender) = &*zread!(sender) {
                         if let Err(e) = sender.send(s) {
                             log::warn!("Error sending reply into flume channel: {}", e)
                         }
                     }
                 } else {
-                    drop(sender.take())
+                    drop(zwrite!(sender).take())
                 }
-            })),
+            }),
             receiver,
         )
     }

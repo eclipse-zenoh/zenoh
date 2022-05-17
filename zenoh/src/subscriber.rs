@@ -13,14 +13,13 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{Callback, Id, IntoHandler, KeyExpr, Sample};
+use crate::prelude::{Callback, Id, IntoHandler, KeyExpr, Sample, locked};
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::sync::RwLock;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol_core::SubInfo;
 
@@ -158,7 +157,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         callback: Callback,
     ) -> CallbackSubscriberBuilder<'a, 'b, Callback>
     where
-        Callback: FnMut(Sample) + Send + Sync + 'static,
+        Callback: Fn(Sample) + Send + Sync + 'static,
     {
         CallbackSubscriberBuilder {
             session: self.session,
@@ -169,6 +168,18 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
             local: self.local,
             callback: Some(callback),
         }
+    }
+
+    /// Make the built Subscriber a [`CallbackSubscriber`](CallbackSubscriber).
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> CallbackSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
     }
 
     /// Make the built Subscriber a [`HandlerSubscriber`](HandlerSubscriber).
@@ -299,7 +310,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Sample) + Send + Sync + 'static,
+    Callback: Fn(Sample) + Send + Sync + 'static,
 {
     session: SessionRef<'a>,
     key_expr: KeyExpr<'b>,
@@ -312,7 +323,7 @@ where
 
 impl<Callback> fmt::Debug for CallbackSubscriberBuilder<'_, '_, Callback>
 where
-    Callback: FnMut(Sample) + Send + Sync + 'static,
+    Callback: Fn(Sample) + Send + Sync + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
@@ -327,7 +338,7 @@ where
 
 impl<'a, 'b, Callback> CallbackSubscriberBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Sample) + Send + Sync + 'static,
+    Callback: Fn(Sample) + Send + Sync + 'static,
 {
     /// Change the subscription reliability.
     #[inline]
@@ -387,19 +398,19 @@ where
     }
 }
 
-impl<'a, F: FnMut(Sample) + Send + Sync> Resolvable for CallbackSubscriberBuilder<'a, '_, F> {
+impl<'a, Callback> Resolvable for CallbackSubscriberBuilder<'a, '_, Callback>
+where
+    Callback: Fn(Sample) + Send + Sync + 'static,
+{
     type Output = ZResult<CallbackSubscriber<'a>>;
 }
 
-impl<F: FnMut(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
+impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(mut self) -> Self::Output {
         log::trace!("declare_callback_subscriber({:?})", self.key_expr);
         if self.local {
             self.session
-                .declare_local_subscriber(
-                    &self.key_expr,
-                    Arc::new(RwLock::new(self.callback.take().unwrap())),
-                )
+                .declare_local_subscriber(&self.key_expr, Arc::new(self.callback.take().unwrap()))
                 .map(|sub_state| CallbackSubscriber {
                     session: self.session.clone(),
                     state: sub_state,
@@ -408,7 +419,7 @@ impl<F: FnMut(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'
             self.session
                 .declare_subscriber(
                     &self.key_expr,
-                    Arc::new(RwLock::new(self.callback.take().unwrap())),
+                    Arc::new(self.callback.take().unwrap()),
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
@@ -422,7 +433,7 @@ impl<F: FnMut(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'
         }
     }
 }
-impl<F: FnMut(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
+impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
@@ -617,11 +628,11 @@ impl crate::prelude::IntoHandler<Sample, flume::Receiver<Sample>>
     fn into_handler(self) -> crate::prelude::Handler<Sample, flume::Receiver<Sample>> {
         let (sender, receiver) = self;
         (
-            std::sync::Arc::new(std::sync::RwLock::new(move |s| {
+            std::sync::Arc::new(move |s| {
                 if let Err(e) = sender.send(s) {
                     log::warn!("Error sending sample into flume channel: {}", e)
                 }
-            })),
+            }),
             receiver,
         )
     }

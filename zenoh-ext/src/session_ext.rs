@@ -68,8 +68,8 @@ pub trait SessionExt {
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut subscriber = session.subscribe_with_query("/key/expr").await.unwrap();
-    /// while let Some(sample) = subscriber.next().await {
+    /// let subscriber = session.subscribe_with_query("/key/expr").await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })

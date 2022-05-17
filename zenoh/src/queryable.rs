@@ -22,7 +22,6 @@ use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::RwLock;
 use std::task::{Context, Poll};
 use zenoh_core::AsyncResolve;
 use zenoh_core::Resolvable;
@@ -312,7 +311,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         callback: Callback,
     ) -> CallbackQueryableBuilder<'a, 'b, Callback>
     where
-        Callback: FnMut(Query) + Send + Sync + 'static,
+        Callback: Fn(Query) + Send + Sync + 'static,
     {
         CallbackQueryableBuilder {
             session: self.session,
@@ -321,6 +320,18 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
             complete: self.complete,
             callback: Some(callback),
         }
+    }
+
+    /// Make the built Queryable a [`CallbackQueryable`](CallbackQueryable).
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> CallbackQueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Query) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
     }
 
     /// Make the built Queryable a [`HandlerQueryable`](HandlerQueryable).
@@ -396,7 +407,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Query) + Send + Sync + 'static,
+    Callback: Fn(Query) + Send + Sync + 'static,
 {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,
@@ -407,7 +418,7 @@ where
 
 impl<'a, 'b, Callback> CallbackQueryableBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Query) + Send + Sync + 'static,
+    Callback: Fn(Query) + Send + Sync + 'static,
 {
     /// Change queryable completeness.
     #[inline]
@@ -419,7 +430,7 @@ where
 
 impl<'a, Callback> Runnable for CallbackQueryableBuilder<'a, '_, Callback>
 where
-    Callback: FnMut(Query) + Send + Sync + 'static,
+    Callback: Fn(Query) + Send + Sync + 'static,
 {
     type Output = crate::Result<CallbackQueryable<'a>>;
 
@@ -429,7 +440,7 @@ where
                 &self.key_expr,
                 self.kind,
                 self.complete,
-                Arc::new(RwLock::new(self.callback.take().unwrap())),
+                Arc::new(self.callback.take().unwrap()),
             )
             .map(|qable_state| CallbackQueryable {
                 session: self.session.clone(),
@@ -536,11 +547,11 @@ impl crate::prelude::IntoHandler<Query, flume::Receiver<Query>>
     fn into_handler(self) -> crate::prelude::Handler<Query, flume::Receiver<Query>> {
         let (sender, receiver) = self;
         (
-            std::sync::Arc::new(std::sync::RwLock::new(move |s| {
+            std::sync::Arc::new(move |s| {
                 if let Err(e) = sender.send(s) {
                     log::warn!("Error sending query into flume channel: {}", e)
                 }
-            })),
+            }),
             receiver,
         )
     }

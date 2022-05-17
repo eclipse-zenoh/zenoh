@@ -1212,17 +1212,6 @@ impl Session {
         }
     }
 
-    #[inline]
-    fn invoke_subscriber(
-        callback: &Callback<Sample>,
-        key_expr: String,
-        payload: ZBuf,
-        data_info: Option<DataInfo>,
-    ) {
-        let callback = &mut *zwrite!(callback);
-        callback(Sample::with_info(key_expr.into(), payload, data_info));
-    }
-
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1238,26 +1227,24 @@ impl Session {
                 Some(res) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
-                        Session::invoke_subscriber(&sub.callback, res.name.clone(), payload, info);
+                        (sub.callback)(Sample::with_info(res.name.clone().into(), payload, info));
                     } else {
                         if !local || local_routing {
                             for sub in &res.subscribers {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    res.name.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    res.name.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                         if local {
                             for sub in &res.local_subscribers {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    res.name.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    res.name.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
@@ -1272,24 +1259,22 @@ impl Session {
                     if !local || local_routing {
                         for sub in state.subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    key_expr.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
                     if local {
                         for sub in state.local_subscribers.values() {
                             if key_expr::matches(&sub.key_expr_str, &key_expr) {
-                                Session::invoke_subscriber(
-                                    &sub.callback,
-                                    key_expr.clone(),
+                                (sub.callback)(Sample::with_info(
+                                    key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
-                                );
+                                ));
                             }
                         }
                     }
@@ -1468,7 +1453,6 @@ impl Session {
         let pid = self.runtime.pid; // @TODO build/use prebuilt specific pid
 
         for (kind, req_sender) in kinds_and_senders {
-            let req_sender = &mut *zwrite!(req_sender);
             req_sender(Query {
                 key_selector: key_expr.clone().into(),
                 value_selector: value_selector.clone(),
@@ -1763,8 +1747,7 @@ impl Primitives for Session {
                 };
                 match query.reception_mode {
                     ConsolidationMode::None => {
-                        let callback = &mut *zwrite!(query.callback);
-                        let _ = callback(Some(new_reply));
+                        let _ = (query.callback)(Some(new_reply));
                     }
                     ConsolidationMode::Lazy => {
                         match query
@@ -1781,8 +1764,7 @@ impl Primitives for Session {
                                         new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                         new_reply.clone(),
                                     );
-                                    let callback = &mut *zwrite!(query.callback);
-                                    let _ = callback(Some(new_reply));
+                                    let _ = (query.callback)(Some(new_reply));
                                 }
                             }
                             None => {
@@ -1790,8 +1772,7 @@ impl Primitives for Session {
                                     new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                     new_reply.clone(),
                                 );
-                                let callback = &mut *zwrite!(query.callback);
-                                let _ = callback(Some(new_reply));
+                                let _ = (query.callback)(Some(new_reply));
                             }
                         }
                     }
@@ -1836,14 +1817,13 @@ impl Primitives for Session {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
-                    let callback = &mut *zwrite!(query.callback);
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            let _ = callback(Some(reply));
+                            let _ = (query.callback)(Some(reply));
                         }
                     }
                     trace!("Close query {}", qid);
-                    let _ = callback(None);
+                    let _ = (query.callback)(None);
                 }
             }
             None => {
