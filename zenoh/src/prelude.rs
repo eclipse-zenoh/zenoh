@@ -1139,11 +1139,17 @@ pub trait EntityFactory {
         IntoKeyExpr: Into<KeyExpr<'a>>;
 }
 
-pub type Dyn<T> = std::sync::Arc<std::sync::RwLock<T>>;
-pub type Callback<T> = Dyn<dyn FnMut(T) + Send + Sync>;
+pub type Dyn<T> = std::sync::Arc<T>;
+pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
+pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
 
 pub type Handler<T, Receiver> = (Callback<T>, Receiver);
 
 pub trait IntoHandler<T, Receiver> {
     fn into_handler(self) -> Handler<T, Receiver>;
+}
+
+pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
+    let lock = std::sync::Mutex::new(fnmut);
+    move |x| zlock!(lock)(x)
 }

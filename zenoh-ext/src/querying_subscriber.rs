@@ -16,7 +16,7 @@ use std::pin::Pin;
 use futures::Future;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use zenoh::prelude::{Callback, IntoHandler, KeyExpr, Sample, Selector, ZFuture};
+use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh::sync::zready;
@@ -74,12 +74,24 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         callback: Callback,
     ) -> CallbackQueryingSubscriberBuilder<'a, 'b, Callback>
     where
-        Callback: FnMut(Sample) + Send + Sync + 'static,
+        Callback: Fn(Sample) + Send + Sync + 'static,
     {
         CallbackQueryingSubscriberBuilder {
             builder: self,
             callback: Some(callback),
         }
+    }
+
+    /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> CallbackQueryingSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
     }
 
     /// Make the built QueryingSubscriber a [`HandlerQueryingSubscriber`](HandlerQueryingSubscriber).
@@ -228,7 +240,7 @@ pub struct CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
 
 impl<'a, 'b, Callback> Future for CallbackQueryingSubscriberBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Sample) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Sample) + Unpin + Send + Sync + 'static,
 {
     type Output = ZResult<CallbackQueryingSubscriber<'a>>;
 
@@ -236,20 +248,20 @@ where
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(CallbackQueryingSubscriber::new(
             self.builder.clone().with_static_keys(),
-            Arc::new(RwLock::new(self.callback.take().unwrap())),
+            Arc::new(self.callback.take().unwrap()),
         ))
     }
 }
 
 impl<'a, 'b, Callback> ZFuture for CallbackQueryingSubscriberBuilder<'a, 'b, Callback>
 where
-    Callback: FnMut(Sample) + Unpin + Send + Sync + 'static,
+    Callback: Fn(Sample) + Unpin + Send + Sync + 'static,
 {
     #[inline]
     fn wait(mut self) -> ZResult<CallbackQueryingSubscriber<'a>> {
         CallbackQueryingSubscriber::new(
             self.builder.with_static_keys(),
-            Arc::new(RwLock::new(self.callback.take().unwrap())),
+            Arc::new(self.callback.take().unwrap()),
         )
     }
 }
@@ -353,8 +365,6 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         conf: QueryingSubscriberBuilder<'a, 'a>,
         callback: Callback<Sample>,
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
-        use zenoh::prelude::EntityFactory;
-
         let state = Arc::new(RwLock::new(InnerState {
             pending_queries: 1,
             merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
@@ -366,7 +376,6 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             move |s| {
                 let state = &mut zwrite!(state);
                 if state.pending_queries == 0 {
-                    let callback = &mut zwrite!(callback);
                     callback(s);
                 } else {
                     state.merge_queue.push(s);
@@ -481,7 +490,6 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                                 state.merge_queue.len()
                             );
                             for s in state.merge_queue.drain(..) {
-                                let mut callback = zwrite!(callback);
                                 callback(s);
                             }
                         }

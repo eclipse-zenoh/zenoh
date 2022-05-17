@@ -32,7 +32,7 @@ fn main() {
     let mut nm = 0;
     let _sub = session
         .subscribe(&key_expr)
-        .callback(move |_sample| {
+        .callback_mut(move |_sample| {
             if count == 0 {
                 start = Instant::now();
                 count += 1;
