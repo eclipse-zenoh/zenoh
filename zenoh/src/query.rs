@@ -19,7 +19,6 @@ use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::RwLock;
 use zenoh_core::zresult::ZResult;
 use zenoh_sync::{derive_zfuture, Runnable};
 
@@ -418,17 +417,12 @@ impl crate::prelude::IntoHandler<Option<Reply>, flume::Receiver<Reply>>
 {
     fn into_handler(self) -> crate::prelude::Handler<Option<Reply>, flume::Receiver<Reply>> {
         let (sender, receiver) = self;
-        let sender = RwLock::new(Some(sender));
         (
             Box::new(move |s| {
                 if let Some(s) = s {
-                    if let Some(sender) = &*zread!(sender) {
-                        if let Err(e) = sender.send(s) {
-                            log::warn!("Error sending reply into flume channel: {}", e)
-                        }
+                    if let Err(e) = sender.send(s) {
+                        log::warn!("Error sending reply into flume channel: {}", e)
                     }
-                } else {
-                    drop(zwrite!(sender).take())
                 }
             }),
             receiver,
