@@ -28,7 +28,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let replies = session.get(&selector).target(target).await.unwrap();
+    let replies = session.get(&selector).target(target).res().await.unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => println!(

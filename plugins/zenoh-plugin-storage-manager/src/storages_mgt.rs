@@ -55,6 +55,7 @@ pub(crate) async fn start_storage(
             .get(&Selector::from(&key_expr).with_value_selector("?(starttime=0)"))
             .target(QueryTarget::All)
             .consolidation(QueryConsolidation::none())
+            .res_async()
             .await
         {
             Ok(replies) => replies,

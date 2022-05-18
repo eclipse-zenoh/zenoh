@@ -479,7 +479,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                         Err(v) => log::debug!("Received error {}", v),
                     }
                 })
-                .wait(),
+                .res_sync(),
         )
     }
 }

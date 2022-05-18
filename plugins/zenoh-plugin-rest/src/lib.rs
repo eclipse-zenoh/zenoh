@@ -321,6 +321,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             .0
             .get(&selector)
             .consolidation(consolidation)
+            .res_async()
             .await
         {
             Ok(receiver) => {

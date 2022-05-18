@@ -248,7 +248,6 @@ impl Session {
         }
     }
 
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
@@ -1393,8 +1392,8 @@ impl Session {
         GetBuilder {
             session: self,
             selector,
-            target: Some(QueryTarget::default()),
-            consolidation: Some(QueryConsolidation::default()),
+            target: QueryTarget::default(),
+            consolidation: QueryConsolidation::default(),
             local_routing: None,
         }
     }
