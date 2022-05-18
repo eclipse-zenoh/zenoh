@@ -14,7 +14,7 @@ use std::pin::Pin;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //;
 use futures::Future;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
@@ -22,7 +22,7 @@ use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh::sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::zwrite;
+use zenoh_core::zlock;
 
 use crate::session_ext::SessionRef;
 
@@ -357,7 +357,7 @@ pub struct CallbackQueryingSubscriber<'a> {
     query_consolidation: QueryConsolidation,
     subscriber: CallbackSubscriber<'a>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
-    state: Arc<RwLock<InnerState>>,
+    state: Arc<Mutex<InnerState>>,
 }
 
 impl<'a> CallbackQueryingSubscriber<'a> {
@@ -365,7 +365,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         conf: QueryingSubscriberBuilder<'a, 'a>,
         callback: Callback<Sample>,
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
-        let state = Arc::new(RwLock::new(InnerState {
+        let state = Arc::new(Mutex::new(InnerState {
             pending_queries: 0,
             merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
         }));
@@ -375,7 +375,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             let state = state.clone();
             let callback = callback.clone();
             move |s| {
-                let state = &mut zwrite!(state);
+                let state = &mut zlock!(state);
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
@@ -459,7 +459,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
-        zwrite!(self.state).pending_queries += 1;
+        zlock!(self.state).pending_queries += 1;
         // pending queries will be decremented in RepliesHandler drop()
         let handler = RepliesHandler {
             state: self.state.clone(),
@@ -473,7 +473,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 .target(target)
                 .consolidation(consolidation)
                 .callback(move |r| {
-                    let mut state = zwrite!(handler.state);
+                    let mut state = zlock!(handler.state);
                     match r.sample {
                         Ok(s) => state.merge_queue.push(s),
                         Err(v) => log::debug!("Received error {}", v),
@@ -485,13 +485,13 @@ impl<'a> CallbackQueryingSubscriber<'a> {
 }
 
 struct RepliesHandler {
-    state: Arc<RwLock<InnerState>>,
+    state: Arc<Mutex<InnerState>>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
 impl Drop for RepliesHandler {
     fn drop(&mut self) {
-        let mut state = zwrite!(self.state);
+        let mut state = zlock!(self.state);
         state.pending_queries -= 1;
         if state.pending_queries == 0 {
             state
