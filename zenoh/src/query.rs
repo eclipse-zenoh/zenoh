@@ -20,7 +20,7 @@ use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
 use std::fmt;
 use zenoh_core::zresult::ZResult;
-use zenoh_sync::{derive_zfuture, Runnable};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::QueryTarget;
@@ -52,7 +52,7 @@ impl QueryConsolidation {
 
     /// No consolidation performed.
     ///
-    /// This is usefull when querying timeseries data bases or
+    /// This is useful when querying timeseries data bases or
     /// when using quorums.
     #[inline]
     pub fn none() -> Self {
@@ -65,7 +65,7 @@ impl QueryConsolidation {
     /// transmitted to the application when received without needing
     /// to wait for all replies.
     ///
-    /// This mode does not garantie that there will be no duplicates.
+    /// This mode does not guarantee that there will be no duplicates.
     #[inline]
     pub fn lazy() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::lazy())
@@ -74,7 +74,7 @@ impl QueryConsolidation {
     /// Full consolidation performed at reception.
     ///
     /// This is the default strategy. It offers the best latency while
-    /// garantying that there will be no duplicates.
+    /// guarantying that there will be no duplicates.
     #[inline]
     pub fn reception() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::reception())
@@ -121,37 +121,35 @@ pub(crate) struct QueryState {
     pub(crate) callback: Callback<Reply>,
 }
 
-derive_zfuture! {
-    /// A builder for initializing a `query`.
-    ///
-    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
-    /// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
-    /// use zenoh::prelude::*;
-    /// use zenoh::query::*;
-    /// use zenoh::queryable;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let mut replies = session
-    ///     .get("/key/expression?value>1")
-    ///     .target(QueryTarget::All)
-    ///     .consolidation(QueryConsolidation::none())
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct GetBuilder<'a, 'b> {
-        pub(crate) session: &'a Session,
-        pub(crate) selector: Selector<'b>,
-        pub(crate) target: Option<QueryTarget>,
-        pub(crate) consolidation: Option<QueryConsolidation>,
-        pub(crate) local_routing: Option<bool>,
-    }
+/// A builder for initializing a `query`.
+///
+/// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
+/// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use futures::prelude::*;
+/// use zenoh::prelude::*;
+/// use zenoh::query::*;
+/// use zenoh::queryable;
+///
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let mut replies = session
+///     .get("/key/expression?value>1")
+///     .target(QueryTarget::All)
+///     .consolidation(QueryConsolidation::none())
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct GetBuilder<'a, 'b> {
+    pub(crate) session: &'a Session,
+    pub(crate) selector: Selector<'b>,
+    pub(crate) target: QueryTarget,
+    pub(crate) consolidation: QueryConsolidation,
+    pub(crate) local_routing: Option<bool>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
@@ -162,12 +160,8 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         Callback: Fn(Reply) + Send + Sync + 'static,
     {
         CallbackGetBuilder {
-            session: self.session,
-            selector: self.selector,
-            target: self.target,
-            consolidation: self.consolidation,
-            local_routing: self.local_routing,
-            callback: Some(callback),
+            builder: self,
+            callback,
         }
     }
 
@@ -193,26 +187,22 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
     {
         HandlerGetBuilder {
-            session: self.session,
-            selector: self.selector,
-            target: self.target,
-            consolidation: self.consolidation,
-            local_routing: self.local_routing,
-            handler: Some(handler.into_handler()),
+            builder: self,
+            handler: handler.into_handler(),
         }
     }
 
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = Some(target);
+        self.target = target;
         self
     }
 
     /// Change the consolidation mode of the query.
     #[inline]
     pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
-        self.consolidation = Some(consolidation);
+        self.consolidation = consolidation;
         self
     }
 
@@ -224,20 +214,21 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     }
 }
 
-impl Runnable for GetBuilder<'_, '_> {
+impl Resolvable for GetBuilder<'_, '_> {
     type Output = zenoh_core::Result<flume::Receiver<Reply>>;
+}
+impl SyncResolve for GetBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
+        self.with(flume::bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE))
+            .res_sync()
+    }
+}
+impl AsyncResolve for GetBuilder<'_, '_> {
+    type Future = futures::future::Ready<Self::Output>;
 
-    fn run(&mut self) -> Self::Output {
-        let (callback, receiver) = flume::bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE).into_handler();
-        self.session
-            .query(
-                &self.selector,
-                self.target.take().unwrap(),
-                self.consolidation.take().unwrap(),
-                self.local_routing,
-                callback,
-            )
-            .map(|_| receiver)
+    fn res_async(self) -> Self::Future {
+        self.with(flume::bounded(*API_REPLY_RECEPTION_CHANNEL_SIZE))
+            .res_async()
     }
 }
 
@@ -247,37 +238,8 @@ pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
 {
-    pub(crate) session: &'a Session,
-    pub(crate) selector: Selector<'b>,
-    pub(crate) target: Option<QueryTarget>,
-    pub(crate) consolidation: Option<QueryConsolidation>,
-    pub(crate) local_routing: Option<bool>,
-    pub(crate) callback: Option<Callback>,
-}
-
-impl<'a, 'b, Callback> std::future::Future for CallbackGetBuilder<'a, 'b, Callback>
-where
-    Callback: Fn(Reply) + Unpin + Send + Sync + 'static,
-{
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut async_std::task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl<'a, 'b, Callback> zenoh_sync::ZFuture for CallbackGetBuilder<'a, 'b, Callback>
-where
-    Callback: Fn(Reply) + Unpin + Send + Sync + 'static,
-{
-    #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
-    }
+    builder: GetBuilder<'a, 'b>,
+    pub(crate) callback: Callback,
 }
 
 impl<'a, 'b, Callback> CallbackGetBuilder<'a, 'b, Callback>
@@ -287,85 +249,69 @@ where
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = Some(target);
+        self.builder = self.builder.target(target);
         self
     }
 
     /// Change the consolidation mode of the query.
     #[inline]
     pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
-        self.consolidation = Some(consolidation);
+        self.builder = self.builder.consolidation(consolidation);
         self
     }
 
     /// Enable or disable local routing.
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
+        self.builder = self.builder.local_routing(local_routing);
         self
     }
 }
 
-impl<Callback> Runnable for CallbackGetBuilder<'_, '_, Callback>
+impl<Callback> Resolvable for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
 {
     type Output = zenoh_core::Result<()>;
-
-    fn run(&mut self) -> Self::Output {
-        self.session.query(
-            &self.selector,
-            self.target.take().unwrap(),
-            self.consolidation.take().unwrap(),
-            self.local_routing,
-            Box::new(self.callback.take().unwrap()),
+}
+impl<Callback> SyncResolve for CallbackGetBuilder<'_, '_, Callback>
+where
+    Callback: Fn(Reply) + Send + Sync + 'static,
+{
+    fn res_sync(self) -> Self::Output {
+        self.builder.session.query(
+            &self.builder.selector,
+            self.builder.target,
+            self.builder.consolidation,
+            self.builder.local_routing,
+            Box::new(self.callback),
         )
     }
 }
+impl<Callback> AsyncResolve for CallbackGetBuilder<'_, '_, Callback>
+where
+    Callback: Fn(Reply) + Send + Sync + 'static,
+{
+    type Future = futures::future::Ready<Self::Output>;
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+
 pub struct HandlerGetBuilder<'a, 'b, Receiver> {
-    pub(crate) session: &'a Session,
-    pub(crate) selector: Selector<'b>,
-    pub(crate) target: Option<QueryTarget>,
-    pub(crate) consolidation: Option<QueryConsolidation>,
-    pub(crate) local_routing: Option<bool>,
-    handler: Option<crate::prelude::Handler<Reply, Receiver>>,
+    builder: GetBuilder<'a, 'b>,
+    handler: Handler<Reply, Receiver>,
 }
 
 impl<Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, Receiver> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerGetBuilder")
-            .field("selector", &self.selector)
-            .field("target", &self.target)
-            .field("consolidation", &self.consolidation)
-            .field("local_routing", &self.local_routing)
+            .field("selector", &self.builder.selector)
+            .field("target", &self.builder.target)
+            .field("consolidation", &self.builder.consolidation)
+            .field("local_routing", &self.builder.local_routing)
             .finish()
-    }
-}
-
-impl<'a, 'b, Receiver> std::future::Future for HandlerGetBuilder<'a, 'b, Receiver>
-where
-    Receiver: Unpin,
-{
-    type Output = <Self as Runnable>::Output;
-
-    #[inline]
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut async_std::task::Context<'_>,
-    ) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-        std::task::Poll::Ready(self.run())
-    }
-}
-
-impl<'a, 'b, Receiver> zenoh_sync::ZFuture for HandlerGetBuilder<'a, 'b, Receiver>
-where
-    Receiver: Send + Sync + Unpin,
-{
-    #[inline]
-    fn wait(mut self) -> Self::Output {
-        self.run()
     }
 }
 
@@ -376,46 +322,53 @@ where
     /// Change the target of the query.
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
-        self.target = Some(target);
+        self.builder = self.builder.target(target);
         self
     }
 
     /// Change the consolidation mode of the query.
     #[inline]
     pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
-        self.consolidation = Some(consolidation);
+        self.builder = self.builder.consolidation(consolidation);
         self
     }
 
     /// Enable or disable local routing.
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
+        self.builder = self.builder.local_routing(local_routing);
         self
     }
 }
 
-impl<Receiver> Runnable for HandlerGetBuilder<'_, '_, Receiver> {
+impl<Receiver: Send> Resolvable for HandlerGetBuilder<'_, '_, Receiver> {
     type Output = ZResult<Receiver>;
-
-    fn run(&mut self) -> Self::Output {
-        let (callback, receiver) = self.handler.take().unwrap();
-        self.session
+}
+impl<Receiver: Send> SyncResolve for HandlerGetBuilder<'_, '_, Receiver> {
+    fn res_sync(self) -> Self::Output {
+        let (callback, receiver) = self.handler;
+        self.builder
+            .session
             .query(
-                &self.selector,
-                self.target.take().unwrap(),
-                self.consolidation.take().unwrap(),
-                self.local_routing,
+                &self.builder.selector,
+                self.builder.target,
+                self.builder.consolidation,
+                self.builder.local_routing,
                 callback,
             )
             .map(|_| receiver)
     }
 }
+impl<Receiver: Send> AsyncResolve for HandlerGetBuilder<'_, '_, Receiver> {
+    type Future = futures::future::Ready<Self::Output>;
 
-impl crate::prelude::IntoHandler<Reply, flume::Receiver<Reply>>
-    for (flume::Sender<Reply>, flume::Receiver<Reply>)
-{
-    fn into_handler(self) -> crate::prelude::Handler<Reply, flume::Receiver<Reply>> {
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+
+impl IntoHandler<Reply, flume::Receiver<Reply>> for (flume::Sender<Reply>, flume::Receiver<Reply>) {
+    fn into_handler(self) -> Handler<Reply, flume::Receiver<Reply>> {
         let (sender, receiver) = self;
         (
             Box::new(move |s| {

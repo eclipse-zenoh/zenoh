@@ -14,15 +14,15 @@ use std::pin::Pin;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //;
 use futures::Future;
-use zenoh_core::{zlock, SyncResolve};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
-use zenoh_sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
+use zenoh_core::{zlock, SyncResolve};
+use zenoh_sync::zready;
 
 use crate::session_ext::SessionRef;
 
