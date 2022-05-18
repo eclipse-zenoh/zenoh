@@ -11,54 +11,76 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::*;
+
 use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
 use async_std::task::JoinHandle;
+use async_std::task::{self};
 use async_trait::async_trait;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock, Weak};
-use std::time::Duration;
+use std::sync::{Arc, RwLock};
 use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zasynclock, zerror, zlock, zread, zwrite};
+use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
 use zenoh_protocol_core::{EndPoint, Locator};
-use zenoh_sync::{Mvar, Signal};
+use zenoh_sync::Signal;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_serial::{DataBits, FlowControl, Parity, SerialPort, SerialPortBuilderExt, SerialStream, ClearBuffer, StopBits};
+use z_serial::ZSerial;
 
-
-use super::{get_unix_path, get_unix_path_as_string, SERIAL_DEFAULT_MTU, SERIAL_LOCATOR_PREFIX};
-
-
-
-
+use super::{get_baud_rate, get_unix_path_as_string, SERIAL_DEFAULT_MTU, SERIAL_LOCATOR_PREFIX};
 
 struct LinkUnicastSerial {
-    // The underlying serial port
-    port: Arc<AsyncMutex<SerialStream>>,
+    // The underlying serial port as returned by ZSerial (tokio-serial)
+    // NOTE: ZSerial requires &mut for read and write operations. This means
+    //       that concurrent reads and writes are not possible. To achieve that,
+    //       we use an UnsafeCell for interior mutability. Using an UnsafeCell
+    //       is safe in our case since the transmission and reception logic
+    //       already ensures that no concurrent reads or writes can happen on
+    //       the same stream: there is only one task at the time that writes on
+    //       the stream and only one task at the time that reads from the stream.
+    port: UnsafeCell<ZSerial>,
+    // port: Arc<AsyncMutex<ZSerial>>,
     // The serial port path
     src_locator: Locator,
     // The serial destination path (random UUIDv4)
     dst_locator: Locator,
     // A flag that tells if the link is connected or not
     is_connected: Arc<AtomicBool>,
+    write_lock: AsyncMutex<()>,
+    read_lock: AsyncMutex<()>,
 }
 
+unsafe impl Send for LinkUnicastSerial {}
+unsafe impl Sync for LinkUnicastSerial {}
+
 impl LinkUnicastSerial {
-    fn new(port: Arc<AsyncMutex<SerialStream>>, src_path: &str, dst_path: &str, is_connected: Arc<AtomicBool>,) -> Self {
+    fn new(
+        port: UnsafeCell<ZSerial>,
+        src_path: &str,
+        dst_path: &str,
+        is_connected: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             port,
             src_locator: Locator::new(SERIAL_LOCATOR_PREFIX, &src_path),
             dst_locator: Locator::new(SERIAL_LOCATOR_PREFIX, &dst_path),
             is_connected,
+            write_lock: AsyncMutex::new(()),
+            read_lock: AsyncMutex::new(()),
         }
+    }
+
+    // NOTE: It is safe to suppress Clippy warning since no concurrent reads
+    //       or concurrent writes will ever happen. The write_lock and read_lock
+    //       are respectively acquired in any read and write operation.
+    #[allow(clippy::mut_from_ref)]
+    fn get_port_mut(&self) -> &mut ZSerial {
+        unsafe { &mut *self.port.get() }
     }
 }
 
@@ -66,8 +88,8 @@ impl LinkUnicastSerial {
 impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing Serial link: {}", self);
-        let guard = zasynclock!(self.port);
-        guard.clear(ClearBuffer::All).map_err(|e| {
+        let guard = zasynclock!(self.write_lock);
+        self.get_port_mut().clear().map_err(|e| {
             let e = zerror!("Unable to close Serial link {}: {}", self, e);
             log::trace!("{}", e);
             e
@@ -77,22 +99,12 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        log::error!("TO SERIAL {} : {:02X?}", buffer.len(), buffer);
-        let mut guard = zasynclock!(self.port);
-        guard.flush().await.unwrap();
-        // Ok(guard.write(buffer).await.map_err(|e| {
-        //     let e = zerror!("Write error on Serial link {}: {}", self, e);
-        //     log::trace!("{}", e);
-        //     e
-        // })?)
-        guard.write_all(buffer).await.map_err(|e| {
-                let e = zerror!("Write error on Serial link {}: {}", self, e);
-                log::trace!("{}", e);
-                e
-            })?;
-
-        log::error!("ACTUALLY WRITTEN {} bytes", buffer.len());
-        guard.flush().await.unwrap();
+        let _guard = zasynclock!(self.write_lock);
+        self.get_port_mut().write(buffer).await.map_err(|e| {
+            let e = zerror!("Unable to write on Serial link {}: {}", self, e);
+            log::trace!("{}", e);
+            e
+        })?;
         Ok(buffer.len())
     }
 
@@ -105,19 +117,19 @@ impl LinkUnicastTrait for LinkUnicastSerial {
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        let mut guard = zasynclock!(self.port);
-        // Ok(guard.read(buffer).await.map_err(|e| {
-        //     let e = zerror!("Read error on Serial link {}: {}", self, e);
-        //     log::trace!("{}", e);
-        //     e
-        // })?)
-        let read = guard.read(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on Serial link {}: {}", self, e);
-            log::trace!("{}", e);
-            e
-        })?;
-        log::error!("FROM SERIAL: {:02X?}", &buffer[0..read]);
-        Ok(read)
+        loop {
+            let _guard = zasynclock!(self.read_lock);
+            match self.get_port_mut().read_msg(buffer).await {
+                Ok(read) => return Ok(read),
+                Err(e) => {
+                    let e = zerror!("Read error on Serial link {}: {}", self, e);
+                    log::trace!("{}", e);
+                    drop(_guard);
+                    async_std::task::sleep(std::time::Duration::from_millis(1)).await;
+                    continue;
+                }
+            }
+        }
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
@@ -151,7 +163,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        true
+        false
     }
 }
 
@@ -220,48 +232,41 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastSerial {
 impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let path = get_unix_path_as_string(&endpoint.locator);
-
-        let port = tokio_serial::new(&path, 9_600)
-            .data_bits(DataBits::Eight)
-            .flow_control(FlowControl::None)
-            .parity(Parity::Odd)
-            .stop_bits(StopBits::Two)
-            .open_native_async()
-            .map_err(|e| {
-                let e = zerror!(
-                    "Can not create a new Serial link bound to {:?}: {}",
-                    path,
-                    e
-                );
-                log::warn!("{}", e);
+        let baud_rate = get_baud_rate(&endpoint);
+        let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
+            let e = zerror!(
+                "Can not create a new Serial link bound to {:?}: {}",
+                path,
                 e
-            })?;
+            );
+            log::warn!("{}", e);
+            e
+        })?;
 
         // Create Serial link
-        let link = Arc::new(LinkUnicastSerial::new(Arc::new(AsyncMutex::new(port)), &path, &path,  Arc::new(AtomicBool::new(true))));
+        let link = Arc::new(LinkUnicastSerial::new(
+            UnsafeCell::new(port),
+            &path,
+            &path,
+            Arc::new(AtomicBool::new(true)),
+        ));
 
         Ok(LinkUnicast(link))
     }
 
-    async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+    async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let path = get_unix_path_as_string(&endpoint.locator);
+        let baud_rate = get_baud_rate(&endpoint);
 
-        // Open the serial port
-        let port = tokio_serial::new(&path, 9_600)
-            .data_bits(DataBits::Eight)
-            .flow_control(FlowControl::None)
-            .parity(Parity::Odd)
-            .stop_bits(StopBits::Two)
-            .open_native_async()
-            .map_err(|e| {
-                let e = zerror!(
-                    "Can not create a new Serial link bound to {:?}: {}",
-                    path,
-                    e
-                );
-                log::warn!("{}", e);
+        let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
+            let e = zerror!(
+                "Can not create a new Serial link bound to {:?}: {}",
+                path,
                 e
-            })?;
+            );
+            log::warn!("{}", e);
+            e
+        })?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -273,22 +278,40 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let c_listeners = self.listeners.clone();
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_read_task(
-                Arc::new(AsyncMutex::new(port)),
-                c_active,
-                c_signal,
-                c_manager,
-                c_path.clone(),
-            )
-            .await;
-            zwrite!(c_listeners).remove(&c_path);
-            res
+            // let res = accept_read_task(
+            //     Arc::new(AsyncMutex::new(Some(UnsafeCell::new(port)))),
+            //     c_active,
+            //     c_signal,
+            //     c_manager,
+            //     c_path.clone(),
+            // )
+            // .await;
+            // zwrite!(c_listeners).remove(&c_path);
+            // res
+            loop {}
         });
 
         let locator = endpoint.locator.clone();
         let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(path, listener);
+        zwrite!(self.listeners).insert(path.clone(), listener);
+
+        let is_connected = Arc::new(AtomicBool::new(false));
+        let dst_path = format!("{}", uuid::Uuid::new_v4());
+        let link = Arc::new(LinkUnicastSerial::new(
+            UnsafeCell::new(port),
+            &path.clone(),
+            &dst_path,
+            is_connected.clone(),
+        ));
+        is_connected.store(true, Ordering::Release);
+
+        log::trace!("Creating new link from {:?}", &path.clone());
+
+        // Communicate the new link to the initial transport manager
+        if let Err(e) = self.manager.send_async(LinkUnicast(link)).await {
+            log::error!("{}-{}: {}", file!(), line!(), e)
+        }
 
         Ok(locator)
     }
@@ -327,52 +350,143 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     }
 }
 
-async fn accept_read_task(
-    port: Arc<AsyncMutex<SerialStream>>,
-    active: Arc<AtomicBool>,
-    signal: Signal,
-    manager: NewLinkChannelSender,
-    src_path: String,
-) -> ZResult<()> {
-    enum Action {
-        Receive(SerialStream),
-        Stop,
-    }
+// async fn accept_read_task(
+//     port: Arc<AsyncMutex<Option<UnsafeCell<ZSerial>>>>,
+//     active: Arc<AtomicBool>,
+//     _signal: Signal,
+//     manager: NewLinkChannelSender,
+//     src_path: String,
+// ) -> ZResult<()> {
+//     // enum Action {
+//     //     Receive(ZSerial),
+//     //     Stop,
+//     // }
 
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
-    }
+//     // async fn stop(signal: Signal) -> ZResult<Action> {
+//     //     signal.wait().await;
+//     //     Ok(Action::Stop)
+//     // }
 
-    let is_connected = Arc::new(AtomicBool::new(false));
+//     let is_connected = Arc::new(AtomicBool::new(false));
 
-    log::trace!("Ready to accept Serial connections on: {:?}", src_path);
+//     log::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
-    while active.load(Ordering::Acquire) {
-        if !is_connected.load(Ordering::Acquire) {
-            let c_port  = port.clone();
-            let guard = zasynclock!(c_port);
+//     while active.load(Ordering::Acquire) {
+//         if !is_connected.load(Ordering::Acquire) {
+//             let guard_port = zasynclock!(port);
 
-            if guard.bytes_to_read().unwrap() > 0 {
-                log::trace!("Ready to read from Serial connection on {:?}", src_path);
-                // Create the new link object
-                let dst_path = format!("{}", uuid::Uuid::new_v4());
+//             match *guard_port {
+//                 None => (),
+//                 Some(ref inner_port) => {
+//                     let s_port = unsafe { &*inner_port.get() };
+//                     let port_path = s_port.port();
 
-                let link = Arc::new(LinkUnicastSerial::new(port.clone(), &src_path, &dst_path, is_connected.clone()));
-                is_connected.store(true, Ordering::Release);
+//                     let to_read = s_port.bytes_to_read().map_err(|e| {
+//                         let e = zerror!(
+//                             "Unable to check if there is data to read from {}: {}",
+//                             port_path,
+//                             e
+//                         );
+//                         log::warn!("{}", e);
+//                         e
+//                     })?;
 
-                log::trace!("Creating new link from {:?}", src_path);
+//                     drop(inner_port);
+//                     drop(guard_port);
 
-                // Communicate the new link to the initial transport manager
-                if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-                    log::error!("{}-{}: {}", file!(), line!(), e)
-                }
-            }
-        } else {
-            ()
-            //task::sleep(Duration::from_secs(10)).await;
-        }
-    }
+//                     if to_read > 0 {
+//                         let cloned_port = port.clone();
+//                         let mut port_guard = zasynclock!(cloned_port);
 
-    Ok(())
-}
+//                         let actual_port = port_guard.take().unwrap();
+
+//                         let dst_path = format!("{}", uuid::Uuid::new_v4());
+//                         let link = Arc::new(LinkUnicastSerial::new(
+//                             actual_port,
+//                             &src_path,
+//                             &dst_path,
+//                             is_connected.clone(),
+//                         ));
+//                         is_connected.store(true, Ordering::Release);
+
+//                         log::trace!("Creating new link from {:?}", src_path);
+
+//                         // Communicate the new link to the initial transport manager
+//                         if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+//                             log::error!("{}-{}: {}", file!(), line!(), e)
+//                         }
+//                     }
+
+//                     // if to_read > 0 {
+//                     //     log::trace!("Ready to read from Serial connection on {:?}", src_path);
+//                     //     // Create the new link object
+//                     //     let dst_path = format!("{}", uuid::Uuid::new_v4());
+//                     //     let actual_port = port.take().ok_or({
+//                     //         let e = zerror!(
+//                     //             "Unable to get the serial port from the option: {}",
+//                     //             port_path
+//                     //         );
+//                     //         log::warn!("{}", e);
+//                     //         e
+//                     //     })?;
+
+//                     //     let link = Arc::new(LinkUnicastSerial::new(
+//                     //         actual_port,
+//                     //         &src_path,
+//                     //         &dst_path,
+//                     //         is_connected.clone(),
+//                     //     ));
+//                     //     is_connected.store(true, Ordering::Release);
+
+//                     //     log::trace!("Creating new link from {:?}", src_path);
+
+//                     //     // Communicate the new link to the initial transport manager
+//                     //     if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+//                     //         log::error!("{}-{}: {}", file!(), line!(), e)
+//                     //     }
+//                     // }
+//                 }
+//             }
+
+//             // let guard = zasynclock!(c_port);
+
+//             // let s_port = unsafe {&*port.get()};
+
+//             // let to_read = s_port.bytes_to_read().map_err(|e| {
+//             //     let e = zerror!(
+//             //         "Unable to check if there is data to read from {}: {}",
+//             //         s_port.port(),
+//             //         e
+//             //     );
+//             //     log::warn!("{}", e);
+//             //     e
+//             // })?;
+
+//             // if to_read > 0 {
+//             //     log::trace!("Ready to read from Serial connection on {:?}", src_path);
+//             //     // Create the new link object
+//             //     let dst_path = format!("{}", uuid::Uuid::new_v4());
+
+//             //     let link = Arc::new(LinkUnicastSerial::new(
+//             //         port.clone(),
+//             //         &src_path,
+//             //         &dst_path,
+//             //         is_connected.clone(),
+//             //     ));
+//             //     is_connected.store(true, Ordering::Release);
+
+//             //     log::trace!("Creating new link from {:?}", src_path);
+
+//             //     // Communicate the new link to the initial transport manager
+//             //     if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+//             //         log::error!("{}-{}: {}", file!(), line!(), e)
+//             //     }
+//             // }
+//         } else {
+//             ()
+//             //task::sleep(Duration::from_secs(10)).await;
+//         }
+//     }
+
+//     Ok(())
+// }

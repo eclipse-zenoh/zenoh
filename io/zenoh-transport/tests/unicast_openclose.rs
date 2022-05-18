@@ -706,17 +706,13 @@ fn openclose_serial_only() {
 
     task::spawn(create_ports());
 
-
-
     task::block_on(async move {
         let endpoint_router: EndPoint = "serial/ttyVIRT0".parse().unwrap();
         let endpoint_client: EndPoint = "serial/ttyVIRT1".parse().unwrap();
         async_std::task::sleep(std::time::Duration::from_secs(10)).await;
         openclose_serial_transport(&endpoint_router, &endpoint_client).await;
-
     });
 }
-
 
 #[cfg(all(feature = "transport_serial", target_os = "linux"))]
 async fn openclose_serial_transport(router_endpoint: &EndPoint, client_endpoint: &EndPoint) {
@@ -811,7 +807,6 @@ async fn openclose_serial_transport(router_endpoint: &EndPoint, client_endpoint:
         }
     });
     println!("Transport Open Close [1f2]: {:?}", res);
-
 
     /* [10] */
     // Perform clean up of the open locators

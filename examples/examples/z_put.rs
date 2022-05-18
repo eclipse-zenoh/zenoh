@@ -33,8 +33,6 @@ async fn main() {
     loop {
         async_std::task::sleep(std::time::Duration::from_secs(10)).await;
     }
-
-
 }
 
 fn parse_args() -> (Config, String, String) {

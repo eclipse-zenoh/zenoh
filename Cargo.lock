@@ -3560,6 +3560,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "z-serial"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "tokio",
+ "tokio-serial",
+]
+
+[[package]]
 name = "zenoh"
 version = "0.6.0-dev.0"
 dependencies = [
@@ -3777,9 +3786,11 @@ dependencies = [
  "futures",
  "log",
  "tokio",
- "tokio-serial",
  "uuid 1.0.0",
+ "z-serial",
+ "zenoh-cfg-properties",
  "zenoh-collections",
+ "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",

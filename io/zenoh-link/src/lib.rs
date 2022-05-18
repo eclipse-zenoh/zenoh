@@ -25,6 +25,10 @@ pub use zenoh_link_quic as quic;
 use zenoh_link_quic::{
     LinkManagerUnicastQuic, QuicConfigurator, QuicLocatorInspector, QUIC_LOCATOR_PREFIX,
 };
+#[cfg(feature = "transport_serial")]
+pub use zenoh_link_serial as serial;
+#[cfg(feature = "transport_serial")]
+use zenoh_link_serial::{LinkManagerUnicastSerial, SERIAL_LOCATOR_PREFIX};
 #[cfg(feature = "transport_tcp")]
 pub use zenoh_link_tcp as tcp;
 #[cfg(feature = "transport_tcp")]
@@ -51,10 +55,6 @@ use zenoh_link_unixsock_stream::{
 pub use zenoh_link_ws as ws;
 #[cfg(feature = "transport_ws")]
 use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
-#[cfg(feature = "transport_serial")]
-pub use zenoh_link_serial as serial;
-#[cfg(feature = "transport_serial")]
-use zenoh_link_serial::{LinkManagerUnicastSerial, SERIAL_LOCATOR_PREFIX};
 
 pub use zenoh_link_commons::*;
 pub use zenoh_protocol_core::{EndPoint, Locator};
