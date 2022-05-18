@@ -939,7 +939,7 @@ impl Session {
             key_expr: key_expr.to_owned(),
             kind,
             complete,
-            callback: callback.clone(),
+            callback: callback.into(),
         });
         #[cfg(feature = "complete_n")]
         {
@@ -1303,7 +1303,7 @@ impl Session {
         target: QueryTarget,
         consolidation: QueryConsolidation,
         local_routing: Option<bool>,
-        callback: Callback<Option<Reply>>,
+        callback: Callback<Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
@@ -1433,7 +1433,7 @@ impl Session {
                             },
                         )
                         .map(|qable| (qable.kind, qable.callback.clone()))
-                        .collect::<Vec<(ZInt, Callback<Query>)>>();
+                        .collect::<Vec<(ZInt, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr,
@@ -1747,7 +1747,7 @@ impl Primitives for Session {
                 };
                 match query.reception_mode {
                     ConsolidationMode::None => {
-                        let _ = (query.callback)(Some(new_reply));
+                        let _ = (query.callback)(new_reply);
                     }
                     ConsolidationMode::Lazy => {
                         match query
@@ -1764,7 +1764,7 @@ impl Primitives for Session {
                                         new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                         new_reply.clone(),
                                     );
-                                    let _ = (query.callback)(Some(new_reply));
+                                    let _ = (query.callback)(new_reply);
                                 }
                             }
                             None => {
@@ -1772,7 +1772,7 @@ impl Primitives for Session {
                                     new_reply.sample.as_ref().unwrap().key_expr.to_string(),
                                     new_reply.clone(),
                                 );
-                                let _ = (query.callback)(Some(new_reply));
+                                let _ = (query.callback)(new_reply);
                             }
                         }
                     }
@@ -1819,11 +1819,10 @@ impl Primitives for Session {
                     let query = state.queries.remove(&qid).unwrap();
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
-                            let _ = (query.callback)(Some(reply));
+                            let _ = (query.callback)(reply);
                         }
                     }
                     trace!("Close query {}", qid);
-                    let _ = (query.callback)(None);
                 }
             }
             None => {

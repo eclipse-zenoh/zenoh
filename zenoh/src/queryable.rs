@@ -149,7 +149,7 @@ pub(crate) struct QueryableState {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
-    pub(crate) callback: Callback<Query>,
+    pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
 }
 
 impl fmt::Debug for QueryableState {
@@ -440,7 +440,7 @@ where
                 &self.key_expr,
                 self.kind,
                 self.complete,
-                Arc::new(self.callback.take().unwrap()),
+                Box::new(self.callback.take().unwrap()),
             )
             .map(|qable_state| CallbackQueryable {
                 session: self.session.clone(),
@@ -488,7 +488,6 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerQueryableBuilder<'a, 'b, Receiver> {
     pub(crate) session: SessionRef<'a>,
@@ -547,7 +546,7 @@ impl crate::prelude::IntoHandler<Query, flume::Receiver<Query>>
     fn into_handler(self) -> crate::prelude::Handler<Query, flume::Receiver<Query>> {
         let (sender, receiver) = self;
         (
-            std::sync::Arc::new(move |s| {
+            Box::new(move |s| {
                 if let Err(e) = sender.send(s) {
                     log::warn!("Error sending query into flume channel: {}", e)
                 }

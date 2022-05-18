@@ -14,7 +14,8 @@ use std::pin::Pin;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //;
 use futures::Future;
-use std::sync::{Arc, RwLock};
+use zenoh_core::{zlock, SyncResolve};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
@@ -22,7 +23,6 @@ use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh_sync::zready;
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zwrite, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
@@ -248,7 +248,7 @@ where
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(CallbackQueryingSubscriber::new(
             self.builder.clone().with_static_keys(),
-            Arc::new(self.callback.take().unwrap()),
+            Box::new(self.callback.take().unwrap()),
         ))
     }
 }
@@ -261,7 +261,7 @@ where
     fn wait(mut self) -> ZResult<CallbackQueryingSubscriber<'a>> {
         CallbackQueryingSubscriber::new(
             self.builder.with_static_keys(),
-            Arc::new(self.callback.take().unwrap()),
+            Box::new(self.callback.take().unwrap()),
         )
     }
 }
@@ -356,8 +356,8 @@ pub struct CallbackQueryingSubscriber<'a> {
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     subscriber: CallbackSubscriber<'a>,
-    callback: Callback<Sample>,
-    state: Arc<RwLock<InnerState>>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    state: Arc<Mutex<InnerState>>,
 }
 
 impl<'a> CallbackQueryingSubscriber<'a> {
@@ -365,16 +365,17 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         conf: QueryingSubscriberBuilder<'a, 'a>,
         callback: Callback<Sample>,
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
-        let state = Arc::new(RwLock::new(InnerState {
-            pending_queries: 1,
+        let state = Arc::new(Mutex::new(InnerState {
+            pending_queries: 0,
             merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
         }));
+        let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
 
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
             move |s| {
-                let state = &mut zwrite!(state);
+                let state = &mut zlock!(state);
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
@@ -458,56 +459,58 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
+        zlock!(self.state).pending_queries += 1;
+        // pending queries will be decremented in RepliesHandler drop()
+        let handler = RepliesHandler {
+            state: self.state.clone(),
+            callback: self.callback.clone(),
+        };
+
         log::debug!("Start query on {}", selector);
-        match self
-            .session
-            .get(selector)
-            .target(target)
-            .consolidation(consolidation)
-            .callback({
-                let state = self.state.clone();
-                let callback = self.callback.clone();
-                move |r| {
-                    let mut state = zwrite!(state);
-                    if let Some(r) = r {
-                        match r.sample {
-                            Ok(s) => state.merge_queue.push(s),
-                            Err(v) => log::debug!("Received error {}", v),
-                        }
-                    } else {
-                        state.pending_queries -= 1;
-                        if state.pending_queries == 0 {
-                            state
-                                .merge_queue
-                                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-                            state
-                                .merge_queue
-                                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-                            state.merge_queue.reverse();
-                            log::debug!(
-                                "Merged received publications - {} samples to propagate",
-                                state.merge_queue.len()
-                            );
-                            for s in state.merge_queue.drain(..) {
-                                callback(s);
-                            }
-                        }
+        zready(
+            self.session
+                .get(selector)
+                .target(target)
+                .consolidation(consolidation)
+                .callback(move |r| {
+                    let mut state = zlock!(handler.state);
+                    match r.sample {
+                        Ok(s) => state.merge_queue.push(s),
+                        Err(v) => log::debug!("Received error {}", v),
                     }
-                }
-            })
-            .wait()
-        {
-            Ok(()) => {
-                state.pending_queries += 1;
-                zready(Ok(()))
+                })
+                .wait(),
+        )
+    }
+}
+
+struct RepliesHandler {
+    state: Arc<Mutex<InnerState>>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+}
+
+impl Drop for RepliesHandler {
+    fn drop(&mut self) {
+        let mut state = zlock!(self.state);
+        state.pending_queries -= 1;
+        if state.pending_queries == 0 {
+            state
+                .merge_queue
+                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
+            state
+                .merge_queue
+                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
+            log::debug!(
+                "Merged received publications - {} samples to propagate",
+                state.merge_queue.len()
+            );
+            for s in state.merge_queue.drain(..) {
+                (self.callback)(s);
             }
-            Err(err) => zready(Err(err)),
         }
     }
 }
 
-#[derive(Clone)]
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
     builder: QueryingSubscriberBuilder<'a, 'b>,
