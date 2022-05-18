@@ -500,7 +500,6 @@ impl Drop for RepliesHandler {
             state
                 .merge_queue
                 .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-            state.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
                 state.merge_queue.len()
