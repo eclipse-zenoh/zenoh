@@ -459,34 +459,28 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         target: QueryTarget,
         consolidation: QueryConsolidation,
     ) -> impl ZFuture<Output = ZResult<()>> {
-        let mut state = zwrite!(self.state);
+        zwrite!(self.state).pending_queries += 1;
+        // pending queries will be decremented in RepliesHandler drop()
+        let handler = RepliesHandler {
+            state: self.state.clone(),
+            callback: self.callback.clone(),
+        };
+
         log::debug!("Start query on {}", selector);
-        match self
-            .session
-            .get(selector)
-            .target(target)
-            .consolidation(consolidation)
-            .callback({
-                let handler = RepliesHandler {
-                    state: self.state.clone(),
-                    callback: self.callback.clone(),
-                };
-                move |r| {
+        zready(
+            self.session
+                .get(selector)
+                .target(target)
+                .consolidation(consolidation)
+                .callback(move |r| {
                     let mut state = zwrite!(handler.state);
                     match r.sample {
                         Ok(s) => state.merge_queue.push(s),
                         Err(v) => log::debug!("Received error {}", v),
                     }
-                }
-            })
-            .wait()
-        {
-            Ok(()) => {
-                state.pending_queries += 1;
-                zready(Ok(()))
-            }
-            Err(err) => zready(Err(err)),
-        }
+                })
+                .wait(),
+        )
     }
 }
 
