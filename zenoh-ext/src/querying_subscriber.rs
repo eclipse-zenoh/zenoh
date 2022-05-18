@@ -1,5 +1,3 @@
-use std::ops::Deref;
-use std::pin::Pin;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,8 +10,10 @@ use std::pin::Pin;
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-//;
+//
 use futures::Future;
+use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use zenoh::prelude::*;
@@ -379,6 +379,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
+                    log::trace!("Sample received while query in progress: push it to merge_queue");
                     state.merge_queue.push(s);
                 }
             }
@@ -475,7 +476,10 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 .callback(move |r| {
                     let mut state = zlock!(handler.state);
                     match r.sample {
-                        Ok(s) => state.merge_queue.push(s),
+                        Ok(s) => {
+                            log::trace!("Reply received: push it to merge_queue");
+                            state.merge_queue.push(s)
+                        }
                         Err(v) => log::debug!("Received error {}", v),
                     }
                 })
@@ -493,6 +497,10 @@ impl Drop for RepliesHandler {
     fn drop(&mut self) {
         let mut state = zlock!(self.state);
         state.pending_queries -= 1;
+        log::trace!(
+            "Query done - {} queries still in progress",
+            state.pending_queries
+        );
         if state.pending_queries == 0 {
             state
                 .merge_queue
@@ -501,7 +509,7 @@ impl Drop for RepliesHandler {
                 .merge_queue
                 .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             log::debug!(
-                "Merged received publications - {} samples to propagate",
+                "All queries done. Replies and live publications merged - {} samples to propagate",
                 state.merge_queue.len()
             );
             for s in state.merge_queue.drain(..) {
