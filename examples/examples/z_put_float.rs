@@ -25,7 +25,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Putting Float ('{}': '{}')...", key_expr, value);
-    session.put(&key_expr, value).await.unwrap();
+    session.put(&key_expr, value).res().await.unwrap();
 
     session.close().await.unwrap();
 }

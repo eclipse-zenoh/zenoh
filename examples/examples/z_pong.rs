@@ -31,14 +31,14 @@ fn main() {
     // The key expression to echo the data back
     let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_ping).res_sync().unwrap();
+    let sub = session.subscribe(&key_expr_ping).res().unwrap();
 
     while let Ok(sample) = sub.recv() {
         session
             .put(&key_expr_pong, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
     }
 }

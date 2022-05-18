@@ -13,7 +13,6 @@
 //
 use crate::config::Config;
 use crate::config::Notifier;
-use crate::data_kind;
 use crate::info::*;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
@@ -32,6 +31,7 @@ use crate::Sample;
 use crate::Selector;
 use crate::Value;
 use crate::ZFuture;
+use crate::{data_kind, SampleKind};
 use async_std::task;
 use flume::bounded;
 use futures::StreamExt;
@@ -1130,15 +1130,13 @@ impl Session {
         IntoKeyExpr: Into<KeyExpr<'b>>,
     {
         PublishBuilder {
-            publisher: Some(Publisher {
+            publisher: Publisher {
                 session: SessionRef::Borrow(self),
                 key_expr: key_expr.into().to_owned(),
-                value: None,
-                kind: None,
                 congestion_control: CongestionControl::default(),
                 priority: Priority::default(),
                 local_routing: None,
-            }),
+            },
         }
     }
 
@@ -1170,13 +1168,9 @@ impl Session {
         IntoValue: Into<Value>,
     {
         PutBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.into(),
-            value: Some(value.into()),
-            kind: None,
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
+            publisher: self.publish(key_expr).publisher,
+            value: value.into(),
+            kind: SampleKind::Put,
         }
     }
 
@@ -1200,14 +1194,10 @@ impl Session {
     where
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
-        DeleteBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.into(),
-            value: Some(Value::empty()),
-            kind: Some(data_kind::DELETE),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
+        PutBuilder {
+            publisher: self.publish(key_expr).publisher,
+            value: Value::empty(),
+            kind: SampleKind::Delete,
         }
     }
 
@@ -1597,15 +1587,13 @@ impl EntityFactory for Arc<Session> {
         IntoKeyExpr: Into<KeyExpr<'a>>,
     {
         PublishBuilder {
-            publisher: Some(Publisher {
+            publisher: Publisher {
                 session: SessionRef::Shared(self.clone()),
                 key_expr: key_expr.into().to_owned(),
-                value: None,
-                kind: None,
                 congestion_control: CongestionControl::default(),
                 priority: Priority::default(),
                 local_routing: None,
-            }),
+            },
         }
     }
 }

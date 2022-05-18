@@ -41,7 +41,7 @@ fn main() {
             .congestion_control(CongestionControl::Block)
             // Set the right priority
             .priority(prio)
-            .wait()
+            .res()
             .unwrap();
 
         if print {

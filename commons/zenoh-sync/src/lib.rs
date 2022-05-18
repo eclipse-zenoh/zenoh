@@ -121,12 +121,14 @@ pub fn zpinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> ZPinBoxFutur
     ZPinBoxFuture(Box::pin(fut))
 }
 
+#[deprecated]
 pub trait Runnable {
     type Output;
 
     fn run(&mut self) -> Self::Output;
 }
 
+#[deprecated]
 #[macro_export]
 macro_rules! derive_zfuture{
     (

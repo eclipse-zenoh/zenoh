@@ -517,7 +517,7 @@ pub struct HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
     handler: Option<zenoh::prelude::Handler<Sample, Receiver>>,
 }
 
-impl<'a, 'b, Receiver> std::future::Future for HandlerQueryingSubscriberBuilder<'a, 'b, Receiver>
+impl<'a, 'b, Receiver> Future for HandlerQueryingSubscriberBuilder<'a, 'b, Receiver>
 where
     Receiver: Unpin,
 {

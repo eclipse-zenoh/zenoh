@@ -37,7 +37,7 @@ async fn main() {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Putting Data ('{}': '{}')...", expr_id, buf);
-        session.put(expr_id, buf).await.unwrap();
+        session.put(expr_id, buf).res().await.unwrap();
     }
 }
 

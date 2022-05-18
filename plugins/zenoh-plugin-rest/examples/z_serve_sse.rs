@@ -83,6 +83,7 @@ async fn main() {
             .put(expr_id, value)
             .encoding(KnownEncoding::TextPlain)
             .congestion_control(CongestionControl::Block)
+            .res_async()
             .await
             .unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;

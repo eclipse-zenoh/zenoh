@@ -31,7 +31,7 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).res_sync().unwrap();
+    let sub = session.subscribe(&key_expr_pong).res().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -48,7 +48,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
 
         let _ = sub.recv();
@@ -61,7 +61,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
 
         let _ = sub.recv();

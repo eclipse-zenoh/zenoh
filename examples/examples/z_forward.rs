@@ -27,7 +27,7 @@ async fn main() {
     println!("Creating Subscriber on '{}'...", key_expr);
     let mut subscriber = session.subscribe(&key_expr).res().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
-    let publisher = session.publish(&forward).await.unwrap();
+    let publisher = session.publish(&forward).res().await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
     subscriber.forward(publisher).await.unwrap();
 }

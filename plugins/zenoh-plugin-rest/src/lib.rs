@@ -365,6 +365,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .put(&key_expr, bytes)
                 .encoding(encoding)
                 .kind(method_to_kind(req.method()))
+                .res_async()
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
