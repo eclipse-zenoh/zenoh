@@ -366,7 +366,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         callback: Callback<Sample>,
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
         let state = Arc::new(RwLock::new(InnerState {
-            pending_queries: 1,
+            pending_queries: 0,
             merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
         }));
         let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
