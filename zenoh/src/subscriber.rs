@@ -13,7 +13,7 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{Callback, Id, IntoHandler, KeyExpr, Sample, locked};
+use crate::prelude::{locked, Callback, Id, IntoHandler, KeyExpr, Sample};
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
