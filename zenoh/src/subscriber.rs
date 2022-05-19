@@ -93,34 +93,34 @@ impl<'l> CallbackSubscriber<'l> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
-        CallbackSubscriberUndeclare {
+    pub fn close(self) -> impl Resolve<ZResult<()>> + 'l {
+        CallbackSubscriberClose {
             s: std::mem::ManuallyDrop::new(self),
             alive: true,
         }
     }
 }
-struct CallbackSubscriberUndeclare<'a> {
+struct CallbackSubscriberClose<'a> {
     s: std::mem::ManuallyDrop<CallbackSubscriber<'a>>,
     alive: bool,
 }
-impl Resolvable for CallbackSubscriberUndeclare<'_> {
+impl Resolvable for CallbackSubscriberClose<'_> {
     type Output = ZResult<()>;
 }
-impl SyncResolve for CallbackSubscriberUndeclare<'_> {
+impl SyncResolve for CallbackSubscriberClose<'_> {
     fn res_sync(mut self) -> Self::Output {
         self.alive = false;
         self.s.session.unsubscribe(self.s.state.id).res_sync()
     }
 }
-impl AsyncResolve for CallbackSubscriberUndeclare<'_> {
+impl AsyncResolve for CallbackSubscriberClose<'_> {
     type Future = futures::future::Ready<ZResult<()>>;
     fn res_async(mut self) -> Self::Future {
         self.alive = false;
         self.s.session.unsubscribe(self.s.state.id).res_async()
     }
 }
-impl Drop for CallbackSubscriberUndeclare<'_> {
+impl Drop for CallbackSubscriberClose<'_> {
     fn drop(&mut self) {
         if self.alive {
             unsafe { std::mem::ManuallyDrop::drop(&mut self.s) }
@@ -548,7 +548,7 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     /// ```
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.undeclare()
+        self.subscriber.close()
     }
 }
 
