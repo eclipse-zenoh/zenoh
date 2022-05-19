@@ -906,12 +906,12 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// # use futures::prelude::*;
-/// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::r#async::*;
+/// # let session = zenoh::open(config::peer()).res().await.unwrap();
 ///
 /// use std::convert::TryInto;
 ///
-/// let queryable = session.queryable("/key/expression").await.unwrap();
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     let selector = query.selector();
 ///     let value_selector = selector.parse_value_selector().unwrap();
@@ -925,8 +925,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// ```
 /// # async_std::task::block_on(async {
 /// # use futures::prelude::*;
-/// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::r#async::*;
+/// # let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # let mut properties = Properties::default();
 ///
 /// let value_selector = ValueSelector::empty()
@@ -936,7 +936,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// let mut replies = session.get(
 ///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
-/// ).await.unwrap();
+/// ).res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]

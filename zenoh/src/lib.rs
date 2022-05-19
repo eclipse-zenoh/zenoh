@@ -31,13 +31,13 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     session.put("/key/expression", "value").await.unwrap();
-//!     session.close().await.unwrap();
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     session.put("/key/expression", "value").res().await.unwrap();
+//!     session.close().res().await.unwrap();
 //! }
 //! ```
 //!
@@ -45,12 +45,12 @@
 //! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let subscriber = session.subscribe("/key/expression").await.unwrap();
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     let subscriber = session.subscribe("/key/expression").res().await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received : {}", sample);
 //!     };
@@ -62,12 +62,12 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let replies = session.get("/key/expression").await.unwrap();
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     let replies = session.get("/key/expression").res().await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.sample);
 //!     }
@@ -173,10 +173,10 @@ pub mod scouting;
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::prelude::*;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).res().await.unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
@@ -202,21 +202,21 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # })
 /// ```
 ///
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
 /// config.set_local_routing(Some(false));
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
-/// let session = zenoh::open(config).await.unwrap();
+/// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
 #[must_use = "OpenBuilder does nothing unless you `.wait()`, `.await` or poll it"]
