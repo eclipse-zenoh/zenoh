@@ -12,22 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::pin::Pin;
 use async_std::task;
-use async_std::task::{Context, Poll};
 use futures::select;
 use futures::FutureExt;
 use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
-use std::future::Future;
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::utils::key_expr;
+use zenoh::utils::{key_expr, ClosureResolve};
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve};
+use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
-use zenoh_sync::zready;
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -72,16 +68,17 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Future for PublicationCacheBuilder<'a, '_> {
+impl<'a, 'b> Resolvable for PublicationCacheBuilder<'a, '_> {
     type Output = ZResult<PublicationCache<'a>>;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(PublicationCache::new(Pin::into_inner(self).clone()))
+}
+impl AsyncResolve for PublicationCacheBuilder<'_, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
-
-impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
-    fn wait(self) -> ZResult<PublicationCache<'a>> {
+impl SyncResolve for PublicationCacheBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
         PublicationCache::new(self)
     }
 }
@@ -211,8 +208,11 @@ impl<'a> PublicationCache<'a> {
 
     /// Close this PublicationCache
     #[inline]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
         // just drop self and all its content
-        zready(Ok(()))
+        ClosureResolve(move || {
+            std::mem::drop(self);
+            Ok(())
+        })
     }
 }

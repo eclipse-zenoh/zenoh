@@ -40,10 +40,11 @@ async fn main() {
         session
             .subscribe_with_query(key_expr)
             .query_selector(&selector)
+            .res()
             .await
             .unwrap()
     } else {
-        session.subscribe_with_query(key_expr).await.unwrap()
+        session.subscribe_with_query(key_expr).res().await.unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");

@@ -58,7 +58,6 @@ pub(crate) type Id = usize;
 pub use crate::config;
 pub use crate::properties::Properties;
 pub use crate::sync::channel::Receiver;
-pub use crate::sync::ZFuture;
 pub use zenoh_config::ValidatedMap;
 
 /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.

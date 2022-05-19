@@ -27,7 +27,6 @@ use zenoh_core::AsyncResolve;
 use zenoh_core::Resolvable;
 use zenoh_core::Resolve;
 use zenoh_core::SyncResolve;
-use zenoh_sync::Runnable;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
@@ -318,7 +317,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
             key_expr: self.key_expr,
             kind: self.kind,
             complete: self.complete,
-            callback: Some(callback),
+            callback,
         }
     }
 
@@ -365,22 +364,15 @@ impl<'a> Resolvable for QueryableBuilder<'a, '_> {
 }
 impl SyncResolve for QueryableBuilder<'_, '_> {
     fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE).into_handler();
-        self.session
-            .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
-            .map(|qable_state| HandlerQueryable {
-                queryable: CallbackQueryable {
-                    session: self.session.clone(),
-                    state: qable_state,
-                },
-                receiver,
-            })
+        self.with(flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE))
+            .res_sync()
     }
 }
 impl AsyncResolve for QueryableBuilder<'_, '_> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        self.with(flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE))
+            .res_async()
     }
 }
 
@@ -412,7 +404,7 @@ where
     pub(crate) key_expr: KeyExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
-    pub(crate) callback: Option<Callback>,
+    pub(crate) callback: Callback,
 }
 
 impl<'a, 'b, Callback> CallbackQueryableBuilder<'a, 'b, Callback>
@@ -427,22 +419,39 @@ where
     }
 }
 
-impl<'a, Callback> Runnable for CallbackQueryableBuilder<'a, '_, Callback>
+impl<'a, Callback> Resolvable for CallbackQueryableBuilder<'a, '_, Callback>
 where
     Callback: Fn(Query) + Send + Sync + 'static,
 {
     type Output = crate::Result<CallbackQueryable<'a>>;
+}
 
-    fn run(&mut self) -> Self::Output {
-        self.session
+impl<Callback> AsyncResolve for CallbackQueryableBuilder<'_, '_, Callback>
+where
+    Callback: Fn(Query) + Send + Sync + 'static,
+{
+    type Future = futures::future::Ready<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+
+impl<Callback> SyncResolve for CallbackQueryableBuilder<'_, '_, Callback>
+where
+    Callback: Fn(Query) + Send + Sync + 'static,
+{
+    fn res_sync(self) -> Self::Output {
+        let session = self.session;
+        session
             .declare_queryable(
                 &self.key_expr,
                 self.kind,
                 self.complete,
-                Box::new(self.callback.take().unwrap()),
+                Box::new(self.callback),
             )
-            .map(|qable_state| CallbackQueryable {
-                session: self.session.clone(),
+            .map(move |qable_state| CallbackQueryable {
+                session,
                 state: qable_state,
             })
     }

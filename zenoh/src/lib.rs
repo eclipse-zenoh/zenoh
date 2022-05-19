@@ -88,10 +88,8 @@ use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
-use sync::ZFuture;
 use zenoh_cfg_properties::config::*;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_sync::{zpinbox, ZPinBoxFuture};
 
 /// A zenoh result.
 pub use zenoh_core::Result;
@@ -208,8 +206,6 @@ pub mod properties {
 /// ```
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub mod sync {
-    pub use zenoh_sync::ZFuture;
-    pub use zenoh_sync::ZPinBoxFuture;
 
     /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
     pub mod channel {
@@ -410,10 +406,10 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    type Future = ZPinBoxFuture<Self::Output>;
+    type Future = zenoh_sync::PinBoxFuture<Self::Output>;
 
     fn res_async(self) -> Self::Future {
-        zpinbox(async move {
+        zenoh_sync::pinbox(async move {
             let config: crate::config::Config = self
                 .config
                 .try_into()

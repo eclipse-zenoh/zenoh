@@ -27,7 +27,7 @@ async fn main() {
     println!("Deleting resources matching '{}'...", key_expr);
     session.delete(&key_expr).res().await.unwrap();
 
-    session.close().await.unwrap();
+    session.close().res_async().await.unwrap();
 }
 
 fn parse_args() -> (Config, String) {

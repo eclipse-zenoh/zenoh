@@ -28,10 +28,9 @@ use crate::utils::FutureResolve;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
+use crate::SampleKind;
 use crate::Selector;
 use crate::Value;
-use crate::ZFuture;
-use crate::{data_kind, SampleKind};
 use async_std::task;
 use flume::bounded;
 use futures::StreamExt;
@@ -59,7 +58,6 @@ use zenoh_protocol::{
 use zenoh_protocol_core::WhatAmI;
 use zenoh_protocol_core::ZenohId;
 use zenoh_protocol_core::EMPTY_EXPR_ID;
-use zenoh_sync::zpinbox;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -373,18 +371,6 @@ impl Session {
         self.runtime.hlc.as_ref().map(Arc::as_ref)
     }
 
-    fn close_alive(self) -> impl ZFuture<Output = ZResult<()>> {
-        zpinbox(async move {
-            trace!("close()");
-            self.runtime.close().await?;
-
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
-
-            Ok(())
-        })
-    }
-
     /// Close the zenoh [`Session`](Session).
     ///
     /// Sessions are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -399,10 +385,16 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(mut self) -> impl ZFuture<Output = ZResult<()>> {
-        self.alive = false;
-        self.close_alive()
+    pub fn close(self) -> impl Resolve<ZResult<()>> {
+        FutureResolve(async move {
+            trace!("close()");
+            self.runtime.close().await?;
+
+            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
+            primitives.send_close();
+
+            Ok(())
+        })
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).
@@ -1843,7 +1835,7 @@ impl Primitives for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.clone().close_alive().wait();
+            let _ = self.clone().close().res_sync();
         }
     }
 }
