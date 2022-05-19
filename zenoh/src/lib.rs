@@ -202,17 +202,6 @@ pub mod sync {
     pub use zenoh_sync::ZFuture;
     pub use zenoh_sync::ZPinBoxFuture;
     pub use zenoh_sync::ZReady;
-
-    /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
-    pub mod channel {
-        pub use zenoh_sync::channel::Iter;
-        pub use zenoh_sync::channel::Receiver;
-        pub use zenoh_sync::channel::RecvError;
-        pub use zenoh_sync::channel::RecvFut;
-        pub use zenoh_sync::channel::RecvTimeoutError;
-        pub use zenoh_sync::channel::TryIter;
-        pub use zenoh_sync::channel::TryRecvError;
-    }
 }
 
 /// Scouting primitives.

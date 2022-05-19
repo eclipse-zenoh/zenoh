@@ -48,7 +48,6 @@ pub(crate) type Id = usize;
 
 pub use crate::config;
 pub use crate::properties::Properties;
-pub use crate::sync::channel::Receiver;
 pub use crate::sync::ZFuture;
 pub use zenoh_config::ValidatedMap;
 
