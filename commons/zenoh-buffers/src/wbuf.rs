@@ -533,6 +533,7 @@ where
     }
 }
 pub trait ByteSliceExactIter<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator {}
+//noinspection ALL
 impl<'a, T: Iterator<Item = &'a [u8]> + ExactSizeIterator> ByteSliceExactIter<'a> for T {}
 impl<'a> crate::traits::SplitBuffer<'a> for WBuf {
     type Slices = Box<dyn ByteSliceExactIter<'a> + 'a>;

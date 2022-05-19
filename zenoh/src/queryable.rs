@@ -404,7 +404,6 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
 pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Query) + Send + Sync + 'static,

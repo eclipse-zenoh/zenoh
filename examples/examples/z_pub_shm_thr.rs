@@ -38,6 +38,7 @@ async fn main() {
         z.put(&key_expr, buf.clone())
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
+            .res()
             .await
             .unwrap();
     }

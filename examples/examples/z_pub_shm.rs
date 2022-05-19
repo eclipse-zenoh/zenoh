@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             path,
             String::from_utf8_lossy(&slice[0..slice_len])
         );
-        session.put(&path, sbuf.clone()).await?;
+        session.put(&path, sbuf.clone()).res().await?;
         if idx % K == 0 {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {} bytes", freed);

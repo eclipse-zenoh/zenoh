@@ -17,6 +17,7 @@ use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
 use zenoh_core::zread;
 
+//noinspection ALL
 impl TransportMulticastInner {
     fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
         macro_rules! zpush {

@@ -369,6 +369,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
     async fn handle_close(&self, _peer_id: &ZenohId) {}
 }
 
+//noinspection ALL
 impl From<Arc<SharedMemoryAuthenticator>> for PeerAuthenticator {
     fn from(v: Arc<SharedMemoryAuthenticator>) -> PeerAuthenticator {
         PeerAuthenticator(v)

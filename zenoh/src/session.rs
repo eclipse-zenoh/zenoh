@@ -248,6 +248,7 @@ impl Session {
         }
     }
 
+    #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);

@@ -62,7 +62,7 @@ async fn main() {
                     b'q' => break,
                     b'd' => {
                         println!("Do query again");
-                        subscriber.query().await.unwrap()
+                        subscriber.query().res().await.unwrap()
                     }
                     0 => sleep(Duration::from_secs(1)).await,
                     _ => (),

@@ -23,6 +23,7 @@ impl<Output, F: FnOnce() -> Output> zenoh_core::Resolvable for ClosureResolve<F>
     type Output = Output;
 }
 impl<Output: Send, F: FnOnce() -> Output> zenoh_core::SyncResolve for ClosureResolve<F> {
+    //noinspection ALL
     fn res_sync(self) -> Self::Output {
         self.0()
     }

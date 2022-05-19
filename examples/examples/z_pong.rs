@@ -14,7 +14,6 @@
 use clap::{App, Arg};
 use zenoh::config::Config;
 use zenoh::core::SyncResolve;
-use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {

@@ -21,8 +21,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, SyncResolve};
-use zenoh_sync::zready;
+use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
@@ -414,20 +413,37 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         // start query
-        query_subscriber.query().wait()?;
+        query_subscriber.query().res_sync()?;
 
         Ok(query_subscriber)
     }
 
     /// Close this QueryingSubscriber
     #[inline]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
-        zready(self.subscriber.undeclare().res_sync())
+    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+        struct Undeclare<'a> {
+            inner: Option<CallbackQueryingSubscriber<'a>>,
+        }
+        impl Resolvable for Undeclare<'_> {
+            type Output = ZResult<()>;
+        }
+        impl AsyncResolve for Undeclare<'_> {
+            type Future = futures::future::Ready<Self::Output>;
+            fn res_async(self) -> Self::Future {
+                futures::future::ready(self.res_sync())
+            }
+        }
+        impl SyncResolve for Undeclare<'_> {
+            fn res_sync(mut self) -> Self::Output {
+                self.inner.take().unwrap().close().res_sync()
+            }
+        }
+        Undeclare { inner: Some(self) }
     }
 
     /// Issue a new query using the configured selector.
     #[inline]
-    pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
         self.query_on_selector(
             Selector {
                 key_selector: self.query_key_expr.clone(),
@@ -441,11 +457,11 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     /// Issue a new query on the specified selector.
     #[inline]
     pub fn query_on<'c, IntoSelector>(
-        &mut self,
+        &'c mut self,
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
     {
@@ -453,12 +469,12 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     }
 
     #[inline]
-    fn query_on_selector(
-        &mut self,
-        selector: Selector,
+    fn query_on_selector<'c>(
+        &'c mut self,
+        selector: Selector<'c>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> impl ZFuture<Output = ZResult<()>> {
+    ) -> impl Resolve<ZResult<()>> + 'c {
         zlock!(self.state).pending_queries += 1;
         // pending queries will be decremented in RepliesHandler drop()
         let handler = RepliesHandler {
@@ -467,20 +483,17 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         log::debug!("Start query on {}", selector);
-        zready(
-            self.session
-                .get(selector)
-                .target(target)
-                .consolidation(consolidation)
-                .callback(move |r| {
-                    let mut state = zlock!(handler.state);
-                    match r.sample {
-                        Ok(s) => state.merge_queue.push(s),
-                        Err(v) => log::debug!("Received error {}", v),
-                    }
-                })
-                .res_sync(),
-        )
+        self.session
+            .get(selector)
+            .target(target)
+            .consolidation(consolidation)
+            .callback(move |r| {
+                let mut state = zlock!(handler.state);
+                match r.sample {
+                    Ok(s) => state.merge_queue.push(s),
+                    Err(v) => log::debug!("Received error {}", v),
+                }
+            })
     }
 }
 
@@ -641,30 +654,29 @@ pub struct HandlerQueryingSubscriber<'a, Receiver> {
     pub receiver: Receiver,
 }
 
-impl<Receiver> HandlerQueryingSubscriber<'_, Receiver> {
+impl<'a, Receiver> HandlerQueryingSubscriber<'a, Receiver> {
     /// Close a [`HandlerQueryingSubscriber`](HandlerQueryingSubscriber)
     #[inline]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.close()
     }
 
     /// Issue a new query using the configured selector.
     #[inline]
-    pub fn query(&mut self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.query()
     }
 
     /// Issue a new query on the specified selector.
     #[inline]
     pub fn query_on<'c, IntoSelector>(
-        &mut self,
+        &'c mut self,
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-    ) -> impl ZFuture<Output = ZResult<()>>
+    ) -> impl Resolve<ZResult<()>> + 'c
     where
-        IntoSelector: Into<Selector<'c>>,
+        IntoSelector: Into<Selector<'c>> + 'c,
     {
         self.subscriber.query_on(selector, target, consolidation)
     }
@@ -679,11 +691,11 @@ impl<Receiver> Deref for HandlerQueryingSubscriber<'_, Receiver> {
 }
 
 impl HandlerQueryingSubscriber<'_, flume::Receiver<Sample>> {
-    pub fn forward<'selflifetime, E: 'selflifetime, S>(
-        &'selflifetime mut self,
+    pub fn forward<'s, E: 's, S>(
+        &'s mut self,
         sink: S,
     ) -> futures::stream::Forward<
-        impl futures::TryStream<Ok = Sample, Error = E, Item = Result<Sample, E>> + 'selflifetime,
+        impl futures::TryStream<Ok = Sample, Error = E, Item = Result<Sample, E>> + 's,
         S,
     >
     where

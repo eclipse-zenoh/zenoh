@@ -27,6 +27,7 @@ use zenoh_protocol_core::Locator;
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
+//noinspection ALL
 impl TransportMulticastInner {
     fn trigger_callback(
         &self,
