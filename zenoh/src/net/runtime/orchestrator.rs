@@ -500,9 +500,9 @@ impl Runtime {
         sockets: &[UdpSocket],
         matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
-        mut f: F,
+        f: F,
     ) where
-        F: FnMut(Hello) -> Fut + std::marker::Send + Copy,
+        F: Fn(Hello) -> Fut + std::marker::Send + std::marker::Sync + Clone,
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
@@ -542,6 +542,7 @@ impl Runtime {
             }
         };
         let recvs = futures::future::select_all(sockets.iter().map(move |socket| {
+            let f = f.clone();
             async move {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {

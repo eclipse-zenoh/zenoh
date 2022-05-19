@@ -76,19 +76,14 @@
 #[macro_use]
 extern crate zenoh_core;
 
-use async_std::net::UdpSocket;
 use async_std::task;
-use flume::bounded;
-use futures::prelude::*;
 use git_version::git_version;
-use log::trace;
 use net::protocol::proto::data_kind;
-use net::runtime::orchestrator::Loop;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
-use sync::{zready, ZFuture};
-use zenoh_cfg_properties::config::*;
+use scouting::ScoutBuilder;
+use sync::ZFuture;
 use zenoh_core::{zerror, Result as ZResult};
 use zenoh_sync::Runnable;
 
@@ -180,7 +175,7 @@ pub mod properties {
 /// use zenoh::scouting::WhatAmI;
 ///
 /// fn main() {
-///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).wait().unwrap();
+///     let receiver = zenoh::scout(WhatAmI::Router, config::default()).wait().unwrap();
 ///     while let Ok(hello) = receiver.recv() {
 ///         println!("{}", hello);
 ///     }
@@ -195,8 +190,8 @@ pub mod properties {
 ///
 /// #[async_std::main]
 /// async fn main() {
-///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).await.unwrap();
-///     while let Some(hello) = receiver.next().await {
+///     let receiver = zenoh::scout(WhatAmI::Router, config::default()).await.unwrap();
+///     while let Ok(hello) = receiver.recv_async().await {
 ///         println!("{}", hello);
 ///     }
 /// }
@@ -221,29 +216,7 @@ pub mod sync {
 }
 
 /// Scouting primitives.
-pub mod scouting {
-    use crate::sync::channel::{
-        Iter, Receiver, RecvError, RecvFut, RecvTimeoutError, TryIter, TryRecvError,
-    };
-    use flume::Sender;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-    use zenoh_sync::zreceiver;
-
-    /// Constants and helpers for zenoh `whatami` flags.
-    pub use zenoh_protocol_core::WhatAmI;
-
-    /// A zenoh Hello message.
-    pub use zenoh_protocol::proto::Hello;
-
-    zreceiver! {
-        /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.
-        #[derive(Clone)]
-        pub struct HelloReceiver : Receiver<Hello> {
-            pub(crate) stop_sender: Sender<()>,
-        }
-    }
-}
+pub mod scouting;
 
 /// Scout for routers and/or peers.
 ///
@@ -264,8 +237,8 @@ pub mod scouting {
 /// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
-/// while let Some(hello) = receiver.next().await {
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
 /// # })
@@ -273,69 +246,15 @@ pub mod scouting {
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
-) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
+) -> ScoutBuilder<I, TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    let what = what.into();
-    let config: crate::config::Config = match config.try_into() {
-        Ok(config) => config,
-        Err(e) => return zready(Err(zerror!("invalid configuration {:?}", &e).into())),
-    };
-
-    trace!("scout({}, {})", what, &config);
-
-    let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            return zready(Err(zerror!(
-                "invalid default addr {}: {:?}",
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-                &e
-            )
-            .into()))
-        }
-    };
-
-    let addr = config.scouting.multicast.address().unwrap_or(default_addr);
-    let ifaces = config
-        .scouting
-        .multicast
-        .interface()
-        .as_ref()
-        .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
-
-    let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
-    let (stop_sender, stop_receiver) = bounded::<()>(1);
-
-    let ifaces = Runtime::get_interfaces(ifaces);
-    if !ifaces.is_empty() {
-        let sockets: Vec<UdpSocket> = ifaces
-            .into_iter()
-            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-            .collect();
-        if !sockets.is_empty() {
-            async_std::task::spawn(async move {
-                let hello_sender = &hello_sender;
-                let mut stop_receiver = stop_receiver.stream();
-                let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
-                    let _ = hello_sender.send_async(hello).await;
-                    Loop::Continue
-                });
-                let stop = async move {
-                    stop_receiver.next().await;
-                    trace!("stop scout({}, {})", what, &config);
-                };
-                async_std::prelude::FutureExt::race(scout, stop).await;
-            });
-        }
+    ScoutBuilder {
+        what: Some(what),
+        config: Some(config),
     }
-
-    zready(Ok(scouting::HelloReceiver::new(
-        stop_sender,
-        hello_receiver,
-    )))
 }
 
 /// Open a zenoh [`Session`].
