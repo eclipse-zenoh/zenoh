@@ -3562,6 +3562,7 @@ dependencies = [
 [[package]]
 name = "z-serial"
 version = "0.1.0"
+source = "git+https://github.com/ZettaScaleLabs/z-serial?branch=master#7e4954bbfa46383b36f31ff54dbbc9ffc7e63980"
 dependencies = [
  "futures",
  "tokio",
