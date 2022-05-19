@@ -63,12 +63,12 @@ pub trait SessionExt {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     /// use zenoh_ext::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let subscriber = session.subscribe_with_query("/key/expr").await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.subscribe_with_query("/key/expr").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }

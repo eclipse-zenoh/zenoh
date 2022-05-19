@@ -177,9 +177,10 @@ impl fmt::Debug for QueryableState {
 /// ### sync
 /// ```no_run
 /// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).wait().unwrap();
+/// # use sync::SyncResolve;
+/// # let session = zenoh::open(config::peer()).res().unwrap();
 ///
-/// let mut queryable = session.queryable("/key/expression").wait().unwrap();
+/// let mut queryable = session.queryable("/key/expression").res().unwrap();
 /// while let Ok(query) = queryable.recv() {
 ///      println!(">> Handling query '{}'", query.selector());
 /// }
@@ -189,10 +190,11 @@ impl fmt::Debug for QueryableState {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// # use futures::prelude::*;
+/// # use r#async::AsyncResolve;
 /// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # let session = zenoh::open(config::peer()).res().await.unwrap();
 ///
-/// let queryable = session.queryable("/key/expression").await.unwrap();
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///      println!(">> Handling query '{}'", query.selector());
 /// }
@@ -213,10 +215,11 @@ impl<'a> CallbackQueryable<'a> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let queryable = session.queryable("/key/expression").await.unwrap();
-    /// queryable.close().await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+    /// queryable.close().res().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -283,15 +286,12 @@ impl fmt::Debug for CallbackQueryable<'_> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::queryable;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let mut queryable = session
-///     .queryable("/key/expression")
-///     .await
-///     .unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
@@ -384,15 +384,12 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::queryable;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let mut queryable = session
-///     .queryable("/key/expression")
-///     .await
-///     .unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Clone)]
@@ -485,15 +482,12 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::queryable;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let mut queryable = session
-///     .queryable("/key/expression")
-///     .await
-///     .unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]

@@ -35,11 +35,13 @@ pub use zenoh_protocol_core::CongestionControl;
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .delete("/key/expression")
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -54,13 +56,15 @@ pub type DeleteBuilder<'a> = PutBuilder<'a>;
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .put("/key/expression", "value")
 ///     .encoding(KnownEncoding::TextPlain)
 ///     .congestion_control(CongestionControl::Block)
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -138,10 +142,11 @@ use zenoh_core::zresult::Error;
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let publisher = session.publish("/key/expression").await.unwrap();
-/// publisher.send("value").unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let publisher = session.publish("/key/expression").res().await.unwrap();
+/// publisher.put("value").unwrap();
 /// # })
 /// ```
 ///
@@ -151,10 +156,11 @@ use zenoh_core::zresult::Error;
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-/// let publisher = session.publish("/another/key/expression").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let mut subscriber = session.subscribe("/key/expression").res().await.unwrap();
+/// let publisher = session.publish("/another/key/expression").res().await.unwrap();
 /// subscriber.forward(publisher).await.unwrap();
 /// # })
 /// ```
@@ -235,10 +241,11 @@ impl Publisher<'_> {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").await.unwrap();
-    /// publisher.send("value").unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.publish("/key/expression").res().await.unwrap();
+    /// publisher.put("value").unwrap();
     /// # })
     /// ```
     #[inline]
@@ -289,13 +296,14 @@ where
 /// ```
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
 ///     .publish("/key/expression")
-///     .encoding(KnownEncoding::TextPlain)
 ///     .congestion_control(CongestionControl::Block)
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })

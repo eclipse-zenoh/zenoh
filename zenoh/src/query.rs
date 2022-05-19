@@ -129,16 +129,16 @@ pub(crate) struct QueryState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::query::*;
-/// use zenoh::queryable;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let mut replies = session
 ///     .get("/key/expression?value>1")
 ///     .target(QueryTarget::All)
 ///     .consolidation(QueryConsolidation::none())
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
