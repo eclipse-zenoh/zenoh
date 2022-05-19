@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::prelude::FutureExt;
-use futures::stream::StreamExt;
 use zenoh::config::Config;
 use zenoh::core::AsyncResolve;
 use zenoh::scouting::WhatAmI;
@@ -23,13 +22,13 @@ async fn main() {
     env_logger::init();
 
     println!("Scouting...");
-    let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
+    let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
         .res()
         .await
         .unwrap();
 
     let scout = async {
-        while let Some(hello) = receiver.next().await {
+        while let Ok(hello) = receiver.recv_async().await {
             println!("{}", hello);
         }
     };

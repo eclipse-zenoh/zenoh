@@ -18,7 +18,6 @@ use std::task::{Context, Poll};
 
 pub mod backoff;
 pub use backoff::*;
-pub mod channel;
 pub mod condition;
 pub use condition::*;
 pub mod mvar;
