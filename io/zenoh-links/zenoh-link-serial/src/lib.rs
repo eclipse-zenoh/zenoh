@@ -34,6 +34,8 @@ const SERIAL_MTU_LIMIT: u16 = SERIAL_MAX_MTU;
 zconfigurable! {
     // Default MTU (UDP PDU) in bytes.
     static ref SERIAL_DEFAULT_MTU: u16 = SERIAL_MTU_LIMIT;
+
+    static ref SERIAL_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
 #[derive(Default, Clone, Copy)]

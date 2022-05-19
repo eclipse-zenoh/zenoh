@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use async_std::prelude::*;
 use async_std::sync::Mutex as AsyncMutex;
 use async_std::task::JoinHandle;
 use async_std::task::{self};
@@ -21,6 +22,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
@@ -32,7 +34,10 @@ use zenoh_sync::Signal;
 
 use z_serial::ZSerial;
 
-use super::{get_baud_rate, get_unix_path_as_string, SERIAL_DEFAULT_MTU, SERIAL_LOCATOR_PREFIX};
+use super::{
+    get_baud_rate, get_unix_path_as_string, SERIAL_ACCEPT_THROTTLE_TIME, SERIAL_DEFAULT_MTU,
+    SERIAL_LOCATOR_PREFIX,
+};
 
 struct LinkUnicastSerial {
     // The underlying serial port as returned by ZSerial (tokio-serial)
@@ -44,13 +49,13 @@ struct LinkUnicastSerial {
     //       the same stream: there is only one task at the time that writes on
     //       the stream and only one task at the time that reads from the stream.
     port: UnsafeCell<ZSerial>,
-    // port: Arc<AsyncMutex<ZSerial>>,
     // The serial port path
     src_locator: Locator,
     // The serial destination path (random UUIDv4)
     dst_locator: Locator,
     // A flag that tells if the link is connected or not
     is_connected: Arc<AtomicBool>,
+    // Locks for reading and writing ends of the serial.
     write_lock: AsyncMutex<()>,
     read_lock: AsyncMutex<()>,
 }
@@ -95,7 +100,7 @@ impl LinkUnicastSerial {
 impl LinkUnicastTrait for LinkUnicastSerial {
     async fn close(&self) -> ZResult<()> {
         log::trace!("Closing Serial link: {}", self);
-        let guard = zasynclock!(self.write_lock);
+        let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().clear().map_err(|e| {
             let e = zerror!("Unable to close Serial link {}: {}", self, e);
             log::trace!("{}", e);
@@ -295,8 +300,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let c_listeners = self.listeners.clone();
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res =
-                accept_read_task(link, c_active, c_signal, c_manager, c_path.clone(), is_connected).await;
+            let res = accept_read_task(
+                link,
+                c_active,
+                c_signal,
+                c_manager,
+                c_path.clone(),
+                is_connected,
+            )
+            .await;
             zwrite!(c_listeners).remove(&c_path);
             res
         });
@@ -305,7 +317,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(path.clone(), listener);
-
 
         Ok(locator)
     }
@@ -347,13 +358,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 async fn accept_read_task(
     link: Arc<LinkUnicastSerial>,
     active: Arc<AtomicBool>,
-    _signal: Signal,
+    signal: Signal,
     manager: NewLinkChannelSender,
     src_path: String,
     is_connected: Arc<AtomicBool>,
 ) -> ZResult<()> {
     enum Action {
-        Receive(ZSerial),
+        Receive(Arc<LinkUnicastSerial>),
         Stop,
     }
 
@@ -362,28 +373,56 @@ async fn accept_read_task(
         Ok(Action::Stop)
     }
 
-    log::trace!("Ready to accept Serial connections on: {:?}", src_path);
+    async fn receive(
+        link: Arc<LinkUnicastSerial>,
+        active: Arc<AtomicBool>,
+        src_path: String,
+        is_connected: Arc<AtomicBool>,
+    ) -> ZResult<Action> {
+        while active.load(Ordering::Acquire) {
+            if !is_connected.load(Ordering::Acquire) {
+                if !link.is_ready() {
+                    // Waiting to be ready, if not sleep some time.
+                    task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+                    continue;
+                }
 
-    while active.load(Ordering::Acquire) {
-        if !is_connected.load(Ordering::Acquire) {
-            if !link.is_ready() {
-                // Waiting for the link to be ready
-                continue;
+                log::trace!("Creating serial link from {:?}", src_path);
+
+                is_connected.store(true, Ordering::Release);
+
+                return Ok(Action::Receive(link.clone()));
             }
-
-            log::trace!("Creating serial link from {:?}", src_path);
-
-            is_connected.store(true, Ordering::Release);
-
-            // Communicate the new link to the initial transport manager
-            if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                log::error!("{}-{}: {}", file!(), line!(), e)
-            }
-        } else {
-            ()
-            //task::sleep(Duration::from_secs(10)).await;
         }
+        Ok(Action::Stop)
     }
 
-    Ok(())
+    log::trace!("Ready to accept Serial connections on: {:?}", src_path);
+
+    loop {
+        match receive(
+            link.clone(),
+            active.clone(),
+            src_path.clone(),
+            is_connected.clone(),
+        )
+        .race(stop(signal.clone()))
+        .await
+        {
+            Ok(action) => match action {
+                Action::Receive(link) => {
+                    // Communicate the new link to the initial transport manager
+                    if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                        log::error!("{}-{}: {}", file!(), line!(), e)
+                    }
+                }
+                Action::Stop => break Ok(()),
+            },
+            Err(e) => {
+                log::warn!("{}. Hint: Is the serial cable connected?", e);
+                task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+                continue;
+            }
+        }
+    }
 }
