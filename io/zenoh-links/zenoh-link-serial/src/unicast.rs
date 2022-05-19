@@ -89,7 +89,18 @@ impl LinkUnicastSerial {
     }
 
     fn is_ready(&self) -> bool {
-        if self.get_port_mut().bytes_to_read().unwrap_or(0) > 0 {
+        let res = match self.get_port_mut().bytes_to_read() {
+            Ok(b) => b,
+            Err(e) => {
+                log::warn!(
+                    "Unable to check if there are bytes to read in serial {}: {}",
+                    self.src_locator,
+                    e
+                );
+                0
+            }
+        };
+        if res > 0 {
             return true;
         }
         false

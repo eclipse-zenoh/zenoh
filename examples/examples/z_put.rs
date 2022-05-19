@@ -25,14 +25,8 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    async_std::task::sleep(std::time::Duration::from_secs(2)).await;
-
-    //println!("Putting Data ('{}': '{}')...", key_expr, value);
-    //session.put(&key_expr, value).await.unwrap();
-
-    loop {
-        async_std::task::sleep(std::time::Duration::from_secs(10)).await;
-    }
+    println!("Putting Data ('{}': '{}')...", key_expr, value);
+    session.put(&key_expr, value).await.unwrap();
 }
 
 fn parse_args() -> (Config, String, String) {
