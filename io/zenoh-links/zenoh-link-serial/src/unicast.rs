@@ -285,7 +285,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let dst_path = format!("{}", uuid::Uuid::new_v4());
         let link = Arc::new(LinkUnicastSerial::new(
             UnsafeCell::new(port),
-            &path.clone(),
+            &path,
             &dst_path,
             is_connected.clone(),
         ));
@@ -316,7 +316,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let locator = endpoint.locator.clone();
         let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(path.clone(), listener);
+        zwrite!(self.listeners).insert(path, listener);
 
         Ok(locator)
     }
