@@ -277,7 +277,6 @@ impl<'a> Resolvable for SubscriberBuilder<'a, '_> {
 
 impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
     fn res_sync(self) -> Self::Output {
-        log::trace!("subscribe({:?})", self.key_expr);
         HandlerSubscriberBuilder {
             session: self.session.clone(),
             key_expr: self.key_expr.clone(),
@@ -417,7 +416,6 @@ where
 
 impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(mut self) -> Self::Output {
-        log::trace!("declare_callback_subscriber({:?})", self.key_expr);
         if self.local {
             self.session
                 .declare_local_subscriber(&self.key_expr, Box::new(self.callback.take().unwrap()))
@@ -592,9 +590,7 @@ impl<'a, 'b, Receiver> Resolvable for HandlerSubscriberBuilder<'a, 'b, Receiver>
 
 impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
     fn res_sync(mut self) -> Self::Output {
-        log::trace!("declare_handler_subscriber({:?})", self.key_expr);
         let (callback, receiver) = self.handler.take().unwrap();
-
         let subscriber = if self.local {
             self.session
                 .declare_local_subscriber(&self.key_expr, callback)
