@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-use zenoh::{config::Config, core::AsyncResolve};
+use zenoh::config::Config;
+use zenoh::prelude::r#async::AsyncResolve;
 
 #[async_std::main]
 async fn main() {

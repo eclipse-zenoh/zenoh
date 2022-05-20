@@ -17,7 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
+use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::*;
 
 #[async_std::main]

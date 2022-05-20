@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
+use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::*;
 use zenoh::utils::key_expr;
 

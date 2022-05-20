@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
+use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::query::*;
 
 #[async_std::main]

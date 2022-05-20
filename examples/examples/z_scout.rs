@@ -13,7 +13,7 @@
 //
 use async_std::prelude::FutureExt;
 use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
+use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::scouting::WhatAmI;
 
 #[async_std::main]

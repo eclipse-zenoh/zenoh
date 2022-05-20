@@ -16,7 +16,7 @@ use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
-use zenoh::core::AsyncResolve;
+use zenoh::prelude::r#async::AsyncResolve;
 
 const N: usize = 10;
 const K: u32 = 3;

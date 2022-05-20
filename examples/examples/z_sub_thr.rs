@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::core::SyncResolve;
+use zenoh::prelude::sync::SyncResolve;
 
 fn main() {
     // initiate logging
