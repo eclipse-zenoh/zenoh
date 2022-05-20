@@ -157,10 +157,9 @@ pub mod scouting;
 
 /// Scout for routers and/or peers.
 ///
-/// [`scout`] spawns a task that periodically sends scout messages and returns a
-/// [`HelloReceiver`](crate::scouting::HelloReceiver) : a stream of received [`Hello`](crate::scouting::Hello) messages.
+/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`HelloReceiver`](crate::scouting::HelloReceiver) to stop the scouting task.
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
 ///
 /// # Arguments
 ///

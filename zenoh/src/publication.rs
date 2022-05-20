@@ -29,8 +29,6 @@ pub use zenoh_protocol_core::CongestionControl;
 
 /// A builder for initializing a [`delete`](crate::Session::delete) operation.
 ///
-/// The `delete` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
@@ -49,8 +47,6 @@ pub use zenoh_protocol_core::CongestionControl;
 pub type DeleteBuilder<'a> = PutBuilder<'a>;
 
 /// A builder for initializing a [`put`](crate::Session::put) operation.
-///
-/// The `put` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
 ///
 /// # Examples
 /// ```
@@ -288,9 +284,6 @@ where
 }
 
 /// A builder for initializing a [`Publisher`](Publisher).
-///
-/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-/// or asynchronously via `.await`.
 ///
 /// # Examples
 /// ```

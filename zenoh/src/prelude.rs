@@ -1049,8 +1049,8 @@ impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
 /// Functions to create zenoh entities with `'static` lifetime.
 ///
 /// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::subscriber::Subscriber), and
-/// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
+/// [`Subscriber`](crate::subscriber::HandlerSubscriber), and
+/// [`Queryable`](crate::queryable::HandlerQueryable) with a `'static` lifetime.
 /// This is useful to move zenoh entities to several threads and tasks.
 ///
 /// This trait is implemented for `Arc<Session>`.
@@ -1071,7 +1071,7 @@ impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
 /// # })
 /// ```
 pub trait EntityFactory {
-    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](crate::subscriber::HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -1096,12 +1096,12 @@ pub trait EntityFactory {
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
 
-    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    /// [`Queryable`](crate::queryable::HandlerQueryable) will reply to
     ///
     /// # Examples
     /// ```no_run

@@ -28,7 +28,7 @@ use zenoh_core::Resolvable;
 use zenoh_core::Resolve;
 use zenoh_core::SyncResolve;
 
-/// Structs received by a [`Queryable`](Queryable).
+/// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
     /// The key_selector of this Query.
     pub(crate) key_selector: KeyExpr<'static>,
@@ -163,13 +163,6 @@ impl fmt::Debug for QueryableState {
 
 /// An entity able to reply to queries.
 ///
-/// `Queryable` implements the `Stream` trait as well as the
-/// [`Receiver`](crate::prelude::Receiver) trait which allows to access the queries:
-///  - synchronously as with a [`std::sync::mpsc::Receiver`](std::sync::mpsc::Receiver)
-///  - asynchronously as with a [`async_std::channel::Receiver`](async_std::channel::Receiver).
-/// `Queryable` also provides a [`recv_async()`](Queryable::recv_async) function which allows
-/// to access queries asynchronously without needing a mutable reference to the `Queryable`.
-///
 /// Queryables are automatically undeclared when dropped.
 ///
 /// # Examples
@@ -206,7 +199,7 @@ pub struct CallbackQueryable<'a> {
 }
 
 impl<'a> CallbackQueryable<'a> {
-    /// Close a [`Queryable`](Queryable) previously created with [`queryable`](Session::queryable).
+    /// Close a [`CallbackQueryable`](CallbackQueryable) previously created with [`queryable`](crate::Session::queryable).
     ///
     /// Queryables are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Queryable asynchronously.
@@ -278,10 +271,7 @@ impl fmt::Debug for CallbackQueryable<'_> {
     }
 }
 
-/// A builder for initializing a [`Queryable`](Queryable).
-///
-/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-/// or asynchronously via `.await`.
+/// A builder for initializing a [`Queryable`](HandlerQueryable).
 ///
 /// # Examples
 /// ```
@@ -376,10 +366,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
     }
 }
 
-/// A builder for initializing a [`Queryable`](Queryable).
-///
-/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-/// or asynchronously via `.await`.
+/// A builder for initializing a [`Queryable`](CallbackQueryable).
 ///
 /// # Examples
 /// ```
@@ -474,10 +461,7 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
     }
 }
 
-/// A builder for initializing a [`Queryable`](Queryable).
-///
-/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-/// or asynchronously via `.await`.
+/// A builder for initializing a [`HandlerQueryable`].
 ///
 /// # Examples
 /// ```

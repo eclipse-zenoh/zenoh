@@ -298,9 +298,6 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 
 /// A builder for initializing a [`CallbackSubscriber`](CallbackSubscriber).
 ///
-/// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-/// or asynchronously via `.await`.
-///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {

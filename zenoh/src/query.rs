@@ -22,7 +22,7 @@ use std::fmt;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
-/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::queryable::HandlerQueryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::QueryTarget;
 
 /// The kind of consolidation.
@@ -123,9 +123,6 @@ pub(crate) struct QueryState {
 
 /// A builder for initializing a `query`.
 ///
-/// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver) and can be
-/// accessed synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-///
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
@@ -153,7 +150,7 @@ pub struct GetBuilder<'a, 'b> {
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
-    /// Make the built query a [`CallbackGet`](CallbackGet).
+    /// Make the built `query` a callback `query`.
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> CallbackGetBuilder<'a, 'b, Callback>
     where
@@ -165,7 +162,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         }
     }
 
-    /// Make the built query a [`CallbackGet`](CallbackGet).
+    /// Make the built `query` a callback `query`.
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -177,7 +174,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         self.callback(locked(callback))
     }
 
-    /// Make the built query a [`HandlerGet`](HandlerGet).
+    /// Make the built `query` a handler `query`.
     #[inline]
     pub fn with<IntoHandler, Receiver>(
         self,

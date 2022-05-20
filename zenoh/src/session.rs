@@ -304,8 +304,8 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also alows to create [`Subscriber`](Subscriber) and
-    /// [`Queryable`](Queryable) with static lifetime that can be moved to several
+    /// and tasks. It also alows to create [`Subscriber`](HandlerSubscriber) and
+    /// [`Queryable`](HandlerQueryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
     /// Note: the given zenoh `Session` will be closed when the last reference to
@@ -335,7 +335,7 @@ impl Session {
     /// the program's life. Dropping the returned reference will cause a memory
     /// leak.
     ///
-    /// This is useful to move entities (like [`Subscriber`](Subscriber)) which
+    /// This is useful to move entities (like [`Subscriber`](HandlerSubscriber)) which
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
@@ -823,7 +823,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    /// Create a [`Subscriber`](Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -1014,12 +1014,12 @@ impl Session {
             .count() as ZInt
     }
 
-    /// Create a [`Queryable`](Queryable) for the given key expression.
+    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](Queryable) will reply to
+    /// [`Queryable`](HandlerQueryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -1363,7 +1363,6 @@ impl Session {
     }
 
     /// Query data from the matching queryables in the system.
-    /// The result of the query is provided as a [`ReplyReceiver`](ReplyReceiver).
     ///
     /// # Arguments
     ///
@@ -1502,7 +1501,7 @@ impl Session {
 }
 
 impl EntityFactory for Arc<Session> {
-    /// Create a [`Subscriber`](Subscriber) for the given key expression.
+    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -1537,12 +1536,12 @@ impl EntityFactory for Arc<Session> {
         }
     }
 
-    /// Create a [`Queryable`](Queryable) for the given key expression.
+    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](Queryable) will reply to
+    /// [`Queryable`](HandlerQueryable) will reply to
     ///
     /// # Examples
     /// ```no_run
