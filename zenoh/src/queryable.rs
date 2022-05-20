@@ -342,7 +342,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
             key_expr: self.key_expr,
             kind: self.kind,
             complete: self.complete,
-            handler: Some(handler.into_handler()),
+            handler: handler.into_handler(),
         }
     }
 
@@ -486,7 +486,7 @@ pub struct HandlerQueryableBuilder<'a, 'b, Receiver> {
     pub(crate) key_expr: KeyExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
-    pub(crate) handler: Option<crate::prelude::Handler<Query, Receiver>>,
+    pub(crate) handler: Handler<Query, Receiver>,
 }
 
 impl<'a, 'b, Receiver> HandlerQueryableBuilder<'a, 'b, Receiver> {
@@ -512,13 +512,14 @@ impl<'a, Receiver> Resolvable for HandlerQueryableBuilder<'a, '_, Receiver> {
 }
 
 impl<'a, Receiver: Send> SyncResolve for HandlerQueryableBuilder<'a, '_, Receiver> {
-    fn res_sync(mut self) -> Self::Output {
-        let (callback, receiver) = self.handler.take().unwrap();
-        self.session
+    fn res_sync(self) -> Self::Output {
+        let session = self.session;
+        let (callback, receiver) = self.handler;
+        session
             .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
             .map(|qable_state| HandlerQueryable {
                 queryable: CallbackQueryable {
-                    session: self.session.clone(),
+                    session,
                     state: qable_state,
                 },
                 receiver,

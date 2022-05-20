@@ -177,7 +177,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            callback: Some(callback),
+            callback,
         }
     }
 
@@ -209,7 +209,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            handler: Some(handler.into_handler()),
+            handler: handler.into_handler(),
         }
     }
 
@@ -284,7 +284,7 @@ impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            handler: Some(flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_handler()),
+            handler: flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_handler(),
         }
         .res_sync()
     }
@@ -327,7 +327,7 @@ where
     mode: SubMode,
     period: Option<Period>,
     local: bool,
-    callback: Option<Callback>,
+    callback: Callback,
 }
 
 impl<Callback> fmt::Debug for CallbackSubscriberBuilder<'_, '_, Callback>
@@ -415,19 +415,20 @@ where
 }
 
 impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
-    fn res_sync(mut self) -> Self::Output {
+    fn res_sync(self) -> Self::Output {
+        let session = self.session;
         if self.local {
-            self.session
-                .declare_local_subscriber(&self.key_expr, Box::new(self.callback.take().unwrap()))
+            session
+                .declare_local_subscriber(&self.key_expr, Box::new(self.callback))
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session.clone(),
+                    session,
                     state: sub_state,
                 })
         } else {
-            self.session
+            session
                 .declare_subscriber(
                     &self.key_expr,
-                    Box::new(self.callback.take().unwrap()),
+                    Box::new(self.callback),
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode,
@@ -435,7 +436,7 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session.clone(),
+                    session,
                     state: sub_state,
                 })
         }
@@ -456,7 +457,7 @@ pub struct HandlerSubscriberBuilder<'a, 'b, Receiver> {
     mode: SubMode,
     period: Option<Period>,
     local: bool,
-    handler: Option<crate::prelude::Handler<Sample, Receiver>>,
+    handler: crate::prelude::Handler<Sample, Receiver>,
 }
 
 impl<Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, Receiver> {
@@ -589,17 +590,18 @@ impl<'a, 'b, Receiver> Resolvable for HandlerSubscriberBuilder<'a, 'b, Receiver>
 }
 
 impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
-    fn res_sync(mut self) -> Self::Output {
-        let (callback, receiver) = self.handler.take().unwrap();
+    fn res_sync(self) -> Self::Output {
+        let session = self.session;
+        let (callback, receiver) = self.handler;
         let subscriber = if self.local {
-            self.session
+            session
                 .declare_local_subscriber(&self.key_expr, callback)
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session.clone(),
+                    session,
                     state: sub_state,
                 })
         } else {
-            self.session
+            session
                 .declare_subscriber(
                     &self.key_expr,
                     callback,
@@ -610,7 +612,7 @@ impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Re
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {
-                    session: self.session.clone(),
+                    session,
                     state: sub_state,
                 })
         };
