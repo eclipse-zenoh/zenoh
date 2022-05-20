@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use futures::prelude::*;
+use futures::StreamExt;
 use http_types::Method;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -22,9 +22,9 @@ use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::Session;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
 mod config;
 pub use config::Config;
@@ -82,8 +82,9 @@ fn result_to_json(sample: Result<Sample, Value>) -> String {
     }
 }
 
-async fn to_json(results: ReplyReceiver) -> String {
+async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
+        .stream()
         .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
         .collect::<Vec<String>>()
         .await
@@ -111,8 +112,9 @@ fn result_to_html(sample: Result<Sample, Value>) -> String {
     }
 }
 
-async fn to_html(results: ReplyReceiver) -> String {
+async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
+        .stream()
         .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
         .collect::<Vec<String>>()
         .await
@@ -263,9 +265,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
+                    let sub = req
+                        .state()
+                        .0
+                        .subscribe(&key_expr)
+                        .res_async()
+                        .await
+                        .unwrap();
                     loop {
-                        let sample = sub.next().await.unwrap();
+                        let sample = sub.recv_async().await.unwrap();
                         let send = async {
                             if let Err(e) = sender
                                 .send(&sample.kind.to_string(), sample_to_json(sample), None)
@@ -284,7 +292,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.close().await {
+                            if let Err(e) = sub.close().res_async().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;
@@ -313,6 +321,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             .0
             .get(&selector)
             .consolidation(consolidation)
+            .res_async()
             .await
         {
             Ok(receiver) => {
@@ -356,6 +365,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .put(&key_expr, bytes)
                 .encoding(encoding)
                 .kind(method_to_kind(req.method()))
+                .res_async()
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -381,7 +391,9 @@ pub async fn run(runtime: Runtime, conf: Config) {
     let _ = env_logger::try_init();
 
     let pid = runtime.get_pid_str();
-    let session = Session::init(runtime, true, vec![], vec![]).await;
+    let session = Session::init(runtime, true, vec![], vec![])
+        .res_async()
+        .await;
 
     let mut app = Server::with_state((Arc::new(session), pid));
     app.with(

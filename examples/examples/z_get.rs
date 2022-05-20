@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-use futures::prelude::*;
 use std::convert::TryFrom;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::query::*;
 
 #[async_std::main]
@@ -25,11 +25,11 @@ async fn main() {
     let (config, selector, target) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let mut replies = session.get(&selector).target(target).await.unwrap();
-    while let Some(reply) = replies.next().await {
+    let replies = session.get(&selector).target(target).res().await.unwrap();
+    while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => println!(
                 ">> Received ('{}': '{}')",

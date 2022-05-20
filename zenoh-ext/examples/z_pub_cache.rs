@@ -15,6 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh_core::AsyncResolve;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -25,10 +26,10 @@ async fn main() {
     let (config, key_expr, value, history, prefix) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     print!("Declare key expression {}", key_expr);
-    let expr_id = session.declare_expr(&key_expr).await.unwrap();
+    let expr_id = session.declare_expr(&key_expr).res().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Creating PublicationCache on {}", expr_id);
@@ -36,13 +37,13 @@ async fn main() {
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
-    let _publication_cache = publication_cache_builder.await.unwrap();
+    let _publication_cache = publication_cache_builder.res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Put Data ('{}': '{}')", expr_id, buf);
-        session.put(expr_id, buf).await.unwrap();
+        session.put(expr_id, buf).res().await.unwrap();
     }
 }
 

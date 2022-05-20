@@ -14,7 +14,6 @@
 use async_std::channel::{bounded, Sender};
 use async_std::task;
 use futures::select;
-use futures::stream::StreamExt;
 use futures::FutureExt;
 use log::{debug, error, trace, warn};
 use std::sync::Arc;
@@ -22,7 +21,7 @@ use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::Session;
 use zenoh_backend_traits::Query;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{AsyncResolve, Result as ZResult, SyncResolve};
 
 pub(crate) enum StorageMessage {
     Stop,
@@ -42,7 +41,7 @@ pub(crate) async fn start_storage(
     let (tx, rx) = bounded(1);
     task::spawn(async move {
         // subscribe on key_expr
-        let mut storage_sub = match zenoh.subscribe(&key_expr).await {
+        let storage_sub = match zenoh.subscribe(&key_expr).res_async().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);
@@ -52,10 +51,11 @@ pub(crate) async fn start_storage(
 
         // align with other storages, querying them on key_expr,
         // with starttime to get historical data (in case of time-series)
-        let mut replies = match zenoh
+        let replies = match zenoh
             .get(&Selector::from(&key_expr).with_value_selector("?(starttime=0)"))
             .target(QueryTarget::All)
             .consolidation(QueryConsolidation::none())
+            .res_async()
             .await
         {
             Ok(replies) => replies,
@@ -64,7 +64,7 @@ pub(crate) async fn start_storage(
                 return;
             }
         };
-        while let Some(reply) = replies.next().await {
+        while let Ok(reply) = replies.recv_async().await {
             match reply.sample {
                 Ok(sample) => {
                     log::trace!("Storage {} aligns data {}", admin_key, sample.key_expr);
@@ -90,7 +90,7 @@ pub(crate) async fn start_storage(
         }
 
         // answer to queries on key_expr
-        let mut storage_queryable = match zenoh.queryable(&key_expr).await {
+        let storage_queryable = match zenoh.queryable(&key_expr).res_sync() {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);
@@ -101,7 +101,7 @@ pub(crate) async fn start_storage(
         loop {
             select!(
                 // on sample for key_expr
-                sample = storage_sub.next() => {
+                sample = storage_sub.recv_async() => {
                     // Call incoming data interceptor (if any)
                     let sample = if let Some(ref interceptor) = in_interceptor {
                         interceptor(sample.unwrap())
@@ -114,7 +114,7 @@ pub(crate) async fn start_storage(
                     }
                 },
                 // on query on key_expr
-                query = storage_queryable.next() => {
+                query = storage_queryable.recv_async() => {
                     let q = query.unwrap();
                     // wrap zenoh::Query in zenoh_backend_traits::Query
                     // with outgoing interceptor

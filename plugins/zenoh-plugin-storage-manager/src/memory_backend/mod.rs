@@ -25,7 +25,7 @@ use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_core::Result as ZResult;
+use zenoh_core::{AsyncResolve, Result as ZResult};
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))
@@ -231,7 +231,7 @@ impl Storage for MemoryStorage {
             if let Some(Present { sample, ts: _ }) =
                 self.map.read().await.get(query.key_selector().as_str())
             {
-                query.reply(sample.clone()).await?;
+                query.reply(sample.clone()).res_async().await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
@@ -239,7 +239,7 @@ impl Storage for MemoryStorage {
                     if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
                     {
                         let s: Sample = sample.clone();
-                        query.reply(s).await?;
+                        query.reply(s).res_async().await?;
                     }
                 }
             }

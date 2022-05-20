@@ -18,7 +18,6 @@ use std::task::{Context, Poll};
 
 pub mod backoff;
 pub use backoff::*;
-pub mod channel;
 pub mod condition;
 pub use condition::*;
 pub mod mvar;
@@ -30,77 +29,10 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
 
-/// A future which output can be accessed synchronously or asynchronously.
-pub trait ZFuture: Future + Send {
-    /// Synchronously waits for the output of this future.
-    fn wait(self) -> Self::Output;
-}
-
-/// Creates a [`ZFuture`] that is immediately ready with a value.
-///
-/// This `struct` is created by [`zready()`]. See its
-/// documentation for more.
-#[derive(Debug, Clone)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-pub struct ZReady<T>(Option<T>);
-
-impl<T> Unpin for ZReady<T> {}
-
-impl<T> Future for ZReady<T> {
-    type Output = T;
-
-    #[inline]
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<T> {
-        Poll::Ready(self.0.take().expect("Ready polled after completion"))
-    }
-}
-
-impl<T> ZFuture for ZReady<T>
-where
-    T: Unpin + Send,
-{
-    #[inline]
-    fn wait(self) -> T {
-        self.0.unwrap()
-    }
-}
-
-/// Creates a [`ZFuture`] that is immediately ready with a value.
-///
-/// ZFutures created through this function are functionally similar to those
-/// created through `async {}`. The main difference is that futures created
-/// through this function are named and implement `Unpin` and `ZFuture`.
-///
-/// # Examples
-///
-/// ```
-/// use zenoh_sync::zready;
-///
-/// # async fn run() {
-/// let a = zready(1);
-/// assert_eq!(a.await, 1);
-/// # }
-/// ```
-#[inline]
-pub fn zready<T>(t: T) -> ZReady<T> {
-    ZReady(Some(t))
-}
-
-#[macro_export]
-macro_rules! zready_try {
-    ($val:expr) => {
-        zenoh_sync::zready({
-            let f = || $val;
-            f()
-        })
-    };
-}
-
 /// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-pub struct ZPinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
+pub struct PinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 
-impl<T> Future for ZPinBoxFuture<T> {
+impl<T> Future for PinBoxFuture<T> {
     type Output = T;
 
     #[inline]
@@ -109,58 +41,7 @@ impl<T> Future for ZPinBoxFuture<T> {
     }
 }
 
-impl<T> ZFuture for ZPinBoxFuture<T> {
-    #[inline]
-    fn wait(self) -> T {
-        async_std::task::block_on(self.0)
-    }
-}
-
 #[inline]
-pub fn zpinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> ZPinBoxFuture<T> {
-    ZPinBoxFuture(Box::pin(fut))
-}
-
-pub trait Runnable {
-    type Output;
-
-    fn run(&mut self) -> Self::Output;
-}
-
-#[macro_export]
-macro_rules! derive_zfuture{
-    (
-     $(#[$meta:meta])*
-     $vis:vis struct $struct_name:ident$(<$( $lt:lifetime ),+>)? {
-        $(
-        $(#[$field_meta:meta])*
-        $field_vis:vis $field_name:ident : $field_type:ty,
-        )*
-    }
-    ) => {
-        $(#[$meta])*
-        #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-        $vis struct $struct_name$(<$( $lt ),+>)? {
-            $(
-            $(#[$field_meta:meta])*
-            $field_vis $field_name : $field_type,
-            )*
-        }
-
-        impl$(<$( $lt ),+>)? ::std::future::Future for $struct_name$(<$( $lt ),+>)? {
-            type Output = <Self as Runnable>::Output;
-
-            #[inline]
-            fn poll(mut self: std::pin::Pin<&mut Self>, _cx: &mut async_std::task::Context<'_>) -> std::task::Poll<<Self as ::std::future::Future>::Output> {
-                std::task::Poll::Ready(self.run())
-            }
-        }
-
-        impl$(<$( $lt ),+>)? zenoh_sync::ZFuture for $struct_name$(<$( $lt ),+>)? {
-            #[inline]
-            fn wait(mut self) -> Self::Output {
-                self.run()
-            }
-        }
-    }
+pub fn pinbox<T>(fut: impl Future<Output = T> + Send + 'static) -> PinBoxFuture<T> {
+    PinBoxFuture(Box::pin(fut))
 }

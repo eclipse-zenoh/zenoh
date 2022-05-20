@@ -394,6 +394,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
     }
 }
 
+//noinspection ALL
 impl From<Arc<UserPasswordAuthenticator>> for PeerAuthenticator {
     fn from(v: Arc<UserPasswordAuthenticator>) -> PeerAuthenticator {
         PeerAuthenticator(v)

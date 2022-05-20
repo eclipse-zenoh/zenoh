@@ -12,22 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::channel::{bounded, Sender};
-use async_std::pin::Pin;
 use async_std::task;
-use async_std::task::{Context, Poll};
 use futures::select;
 use futures::FutureExt;
 use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
-use std::future::Future;
 use zenoh::prelude::*;
-use zenoh::queryable::Queryable;
-use zenoh::subscriber::Subscriber;
-use zenoh::sync::zready;
-use zenoh::utils::key_expr;
+use zenoh::queryable::{HandlerQueryable, Query};
+use zenoh::subscriber::FlumeSubscriber;
+use zenoh::utils::{key_expr, ClosureResolve};
 use zenoh::Session;
-use zenoh_core::bail;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{Result as ZResult, SyncResolve};
 
 /// The builder of PublicationCache, allowing to configure it.
 #[derive(Clone)]
@@ -72,23 +68,24 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Future for PublicationCacheBuilder<'a, '_> {
+impl<'a, 'b> Resolvable for PublicationCacheBuilder<'a, '_> {
     type Output = ZResult<PublicationCache<'a>>;
-
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(PublicationCache::new(Pin::into_inner(self).clone()))
+}
+impl AsyncResolve for PublicationCacheBuilder<'_, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
-
-impl<'a> ZFuture for PublicationCacheBuilder<'a, '_> {
-    fn wait(self) -> ZResult<PublicationCache<'a>> {
+impl SyncResolve for PublicationCacheBuilder<'_, '_> {
+    fn res_sync(self) -> Self::Output {
         PublicationCache::new(self)
     }
 }
 
 pub struct PublicationCache<'a> {
-    _local_sub: Subscriber<'a>,
-    _queryable: Queryable<'a>,
+    _local_sub: FlumeSubscriber<'a>,
+    _queryable: HandlerQueryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
 
@@ -110,7 +107,11 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let mut local_sub = conf.session.subscribe(&conf.pub_key_expr).local().wait()?;
+        let local_sub = conf
+            .session
+            .subscribe(&conf.pub_key_expr)
+            .local()
+            .res_sync()?;
 
         // declare the queryable that will answer to queries on cache
         let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
@@ -122,11 +123,11 @@ impl<'a> PublicationCache<'a> {
         } else {
             conf.pub_key_expr.clone()
         };
-        let mut queryable = conf.session.queryable(&queryable_key_expr).wait()?;
+        let queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
-        let mut sub_recv = local_sub.receiver().clone();
-        let mut quer_recv = queryable.receiver().clone();
+        let sub_recv = local_sub.receiver.clone();
+        let quer_recv = queryable.receiver.clone();
         let pub_key_expr = conf.pub_key_expr.to_owned();
         let resources_limit = conf.resources_limit;
         let queryable_prefix = conf.queryable_prefix;
@@ -141,8 +142,8 @@ impl<'a> PublicationCache<'a> {
             loop {
                 select!(
                     // on publication received by the local subscriber, store it
-                    sample = sub_recv.next().fuse() => {
-                        if let Some(sample) = sample {
+                    sample = sub_recv.recv_async() => {
+                        if let Ok(sample) = sample {
                             let queryable_key_expr = if let Some(prefix) = &queryable_prefix {
                                 format!("{}{}", prefix, sample.key_expr)
                             } else {
@@ -166,12 +167,12 @@ impl<'a> PublicationCache<'a> {
                     },
 
                     // on query, reply with cach content
-                    query = quer_recv.next().fuse() => {
-                        if let Some(query) = query {
+                    query = quer_recv.recv_async() => {
+                        if let Ok(query) = query {
                             if !query.selector().key_selector.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_selector.as_str()) {
                                     for sample in queue {
-                                        if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
                                     }
@@ -180,7 +181,7 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                                         for sample in queue {
-                                            if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
                                         }
@@ -207,8 +208,11 @@ impl<'a> PublicationCache<'a> {
 
     /// Close this PublicationCache
     #[inline]
-    pub fn close(self) -> impl ZFuture<Output = ZResult<()>> {
+    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
         // just drop self and all its content
-        zready(Ok(()))
+        ClosureResolve(move || {
+            std::mem::drop(self);
+            Ok(())
+        })
     }
 }

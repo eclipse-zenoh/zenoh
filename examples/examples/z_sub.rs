@@ -18,6 +18,7 @@ use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 
 #[async_std::main]
 async fn main() {
@@ -27,18 +28,18 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
 
-    let mut subscriber = session.subscribe(&key_expr).await.unwrap();
+    let subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(
-            sample = subscriber.next() => {
+            sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
                     sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());

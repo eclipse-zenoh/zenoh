@@ -13,7 +13,6 @@
 //
 #![recursion_limit = "256"]
 
-use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
@@ -25,6 +24,8 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::utils::key_expr;
+use zenoh_core::AsyncResolve;
+use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
 pub struct ExamplePlugin {}
@@ -122,32 +123,34 @@ impl Drop for RunningPlugin {
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
-    let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
+    let session = zenoh::Session::init(runtime, true, vec![], vec![])
+        .res_async()
+        .await;
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     debug!("Run example-plugin with storage-selector={}", selector);
 
     debug!("Create Subscriber on {}", selector);
-    let mut sub = session.subscribe(&selector).await.unwrap();
+    let sub = session.subscribe(&selector).res_async().await.unwrap();
 
     debug!("Create Queryable on {}", selector);
-    let mut queryable = session.queryable(&selector).await.unwrap();
+    let queryable = session.queryable(&selector).res_sync().unwrap();
 
     while flag.load(Relaxed) {
         select!(
-            sample = sub.next() => {
+            sample = sub.recv_async() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
                 stored.insert(sample.key_expr.to_string(), sample);
             },
 
-            query = queryable.next() => {
+            query = queryable.recv_async() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
                     if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
-                        query.reply(Ok(sample.clone())).await.unwrap();
+                        query.reply(Ok(sample.clone())).res_async().await.unwrap();
                     }
                 }
             }

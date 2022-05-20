@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh_core::AsyncResolve;
 use zenoh_ext::group::*;
 
 #[async_std::main]
@@ -10,8 +11,8 @@ async fn main() {
 
     let (config, group_name, id, size, timeout) = parse_args();
 
-    let z = Arc::new(zenoh::open(config).await.unwrap());
-    let member_id = id.unwrap_or(z.id().await);
+    let z = Arc::new(zenoh::open(config).res().await.unwrap());
+    let member_id = id.unwrap_or_else(|| z.id());
     let member = Member::new(&member_id).lease(Duration::from_secs(3));
 
     let group = Group::join(z.clone(), &group_name, member).await;

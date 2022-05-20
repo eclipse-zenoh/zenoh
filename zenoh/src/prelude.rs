@@ -22,13 +22,22 @@
 //! use zenoh::prelude::*;
 //! ```
 
+pub mod sync {
+    pub use super::*;
+    pub use zenoh_core::SyncResolve;
+}
+pub mod r#async {
+    pub use super::*;
+    pub use zenoh_core::AsyncResolve;
+}
+
 #[cfg(feature = "shared-memory")]
 use crate::buf::SharedMemoryBuf;
 use crate::buf::ZBuf;
 use crate::data_kind;
 use crate::publication::PublishBuilder;
 use crate::queryable::{Query, QueryableBuilder};
-use crate::subscriber::SubscribeBuilder;
+use crate::subscriber::SubscriberBuilder;
 use crate::time::{new_reception_timestamp, Timestamp};
 use regex::Regex;
 use std::borrow::Cow;
@@ -48,8 +57,6 @@ pub(crate) type Id = usize;
 
 pub use crate::config;
 pub use crate::properties::Properties;
-pub use crate::sync::channel::Receiver;
-pub use crate::sync::ZFuture;
 pub use zenoh_config::ValidatedMap;
 
 /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
@@ -899,13 +906,13 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// # use futures::prelude::*;
-/// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::r#async::*;
+/// # let session = zenoh::open(config::peer()).res().await.unwrap();
 ///
 /// use std::convert::TryInto;
 ///
-/// let mut queryable = session.queryable("/key/expression").await.unwrap();
-/// while let Some(query) = queryable.next().await {
+/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// while let Ok(query) = queryable.recv_async().await {
 ///     let selector = query.selector();
 ///     let value_selector = selector.parse_value_selector().unwrap();
 ///     println!("filter: {}", value_selector.filter);
@@ -918,8 +925,8 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 /// ```
 /// # async_std::task::block_on(async {
 /// # use futures::prelude::*;
-/// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).await.unwrap();
+/// # use zenoh::prelude::r#async::*;
+/// # let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # let mut properties = Properties::default();
 ///
 /// let value_selector = ValueSelector::empty()
@@ -929,7 +936,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
 ///
 /// let mut replies = session.get(
 ///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
-/// ).await.unwrap();
+/// ).res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
@@ -1051,13 +1058,13 @@ impl<'a> TryFrom<&'a String> for ValueSelector<'a> {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
+/// use r#async::AsyncResolve;
 /// use zenoh::prelude::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
 /// async_std::task::spawn(async move {
-///     while let Some(sample) = subscriber.next().await {
+///     while let Ok(sample) = subscriber.recv_async().await {
 ///         println!("Received : {:?}", sample);
 ///     }
 /// }).await;
@@ -1073,19 +1080,19 @@ pub trait EntityFactory {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(sample) = subscriber.next().await {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
     ///     }
     /// }).await;
     /// # })
     /// ```
-    fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscribeBuilder<'static, 'a>
+    fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
 
@@ -1099,17 +1106,17 @@ pub trait EntityFactory {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use futures::prelude::*;
+    /// use r#async::AsyncResolve;
     /// use zenoh::prelude::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let mut queryable = session.queryable("/key/expression").await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
-    ///     while let Some(query) = queryable.next().await {
+    ///     while let Ok(query) = queryable.recv_async().await {
     ///         query.reply(Ok(Sample::new(
     ///             "/key/expression".to_string(),
     ///             "value",
-    ///         ))).await.unwrap();
+    ///         ))).res().await.unwrap();
     ///     }
     /// }).await;
     /// # })
@@ -1128,13 +1135,29 @@ pub trait EntityFactory {
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").await.unwrap();
-    /// publisher.send("value").unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.publish("/key/expression").res().await.unwrap();
+    /// publisher.put("value").unwrap();
     /// # })
     /// ```
     fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: Into<KeyExpr<'a>>;
+}
+
+pub type Dyn<T> = std::boxed::Box<T>;
+pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
+pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
+
+pub type Handler<T, Receiver> = (Callback<T>, Receiver);
+
+pub trait IntoHandler<T, Receiver> {
+    fn into_handler(self) -> Handler<T, Receiver>;
+}
+
+pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
+    let lock = std::sync::Mutex::new(fnmut);
+    move |x| zlock!(lock)(x)
 }

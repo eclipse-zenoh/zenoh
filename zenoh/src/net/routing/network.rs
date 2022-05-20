@@ -128,6 +128,7 @@ impl Network {
         }
     }
 
+    //noinspection ALL
     pub(crate) fn dot(&self) -> String {
         std::format!(
             "{:?}",

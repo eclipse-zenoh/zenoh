@@ -13,10 +13,10 @@
 //
 
 use clap::{App, Arg};
-use futures::prelude::*;
 use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
+use zenoh_core::{AsyncResolve, SyncResolve};
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -41,31 +41,36 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res_async().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let mut queryable = session.queryable(key).await.unwrap();
+    let queryable = session.queryable(key).res_sync().unwrap();
 
-    async_std::task::spawn(
-        queryable
-            .receiver()
-            .clone()
-            .for_each(move |request| async move {
+    async_std::task::spawn({
+        let receiver = queryable.receiver.clone();
+        async move {
+            while let Ok(request) = receiver.recv_async().await {
                 request
                     .reply(Ok(Sample::new(key.to_string(), HTML)))
+                    .res_async()
                     .await
                     .unwrap();
-            }),
-    );
+            }
+        }
+    });
 
     let event_key = [key, "/event"].concat();
 
     print!("Declaring key expression '{}'...", event_key);
-    let expr_id = session.declare_expr(&event_key).await.unwrap();
+    let expr_id = session.declare_expr(&event_key).res_async().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Declaring publication on '{}'...", expr_id);
-    session.declare_publication(expr_id).await.unwrap();
+    session
+        .declare_publication(expr_id)
+        .res_async()
+        .await
+        .unwrap();
 
     println!("Putting Data periodically ('{}': '{}')...", expr_id, value);
 
@@ -78,6 +83,7 @@ async fn main() {
             .put(expr_id, value)
             .encoding(KnownEncoding::TextPlain)
             .congestion_control(CongestionControl::Block)
+            .res_async()
             .await
             .unwrap();
         async_std::task::sleep(std::time::Duration::new(1, 0)).await;

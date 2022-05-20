@@ -32,6 +32,7 @@ use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::Result as ZResult;
+use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock};
 use zenoh_util::LibLoader;
 
@@ -91,7 +92,7 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let session = Arc::new(zenoh::init(runtime.clone()).wait().unwrap());
+        let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
         let mut new_self = StorageRuntimeInner {
             name,
             runtime,

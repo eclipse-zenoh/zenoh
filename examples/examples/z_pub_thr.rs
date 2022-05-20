@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
@@ -27,9 +28,9 @@ fn main() {
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
+    let key_expr = session.declare_expr("/test/thr").res().unwrap();
 
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
@@ -40,7 +41,7 @@ fn main() {
             .congestion_control(CongestionControl::Block)
             // Set the right priority
             .priority(prio)
-            .wait()
+            .res()
             .unwrap();
 
         if print {

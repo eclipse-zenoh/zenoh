@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
+use zenoh::core::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
@@ -22,15 +23,15 @@ fn main() {
     env_logger::init();
 
     let (config, size, n) = parse_args();
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = session.declare_expr("/test/ping").res().unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).wait().unwrap();
+    let sub = session.subscribe(&key_expr_pong).res().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -47,7 +48,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
 
         let _ = sub.recv();
@@ -60,7 +61,7 @@ fn main() {
             .put(&key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
 
         let _ = sub.recv();

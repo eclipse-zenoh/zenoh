@@ -17,6 +17,7 @@ use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::prelude::*;
 
 #[async_std::main]
@@ -27,20 +28,20 @@ async fn main() {
     let (config, key_expr, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let mut queryable = session.queryable(&key_expr).await.unwrap();
+    let queryable = session.queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(
-            query = queryable.next() => {
+            query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
-                query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).await.unwrap();
+                query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).res_async().await.unwrap();
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

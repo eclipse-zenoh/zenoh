@@ -570,6 +570,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     }
 }
 
+//noinspection ALL
 impl From<Arc<PubKeyAuthenticator>> for PeerAuthenticator {
     fn from(v: Arc<PubKeyAuthenticator>) -> PeerAuthenticator {
         PeerAuthenticator(v)

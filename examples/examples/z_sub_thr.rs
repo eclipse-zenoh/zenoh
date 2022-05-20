@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::core::SyncResolve;
 
 fn main() {
     // initiate logging
@@ -22,9 +22,9 @@ fn main() {
 
     let (config, m, n) = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").wait().unwrap();
+    let key_expr = session.declare_expr("/test/thr").res().unwrap();
 
     let mut count = 0;
     let mut start = Instant::now();
@@ -32,7 +32,7 @@ fn main() {
     let mut nm = 0;
     let _sub = session
         .subscribe(&key_expr)
-        .callback(move |_sample| {
+        .callback_mut(move |_sample| {
             if count == 0 {
                 start = Instant::now();
                 count += 1;
@@ -47,7 +47,7 @@ fn main() {
                 }
             }
         })
-        .wait()
+        .res()
         .unwrap();
 
     // Stop forever

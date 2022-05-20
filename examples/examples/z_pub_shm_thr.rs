@@ -14,6 +14,7 @@
 use clap::{App, Arg};
 use zenoh::buf::SharedMemoryManager;
 use zenoh::config::Config;
+use zenoh::core::AsyncResolve;
 use zenoh::publication::CongestionControl;
 
 #[async_std::main]
@@ -22,8 +23,8 @@ async fn main() {
     env_logger::init();
     let (config, sm_size, size) = parse_args();
 
-    let z = zenoh::open(config).await.unwrap();
-    let id = z.id().await;
+    let z = zenoh::open(config).res().await.unwrap();
+    let id = z.id();
     let mut shm = SharedMemoryManager::make(id, sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();
     let bs = unsafe { buf.as_mut_slice() };
@@ -31,12 +32,13 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let key_expr = z.declare_expr("/test/thr").await.unwrap();
+    let key_expr = z.declare_expr("/test/thr").res().await.unwrap();
 
     loop {
         z.put(&key_expr, buf.clone())
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
+            .res()
             .await
             .unwrap();
     }

@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::core::SyncResolve;
 use zenoh::publication::CongestionControl;
 
 fn main() {
@@ -22,22 +22,22 @@ fn main() {
 
     let config = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap();
 
     // The key expression to read the data from
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = session.declare_expr("/test/ping").res().unwrap();
 
     // The key expression to echo the data back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
+    let sub = session.subscribe(&key_expr_ping).res().unwrap();
 
     while let Ok(sample) = sub.recv() {
         session
             .put(&key_expr_pong, sample.value)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
-            .wait()
+            .res()
             .unwrap();
     }
 }
