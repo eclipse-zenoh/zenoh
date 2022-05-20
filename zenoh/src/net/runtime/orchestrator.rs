@@ -450,11 +450,9 @@ impl Runtime {
                 #[allow(clippy::or_fun_call)]
                 let local_addr = socket
                     .local_addr()
-                    .or::<std::io::Error>(Ok(SocketAddr::new(addr, 0).into()))
-                    .unwrap()
+                    .unwrap_or(SocketAddr::new(addr, 0).into())
                     .as_socket()
-                    .or(Some(SocketAddr::new(addr, 0)))
-                    .unwrap();
+                    .unwrap_or(SocketAddr::new(addr, 0));
                 log::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
@@ -552,7 +550,7 @@ impl Runtime {
                             if let Some(msg) = zbuf.reader().read_transport_message() {
                                 log::trace!("Received {:?} from {}", msg.body, peer);
                                 if let TransportBody::Hello(hello) = &msg.body {
-                                    let whatami = hello.whatami.or(Some(WhatAmI::Router)).unwrap();
+                                    let whatami = hello.whatami.unwrap_or(WhatAmI::Router);
                                     if matcher.matches(whatami) {
                                         if let Loop::Break = f(hello.clone()).await {
                                             break;
