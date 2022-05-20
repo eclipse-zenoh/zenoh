@@ -29,7 +29,7 @@ pub use zenoh_protocol_core::WhatAmI;
 /// A zenoh Hello message.
 pub use zenoh_protocol::proto::Hello;
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct ScoutBuilder<IntoWhatAmI, TryIntoConfig>
 where
@@ -75,7 +75,7 @@ where
     }
 }
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, Callback>
 where
@@ -141,7 +141,7 @@ impl Scout {
     }
 }
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, Receiver>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,

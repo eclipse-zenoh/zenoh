@@ -30,6 +30,7 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
 }
 
 /// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 
 impl<T> Future for PinBoxFuture<T> {

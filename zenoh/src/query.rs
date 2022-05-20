@@ -141,6 +141,7 @@ pub(crate) struct QueryState {
 /// # })
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct GetBuilder<'a, 'b> {
     pub(crate) session: &'a Session,
     pub(crate) selector: Selector<'b>,
@@ -230,7 +231,7 @@ impl AsyncResolve for GetBuilder<'_, '_> {
 }
 
 #[derive(Debug, Clone)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
@@ -296,6 +297,7 @@ where
     }
 }
 
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerGetBuilder<'a, 'b, Receiver> {
     builder: GetBuilder<'a, 'b>,
     handler: Handler<Reply, Receiver>,

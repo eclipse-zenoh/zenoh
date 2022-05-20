@@ -26,6 +26,7 @@ const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
     sub_key_expr: KeyExpr<'b>,
@@ -222,7 +223,7 @@ impl SyncResolve for QueryingSubscriberBuilder<'_, '_> {
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 #[derive(Clone)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     builder: QueryingSubscriberBuilder<'a, 'b>,
     callback: Callback,
@@ -521,7 +522,7 @@ impl Drop for RepliesHandler {
     }
 }
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
     builder: QueryingSubscriberBuilder<'a, 'b>,
     handler: zenoh::prelude::Handler<Sample, Receiver>,

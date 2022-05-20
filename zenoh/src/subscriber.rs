@@ -150,6 +150,7 @@ impl fmt::Debug for CallbackSubscriber<'_> {
 }
 
 #[derive(Debug, Clone)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,
@@ -316,7 +317,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Sample) + Send + Sync + 'static,
@@ -449,7 +450,7 @@ impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_,
     }
 }
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerSubscriberBuilder<'a, 'b, Receiver> {
     session: SessionRef<'a>,
     key_expr: KeyExpr<'b>,

@@ -216,7 +216,6 @@ where
 /// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
-#[must_use = "OpenBuilder does nothing unless you `.wait()`, `.await` or poll it"]
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -225,6 +224,7 @@ where
     OpenBuilder { config }
 }
 
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,

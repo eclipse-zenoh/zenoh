@@ -93,7 +93,7 @@ impl fmt::Display for Query {
     }
 }
 
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
     result: Result<Sample, Value>,
@@ -114,6 +114,8 @@ impl SyncResolve for ReplyBuilder<'_> {
         }
     }
 }
+
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct ReplyFuture<'a>(
     Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
 );
@@ -238,6 +240,8 @@ impl SyncResolve for QueryableCloser<'_> {
             .close_queryable(self.queryable.state.id)
     }
 }
+
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct QueryableCloserFuture(futures::future::Ready<crate::Result<()>>);
 impl std::future::Future for QueryableCloserFuture {
     type Output = crate::Result<()>;
@@ -285,6 +289,7 @@ impl fmt::Debug for CallbackQueryable<'_> {
 /// # })
 /// ```
 #[derive(Debug, Clone)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,
@@ -380,6 +385,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// # })
 /// ```
 #[derive(Clone)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Query) + Send + Sync + 'static,
@@ -474,7 +480,7 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerQueryableBuilder<'a, 'b, Receiver> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,

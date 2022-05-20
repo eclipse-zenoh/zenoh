@@ -247,6 +247,7 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
@@ -275,7 +276,7 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn init(
         runtime: Runtime,
         local_routing: bool,
@@ -386,6 +387,7 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # })
     /// ```
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         FutureResolve(async move {
             trace!("close()");
@@ -444,6 +446,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn info(&self) -> impl Resolve<InfoProperties> + '_ {
         ClosureResolve(move || {
             trace!("info()");
@@ -513,6 +516,7 @@ impl Session {
     /// let expr_id = session.declare_expr("/key/expression").res().await.unwrap();
     /// # })
     /// ```
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn declare_expr<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
@@ -572,7 +576,7 @@ impl Session {
     /// session.undeclare_expr(expr_id).res().await;
     /// # })
     /// ```
-    #[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn undeclare_expr(&self, expr_id: ExprId) -> impl Resolve<ZResult<()>> + '_ {
         ClosureResolve(move || {
             trace!("undeclare_expr({:?})", expr_id);
@@ -607,6 +611,7 @@ impl Session {
     /// session.put("/key/expression", "value").res().await.unwrap();
     /// # })
     /// ```
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn declare_publication<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
@@ -664,6 +669,7 @@ impl Session {
     /// session.undeclare_publication("/key/expression").res().await.unwrap();
     /// # })
     /// ```
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn undeclare_publication<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
@@ -1283,6 +1289,7 @@ impl Session {
         }
     }
 
+    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
         ClosureResolve(move || {
             trace!("pull({:?})", key_expr);
