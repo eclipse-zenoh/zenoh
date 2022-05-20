@@ -390,29 +390,21 @@ impl TransportUnicastInner {
     pub(crate) async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.pid);
 
-        let guard = zread!(self.links);
-        if let Some(l) = zlinkget!(guard, link) {
-            let mut pipeline = l.pipeline.clone();
-            // Drop the guard
-            drop(guard);
+        let mut pipeline = zlinkget!(zread!(self.links), link)
+            .map(|l| l.pipeline.clone())
+            .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
+        if let Some(p) = pipeline.take() {
+            // Close message to be sent on the target link
+            let peer_id = Some(self.config.manager.pid());
+            let reason_id = reason;
+            let link_only = true; // This is should always be true when closing a link
+            let attachment = None; // No attachment here
+            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            // Schedule the close message for transmission
-            if let Some(pipeline) = pipeline.take() {
-                // Close message to be sent on the target link
-                let peer_id = Some(self.config.manager.pid());
-                let reason_id = reason;
-                let link_only = true; // This is should always be true when closing a link
-                let attachment = None; // No attachment here
-                let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-                pipeline.push_transport_message(msg, Priority::Background);
-            }
-
-            // Remove the link from the channel
-            self.del_link(link).await?;
+            p.push_transport_message(msg, Priority::Background);
         }
-
-        Ok(())
+        // Remove the link from the channel
+        self.del_link(link).await
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {

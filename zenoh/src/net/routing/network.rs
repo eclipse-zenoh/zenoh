@@ -304,7 +304,7 @@ impl Network {
                     }
                     Some((
                         pid,
-                        link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
+                        link_state.whatami.unwrap_or(WhatAmI::Router),
                         link_state.locators,
                         link_state.sn,
                         link_state.links,
@@ -313,7 +313,7 @@ impl Network {
                     match src_link.get_pid(&link_state.psid) {
                         Some(pid) => Some((
                             *pid,
-                            link_state.whatami.or(Some(WhatAmI::Router)).unwrap(),
+                            link_state.whatami.unwrap_or(WhatAmI::Router),
                             link_state.locators,
                             link_state.sn,
                             link_state.links,
