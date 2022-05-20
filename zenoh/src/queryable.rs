@@ -19,6 +19,7 @@ use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::FutureExt;
 use std::fmt;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -333,7 +334,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     pub fn with<IntoHandler, Receiver>(
         self,
         handler: IntoHandler,
-    ) -> HandlerQueryableBuilder<'a, 'b, Receiver>
+    ) -> HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
     where
         IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
     {
@@ -342,7 +343,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
             key_expr: self.key_expr,
             kind: self.kind,
             complete: self.complete,
-            handler: handler.into_handler(),
+            handler,
+            receiver: PhantomData,
         }
     }
 
@@ -480,16 +482,24 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
+#[derive(Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct HandlerQueryableBuilder<'a, 'b, Receiver> {
+pub struct HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: KeyExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
-    pub(crate) handler: Handler<Query, Receiver>,
+    pub(crate) handler: IntoHandler,
+    pub(crate) receiver: PhantomData<Receiver>,
 }
 
-impl<'a, 'b, Receiver> HandlerQueryableBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, IntoHandler, Receiver> HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
@@ -498,7 +508,10 @@ impl<'a, 'b, Receiver> HandlerQueryableBuilder<'a, 'b, Receiver> {
     }
 }
 
-impl<U> fmt::Debug for HandlerQueryableBuilder<'_, '_, U> {
+impl<IntoHandler, Receiver> fmt::Debug for HandlerQueryableBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerQueryableBuilder")
             .field("key_expr", &self.key_expr)
@@ -507,14 +520,22 @@ impl<U> fmt::Debug for HandlerQueryableBuilder<'_, '_, U> {
     }
 }
 
-impl<'a, Receiver> Resolvable for HandlerQueryableBuilder<'a, '_, Receiver> {
+impl<'a, IntoHandler, Receiver> Resolvable
+    for HandlerQueryableBuilder<'a, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     type Output = crate::Result<HandlerQueryable<'a, Receiver>>;
 }
 
-impl<'a, Receiver: Send> SyncResolve for HandlerQueryableBuilder<'a, '_, Receiver> {
+impl<'a, IntoHandler, Receiver: Send> SyncResolve
+    for HandlerQueryableBuilder<'a, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     fn res_sync(self) -> Self::Output {
         let session = self.session;
-        let (callback, receiver) = self.handler;
+        let (callback, receiver) = self.handler.into_handler();
         session
             .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
             .map(|qable_state| HandlerQueryable {
@@ -526,7 +547,11 @@ impl<'a, Receiver: Send> SyncResolve for HandlerQueryableBuilder<'a, '_, Receive
             })
     }
 }
-impl<Receiver: Send> AsyncResolve for HandlerQueryableBuilder<'_, '_, Receiver> {
+impl<IntoHandler, Receiver: Send> AsyncResolve
+    for HandlerQueryableBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+{
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())

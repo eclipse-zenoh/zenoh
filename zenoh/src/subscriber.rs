@@ -13,11 +13,12 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{locked, Callback, Id, IntoHandler, KeyExpr, Sample};
+use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
@@ -198,7 +199,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     pub fn with<IntoHandler, Receiver>(
         self,
         handler: IntoHandler,
-    ) -> HandlerSubscriberBuilder<'a, 'b, Receiver>
+    ) -> HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
     where
         IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
     {
@@ -209,7 +210,8 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            handler: handler.into_handler(),
+            handler,
+            receiver: PhantomData,
         }
     }
 
@@ -284,7 +286,8 @@ impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
             mode: self.mode,
             period: self.period,
             local: self.local,
-            handler: flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_handler(),
+            handler: flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE),
+            receiver: PhantomData,
         }
         .res_sync()
     }
@@ -449,18 +452,26 @@ impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_,
     }
 }
 
+#[derive(Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct HandlerSubscriberBuilder<'a, 'b, Receiver> {
+pub struct HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     session: SessionRef<'a>,
     key_expr: KeyExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
     local: bool,
-    handler: crate::prelude::Handler<Sample, Receiver>,
+    handler: IntoHandler,
+    receiver: PhantomData<Receiver>,
 }
 
-impl<Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, Receiver> {
+impl<IntoHandler, Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerSubscriberBuilder")
             .field("key_expr", &self.key_expr)
@@ -471,7 +482,10 @@ impl<Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, Receiver> {
     }
 }
 
-impl<'a, 'b, Receiver> HandlerSubscriberBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, IntoHandler, Receiver> HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -585,14 +599,22 @@ impl HandlerSubscriber<'_, flume::Receiver<Sample>> {
     }
 }
 
-impl<'a, 'b, Receiver> Resolvable for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, IntoHandler, Receiver> Resolvable
+    for HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     type Output = ZResult<HandlerSubscriber<'a, Receiver>>;
 }
 
-impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, IntoHandler, Receiver: Send> SyncResolve
+    for HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     fn res_sync(self) -> Self::Output {
         let session = self.session;
-        let (callback, receiver) = self.handler;
+        let (callback, receiver) = self.handler.into_handler();
         let subscriber = if self.local {
             session
                 .declare_local_subscriber(&self.key_expr, callback)
@@ -623,7 +645,11 @@ impl<'a, 'b, Receiver: Send> SyncResolve for HandlerSubscriberBuilder<'a, 'b, Re
         })
     }
 }
-impl<'a, 'b, Receiver: Send> AsyncResolve for HandlerSubscriberBuilder<'a, 'b, Receiver> {
+impl<'a, 'b, IntoHandler, Receiver: Send> AsyncResolve
+    for HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
+{
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())

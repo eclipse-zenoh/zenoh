@@ -19,6 +19,7 @@ use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
 use std::fmt;
+use std::marker::PhantomData;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
@@ -180,13 +181,14 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     pub fn with<IntoHandler, Receiver>(
         self,
         handler: IntoHandler,
-    ) -> HandlerGetBuilder<'a, 'b, Receiver>
+    ) -> HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
     where
         IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
     {
         HandlerGetBuilder {
             builder: self,
-            handler: handler.into_handler(),
+            handler,
+            receiver: PhantomData,
         }
     }
 
@@ -297,13 +299,21 @@ where
     }
 }
 
+#[derive(Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct HandlerGetBuilder<'a, 'b, Receiver> {
+pub struct HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
+{
     builder: GetBuilder<'a, 'b>,
-    handler: Handler<Reply, Receiver>,
+    handler: IntoHandler,
+    receiver: PhantomData<Receiver>,
 }
 
-impl<Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, Receiver> {
+impl<IntoHandler, Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerGetBuilder")
             .field("selector", &self.builder.selector)
@@ -314,8 +324,9 @@ impl<Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, Receiver> {
     }
 }
 
-impl<'a, 'b, Receiver> HandlerGetBuilder<'a, 'b, Receiver>
+impl<'a, 'b, IntoHandler, Receiver> HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
 where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
     Receiver: Send + Sync,
 {
     /// Change the target of the query.
@@ -340,12 +351,19 @@ where
     }
 }
 
-impl<Receiver: Send> Resolvable for HandlerGetBuilder<'_, '_, Receiver> {
+impl<IntoHandler, Receiver: Send> Resolvable for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
+{
     type Output = ZResult<Receiver>;
 }
-impl<Receiver: Send> SyncResolve for HandlerGetBuilder<'_, '_, Receiver> {
+
+impl<IntoHandler, Receiver: Send> SyncResolve for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
+{
     fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = self.handler;
+        let (callback, receiver) = self.handler.into_handler();
         self.builder
             .session
             .query(
@@ -358,7 +376,11 @@ impl<Receiver: Send> SyncResolve for HandlerGetBuilder<'_, '_, Receiver> {
             .map(|_| receiver)
     }
 }
-impl<Receiver: Send> AsyncResolve for HandlerGetBuilder<'_, '_, Receiver> {
+
+impl<IntoHandler, Receiver: Send> AsyncResolve for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
+where
+    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
+{
     type Future = futures::future::Ready<Self::Output>;
 
     fn res_async(self) -> Self::Future {
