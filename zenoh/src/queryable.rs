@@ -164,35 +164,29 @@ impl fmt::Debug for QueryableState {
     }
 }
 
-/// An entity able to reply to queries.
+/// An entity able to reply to queries through a callback.
+///
+/// CallbackQueryables can be created from a zenoh [`Session`](crate::Session)
+/// with the [`queryable`](crate::Session::subscribe) function
+/// and the [`callback`](QueryableBuilder::callback) function
+/// of the resulting builder.
+///
+
 ///
 /// Queryables are automatically undeclared when dropped.
 ///
 /// # Examples
-///
-/// ### sync
-/// ```no_run
-/// # use zenoh::prelude::*;
-/// # use sync::SyncResolve;
-/// # let session = zenoh::open(config::peer()).res().unwrap();
-///
-/// let mut queryable = session.queryable("/key/expression").res().unwrap();
-/// while let Ok(query) = queryable.recv() {
-///      println!(">> Handling query '{}'", query.selector());
-/// }
-/// ```
-///
-/// ### async
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// # use futures::prelude::*;
-/// # use r#async::AsyncResolve;
-/// # use zenoh::prelude::*;
-/// # let session = zenoh::open(config::peer()).res().await.unwrap();
+/// use futures::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::prelude::*;
 ///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
-///      println!(">> Handling query '{}'", query.selector());
+///     println!(">> Handling query '{}'", query.selector());
+///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
 /// }
 /// # })
 /// ```
@@ -271,7 +265,7 @@ impl Drop for CallbackQueryable<'_> {
     }
 }
 
-/// A builder for initializing a [`Queryable`](HandlerQueryable).
+/// A builder for initializing a [`FlumeQueryable`].
 ///
 /// # Examples
 /// ```
@@ -294,7 +288,23 @@ pub struct QueryableBuilder<'a, 'b> {
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
-    /// Make the built Queryable a [`CallbackQueryable`](CallbackQueryable).
+    /// Receive the queries for this Queryable with a callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session
+    ///     .queryable("/key/expression")
+    ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -309,7 +319,24 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         }
     }
 
-    /// Make the built Queryable a [`CallbackQueryable`](CallbackQueryable).
+    /// Receive the queries for this Queryable with a mutable callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut n = 0;
+    /// let queryable = session
+    ///     .queryable("/key/expression")
+    ///     .callback_mut(move |query| {n += 1;})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -321,7 +348,26 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         self.callback(locked(callback))
     }
 
-    /// Make the built Queryable a [`HandlerQueryable`](HandlerQueryable).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::Handler).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session
+    ///     .queryable("/key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(query) = queryable.recv_async().await {
+    ///     println!(">> Handling query '{}'", query.selector());
+    /// }
+    /// # })
+    /// ```
     #[inline]
     pub fn with<IntoHandler, Receiver>(
         self,
@@ -435,6 +481,34 @@ where
     }
 }
 
+/// A queryable that provides data through a [`Handler`](crate::prelude::Handler).
+///
+/// HandlerQueryables can be created from a zenoh [`Session`](crate::Session)
+/// with the [`queryable`](crate::Session::queryable) function
+/// and the [`with`](QueryableBuilder::with) function
+/// of the resulting builder.
+///
+/// Queryables are automatically undeclared when dropped.
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session
+///     .queryable("/key/expression")
+///     .with(flume::bounded(32))
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(query) = queryable.recv_async().await {
+///     println!(">> Handling query '{}'", query.selector());
+///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
+/// }
+/// # })
+/// ```
 #[derive(Debug)]
 pub struct HandlerQueryable<'a, Receiver> {
     pub queryable: CallbackQueryable<'a>,
@@ -466,7 +540,12 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session
+///     .queryable("/key/expression")
+///     .with(flume::bounded(32))
+///     .res()
+///     .await
+///     .unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
