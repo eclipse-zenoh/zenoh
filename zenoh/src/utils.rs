@@ -16,7 +16,7 @@
 
 /// Helpers to manipulate and compare key expressions.
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_protocol_core::key_expr;
+pub use zenoh_protocol_core::wire_expr;
 
 pub struct ClosureResolve<F>(pub F);
 impl<Output, F: FnOnce() -> Output> zenoh_core::Resolvable for ClosureResolve<F> {

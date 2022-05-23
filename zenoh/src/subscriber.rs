@@ -13,7 +13,7 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
+use crate::prelude::{locked, Callback, Id, Sample, WireExpr};
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
@@ -32,7 +32,7 @@ pub use zenoh_protocol_core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr: WireExpr<'static>,
     pub(crate) key_expr_str: String,
     pub(crate) callback: Callback<Sample>,
 }
@@ -154,7 +154,7 @@ impl fmt::Debug for CallbackSubscriber<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: WireExpr<'b>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: SubMode,
     pub(crate) period: Option<Period>,
@@ -325,7 +325,7 @@ where
     Callback: Fn(Sample) + Send + Sync + 'static,
 {
     session: SessionRef<'a>,
-    key_expr: KeyExpr<'b>,
+    key_expr: WireExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
@@ -459,7 +459,7 @@ where
     IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
 {
     session: SessionRef<'a>,
-    key_expr: KeyExpr<'b>,
+    key_expr: WireExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,

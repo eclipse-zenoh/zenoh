@@ -20,7 +20,7 @@ use std::collections::{HashMap, VecDeque};
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::utils::{key_expr, ClosureResolve};
+use zenoh::utils::{wire_expr, ClosureResolve};
 use zenoh::Session;
 use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
@@ -29,7 +29,7 @@ use zenoh_core::{Result as ZResult, SyncResolve};
 #[derive(Clone)]
 pub struct PublicationCacheBuilder<'a, 'b> {
     session: &'a Session,
-    pub_key_expr: KeyExpr<'b>,
+    pub_key_expr: WireExpr<'b>,
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
@@ -38,7 +38,7 @@ pub struct PublicationCacheBuilder<'a, 'b> {
 impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
-        pub_key_expr: KeyExpr<'b>,
+        pub_key_expr: WireExpr<'b>,
     ) -> PublicationCacheBuilder<'a, 'b> {
         PublicationCacheBuilder {
             session,
@@ -115,7 +115,7 @@ impl<'a> PublicationCache<'a> {
 
         // declare the queryable that will answer to queries on cache
         let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
-            KeyExpr::from(format!(
+            WireExpr::from(format!(
                 "{}{}",
                 prefix,
                 conf.session.key_expr_to_expr(&conf.pub_key_expr)?
@@ -179,7 +179,7 @@ impl<'a> PublicationCache<'a> {
                                 }
                             } else {
                                 for (key_expr, queue) in cache.iter() {
-                                    if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
+                                    if wire_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                                         for sample in queue {
                                             if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);

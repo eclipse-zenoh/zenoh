@@ -14,7 +14,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use rand::SeedableRng;
-use zenoh_protocol_core::key_expr::intersect;
+use zenoh_protocol_core::wire_expr::intersect;
 fn run_intersections<const N: usize>(pool: [(&str, &str); N]) {
     for (l, r) in pool {
         intersect(l, r);
@@ -142,7 +142,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 routes
                     .iter()
                     .filter_map(|r| {
-                        zenoh_protocol_core::key_expr::intersect(r, matching).then(|| ())
+                        zenoh_protocol_core::wire_expr::intersect(r, matching).then(|| ())
                     })
                     .count()
             }

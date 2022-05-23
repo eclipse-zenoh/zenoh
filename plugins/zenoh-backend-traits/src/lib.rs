@@ -139,7 +139,7 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use zenoh::prelude::{KeyExpr, Sample, Selector};
+use zenoh::prelude::{Sample, Selector, WireExpr};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
@@ -222,7 +222,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
+    pub fn key_selector(&self) -> &WireExpr<'_> {
         self.q.key_selector()
     }
 

@@ -49,8 +49,8 @@ use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        key_expr, queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
-        KeyExpr, QueryTarget, QueryableInfo, SubInfo, ZInt,
+        queryable, wire_expr, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy,
+        ExprId, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -148,7 +148,7 @@ impl SessionState {
         }
     }
 
-    pub fn remotekey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
+    pub fn remotekey_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(key_expr.suffix.to_string())
         } else if key_expr.suffix.is_empty() {
@@ -158,7 +158,7 @@ impl SessionState {
         }
     }
 
-    pub fn localkey_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
+    pub fn localkey_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(key_expr.suffix.to_string())
         } else if key_expr.suffix.is_empty() {
@@ -168,7 +168,7 @@ impl SessionState {
         }
     }
 
-    pub fn key_expr_to_expr(&self, key_expr: &KeyExpr, local: bool) -> ZResult<String> {
+    pub fn key_expr_to_expr(&self, key_expr: &WireExpr, local: bool) -> ZResult<String> {
         if local {
             self.localkey_to_expr(key_expr)
         } else {
@@ -522,7 +522,7 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<ExprId>> + 'a
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
     {
         let key_expr = key_expr.into();
         ClosureResolve(move || {
@@ -540,7 +540,7 @@ impl Session {
                         let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
                         let mut res = Resource::new(expr.clone());
                         for sub in state.subscribers.values() {
-                            if key_expr::matches(&expr, &sub.key_expr_str) {
+                            if wire_expr::matches(&expr, &sub.key_expr_str) {
                                 res.subscribers.push(sub.clone());
                             }
                         }
@@ -617,7 +617,7 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
     {
         let key_expr = key_expr.into();
         ClosureResolve(move || {
@@ -628,12 +628,12 @@ impl Session {
                     let declared_pub = if let Some(join_pub) = state
                         .join_publications
                         .iter()
-                        .find(|s| key_expr::include(s, &key_expr_str))
+                        .find(|s| wire_expr::include(s, &key_expr_str))
                     {
                         let joined_pub = state
                             .publications
                             .iter()
-                            .any(|p| key_expr::include(join_pub, p));
+                            .any(|p| wire_expr::include(join_pub, p));
                         (!joined_pub).then(|| join_pub.clone().into())
                     } else {
                         Some(key_expr.clone())
@@ -675,7 +675,7 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
     {
         let key_expr = key_expr.into();
         ClosureResolve(move || {
@@ -687,13 +687,13 @@ impl Session {
                     match state
                         .join_publications
                         .iter()
-                        .find(|s| key_expr::include(s, &key_expr_str))
+                        .find(|s| wire_expr::include(s, &key_expr_str))
                     {
                         Some(join_pub) => {
                             let joined_pub = state
                                 .publications
                                 .iter()
-                                .any(|p| key_expr::include(join_pub, p));
+                                .any(|p| wire_expr::include(join_pub, p));
                             if !joined_pub {
                                 let primitives = state.primitives.as_ref().unwrap().clone();
                                 let key_expr = join_pub.clone().into();
@@ -717,7 +717,7 @@ impl Session {
 
     pub(crate) fn declare_subscriber(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         callback: Callback<Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
@@ -734,11 +734,11 @@ impl Session {
         let declared_sub = match state
             .join_subscriptions
             .iter()
-            .find(|s| key_expr::include(s, &sub_state.key_expr_str))
+            .find(|s| wire_expr::include(s, &sub_state.key_expr_str))
         {
             Some(join_sub) => {
                 let joined_sub = state.subscribers.values().any(|s| {
-                    key_expr::include(join_sub, &state.localkey_to_expr(&s.key_expr).unwrap())
+                    wire_expr::include(join_sub, &state.localkey_to_expr(&s.key_expr).unwrap())
                 });
                 (!joined_sub).then(|| join_sub.clone().into())
             }
@@ -753,12 +753,12 @@ impl Session {
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
@@ -774,14 +774,14 @@ impl Session {
                         let scope = self
                             .declare_expr(&key_expr.suffix.as_ref()[..pos])
                             .res_sync()?;
-                        KeyExpr {
+                        WireExpr {
                             scope,
                             suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
                         }
                     }
                     None => {
                         let scope = self.declare_expr(key_expr.suffix.as_ref()).res_sync()?;
-                        KeyExpr {
+                        WireExpr {
                             scope,
                             suffix: "".into(),
                         }
@@ -799,7 +799,7 @@ impl Session {
 
     pub(crate) fn declare_local_subscriber(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -816,12 +816,12 @@ impl Session {
             .local_subscribers
             .insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if key_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
@@ -853,7 +853,7 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<WireExpr<'b>>,
     {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
@@ -886,11 +886,11 @@ impl Session {
                     match state
                         .join_subscriptions
                         .iter()
-                        .find(|s| key_expr::include(s, &key_expr))
+                        .find(|s| wire_expr::include(s, &key_expr))
                     {
                         Some(join_sub) => {
                             let joined_sub = state.subscribers.values().any(|s| {
-                                key_expr::include(
+                                wire_expr::include(
                                     join_sub,
                                     &state.localkey_to_expr(&s.key_expr).unwrap(),
                                 )
@@ -932,7 +932,7 @@ impl Session {
 
     pub(crate) fn declare_queryable(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         kind: ZInt,
         complete: bool,
         callback: Callback<Query>,
@@ -988,7 +988,7 @@ impl Session {
         Ok(qable_state)
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {
+    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.kind == kind
                 && state.localkey_to_expr(&q.key_expr).unwrap()
@@ -997,7 +997,7 @@ impl Session {
     }
 
     #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &KeyExpr, kind: ZInt) -> bool {
+    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.complete
                 && q.kind == kind
@@ -1007,7 +1007,7 @@ impl Session {
     }
 
     #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &KeyExpr, kind: ZInt) -> ZInt {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr, kind: ZInt) -> ZInt {
         state
             .queryables
             .values()
@@ -1048,7 +1048,7 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<WireExpr<'b>>,
     {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
@@ -1135,7 +1135,7 @@ impl Session {
     /// ```
     pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<WireExpr<'b>>,
     {
         PublishBuilder {
             publisher: Publisher {
@@ -1177,7 +1177,7 @@ impl Session {
         value: IntoValue,
     ) -> PutBuilder<'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
@@ -1206,7 +1206,7 @@ impl Session {
     #[inline]
     pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> DeleteBuilder<'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
     {
         PutBuilder {
             publisher: self.publish(key_expr).publisher,
@@ -1218,7 +1218,7 @@ impl Session {
     pub(crate) fn handle_data(
         &self,
         local: bool,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
         local_routing: Option<bool>,
@@ -1261,7 +1261,7 @@ impl Session {
                 Ok(key_expr) => {
                     if !local || local_routing {
                         for sub in state.subscribers.values() {
-                            if key_expr::matches(&sub.key_expr_str, &key_expr) {
+                            if wire_expr::matches(&sub.key_expr_str, &key_expr) {
                                 (sub.callback)(Sample::with_info(
                                     key_expr.clone().into(),
                                     payload.clone(),
@@ -1272,7 +1272,7 @@ impl Session {
                     }
                     if local {
                         for sub in state.local_subscribers.values() {
-                            if key_expr::matches(&sub.key_expr_str, &key_expr) {
+                            if wire_expr::matches(&sub.key_expr_str, &key_expr) {
                                 (sub.callback)(Sample::with_info(
                                     key_expr.clone().into(),
                                     payload.clone(),
@@ -1290,7 +1290,7 @@ impl Session {
     }
 
     #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
+    pub(crate) fn pull<'a>(&'a self, key_expr: &'a WireExpr) -> impl Resolve<ZResult<()>> + 'a {
         ClosureResolve(move || {
             trace!("pull({:?})", key_expr);
             let state = zread!(self.state);
@@ -1405,7 +1405,7 @@ impl Session {
     pub(crate) fn handle_query(
         &self,
         local: bool,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
         target: zenoh_protocol_core::QueryTAK,
@@ -1421,7 +1421,7 @@ impl Session {
                         .filter(
                             |queryable| match state.localkey_to_expr(&queryable.key_expr) {
                                 Ok(qablname) => {
-                                    key_expr::matches(&qablname, &key_expr)
+                                    wire_expr::matches(&qablname, &key_expr)
                                         && ((queryable.kind == queryable::ALL_KINDS
                                             || target.kind == queryable::ALL_KINDS)
                                             || (queryable.kind & target.kind != 0))
@@ -1501,7 +1501,7 @@ impl Session {
         }
     }
 
-    pub fn key_expr_to_expr(&self, key_expr: &KeyExpr) -> ZResult<String> {
+    pub fn key_expr_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
         let state = zread!(self.state);
         state.remotekey_to_expr(key_expr)
     }
@@ -1531,7 +1531,7 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<WireExpr<'b>>,
     {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1570,7 +1570,7 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn queryable<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        IntoKeyExpr: Into<WireExpr<'b>>,
     {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1599,7 +1599,7 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>,
+        IntoKeyExpr: Into<WireExpr<'a>>,
     {
         PublishBuilder {
             publisher: Publisher {
@@ -1614,14 +1614,14 @@ impl EntityFactory for Arc<Session> {
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         trace!("recv Decl Resource {} {:?}", expr_id, key_expr);
         let state = &mut zwrite!(self.state);
         match state.remotekey_to_expr(key_expr) {
             Ok(key_expr) => {
                 let mut res = Resource::new(key_expr.clone());
                 for sub in state.subscribers.values() {
-                    if key_expr::matches(&key_expr, &sub.key_expr_str) {
+                    if wire_expr::matches(&key_expr, &sub.key_expr_str) {
                         res.subscribers.push(sub.clone());
                     }
                 }
@@ -1636,30 +1636,30 @@ impl Primitives for Session {
         trace!("recv Forget Resource {}", _expr_id);
     }
 
-    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Decl Publisher {:?}", _key_expr);
     }
 
-    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _key_expr);
     }
 
     fn decl_subscriber(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Decl Subscriber {:?} , {:?}", _key_expr, _sub_info);
     }
 
-    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _key_expr);
     }
 
     fn decl_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
@@ -1669,7 +1669,7 @@ impl Primitives for Session {
 
     fn forget_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -1678,7 +1678,7 @@ impl Primitives for Session {
 
     fn send_data(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1698,7 +1698,7 @@ impl Primitives for Session {
 
     fn send_query(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
         target: zenoh_protocol_core::QueryTAK,
@@ -1720,7 +1720,7 @@ impl Primitives for Session {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: ZenohId,
-        key_expr: KeyExpr,
+        key_expr: WireExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -1836,7 +1836,7 @@ impl Primitives for Session {
     fn send_pull(
         &self,
         _is_final: bool,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {

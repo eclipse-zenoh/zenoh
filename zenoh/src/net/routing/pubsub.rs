@@ -22,7 +22,7 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, KeyExpr, Priority, Reliability, SubInfo, SubMode, WhatAmI, ZInt,
+    Channel, CongestionControl, Priority, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt,
     ZenohId,
 };
 
@@ -160,7 +160,7 @@ fn register_router_subscription(
 pub fn declare_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     sub_info: &SubInfo,
     router: ZenohId,
 ) {
@@ -202,7 +202,7 @@ fn register_peer_subscription(
 pub fn declare_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     sub_info: &SubInfo,
     peer: ZenohId,
 ) {
@@ -269,7 +269,7 @@ fn register_client_subscription(
 pub fn declare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     sub_info: &SubInfo,
 ) {
     log::debug!("Register client subscription");
@@ -452,7 +452,7 @@ fn undeclare_router_subscription(
 pub fn forget_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     router: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
@@ -500,7 +500,7 @@ fn undeclare_peer_subscription(
 pub fn forget_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     peer: &ZenohId,
 ) {
     match tables.get_mapping(face, &expr.scope) {
@@ -570,7 +570,7 @@ pub(crate) fn undeclare_client_subscription(
     Resource::clean(res)
 }
 
-pub fn forget_client_subscription(tables: &mut Tables, face: &mut Arc<FaceState>, expr: &KeyExpr) {
+pub fn forget_client_subscription(tables: &mut Tables, face: &mut Arc<FaceState>, expr: &WireExpr) {
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
@@ -1121,7 +1121,7 @@ macro_rules! cache_data {
 pub fn route_data(
     tables: &Tables,
     face: &Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     channel: Channel,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
@@ -1179,7 +1179,7 @@ pub fn route_data(
 pub fn full_reentrant_route_data(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     channel: Channel,
     congestion_control: CongestionControl,
     info: Option<DataInfo>,
@@ -1239,7 +1239,7 @@ pub fn pull_data(
     tables: &mut Tables,
     face: &Arc<FaceState>,
     _is_final: bool,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     _pull_id: ZInt,
     _max_samples: &Option<ZInt>,
 ) {

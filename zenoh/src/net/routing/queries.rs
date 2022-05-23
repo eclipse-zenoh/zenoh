@@ -26,8 +26,8 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable, ConsolidationStrategy, KeyExpr, QueryTAK, QueryTarget, QueryableInfo,
-    WhatAmI, ZInt, ZenohId,
+    queryable, wire_expr, ConsolidationStrategy, QueryTAK, QueryTarget, QueryableInfo, WhatAmI,
+    WireExpr, ZInt, ZenohId,
 };
 
 use super::face::FaceState;
@@ -350,7 +350,7 @@ fn register_router_queryable(
 pub fn declare_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
     router: ZenohId,
@@ -400,7 +400,7 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
 pub fn declare_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
     peer: ZenohId,
@@ -460,7 +460,7 @@ fn register_client_queryable(
 pub fn declare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
     qabl_info: &QueryableInfo,
 ) {
@@ -666,7 +666,7 @@ fn undeclare_router_queryable(
 pub fn forget_router_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
     router: &ZenohId,
 ) {
@@ -722,7 +722,7 @@ fn undeclare_peer_queryable(
 pub fn forget_peer_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
     peer: &ZenohId,
 ) {
@@ -844,7 +844,7 @@ pub(crate) fn undeclare_client_queryable(
 pub fn forget_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     kind: ZInt,
 ) {
     match tables.get_mapping(face, &expr.scope) {
@@ -1072,7 +1072,7 @@ fn compute_query_route(
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        let complete = key_expr::include(&mres.expr(), &key_expr);
+        let complete = wire_expr::include(&mres.expr(), &key_expr);
         if tables.whatami == WhatAmI::Router {
             if master || source_type == WhatAmI::Router {
                 let net = tables.routers_net.as_ref().unwrap();
@@ -1354,7 +1354,7 @@ impl Timed for QueryCleanup {
 pub fn route_query(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
-    expr: &KeyExpr,
+    expr: &WireExpr,
     value_selector: &str,
     qid: ZInt,
     target: QueryTAK,
@@ -1524,7 +1524,7 @@ pub fn route_query(
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
                     outface.primitives.send_query(
-                        key_expr,
+                        wire_expr,
                         value_selector,
                         qid,
                         target.clone(),
@@ -1551,7 +1551,7 @@ pub(crate) fn route_send_reply_data(
     qid: ZInt,
     replier_kind: ZInt,
     replier_id: ZenohId,
-    key_expr: KeyExpr,
+    key_expr: WireExpr,
     info: Option<DataInfo>,
     payload: ZBuf,
 ) {

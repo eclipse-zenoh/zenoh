@@ -14,7 +14,7 @@
 
 //! Some useful functions for Backend/Storage implementations.
 
-use zenoh::utils::key_expr::*;
+use zenoh::utils::wire_expr::*;
 
 /// Returns the longest prefix in a key selector that doesn't contain any '*' character.  
 /// This would be the common prefix of all keys stored in a storage using this key selector.

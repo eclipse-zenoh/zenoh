@@ -72,7 +72,7 @@ pub use zenoh_protocol_core::ZenohId;
 pub use zenoh_protocol_core::ExprId;
 
 /// A key expression.
-pub use zenoh_protocol_core::KeyExpr;
+pub use zenoh_protocol_core::WireExpr;
 
 /// A zenoh integer.
 pub use zenoh_protocol_core::ZInt;
@@ -526,7 +526,7 @@ impl From<ZInt> for SampleKind {
 #[derive(Clone, Debug)]
 pub struct Sample {
     /// The key expression on which this Sample was published.
-    pub key_expr: KeyExpr<'static>,
+    pub key_expr: WireExpr<'static>,
     /// The value of this Sample.
     pub value: Value,
     /// The kind of this Sample.
@@ -542,7 +542,7 @@ impl Sample {
     #[inline]
     pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        IntoKeyExpr: Into<WireExpr<'static>>,
         IntoValue: Into<Value>,
     {
         Sample {
@@ -556,7 +556,7 @@ impl Sample {
 
     #[inline]
     pub(crate) fn with_info(
-        key_expr: KeyExpr<'static>,
+        key_expr: WireExpr<'static>,
         payload: ZBuf,
         data_info: Option<DataInfo>,
     ) -> Self {
@@ -584,7 +584,7 @@ impl Sample {
     }
 
     #[inline]
-    pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
+    pub(crate) fn split(self) -> (WireExpr<'static>, ZBuf, DataInfo) {
         let info = DataInfo {
             kind: if self.kind == SampleKind::Put {
                 None
@@ -786,7 +786,7 @@ pub const PROP_STOPTIME: &str = "stoptime";
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     /// I.e. all characters before `?`.
-    pub key_selector: KeyExpr<'a>,
+    pub key_selector: WireExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
     /// I.e. all characters starting from `?`.
     pub value_selector: Cow<'a, str>,
@@ -872,8 +872,8 @@ impl<'a> From<&'a Query> for Selector<'a> {
     }
 }
 
-impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
-    fn from(key_selector: &KeyExpr<'a>) -> Self {
+impl<'a> From<&WireExpr<'a>> for Selector<'a> {
+    fn from(key_selector: &WireExpr<'a>) -> Self {
         Self {
             key_selector: key_selector.clone(),
             value_selector: "".into(),
@@ -881,8 +881,8 @@ impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     }
 }
 
-impl<'a> From<KeyExpr<'a>> for Selector<'a> {
-    fn from(key_selector: KeyExpr<'a>) -> Self {
+impl<'a> From<WireExpr<'a>> for Selector<'a> {
+    fn from(key_selector: WireExpr<'a>) -> Self {
         Self {
             key_selector,
             value_selector: "".into(),
@@ -1094,7 +1094,7 @@ pub trait EntityFactory {
     /// ```
     fn subscribe<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>;
+        IntoKeyExpr: Into<WireExpr<'a>>;
 
     /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
     ///
@@ -1123,7 +1123,7 @@ pub trait EntityFactory {
     /// ```
     fn queryable<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>;
+        IntoKeyExpr: Into<WireExpr<'a>>;
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
     ///
@@ -1144,7 +1144,7 @@ pub trait EntityFactory {
     /// ```
     fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
-        IntoKeyExpr: Into<KeyExpr<'a>>;
+        IntoKeyExpr: Into<WireExpr<'a>>;
 }
 
 pub type Dyn<T> = std::boxed::Box<T>;

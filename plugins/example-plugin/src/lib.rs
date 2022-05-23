@@ -23,7 +23,7 @@ use std::sync::{
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::utils::key_expr;
+use zenoh::utils::wire_expr;
 use zenoh_core::AsyncResolve;
 use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};
@@ -120,7 +120,7 @@ impl Drop for RunningPlugin {
     }
 }
 
-async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
+async fn run(runtime: Runtime, selector: WireExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     let session = zenoh::Session::init(runtime, true, vec![], vec![])
@@ -149,7 +149,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
+                    if wire_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
                         query.reply(Ok(sample.clone())).res_async().await.unwrap();
                     }
                 }

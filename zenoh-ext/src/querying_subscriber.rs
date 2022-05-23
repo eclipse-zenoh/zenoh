@@ -29,11 +29,11 @@ const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
-    sub_key_expr: KeyExpr<'b>,
+    sub_key_expr: WireExpr<'b>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
-    query_key_expr: KeyExpr<'b>,
+    query_key_expr: WireExpr<'b>,
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -42,7 +42,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
         session: SessionRef<'a>,
-        sub_key_expr: KeyExpr<'b>,
+        sub_key_expr: WireExpr<'b>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget::All;
@@ -340,7 +340,7 @@ struct InnerState {
 
 pub struct CallbackQueryingSubscriber<'a> {
     session: SessionRef<'a>,
-    query_key_expr: KeyExpr<'a>,
+    query_key_expr: WireExpr<'a>,
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,

@@ -401,7 +401,7 @@ mod tests {
     use zenoh_protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
-    use zenoh_protocol_core::{Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt};
+    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
 
     fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {
@@ -446,7 +446,7 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key: KeyExpr = format!("test{}", zmsgs_in.len()).into();
+                let key: WireExpr = format!("test{}", zmsgs_in.len()).into();
                 let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,

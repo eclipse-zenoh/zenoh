@@ -163,7 +163,7 @@ use zenoh_core::zresult::Error;
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'a>,
+    pub(crate) key_expr: WireExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) local_routing: Option<bool>,

@@ -257,12 +257,12 @@ pub fn matches(s1: &str, s2: &str) -> bool {
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-pub struct KeyExpr<'a> {
+pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,
 }
 
-impl<'a> KeyExpr<'a> {
+impl<'a> WireExpr<'a> {
     pub fn as_str(&'a self) -> &'a str {
         if self.scope == 0 {
             self.suffix.as_ref()
@@ -299,8 +299,8 @@ impl<'a> KeyExpr<'a> {
         !self.suffix.as_ref().is_empty()
     }
 
-    pub fn to_owned(&self) -> KeyExpr<'static> {
-        KeyExpr {
+    pub fn to_owned(&self) -> WireExpr<'static> {
+        WireExpr {
             scope: self.scope,
             suffix: self.suffix.to_string().into(),
         }
@@ -316,7 +316,7 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl TryInto<String> for KeyExpr<'_> {
+impl TryInto<String> for WireExpr<'_> {
     type Error = zenoh_core::Error;
     fn try_into(self) -> Result<String, Self::Error> {
         if self.scope == 0 {
@@ -327,14 +327,14 @@ impl TryInto<String> for KeyExpr<'_> {
     }
 }
 
-impl TryInto<ExprId> for KeyExpr<'_> {
+impl TryInto<ExprId> for WireExpr<'_> {
     type Error = zenoh_core::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
     }
 }
 
-impl fmt::Debug for KeyExpr<'_> {
+impl fmt::Debug for WireExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.scope == 0 {
             write!(f, "{}", self.suffix)
@@ -344,7 +344,7 @@ impl fmt::Debug for KeyExpr<'_> {
     }
 }
 
-impl fmt::Display for KeyExpr<'_> {
+impl fmt::Display for WireExpr<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.scope == 0 {
             write!(f, "{}", self.suffix)
@@ -354,57 +354,57 @@ impl fmt::Display for KeyExpr<'_> {
     }
 }
 
-impl<'a> From<&KeyExpr<'a>> for KeyExpr<'a> {
+impl<'a> From<&WireExpr<'a>> for WireExpr<'a> {
     #[inline]
-    fn from(key: &KeyExpr<'a>) -> KeyExpr<'a> {
+    fn from(key: &WireExpr<'a>) -> WireExpr<'a> {
         key.clone()
     }
 }
 
-impl From<ExprId> for KeyExpr<'_> {
+impl From<ExprId> for WireExpr<'_> {
     #[inline]
-    fn from(rid: ExprId) -> KeyExpr<'static> {
-        KeyExpr {
+    fn from(rid: ExprId) -> WireExpr<'static> {
+        WireExpr {
             scope: rid,
             suffix: "".into(),
         }
     }
 }
 
-impl From<&ExprId> for KeyExpr<'_> {
+impl From<&ExprId> for WireExpr<'_> {
     #[inline]
-    fn from(rid: &ExprId) -> KeyExpr<'static> {
-        KeyExpr {
+    fn from(rid: &ExprId) -> WireExpr<'static> {
+        WireExpr {
             scope: *rid,
             suffix: "".into(),
         }
     }
 }
 
-impl<'a> From<&'a str> for KeyExpr<'a> {
+impl<'a> From<&'a str> for WireExpr<'a> {
     #[inline]
-    fn from(name: &'a str) -> KeyExpr<'a> {
-        KeyExpr {
+    fn from(name: &'a str) -> WireExpr<'a> {
+        WireExpr {
             scope: 0,
             suffix: name.into(),
         }
     }
 }
 
-impl From<String> for KeyExpr<'_> {
+impl From<String> for WireExpr<'_> {
     #[inline]
-    fn from(name: String) -> KeyExpr<'static> {
-        KeyExpr {
+    fn from(name: String) -> WireExpr<'static> {
+        WireExpr {
             scope: 0,
             suffix: name.into(),
         }
     }
 }
 
-impl<'a> From<&'a String> for KeyExpr<'a> {
+impl<'a> From<&'a String> for WireExpr<'a> {
     #[inline]
-    fn from(name: &'a String) -> KeyExpr<'a> {
-        KeyExpr {
+    fn from(name: &'a String) -> WireExpr<'a> {
+        WireExpr {
             scope: 0,
             suffix: name.into(),
         }

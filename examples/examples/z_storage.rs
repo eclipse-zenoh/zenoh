@@ -23,7 +23,7 @@ use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::*;
-use zenoh::utils::key_expr;
+use zenoh::utils::wire_expr;
 
 #[async_std::main]
 async fn main() {
@@ -63,7 +63,7 @@ async fn main() {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
+                    if wire_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
                         query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
                 }

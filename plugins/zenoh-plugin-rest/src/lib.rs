@@ -205,7 +205,7 @@ impl RunningPluginTrait for RunningPlugin {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::key_expr::intersect(key, selector.key_selector.as_str()) {
+            if zenoh::utils::wire_expr::intersect(key, selector.key_selector.as_str()) {
                 responses.push(zenoh::plugins::Response {
                     key: key.clone(),
                     value: GIT_VERSION.into(),
@@ -213,7 +213,7 @@ impl RunningPluginTrait for RunningPlugin {
             }
         });
         with_extended_string(&mut key, &["/port"], |port_key| {
-            if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), port_key) {
+            if zenoh::utils::wire_expr::intersect(selector.key_selector.as_str(), port_key) {
                 responses.push(zenoh::plugins::Response {
                     key: port_key.clone(),
                     value: (&self.0).into(),
@@ -415,12 +415,12 @@ pub async fn run(runtime: Runtime, conf: Config) {
     }
 }
 
-fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
+fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> WireExpr<'a> {
     if path == "/@/router/local" {
-        KeyExpr::from(format!("/@/router/{}", pid))
+        WireExpr::from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
+        WireExpr::from(format!("/@/router/{}/{}", pid, suffix))
     } else {
-        KeyExpr::from(path)
+        WireExpr::from(path)
     }
 }

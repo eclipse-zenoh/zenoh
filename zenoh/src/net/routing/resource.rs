@@ -19,11 +19,11 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::key_expr;
-use zenoh_protocol_core::{KeyExpr, QueryableInfo, SubInfo, ZInt, ZenohId};
+use zenoh_protocol_core::wire_expr;
+use zenoh_protocol_core::{QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId};
 use zenoh_sync::get_mut_unchecked;
 
-pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
+pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::QueryTarget)>;
@@ -359,7 +359,7 @@ impl Resource {
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> KeyExpr<'static> {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -390,7 +390,7 @@ impl Resource {
                         expr_id
                     }
                 };
-                KeyExpr {
+                WireExpr {
                     scope: expr_id,
                     suffix: wildsuffix.into(),
                 }
@@ -400,13 +400,13 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> KeyExpr<'a> {
+    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
         fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
             sid: usize,
             checkchilds: bool,
-        ) -> KeyExpr<'a> {
+        ) -> WireExpr<'a> {
             if checkchilds && !suffix.is_empty() {
                 let (chunk, rest) = Resource::fst_chunk(suffix);
                 if let Some(child) = prefix.childs.get(chunk) {
@@ -415,12 +415,12 @@ impl Resource {
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
                 if let Some(expr_id) = ctx.local_expr_id {
-                    return KeyExpr {
+                    return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                     };
                 } else if let Some(expr_id) = ctx.remote_expr_id {
-                    return KeyExpr {
+                    return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                     };
@@ -452,7 +452,7 @@ impl Resource {
             if key_expr.is_empty() {
                 if from.suffix == "/**" || from.suffix == "/" {
                     if from.context.is_some()
-                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
+                        && is_admin == from.expr().starts_with(wire_expr::ADMIN_PREFIX)
                     {
                         matches.push(Arc::downgrade(from));
                     }
@@ -463,10 +463,10 @@ impl Resource {
                 return matches;
             }
             let (chunk, rest) = Resource::fst_chunk(key_expr);
-            if key_expr::intersect(chunk, &from.suffix) {
+            if wire_expr::intersect(chunk, &from.suffix) {
                 if rest.is_empty() || rest == "/" || rest == "/**" {
                     if from.context.is_some()
-                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
+                        && is_admin == from.expr().starts_with(wire_expr::ADMIN_PREFIX)
                     {
                         matches.push(Arc::downgrade(from));
                     }
@@ -484,7 +484,7 @@ impl Resource {
         }
         get_matches_from(
             key_expr,
-            key_expr.starts_with(key_expr::ADMIN_PREFIX),
+            key_expr.starts_with(wire_expr::ADMIN_PREFIX),
             &tables.root_res,
         )
     }
@@ -528,7 +528,7 @@ pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     expr_id: ZInt,
-    expr: &KeyExpr,
+    expr: &WireExpr,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {

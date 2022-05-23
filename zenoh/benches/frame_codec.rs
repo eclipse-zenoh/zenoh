@@ -15,7 +15,7 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, Priority, Reliability};
+use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr};
 use zenoh::net::protocol::io::{WBuf, ZBuf};
 use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
 use zenoh::net::protocol::proto::ZenohMessage;
@@ -32,9 +32,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
 
     let key_expr_set = [
-        KeyExpr::from(1),
-        KeyExpr::from("/frame/bench"),
-        KeyExpr::from(1).with_suffix("/frame/bench"),
+        WireExpr::from(1),
+        WireExpr::from("/frame/bench"),
+        WireExpr::from(1).with_suffix("/frame/bench"),
     ];
 
     for p in &pld {

@@ -1,0 +1,170 @@
+pub(crate) struct Writer {
+    pub ptr: *mut u8,
+    pub len: usize,
+}
+impl Writer {
+    pub(crate) fn write(&mut self, slice: &[u8]) {
+        let len = slice.len();
+        unsafe { std::ptr::copy(slice.as_ptr(), self.ptr.add(self.len), len) };
+        self.len += len
+    }
+    pub(crate) fn write_byte(&mut self, byte: u8) {
+        unsafe { *self.ptr.add(self.len) = byte };
+        self.len += 1
+    }
+}
+
+#[derive(Debug)]
+pub struct Spliter<'a, S: ?Sized, D: ?Sized> {
+    s: Option<&'a S>,
+    d: &'a D,
+}
+impl<'a, S: ?Sized, D: ?Sized> Clone for Spliter<'a, S, D> {
+    fn clone(&self) -> Self {
+        Self {
+            s: self.s,
+            d: self.d,
+        }
+    }
+}
+
+impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Spliter<'a, S, D> {
+    pub fn into_inner(self) -> Option<&'a S> {
+        self.s
+    }
+    pub fn unwrap(self) -> &'a S {
+        self.s.unwrap()
+    }
+    pub fn left(&mut self) -> Option<&'a S> {
+        match self.s {
+            Some(s) => match s.try_split_once(self.d) {
+                (l, Some(r)) => {
+                    self.s = Some(r);
+                    Some(l)
+                }
+                _ => None,
+            },
+            None => None,
+        }
+    }
+    pub fn right(&mut self) -> Option<&'a S> {
+        match self.s {
+            Some(s) => match s.try_rsplit_once(self.d) {
+                (Some(l), r) => {
+                    self.s = Some(l);
+                    Some(r)
+                }
+                _ => None,
+            },
+            None => None,
+        }
+    }
+}
+impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Spliter<'a, S, D> {
+    type Item = &'a S;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.s {
+            Some(s) => {
+                let (ret, s) = s.try_split_once(self.d);
+                self.s = s;
+                Some(ret)
+            }
+            None => None,
+        }
+    }
+}
+#[test]
+fn splits() {
+    assert_eq!(
+        b"hello**".spliter(b"**".as_ref()).right(),
+        Some(b"".as_ref())
+    );
+}
+impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Spliter<'a, S, D> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.s {
+            Some(s) => {
+                let (s, ret) = s.try_rsplit_once(self.d);
+                self.s = s;
+                Some(ret)
+            }
+            None => None,
+        }
+    }
+}
+pub trait Split<Delimiter: ?Sized> {
+    fn split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
+    fn try_split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, Option<&'a Self>);
+    fn rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
+    fn try_rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (Option<&'a Self>, &'a Self);
+    fn spliter<'a>(&'a self, delimiter: &'a Delimiter) -> Spliter<'a, Self, Delimiter> {
+        Spliter {
+            s: Some(self),
+            d: delimiter,
+        }
+    }
+}
+impl Split<u8> for [u8] {
+    fn split_once<'a>(&'a self, delimiter: &u8) -> (&'a Self, &'a Self) {
+        match self.iter().position(|c| c == delimiter) {
+            Some(i) => (&self[..i], &self[(i + 1)..]),
+            None => (self, &[]),
+        }
+    }
+    fn rsplit_once<'a>(&'a self, delimiter: &u8) -> (&'a Self, &'a Self) {
+        match self.iter().rposition(|c| c == delimiter) {
+            Some(i) => (&self[..i], &self[(i + 1)..]),
+            None => (&[], self),
+        }
+    }
+
+    fn try_split_once<'a>(&'a self, delimiter: &u8) -> (&'a Self, Option<&'a Self>) {
+        match self.iter().position(|c| c == delimiter) {
+            Some(i) => (&self[..i], Some(&self[(i + 1)..])),
+            None => (self, None),
+        }
+    }
+
+    fn try_rsplit_once<'a>(&'a self, delimiter: &u8) -> (Option<&'a Self>, &'a Self) {
+        match self.iter().rposition(|c| c == delimiter) {
+            Some(i) => (Some(&self[..i]), &self[(i + 1)..]),
+            None => (None, self),
+        }
+    }
+}
+impl Split<[u8]> for [u8] {
+    fn split_once<'a>(&'a self, delimiter: &[u8]) -> (&'a Self, &'a Self) {
+        for i in 0..self.len() {
+            if self[i..].starts_with(delimiter) {
+                return (&self[..i], &self[(i + delimiter.len())..]);
+            }
+        }
+        (self, &[])
+    }
+    fn rsplit_once<'a>(&'a self, delimiter: &[u8]) -> (&'a Self, &'a Self) {
+        for i in (0..self.len()).rev() {
+            if self[..i].ends_with(delimiter) {
+                return (&self[..(i - delimiter.len())], &self[i..]);
+            }
+        }
+        (&[], self)
+    }
+
+    fn try_split_once<'a>(&'a self, delimiter: &[u8]) -> (&'a Self, Option<&'a Self>) {
+        for i in 0..self.len() {
+            if self[i..].starts_with(delimiter) {
+                return (&self[..i], Some(&self[(i + delimiter.len())..]));
+            }
+        }
+        (self, None)
+    }
+
+    fn try_rsplit_once<'a>(&'a self, delimiter: &[u8]) -> (Option<&'a Self>, &'a Self) {
+        for i in (delimiter.len()..(self.len() + 1)).rev() {
+            if self[..i].ends_with(delimiter) {
+                return (Some(&self[..(i - delimiter.len())]), &self[i..]);
+            }
+        }
+        (None, self)
+    }
+}

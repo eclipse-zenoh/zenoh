@@ -18,7 +18,7 @@ use criterion::Criterion;
 use std::sync::Arc;
 
 use zenoh::net::protocol::core::Encoding;
-use zenoh::net::protocol::core::{Channel, CongestionControl, KeyExpr, ZenohId};
+use zenoh::net::protocol::core::{Channel, CongestionControl, WireExpr, ZenohId};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -35,7 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for s in size.iter() {
         c.bench_function(format!("{} msg_creation_yes_info", s).as_str(), |b| {
             b.iter(|| {
-                let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
+                let key_expr = WireExpr::from(18).with_suffix("/com/acme/sensors/temp");
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
@@ -70,7 +70,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         c.bench_function(format!("{} msg_creation_no_info", s).as_str(), |b| {
             b.iter(|| {
-                let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
+                let key_expr = WireExpr::from(18).with_suffix("/com/acme/sensors/temp");
                 let payload = ZBuf::from(vec![0; *s]);
                 let channel = Channel::default();
                 let congestion_control = CongestionControl::default();
@@ -91,7 +91,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         });
     }
 
-    let key_expr = KeyExpr::from(18).with_suffix("/com/acme/sensors/temp");
+    let key_expr = WireExpr::from(18).with_suffix("/com/acme/sensors/temp");
     let info = Some(DataInfo {
         #[cfg(feature = "shared-memory")]
         sliced: false,

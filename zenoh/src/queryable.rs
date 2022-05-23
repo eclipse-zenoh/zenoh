@@ -32,7 +32,7 @@ use zenoh_core::SyncResolve;
 /// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: KeyExpr<'static>,
+    pub(crate) key_selector: WireExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
 
@@ -54,7 +54,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
+    pub fn key_selector(&self) -> &WireExpr<'_> {
         &self.key_selector
     }
 
@@ -148,7 +148,7 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
 
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr: WireExpr<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
@@ -293,7 +293,7 @@ impl fmt::Debug for CallbackQueryable<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: WireExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
 }
@@ -393,7 +393,7 @@ where
     Callback: Fn(Query) + Send + Sync + 'static,
 {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: WireExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) callback: Callback,
@@ -489,7 +489,7 @@ where
     IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
 {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: WireExpr<'b>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) handler: IntoHandler,

@@ -19,8 +19,8 @@ use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo, SubInfo,
-    WhatAmI, ZInt, ZenohId,
+    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, SubInfo, WhatAmI,
+    WireExpr, ZInt, ZenohId,
 };
 use zenoh_transport::Primitives;
 
@@ -164,7 +164,7 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         let mut tables = zwrite!(self.tables);
         register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
     }
@@ -176,7 +176,7 @@ impl Primitives for Face {
 
     fn decl_subscriber(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
@@ -215,7 +215,7 @@ impl Primitives for Face {
         }
     }
 
-    fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -239,13 +239,13 @@ impl Primitives for Face {
         }
     }
 
-    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
-    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_queryable(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
@@ -290,7 +290,7 @@ impl Primitives for Face {
 
     fn forget_queryable(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
@@ -326,7 +326,7 @@ impl Primitives for Face {
 
     fn send_data(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -347,7 +347,7 @@ impl Primitives for Face {
 
     fn send_query(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
@@ -371,7 +371,7 @@ impl Primitives for Face {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: ZenohId,
-        key_expr: KeyExpr,
+        key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -396,7 +396,7 @@ impl Primitives for Face {
     fn send_pull(
         &self,
         is_final: bool,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {

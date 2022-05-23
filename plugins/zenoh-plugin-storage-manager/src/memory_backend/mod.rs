@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
-use zenoh::utils::key_expr;
+use zenoh::utils::wire_expr;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
@@ -236,7 +236,7 @@ impl Storage for MemoryStorage {
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
+                    if wire_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
                     {
                         let s: Sample = sample.clone();
                         query.reply(s).res_async().await?;

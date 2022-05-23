@@ -118,7 +118,7 @@ struct GroupState {
     members: Mutex<HashMap<String, (Member, Instant)>>,
     _group_expr: String,
     _group_expr_id: u64,
-    event_expr: KeyExpr<'static>,
+    event_expr: WireExpr<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
 }
@@ -295,7 +295,7 @@ impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
         let expr_id = z.declare_expr(&_group_expr).res_async().await.unwrap();
-        let event_expr = KeyExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
+        let event_expr = WireExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),
