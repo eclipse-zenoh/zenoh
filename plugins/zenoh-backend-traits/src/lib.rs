@@ -16,7 +16,7 @@
 //!  - [`Volume`]
 //!  - [`Storage`]
 //!
-//! Such library must also declare a `create_backend()` operation
+//! Such library must also declare a `create_volume()` operation
 //! with the `#[no_mangle]` attribute as an entrypoint to be called for the Backend creation.
 //!
 //! # Example
