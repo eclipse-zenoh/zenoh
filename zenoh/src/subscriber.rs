@@ -172,12 +172,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
         CallbackSubscriberBuilder {
-            session: self.session,
-            key_expr: self.key_expr,
-            reliability: self.reliability,
-            mode: self.mode,
-            period: self.period,
-            local: self.local,
+            builder: self,
             callback,
         }
     }
@@ -204,12 +199,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
         IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
     {
         HandlerSubscriberBuilder {
-            session: self.session,
-            key_expr: self.key_expr,
-            reliability: self.reliability,
-            mode: self.mode,
-            period: self.period,
-            local: self.local,
+            builder: self,
             handler,
             receiver: PhantomData,
         }
@@ -280,12 +270,7 @@ impl<'a> Resolvable for SubscriberBuilder<'a, '_> {
 impl<'a> SyncResolve for SubscriberBuilder<'a, '_> {
     fn res_sync(self) -> Self::Output {
         HandlerSubscriberBuilder {
-            session: self.session.clone(),
-            key_expr: self.key_expr.clone(),
-            reliability: self.reliability,
-            mode: self.mode,
-            period: self.period,
-            local: self.local,
+            builder: self,
             handler: flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE),
             receiver: PhantomData,
         }
@@ -324,13 +309,8 @@ pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Sample) + Send + Sync + 'static,
 {
-    session: SessionRef<'a>,
-    key_expr: KeyExpr<'b>,
-    reliability: Reliability,
-    mode: SubMode,
-    period: Option<Period>,
-    local: bool,
-    callback: Callback,
+    pub(crate) builder: SubscriberBuilder<'a, 'b>,
+    pub(crate) callback: Callback,
 }
 
 impl<Callback> fmt::Debug for CallbackSubscriberBuilder<'_, '_, Callback>
@@ -339,11 +319,11 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CallbackSubscriberBuilder")
-            .field("session", &self.session)
-            .field("key_expr", &self.key_expr)
-            .field("reliability", &self.reliability)
-            .field("mode", &self.mode)
-            .field("period", &self.period)
+            .field("session", &self.builder.session)
+            .field("key_expr", &self.builder.key_expr)
+            .field("reliability", &self.builder.reliability)
+            .field("mode", &self.builder.mode)
+            .field("period", &self.builder.period)
             .finish()
     }
 }
@@ -355,57 +335,56 @@ where
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
+        self.builder = self.builder.reliability(reliability);
         self
     }
 
     /// Change the subscription reliability to `Reliable`.
     #[inline]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
+        self.builder = self.builder.reliable();
         self
     }
 
     /// Change the subscription reliability to `BestEffort`.
     #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
+        self.builder = self.builder.best_effort();
         self
     }
 
     /// Change the subscription mode.
     #[inline]
     pub fn mode(mut self, mode: SubMode) -> Self {
-        self.mode = mode;
+        self.builder = self.builder.mode(mode);
         self
     }
 
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.mode = SubMode::Push;
-        self.period = None;
+        self.builder = self.builder.push_mode();
         self
     }
 
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(mut self) -> Self {
-        self.mode = SubMode::Pull;
+        self.builder = self.builder.pull_mode();
         self
     }
 
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
+        self.builder = self.builder.period(period);
         self
     }
 
     /// Make the subscription local onlyu.
     #[inline]
     pub fn local(mut self) -> Self {
-        self.local = true;
+        self.builder = self.builder.local();
         self
     }
 }
@@ -419,10 +398,10 @@ where
 
 impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(self) -> Self::Output {
-        let session = self.session;
-        if self.local {
+        let session = self.builder.session;
+        if self.builder.local {
             session
-                .declare_local_subscriber(&self.key_expr, Box::new(self.callback))
+                .declare_local_subscriber(&self.builder.key_expr, Box::new(self.callback))
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -430,12 +409,12 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
         } else {
             session
                 .declare_subscriber(
-                    &self.key_expr,
+                    &self.builder.key_expr,
                     Box::new(self.callback),
                     &SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode,
-                        period: self.period,
+                        reliability: self.builder.reliability,
+                        mode: self.builder.mode,
+                        period: self.builder.period,
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {
@@ -458,14 +437,9 @@ pub struct HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
 where
     IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
 {
-    session: SessionRef<'a>,
-    key_expr: KeyExpr<'b>,
-    reliability: Reliability,
-    mode: SubMode,
-    period: Option<Period>,
-    local: bool,
-    handler: IntoHandler,
-    receiver: PhantomData<Receiver>,
+    pub(crate) builder: SubscriberBuilder<'a, 'b>,
+    pub(crate) handler: IntoHandler,
+    pub(crate) receiver: PhantomData<Receiver>,
 }
 
 impl<IntoHandler, Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, IntoHandler, Receiver>
@@ -474,10 +448,11 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerSubscriberBuilder")
-            .field("key_expr", &self.key_expr)
-            .field("reliability", &self.reliability)
-            .field("mode", &self.mode)
-            .field("period", &self.period)
+            .field("session", &self.builder.session)
+            .field("key_expr", &self.builder.key_expr)
+            .field("reliability", &self.builder.reliability)
+            .field("mode", &self.builder.mode)
+            .field("period", &self.builder.period)
             .finish()
     }
 }
@@ -489,57 +464,56 @@ where
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.reliability = reliability;
+        self.builder = self.builder.reliability(reliability);
         self
     }
 
     /// Change the subscription reliability to `Reliable`.
     #[inline]
     pub fn reliable(mut self) -> Self {
-        self.reliability = Reliability::Reliable;
+        self.builder = self.builder.reliable();
         self
     }
 
     /// Change the subscription reliability to `BestEffort`.
     #[inline]
     pub fn best_effort(mut self) -> Self {
-        self.reliability = Reliability::BestEffort;
+        self.builder = self.builder.best_effort();
         self
     }
 
     /// Change the subscription mode.
     #[inline]
     pub fn mode(mut self, mode: SubMode) -> Self {
-        self.mode = mode;
+        self.builder = self.builder.mode(mode);
         self
     }
 
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(mut self) -> Self {
-        self.mode = SubMode::Push;
-        self.period = None;
+        self.builder = self.builder.push_mode();
         self
     }
 
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(mut self) -> Self {
-        self.mode = SubMode::Pull;
+        self.builder = self.builder.pull_mode();
         self
     }
 
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
+        self.builder = self.builder.period(period);
         self
     }
 
     /// Make the subscription local onlyu.
     #[inline]
     pub fn local(mut self) -> Self {
-        self.local = true;
+        self.builder = self.builder.local();
         self
     }
 }
@@ -613,11 +587,11 @@ where
     IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
 {
     fn res_sync(self) -> Self::Output {
-        let session = self.session;
+        let session = self.builder.session;
         let (callback, receiver) = self.handler.into_handler();
-        let subscriber = if self.local {
+        let subscriber = if self.builder.local {
             session
-                .declare_local_subscriber(&self.key_expr, callback)
+                .declare_local_subscriber(&self.builder.key_expr, callback)
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -625,12 +599,12 @@ where
         } else {
             session
                 .declare_subscriber(
-                    &self.key_expr,
+                    &self.builder.key_expr,
                     callback,
                     &SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode,
-                        period: self.period,
+                        reliability: self.builder.reliability,
+                        mode: self.builder.mode,
+                        period: self.builder.period,
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {

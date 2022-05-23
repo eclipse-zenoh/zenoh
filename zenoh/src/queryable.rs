@@ -309,10 +309,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         Callback: Fn(Query) + Send + Sync + 'static,
     {
         CallbackQueryableBuilder {
-            session: self.session,
-            key_expr: self.key_expr,
-            kind: self.kind,
-            complete: self.complete,
+            builder: self,
             callback,
         }
     }
@@ -339,10 +336,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
         IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
     {
         HandlerQueryableBuilder {
-            session: self.session,
-            key_expr: self.key_expr,
-            kind: self.kind,
-            complete: self.complete,
+            builder: self,
             handler,
             receiver: PhantomData,
         }
@@ -392,10 +386,7 @@ pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
     Callback: Fn(Query) + Send + Sync + 'static,
 {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
-    pub(crate) kind: ZInt,
-    pub(crate) complete: bool,
+    pub(crate) builder: QueryableBuilder<'a, 'b>,
     pub(crate) callback: Callback,
 }
 
@@ -406,7 +397,7 @@ where
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
-        self.complete = complete;
+        self.builder = self.builder.complete(complete);
         self
     }
 }
@@ -434,12 +425,12 @@ where
     Callback: Fn(Query) + Send + Sync + 'static,
 {
     fn res_sync(self) -> Self::Output {
-        let session = self.session;
+        let session = self.builder.session;
         session
             .declare_queryable(
-                &self.key_expr,
-                self.kind,
-                self.complete,
+                &self.builder.key_expr,
+                self.builder.kind,
+                self.builder.complete,
                 Box::new(self.callback),
             )
             .map(move |qable_state| CallbackQueryable {
@@ -488,10 +479,7 @@ pub struct HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
 where
     IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
 {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
-    pub(crate) kind: ZInt,
-    pub(crate) complete: bool,
+    pub(crate) builder: QueryableBuilder<'a, 'b>,
     pub(crate) handler: IntoHandler,
     pub(crate) receiver: PhantomData<Receiver>,
 }
@@ -503,7 +491,7 @@ where
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
-        self.complete = complete;
+        self.builder = self.builder.complete(complete);
         self
     }
 }
@@ -514,8 +502,9 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerQueryableBuilder")
-            .field("key_expr", &self.key_expr)
-            .field("complete", &self.complete)
+            .field("session", &self.builder.session)
+            .field("key_expr", &self.builder.key_expr)
+            .field("complete", &self.builder.complete)
             .finish()
     }
 }
@@ -534,10 +523,15 @@ where
     IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
 {
     fn res_sync(self) -> Self::Output {
-        let session = self.session;
+        let session = self.builder.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .declare_queryable(&self.key_expr, self.kind, self.complete, callback)
+            .declare_queryable(
+                &self.builder.key_expr,
+                self.builder.kind,
+                self.builder.complete,
+                callback,
+            )
             .map(|qable_state| HandlerQueryable {
                 queryable: CallbackQueryable {
                     session,
