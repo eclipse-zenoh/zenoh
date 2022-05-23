@@ -13,7 +13,7 @@
 //
 use crate::{
     net::runtime::{orchestrator::Loop, Runtime},
-    prelude::{Callback, IntoHandler},
+    prelude::{locked, Callback, IntoHandler},
 };
 use async_std::net::UdpSocket;
 use futures::StreamExt;
@@ -48,6 +48,56 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     type Output = ZResult<HandlerScout<flume::Receiver<Hello>>>;
+}
+
+impl<IntoWhatAmI, TryIntoConfig> ScoutBuilder<IntoWhatAmI, TryIntoConfig>
+where
+    IntoWhatAmI: Into<WhatAmIMatcher>,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    /// Receive the [`Hello`] messages from this scout with a callback.
+    #[inline]
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, Callback>
+    where
+        Callback: Fn(Hello) + Send + Sync + 'static,
+    {
+        CallbackScoutBuilder {
+            builder: self,
+            callback,
+        }
+    }
+
+    /// Receive the [`Hello`] messages from this scout with a mutable callback.
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, impl Fn(Hello) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Hello) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
+    }
+
+    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::Handler).
+    #[inline]
+    pub fn with<IntoHandler, Receiver>(
+        self,
+        handler: IntoHandler,
+    ) -> HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver>
+    where
+        IntoHandler: crate::prelude::IntoHandler<Hello, Receiver>,
+    {
+        HandlerScoutBuilder {
+            builder: self,
+            handler,
+            receiver: PhantomData,
+        }
+    }
 }
 
 impl<IntoWhatAmI, TryIntoConfig> AsyncResolve for ScoutBuilder<IntoWhatAmI, TryIntoConfig>
