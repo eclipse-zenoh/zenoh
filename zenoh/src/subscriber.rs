@@ -39,17 +39,17 @@ pub(crate) struct SubscriberState {
 
 impl fmt::Debug for SubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Subscriber{{ id:{}, key_expr:{} }}",
-            self.id, self.key_expr_str
-        )
+        f.debug_struct("Subscriber")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr_str)
+            .finish()
     }
 }
 
 /// A subscriber that provides data through a callback.
 ///
 /// Subscribers are automatically undeclared when dropped.
+#[derive(Debug)]
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
@@ -141,12 +141,6 @@ impl Drop for CallbackSubscriberClose<'_> {
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
         let _ = self.session.unsubscribe(self.state.id).res_sync();
-    }
-}
-
-impl fmt::Debug for CallbackSubscriber<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
     }
 }
 
@@ -303,7 +297,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackSubscriberBuilder<'a, 'b, Callback>
 where
@@ -311,21 +305,6 @@ where
 {
     pub(crate) builder: SubscriberBuilder<'a, 'b>,
     pub(crate) callback: Callback,
-}
-
-impl<Callback> fmt::Debug for CallbackSubscriberBuilder<'_, '_, Callback>
-where
-    Callback: Fn(Sample) + Send + Sync + 'static,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CallbackSubscriberBuilder")
-            .field("session", &self.builder.session)
-            .field("key_expr", &self.builder.key_expr)
-            .field("reliability", &self.builder.reliability)
-            .field("mode", &self.builder.mode)
-            .field("period", &self.builder.period)
-            .finish()
-    }
 }
 
 impl<'a, 'b, Callback> CallbackSubscriberBuilder<'a, 'b, Callback>
@@ -431,7 +410,7 @@ impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_,
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
 where
@@ -440,21 +419,6 @@ where
     pub(crate) builder: SubscriberBuilder<'a, 'b>,
     pub(crate) handler: IntoHandler,
     pub(crate) receiver: PhantomData<Receiver>,
-}
-
-impl<IntoHandler, Receiver> fmt::Debug for HandlerSubscriberBuilder<'_, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HandlerSubscriberBuilder")
-            .field("session", &self.builder.session)
-            .field("key_expr", &self.builder.key_expr)
-            .field("reliability", &self.builder.reliability)
-            .field("mode", &self.builder.mode)
-            .field("period", &self.builder.period)
-            .finish()
-    }
 }
 
 impl<'a, 'b, IntoHandler, Receiver> HandlerSubscriberBuilder<'a, 'b, IntoHandler, Receiver>
@@ -518,6 +482,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct HandlerSubscriber<'a, Receiver> {
     pub subscriber: CallbackSubscriber<'a>,
     pub receiver: Receiver,

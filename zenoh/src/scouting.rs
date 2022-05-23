@@ -17,7 +17,7 @@ use crate::{
 };
 use async_std::net::UdpSocket;
 use futures::StreamExt;
-use std::{marker::PhantomData, ops::Deref, sync::Arc};
+use std::{fmt, marker::PhantomData, ops::Deref, sync::Arc};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
@@ -182,7 +182,13 @@ impl Scout {
     }
 }
 
-#[derive(Clone)]
+impl fmt::Debug for Scout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Scout").finish()
+    }
+}
+
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver>
 where
@@ -234,6 +240,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct HandlerScout<Receiver> {
     pub scout: Scout,
     pub receiver: Receiver,

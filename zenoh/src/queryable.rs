@@ -76,21 +76,21 @@ impl Query {
 
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Query{{ key_selector: '{}', value_selector: '{}' }}",
-            self.key_selector, self.value_selector
-        )
+        f.debug_struct("Query")
+            .field("key_selector", &self.key_selector)
+            .field("value_selector", &self.value_selector)
+            .finish()
     }
 }
 
 impl fmt::Display for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Query{{ '{}{}' }}",
-            self.key_selector, self.value_selector
-        )
+        f.debug_struct("Query")
+            .field(
+                "selector",
+                &format!("{}{}", &self.key_selector, &self.value_selector),
+            )
+            .finish()
     }
 }
 
@@ -156,11 +156,11 @@ pub(crate) struct QueryableState {
 
 impl fmt::Debug for QueryableState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Queryable{{ id:{}, key_expr:{} }}",
-            self.id, self.key_expr
-        )
+        f.debug_struct("Queryable")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr)
+            .field("complete", &self.complete)
+            .finish()
     }
 }
 
@@ -196,6 +196,7 @@ impl fmt::Debug for QueryableState {
 /// }
 /// # })
 /// ```
+#[derive(Debug)]
 pub struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
@@ -267,12 +268,6 @@ impl Drop for QueryableCloser<'_> {
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
         let _ = self.session.close_queryable(self.state.id);
-    }
-}
-
-impl fmt::Debug for CallbackQueryable<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.state.fmt(f)
     }
 }
 
@@ -380,7 +375,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackQueryableBuilder<'a, 'b, Callback>
 where
@@ -440,6 +435,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct HandlerQueryable<'a, Receiver> {
     pub queryable: CallbackQueryable<'a>,
     pub receiver: Receiver,
@@ -473,7 +469,7 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
 where
@@ -493,19 +489,6 @@ where
     pub fn complete(mut self, complete: bool) -> Self {
         self.builder = self.builder.complete(complete);
         self
-    }
-}
-
-impl<IntoHandler, Receiver> fmt::Debug for HandlerQueryableBuilder<'_, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HandlerQueryableBuilder")
-            .field("session", &self.builder.session)
-            .field("key_expr", &self.builder.key_expr)
-            .field("complete", &self.builder.complete)
-            .finish()
     }
 }
 

@@ -18,7 +18,6 @@ use crate::prelude::*;
 use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
-use std::fmt;
 use std::marker::PhantomData;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -274,6 +273,7 @@ where
 {
     type Output = zenoh_core::Result<()>;
 }
+
 impl<Callback> SyncResolve for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
@@ -288,6 +288,7 @@ where
         )
     }
 }
+
 impl<Callback> AsyncResolve for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
@@ -299,7 +300,7 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
 where
@@ -308,20 +309,6 @@ where
     builder: GetBuilder<'a, 'b>,
     handler: IntoHandler,
     receiver: PhantomData<Receiver>,
-}
-
-impl<IntoHandler, Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HandlerGetBuilder")
-            .field("selector", &self.builder.selector)
-            .field("target", &self.builder.target)
-            .field("consolidation", &self.builder.consolidation)
-            .field("local_routing", &self.builder.local_routing)
-            .finish()
-    }
 }
 
 impl<'a, 'b, IntoHandler, Receiver> HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
