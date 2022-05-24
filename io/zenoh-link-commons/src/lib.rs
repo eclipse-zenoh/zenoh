@@ -155,7 +155,7 @@ impl LinkUnicast {
         }
         let contiguous = wbuf.contiguous();
         // Send the message on the link
-        self.0.write_all(&contiguous).await.unwrap();
+        self.0.write_all(&contiguous).await?;
         let len = contiguous.len();
         #[cfg(test)]
         {
@@ -288,7 +288,7 @@ impl LinkMulticast {
         let contiguous = wbuf.contiguous();
 
         // Send the message on the link
-        let _ = self.0.write_all(&contiguous).await;
+        self.0.write_all(&contiguous).await?;
 
         Ok(contiguous.len())
     }
