@@ -1,22 +1,40 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
 use crate::key_expr::utils::Split;
 
 use super::keyexpr;
 
-pub trait UTF8 {
-    fn utf(&self) -> &str;
-}
-impl UTF8 for [u8] {
-    fn utf(&self) -> &str {
-        std::str::from_utf8(self).unwrap()
-    }
-}
-macro_rules! utfdbg {
-    ($e: expr) => {{
-        let r = $e;
-        println!("[{}:{}] {} = {}", file!(), line!(), stringify!($e), r.utf());
-        r
-    }};
-}
+// #[cfg(test)]
+// pub trait UTF8 {
+//     fn utf(&self) -> &str;
+// }
+// #[cfg(test)]
+// impl UTF8 for [u8] {
+//     fn utf(&self) -> &str {
+//         std::str::from_utf8(self).unwrap()
+//     }
+// }
+// macro_rules! utfdbg {
+//     ($e: expr) => {{
+//         let r = $e;
+//         if (cfg!(test)) {
+//             println!("[{}:{}] {} = {}", file!(), line!(), stringify!($e), r.utf());
+//         }
+//         r
+//     }};
+// }
 
 const DELIMITER: u8 = b'/';
 const SMALL_WILD: u8 = b'*';

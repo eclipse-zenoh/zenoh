@@ -43,7 +43,6 @@ pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
-pub mod key_expr;
 pub mod wire_expr;
 pub use crate::wire_expr::WireExpr;
 

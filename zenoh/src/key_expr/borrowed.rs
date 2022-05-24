@@ -12,13 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::convert::{TryFrom, TryInto};
+use std::{
+    borrow::Borrow,
+    convert::{TryFrom, TryInto},
+};
 use zenoh_core::{bail, Error as ZError};
-
-pub mod canon;
-#[cfg(test)]
-mod test;
-mod utils;
 
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
@@ -33,6 +31,18 @@ impl keyexpr {
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         std::mem::transmute(s)
+    }
+}
+
+impl std::fmt::Debug for keyexpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ke`{}`", self.as_ref())
+    }
+}
+
+impl std::fmt::Display for keyexpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self)
     }
 }
 
@@ -69,9 +79,9 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
             }
         }
-        if value.contains(['#', '?', '$', '{', '}', '[', ']']) {
+        if value.contains(['#', '?', '$']) {
             bail!(
-                "Invalid Key Expr `{}`: `#?${{}}[]` are forbidden characters",
+                "Invalid Key Expr `{}`: `#?$` are forbidden characters",
                 value
             )
         }
@@ -82,7 +92,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
 impl<'a> TryFrom<&'a mut str> for &'a keyexpr {
     type Error = ZError;
     fn try_from(mut value: &'a mut str) -> Result<Self, Self::Error> {
-        canon::Canonizable::canonize(&mut value);
+        super::canon::Canonizable::canonize(&mut value);
         (value as &'a str).try_into()
     }
 }
@@ -99,24 +109,21 @@ impl AsRef<str> for keyexpr {
     }
 }
 
-mod intersect;
-
 impl keyexpr {
-    fn intersect(&self, other: &Self) -> bool {
-        use intersect::Intersector;
-        intersect::DEFAULT_INTERSECTOR.intersect(self, other)
+    pub fn intersect(&self, other: &Self) -> bool {
+        use super::intersect::Intersector;
+        super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
     }
 }
 
-pub fn intersect<
-    'a,
-    L: TryInto<&'a keyexpr, Error = ZError>,
-    R: TryInto<&'a keyexpr, Error = ZError>,
->(
-    left: L,
-    right: R,
-) -> Result<bool, ZError> {
-    let left: &'a keyexpr = left.try_into()?;
-    let right: &'a keyexpr = right.try_into()?;
-    Ok(left.intersect(right))
+impl Borrow<keyexpr> for super::KeyExpr<'_> {
+    fn borrow(&self) -> &keyexpr {
+        self
+    }
+}
+impl ToOwned for keyexpr {
+    type Owned = super::KeyExpr<'static>;
+    fn to_owned(&self) -> Self::Owned {
+        super::KeyExpr::from(self).into_owned()
+    }
 }

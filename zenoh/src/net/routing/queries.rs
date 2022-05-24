@@ -1524,7 +1524,7 @@ pub fn route_query(
                     log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
 
                     outface.primitives.send_query(
-                        wire_expr,
+                        key_expr,
                         value_selector,
                         qid,
                         target.clone(),

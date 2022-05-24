@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use crate::key_expr::utils::{Split, Writer};
 pub trait Canonizable {
     fn canonize(&mut self);
