@@ -279,8 +279,15 @@ async fn tx_task(
             Action::KeepAlive => {
                 let pid = Some(config.pid);
                 let attachment = None;
-                let message = TransportMessage::make_keep_alive(pid, attachment);
-                pipeline.push_transport_message(message, Priority::Background);
+                let mut message = TransportMessage::make_keep_alive(pid, attachment);
+
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.write_transport_message(&mut message).await?;
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(1);
+                    stats.inc_tx_bytes(n);
+                }
             }
             Action::Stop => {
                 // Drain the transmission pipeline and write remaining bytes on the wire
