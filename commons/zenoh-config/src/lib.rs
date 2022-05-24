@@ -185,8 +185,8 @@ validated_struct::validator! {
                     sequence_number_resolution: Option<ZInt>,
                     /// Link lease duration in milliseconds (default: 10000)
                     lease: Option<ZInt>,
-                    /// Link keep-alive duration in milliseconds (default: 2500)
-                    keep_alive: Option<ZInt>,
+                    /// Number fo keep-alive messages in a link lease duration (default: 4)
+                    keep_alive: Option<usize>,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
                     batch_size: Option<u16>,
                     pub queue: QueueConf {

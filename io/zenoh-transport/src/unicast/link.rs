@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
-use super::protocol::core::Priority;
 use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
@@ -202,8 +201,15 @@ async fn tx_task(
             Err(_) => {
                 let pid = None;
                 let attachment = None;
-                let message = TransportMessage::make_keep_alive(pid, attachment);
-                pipeline.push_transport_message(message, Priority::Background);
+                let mut message = TransportMessage::make_keep_alive(pid, attachment);
+
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.write_transport_message(&mut message).await?;
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(1);
+                    stats.inc_tx_bytes(n);
+                }
             }
         }
     }

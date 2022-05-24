@@ -38,7 +38,7 @@ use zenoh_protocol_core::locators::LocatorProtocol;
 /*************************************/
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
-    pub keep_alive: Duration,
+    pub keep_alive: usize,
     pub accept_timeout: Duration,
     pub accept_pending: usize,
     pub max_sessions: usize,
@@ -73,7 +73,7 @@ pub struct TransportManagerBuilderUnicast {
     //       check which considers a link as failed when no messages are received in 3.5 times the
     //       target interval.
     pub(super) lease: Duration,
-    pub(super) keep_alive: Duration,
+    pub(super) keep_alive: usize,
     pub(super) accept_timeout: Duration,
     pub(super) accept_pending: usize,
     pub(super) max_sessions: usize,
@@ -91,7 +91,7 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    pub fn keep_alive(mut self, keep_alive: Duration) -> Self {
+    pub fn keep_alive(mut self, keep_alive: usize) -> Self {
         self.keep_alive = keep_alive;
         self
     }
@@ -141,9 +141,7 @@ impl TransportManagerBuilderUnicast {
         self = self.lease(Duration::from_millis(
             config.transport().link().tx().lease().unwrap(),
         ));
-        self = self.keep_alive(Duration::from_millis(
-            config.transport().link().tx().keep_alive().unwrap(),
-        ));
+        self = self.keep_alive(config.transport().link().tx().keep_alive().unwrap());
         self = self.accept_timeout(Duration::from_millis(
             config.transport().unicast().accept_timeout().unwrap(),
         ));
@@ -218,7 +216,7 @@ impl Default for TransportManagerBuilderUnicast {
     fn default() -> Self {
         Self {
             lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
-            keep_alive: Duration::from_millis(zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap()),
+            keep_alive: zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap(),
             accept_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
             accept_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
             max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
