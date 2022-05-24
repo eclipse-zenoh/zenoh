@@ -243,10 +243,11 @@ pub(super) async fn transport_finalize(
     let transport = input.transport.get_inner()?;
 
     // Start the TX loop
+    let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
     let _ = transport.start_tx(
         link,
         &manager.tx_executor,
-        manager.config.unicast.keep_alive,
+        keep_alive,
         manager.config.batch_size,
     )?;
 

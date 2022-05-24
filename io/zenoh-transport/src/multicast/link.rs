@@ -39,7 +39,7 @@ pub(super) struct TransportLinkMulticastConfig {
     pub(super) pid: PeerId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
-    pub(super) keep_alive: Duration,
+    pub(super) keep_alive: usize,
     pub(super) join_interval: Duration,
     pub(super) sn_resolution: ZInt,
     pub(super) batch_size: u16,
@@ -221,9 +221,10 @@ async fn tx_task(
         Action::Join
     }
 
+    let keep_alive = config.join_interval / config.keep_alive as u32;
     let mut last_join = Instant::now() - config.join_interval;
     loop {
-        match pull(&pipeline, config.keep_alive)
+        match pull(&pipeline, keep_alive)
             .race(join(last_join, config.join_interval))
             .await
         {

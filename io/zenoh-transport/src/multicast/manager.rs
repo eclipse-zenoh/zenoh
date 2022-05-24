@@ -17,16 +17,16 @@ use crate::TransportManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use zenoh_config::Config;
+use zenoh_config::{Config, ZN_LINK_KEEP_ALIVE_DEFAULT, ZN_LINK_LEASE_DEFAULT};
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock};
+use zenoh_core::{zerror, zlock, zparse};
 use zenoh_link::*;
 use zenoh_protocol::proto::tmsg;
 use zenoh_protocol_core::locators::LocatorProtocol;
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,
-    pub keep_alive: Duration,
+    pub keep_alive: usize,
     pub join_interval: Duration,
     pub max_sessions: usize,
     pub is_qos: bool,
@@ -34,7 +34,7 @@ pub struct TransportManagerConfigMulticast {
 
 pub struct TransportManagerBuilderMulticast {
     lease: Duration,
-    keep_alive: Duration,
+    keep_alive: usize,
     join_interval: Duration,
     max_sessions: usize,
     is_qos: bool,
@@ -58,7 +58,7 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
-    pub fn keep_alive(mut self, keep_alive: Duration) -> Self {
+    pub fn keep_alive(mut self, keep_alive: usize) -> Self {
         self.keep_alive = keep_alive;
         self
     }
@@ -85,9 +85,7 @@ impl TransportManagerBuilderMulticast {
         self = self.lease(Duration::from_millis(
             config.transport().link().tx().lease().unwrap(),
         ));
-        self = self.keep_alive(Duration::from_millis(
-            config.transport().link().tx().keep_alive().unwrap(),
-        ));
+        self = self.keep_alive(config.transport().link().tx().keep_alive().unwrap());
         self = self.join_interval(Duration::from_millis(
             config.transport().multicast().join_interval().unwrap(),
         ));
@@ -120,8 +118,8 @@ impl TransportManagerBuilderMulticast {
 impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
         let tmb = TransportManagerBuilderMulticast {
-            lease: Duration::from_millis(0),
-            keep_alive: Duration::from_millis(0),
+            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
+            keep_alive: zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap(),
             join_interval: Duration::from_millis(0),
             max_sessions: 0,
             is_qos: false,
