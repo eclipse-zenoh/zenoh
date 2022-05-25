@@ -172,6 +172,7 @@ fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
             let u_evt = &*s.user_events_tx.lock().await;
             for e in expired_members {
                 if let Some(tx) = u_evt {
+                    log::debug!("Member with lease expired: {}", e);
                     tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
                         .unwrap()
                 }
