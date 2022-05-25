@@ -1151,12 +1151,26 @@ pub type Dyn<T> = std::boxed::Box<T>;
 pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
 pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
 
+/// A Handler is the combination of:
+///  - a callback which is called on
+/// some events like reception of a Sample in a Subscriber or reception
+/// of a Query in a Queryable
+///  - a receiver that allows to collect and access those events one way
+/// or another.
+///
+/// For example a flume channel can be transformed into a Handler by
+/// implmenting the [`IntoHandler`] Trait.
 pub type Handler<T, Receiver> = (Callback<T>, Receiver);
 
+/// A value-to-value conversion that consumes the input value and
+/// transforms it into a [`Handler`].
 pub trait IntoHandler<T, Receiver> {
+    /// Converts this type into a [`Handler`].
     fn into_handler(self) -> Handler<T, Receiver>;
 }
 
+/// A function that can transform a [`FnMut`]`(T)` to
+/// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
 pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)

@@ -18,7 +18,6 @@ use crate::prelude::*;
 use crate::Session;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
 use std::collections::HashMap;
-use std::fmt;
 use std::marker::PhantomData;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -132,13 +131,16 @@ pub(crate) struct QueryState {
 /// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let mut replies = session
+/// let replies = session
 ///     .get("/key/expression?value>1")
 ///     .target(QueryTarget::All)
 ///     .consolidation(QueryConsolidation::none())
 ///     .res()
 ///     .await
 ///     .unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     println!("Received {:?}", reply.sample)
+/// }
 /// # })
 /// ```
 #[derive(Debug, Clone)]
@@ -152,7 +154,23 @@ pub struct GetBuilder<'a, 'b> {
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
-    /// Make the built `query` a callback `query`.
+    /// Receive the replies for this query with a callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session
+    ///     .get("/key/expression")
+    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> CallbackGetBuilder<'a, 'b, Callback>
     where
@@ -164,7 +182,24 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         }
     }
 
-    /// Make the built `query` a callback `query`.
+    /// Receive the replies for this query with a mutable callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut n = 0;
+    /// let queryable = session
+    ///     .get("/key/expression")
+    ///     .callback_mut(move |reply| {n += 1;})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -176,7 +211,26 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         self.callback(locked(callback))
     }
 
-    /// Make the built `query` a handler `query`.
+    /// Receive the replies for this query with a [`Handler`](crate::prelude::Handler).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let replies = session
+    ///     .get("/key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     println!("Received {:?}", reply.sample);
+    /// }
+    /// # })
+    /// ```
     #[inline]
     pub fn with<IntoHandler, Receiver>(
         self,
@@ -232,6 +286,26 @@ impl AsyncResolve for GetBuilder<'_, '_> {
     }
 }
 
+/// A builder for initializing a callback `query`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::query::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// session
+///     .get("/key/expression?value>1")
+///     .callback(|reply| {println!("Received {:?}", reply.sample)})
+///     .target(QueryTarget::All)
+///     .consolidation(QueryConsolidation::none())
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
 #[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
@@ -274,6 +348,7 @@ where
 {
     type Output = zenoh_core::Result<()>;
 }
+
 impl<Callback> SyncResolve for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
@@ -288,6 +363,7 @@ where
         )
     }
 }
+
 impl<Callback> AsyncResolve for CallbackGetBuilder<'_, '_, Callback>
 where
     Callback: Fn(Reply) + Send + Sync + 'static,
@@ -299,7 +375,30 @@ where
     }
 }
 
-#[derive(Clone)]
+/// A builder for initializing a handler `query`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::query::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let replies = session
+///     .get("/key/expression?value>1")
+///     .with(flume::bounded(32))
+///     .target(QueryTarget::All)
+///     .consolidation(QueryConsolidation::none())
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(reply) = replies.recv_async().await {
+///     println!("Received {:?}", reply.sample)
+/// }
+/// # })
+/// ```
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
 where
@@ -308,20 +407,6 @@ where
     builder: GetBuilder<'a, 'b>,
     handler: IntoHandler,
     receiver: PhantomData<Receiver>,
-}
-
-impl<IntoHandler, Receiver> fmt::Debug for HandlerGetBuilder<'_, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Reply, Receiver>,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HandlerGetBuilder")
-            .field("selector", &self.builder.selector)
-            .field("target", &self.builder.target)
-            .field("consolidation", &self.builder.consolidation)
-            .field("local_routing", &self.builder.local_routing)
-            .finish()
-    }
 }
 
 impl<'a, 'b, IntoHandler, Receiver> HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>

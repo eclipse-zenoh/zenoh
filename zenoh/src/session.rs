@@ -1864,6 +1864,6 @@ impl Drop for Session {
 
 impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Session{{...}}")
+        f.debug_struct("Session").field("id", &self.id()).finish()
     }
 }

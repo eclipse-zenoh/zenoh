@@ -17,7 +17,7 @@ use crate::{
 };
 use async_std::net::UdpSocket;
 use futures::StreamExt;
-use std::{marker::PhantomData, ops::Deref, sync::Arc};
+use std::{fmt, marker::PhantomData, ops::Deref, sync::Arc};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
@@ -35,7 +35,6 @@ pub struct ScoutBuilder<IntoWhatAmI, TryIntoConfig>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     pub(crate) what: IntoWhatAmI,
     pub(crate) config: TryIntoConfig,
@@ -45,7 +44,6 @@ impl<IntoWhatAmI, TryIntoConfig> Resolvable for ScoutBuilder<IntoWhatAmI, TryInt
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     type Output = ZResult<HandlerScout<flume::Receiver<Hello>>>;
 }
@@ -54,7 +52,6 @@ impl<IntoWhatAmI, TryIntoConfig> ScoutBuilder<IntoWhatAmI, TryIntoConfig>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     /// Receive the [`Hello`] messages from this scout with a callback.
     #[inline]
@@ -102,7 +99,6 @@ where
 
 impl<IntoWhatAmI, TryIntoConfig> AsyncResolve for ScoutBuilder<IntoWhatAmI, TryIntoConfig>
 where
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: 'static + Send + std::convert::TryInto<crate::config::Config>,
 {
@@ -117,7 +113,6 @@ impl<IntoWhatAmI, TryIntoConfig> SyncResolve for ScoutBuilder<IntoWhatAmI, TryIn
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     fn res_sync(self) -> Self::Output {
         let (callback, receiver) = flume::bounded(1).into_handler();
@@ -131,7 +126,6 @@ pub struct CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, Callback>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     Callback: Fn(Hello) + Send + Sync + 'static,
 {
     builder: ScoutBuilder<IntoWhatAmI, TryIntoConfig>,
@@ -142,7 +136,6 @@ impl<IntoWhatAmI, TryIntoConfig, Callback> Resolvable
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     Callback: Fn(Hello) + Send + Sync + 'static,
 {
     type Output = ZResult<Scout>;
@@ -151,7 +144,6 @@ where
 impl<IntoWhatAmI, TryIntoConfig, Callback> AsyncResolve
     for CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, Callback>
 where
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     Callback: 'static + Fn(Hello) + Send + Sync,
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: 'static + Send + std::convert::TryInto<crate::config::Config>,
@@ -168,7 +160,6 @@ impl<IntoWhatAmI, TryIntoConfig, Callback> SyncResolve
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     Callback: Fn(Hello) + Send + Sync + 'static,
 {
     fn res_sync(self) -> Self::Output {
@@ -191,13 +182,18 @@ impl Scout {
     }
 }
 
-#[derive(Clone)]
+impl fmt::Debug for Scout {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Scout").finish()
+    }
+}
+
+#[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     IntoHandler: crate::prelude::IntoHandler<Hello, Receiver>,
 {
     builder: ScoutBuilder<IntoWhatAmI, TryIntoConfig>,
@@ -210,7 +206,6 @@ impl<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver> Resolvable
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     IntoHandler: crate::prelude::IntoHandler<Hello, Receiver>,
 {
     type Output = ZResult<HandlerScout<Receiver>>;
@@ -219,7 +214,6 @@ where
 impl<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver> AsyncResolve
     for HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver>
 where
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: 'static + Send + std::convert::TryInto<crate::config::Config>,
     IntoHandler: crate::prelude::IntoHandler<Hello, Receiver>,
@@ -236,7 +230,6 @@ impl<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver> SyncResolve
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
     IntoHandler: crate::prelude::IntoHandler<Hello, Receiver>,
     Receiver: Send,
 {
@@ -247,6 +240,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct HandlerScout<Receiver> {
     pub scout: Scout,
     pub receiver: Receiver,
@@ -290,12 +284,11 @@ fn scout<IntoWhatAmI, TryIntoConfig>(
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     let what = what.into();
     let config: crate::config::Config = match config.try_into() {
         Ok(config) => config,
-        Err(e) => bail!("invalid configuration {:?}", &e),
+        Err(_) => bail!("invalid configuration"),
     };
 
     log::trace!("scout({}, {})", what, &config);
