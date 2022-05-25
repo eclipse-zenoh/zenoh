@@ -67,7 +67,7 @@ pub type DeleteBuilder<'a> = PutBuilder<'a>;
 /// ```
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a> {
-    pub(crate) publisher: Publisher<'a>,
+    pub(crate) publisher: PublishBuilder<'a>,
     pub(crate) value: Value,
     pub(crate) kind: SampleKind,
 }
@@ -114,7 +114,7 @@ impl Resolvable for PutBuilder<'_> {
 impl SyncResolve for PutBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        self.publisher.write(self.kind, self.value)
+        self.publisher.res_sync()?.write(self.kind, self.value)
     }
 }
 impl AsyncResolve for PutBuilder<'_> {
@@ -163,7 +163,7 @@ use zenoh_core::zresult::Error;
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: WireExpr<'a>,
+    pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) local_routing: Option<bool>,
@@ -212,7 +212,7 @@ impl Publisher<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &self.key_expr,
+            &(&self.key_expr).into(),
             value.payload.clone(),
             Channel {
                 priority: self.priority.into(),
@@ -224,7 +224,7 @@ impl Publisher<'_> {
         );
         self.session.handle_data(
             true,
-            &self.key_expr,
+            &(&self.key_expr).into(),
             data_info,
             value.payload,
             self.local_routing,
@@ -301,30 +301,48 @@ where
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PublishBuilder<'a> {
-    pub(crate) publisher: Publisher<'a>,
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: ZResult<KeyExpr<'a>>,
+    pub(crate) congestion_control: CongestionControl,
+    pub(crate) priority: Priority,
+    pub(crate) local_routing: Option<bool>,
+}
+impl<'a> Clone for PublishBuilder<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match &self.key_expr {
+                Ok(k) => Ok(k.clone()),
+                Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
+            },
+            congestion_control: self.congestion_control.clone(),
+            priority: self.priority.clone(),
+            local_routing: self.local_routing.clone(),
+        }
+    }
 }
 
 impl<'a> PublishBuilder<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.publisher = self.publisher.congestion_control(congestion_control);
+        self.congestion_control = congestion_control;
         self
     }
 
     /// Change the priority of the written data.
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
-        self.publisher = self.publisher.priority(priority);
+        self.priority = priority;
         self
     }
 
     /// Enable or disable local routing.
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.publisher = self.publisher.local_routing(local_routing);
+        self.local_routing = Some(local_routing);
         self
     }
 }
@@ -335,7 +353,13 @@ impl<'a> Resolvable for PublishBuilder<'a> {
 impl SyncResolve for PublishBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        let publisher = self.publisher;
+        let publisher = Publisher {
+            session: self.session,
+            key_expr: self.key_expr?,
+            congestion_control: self.congestion_control,
+            priority: self.priority,
+            local_routing: self.local_routing,
+        };
         log::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)
     }

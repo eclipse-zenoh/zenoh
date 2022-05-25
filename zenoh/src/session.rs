@@ -11,14 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::info::*;
+use crate::key_expr::keyexpr;
+use crate::key_expr::owned::KeyExprInner;
+use crate::key_expr::owned::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::Callback;
-use crate::prelude::EntityFactory;
+use crate::prelude::{Callback, EntityFactory, KeyExpr};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -36,6 +39,7 @@ use flume::bounded;
 use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -74,21 +78,21 @@ pub(crate) struct SessionState {
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
-    pub(crate) publications: Vec<String>,
+    pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) local_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) local_routing: bool,
-    pub(crate) join_subscriptions: Vec<String>,
-    pub(crate) join_publications: Vec<String>,
+    pub(crate) join_subscriptions: Vec<OwnedKeyExpr>,
+    pub(crate) join_publications: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         local_routing: bool,
-        join_subscriptions: Vec<String>,
-        join_publications: Vec<String>,
+        join_subscriptions: Vec<OwnedKeyExpr>,
+        join_publications: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -133,42 +137,69 @@ impl SessionState {
     }
 
     #[inline]
-    fn localid_to_expr(&self, id: &ExprId) -> ZResult<String> {
+    fn localid_to_expr<'a>(&'a self, id: &ExprId) -> ZResult<KeyExpr<'a>> {
         match self.local_resources.get(id) {
-            Some(res) => Ok(res.name.clone()),
+            Some(res) => Ok(KeyExpr::from(&*res.name)),
             None => bail!("{}", id),
         }
     }
 
     #[inline]
-    fn id_to_expr(&self, id: &ExprId) -> ZResult<String> {
+    fn id_to_expr<'a>(&'a self, id: &ExprId) -> ZResult<KeyExpr<'a>> {
         match self.remote_resources.get(id) {
-            Some(res) => Ok(res.name.clone()),
+            Some(res) => Ok(KeyExpr::from(&*res.name)),
             None => self.localid_to_expr(id),
         }
     }
 
-    pub fn remotekey_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
+    pub(crate) fn remotekey_to_expr<'a, 'b>(
+        &'a self,
+        key_expr: &'b WireExpr,
+    ) -> ZResult<KeyExpr<'b>> {
         if key_expr.scope == EMPTY_EXPR_ID {
-            Ok(key_expr.suffix.to_string())
+            Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
         } else if key_expr.suffix.is_empty() {
-            self.id_to_expr(&key_expr.scope)
+            self.id_to_expr(&key_expr.scope).map(KeyExpr::into_owned)
         } else {
-            Ok(self.id_to_expr(&key_expr.scope)? + key_expr.suffix.as_ref())
+            Ok(unsafe {
+                KeyExpr::from_string_unchecked(
+                    [
+                        self.id_to_expr(&key_expr.scope)?.as_ref(),
+                        key_expr.suffix.as_ref(),
+                    ]
+                    .concat(),
+                )
+            })
         }
     }
 
-    pub fn localkey_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
+    pub(crate) fn localkey_to_expr<'a, 'b>(
+        &'a self,
+        key_expr: &'b WireExpr,
+    ) -> ZResult<KeyExpr<'b>> {
         if key_expr.scope == EMPTY_EXPR_ID {
-            Ok(key_expr.suffix.to_string())
+            Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
         } else if key_expr.suffix.is_empty() {
             self.localid_to_expr(&key_expr.scope)
+                .map(KeyExpr::into_owned)
         } else {
-            Ok(self.localid_to_expr(&key_expr.scope)? + key_expr.suffix.as_ref())
+            Ok(unsafe {
+                KeyExpr::from_string_unchecked(
+                    [
+                        self.localid_to_expr(&key_expr.scope)?.as_ref(),
+                        key_expr.suffix.as_ref(),
+                    ]
+                    .concat(),
+                )
+            })
         }
     }
 
-    pub fn key_expr_to_expr(&self, key_expr: &WireExpr, local: bool) -> ZResult<String> {
+    pub(crate) fn key_expr_to_expr<'a, 'b>(
+        &'a self,
+        key_expr: &'b WireExpr,
+        local: bool,
+    ) -> ZResult<KeyExpr<'b>> {
         if local {
             self.localkey_to_expr(key_expr)
         } else {
@@ -188,13 +219,13 @@ impl fmt::Debug for SessionState {
 }
 
 pub(crate) struct Resource {
-    pub(crate) name: String,
+    pub(crate) name: OwnedKeyExpr,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
     pub(crate) local_subscribers: Vec<Arc<SubscriberState>>,
 }
 
 impl Resource {
-    pub(crate) fn new(name: String) -> Self {
+    pub(crate) fn new(name: OwnedKeyExpr) -> Self {
         Resource {
             name,
             subscribers: vec![],
@@ -247,13 +278,20 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.startup().subscribe().clone();
-            let join_publications = config.startup().declare_publications().clone();
+            let subscriptions = config.startup().subscribe();
+            let mut join_subscriptions: Vec<OwnedKeyExpr> = Vec::with_capacity(subscriptions.len());
+            for sub in subscriptions {
+                join_subscriptions.push(sub.clone().try_into()?)
+            }
+            let pubs = config.startup().declare_publications();
+            let mut join_publications = Vec::with_capacity(pubs.len());
+            for publ in pubs {
+                join_publications.push(publ.clone().try_into()?)
+            }
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
@@ -276,12 +314,11 @@ impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn init(
         runtime: Runtime,
         local_routing: bool,
-        join_subscriptions: Vec<String>,
-        join_publications: Vec<String>,
+        join_subscriptions: Vec<OwnedKeyExpr>,
+        join_publications: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ClosureResolve(move || {
             let router = runtime.router.clone();
@@ -387,7 +424,6 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         FutureResolve(async move {
             trace!("close()");
@@ -446,7 +482,6 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn info(&self) -> impl Resolve<InfoProperties> + '_ {
         ClosureResolve(move || {
             trace!("info()");
@@ -516,45 +551,61 @@ impl Session {
     /// let expr_id = session.declare_expr("/key/expression").res().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn declare_expr<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
-    ) -> impl Resolve<ZResult<ExprId>> + 'a
+    ) -> impl Resolve<ZResult<KeyExpr<'a>>> + 'a
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
+            Into<zenoh_core::Error> + Send + Sync + 'static,
     {
-        let key_expr = key_expr.into();
+        let key_expr = key_expr.try_into();
         ClosureResolve(move || {
+            let key_expr: KeyExpr = match key_expr {
+                Ok(k) => k,
+                Err(e) => return Err(e.into()),
+            };
+            if let KeyExprInner::Wire { expr_id, .. } = &key_expr.0 {
+                if *expr_id != 0 {
+                    return Ok(key_expr);
+                }
+            }
             trace!("declare_expr({:?})", key_expr);
             let mut state = zwrite!(self.state);
 
-            state.localkey_to_expr(&key_expr).map(|expr| {
-                match state
-                    .local_resources
-                    .iter()
-                    .find(|(_expr_id, res)| res.name == expr)
-                {
-                    Some((expr_id, _res)) => *expr_id,
-                    None => {
-                        let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                        let mut res = Resource::new(expr.clone());
-                        for sub in state.subscribers.values() {
-                            if wire_expr::matches(&expr, &sub.key_expr_str) {
-                                res.subscribers.push(sub.clone());
-                            }
+            let owned_expr = OwnedKeyExpr::from(key_expr);
+            let expr = &*owned_expr;
+            match state
+                .local_resources
+                .iter()
+                .find(|(_expr_id, res)| &*res.name == expr)
+            {
+                Some((expr_id, _res)) => Ok(KeyExpr(KeyExprInner::Wire {
+                    expr_id: *expr_id as u32,
+                    prefix_len: expr.len() as u32,
+                    key_expr: owned_expr,
+                })),
+                None => {
+                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                    let mut res = Resource::new(owned_expr.clone());
+                    for sub in state.subscribers.values() {
+                        if expr.intersect(&*sub.key_expr) {
+                            res.subscribers.push(sub.clone());
                         }
-
-                        state.local_resources.insert(expr_id, res);
-
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.decl_resource(expr_id, &key_expr);
-
-                        expr_id
                     }
+                    state.local_resources.insert(expr_id, res);
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    let key_expr = KeyExpr(KeyExprInner::Wire {
+                        expr_id: expr_id as u32,
+                        prefix_len: expr.len() as u32,
+                        key_expr: owned_expr,
+                    });
+                    primitives.decl_resource(expr_id, &(&key_expr).into());
+                    Ok(key_expr)
                 }
-            })
+            }
         })
     }
 
@@ -576,7 +627,6 @@ impl Session {
     /// session.undeclare_expr(expr_id).res().await;
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn undeclare_expr(&self, expr_id: ExprId) -> impl Resolve<ZResult<()>> + '_ {
         ClosureResolve(move || {
             trace!("undeclare_expr({:?})", expr_id);
@@ -611,42 +661,42 @@ impl Session {
     /// session.put("/key/expression", "value").res().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn declare_publication<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
-        let key_expr = key_expr.into();
+        let key_expr = key_expr.try_into().map_err(Into::into);
         ClosureResolve(move || {
+            let key_expr: KeyExpr = key_expr?;
             log::trace!("declare_publication({:?})", key_expr);
             let mut state = zwrite!(self.state);
-            state.localkey_to_expr(&key_expr).map(|key_expr_str| {
-                if !state.publications.iter().any(|p| *p == key_expr_str) {
-                    let declared_pub = if let Some(join_pub) = state
-                        .join_publications
+            if !state.publications.iter().any(|p| **p == *key_expr) {
+                let declared_pub = if let Some(join_pub) = state
+                    .join_publications
+                    .iter()
+                    .find(|s| wire_expr::include(s, &key_expr))
+                {
+                    let joined_pub = state
+                        .publications
                         .iter()
-                        .find(|s| wire_expr::include(s, &key_expr_str))
-                    {
-                        let joined_pub = state
-                            .publications
-                            .iter()
-                            .any(|p| wire_expr::include(join_pub, p));
-                        (!joined_pub).then(|| join_pub.clone().into())
-                    } else {
-                        Some(key_expr.clone())
-                    };
-                    state.publications.push(key_expr_str);
+                        .any(|p| wire_expr::include(join_pub, p));
+                    (!joined_pub).then(|| join_pub.clone().into())
+                } else {
+                    Some(key_expr.clone())
+                };
+                state.publications.push(OwnedKeyExpr::from(key_expr));
 
-                    if let Some(res) = declared_pub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.decl_publisher(&res, None);
-                    }
+                if let Some(res) = declared_pub {
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.decl_publisher(&(&res).into(), None);
                 }
-            })
+            }
+            Ok(())
         })
     }
 
@@ -669,96 +719,91 @@ impl Session {
     /// session.undeclare_publication("/key/expression").res().await.unwrap();
     /// # })
     /// ```
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
     pub fn undeclare_publication<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
-        let key_expr = key_expr.into();
+        let key_expr = key_expr.try_into().map_err(Into::into);
         ClosureResolve(move || {
+            let key_expr: KeyExpr = key_expr?;
             let mut state = zwrite!(self.state);
-            state.localkey_to_expr(&key_expr).and_then(|key_expr_str| {
-                if let Some(idx) = state.publications.iter().position(|p| *p == key_expr_str) {
-                    trace!("undeclare_publication({:?})", key_expr_str);
-                    state.publications.remove(idx);
-                    match state
-                        .join_publications
-                        .iter()
-                        .find(|s| wire_expr::include(s, &key_expr_str))
-                    {
-                        Some(join_pub) => {
-                            let joined_pub = state
-                                .publications
-                                .iter()
-                                .any(|p| wire_expr::include(join_pub, p));
-                            if !joined_pub {
-                                let primitives = state.primitives.as_ref().unwrap().clone();
-                                let key_expr = join_pub.clone().into();
-                                drop(state);
-                                primitives.forget_publisher(&key_expr, None);
-                            }
-                        }
-                        None => {
+            if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
+                trace!("undeclare_publication({:?})", key_expr);
+                state.publications.remove(idx);
+                match state
+                    .join_publications
+                    .iter()
+                    .find(|s| wire_expr::include(s, &key_expr))
+                {
+                    Some(join_pub) => {
+                        let joined_pub = state
+                            .publications
+                            .iter()
+                            .any(|p| wire_expr::include(join_pub, p));
+                        if !joined_pub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
+                            let key_expr = WireExpr::from(join_pub).to_owned();
                             drop(state);
                             primitives.forget_publisher(&key_expr, None);
                         }
-                    };
-                    Ok(())
-                } else {
-                    bail!("Unable to find publication")
-                }
-            })
+                    }
+                    None => {
+                        let primitives = state.primitives.as_ref().unwrap().clone();
+                        drop(state);
+                        primitives.forget_publisher(&(&key_expr).into(), None);
+                    }
+                };
+            } else {
+                bail!("Unable to find publication")
+            }
+            Ok(())
         })
     }
 
     pub(crate) fn declare_subscriber(
         &self,
-        key_expr: &WireExpr,
+        key_expr: &KeyExpr,
         callback: Callback<Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            key_expr: key_expr.to_owned(),
-            key_expr_str,
+            key_expr: key_expr.clone().into_owned(),
             callback,
         });
         let declared_sub = match state
-            .join_subscriptions
+            .join_subscriptions // TODO: can this be an OwnedKeyExpr?
             .iter()
-            .find(|s| wire_expr::include(s, &sub_state.key_expr_str))
+            .find(|s| wire_expr::include(s, &key_expr))
         {
             Some(join_sub) => {
-                let joined_sub = state.subscribers.values().any(|s| {
-                    wire_expr::include(join_sub, &state.localkey_to_expr(&s.key_expr).unwrap())
-                });
+                let joined_sub = state
+                    .subscribers
+                    .values()
+                    .any(|s| wire_expr::include(join_sub, &s.key_expr));
                 (!joined_sub).then(|| join_sub.clone().into())
             }
             None => {
-                let twin_sub = state.subscribers.values().any(|s| {
-                    state.localkey_to_expr(&s.key_expr).unwrap()
-                        == state.localkey_to_expr(&sub_state.key_expr).unwrap()
-                });
-                (!twin_sub).then(|| sub_state.key_expr.clone())
+                let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                (!twin_sub).then(|| key_expr.borrowing_clone())
             }
         };
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if key_expr.intersect(&res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if key_expr.intersect(&res.name) {
                 res.subscribers.push(sub_state.clone());
             }
         }
@@ -768,30 +813,17 @@ impl Session {
             drop(state);
 
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            let key_expr = if key_expr.scope == EMPTY_EXPR_ID {
-                match key_expr.suffix.as_ref().find('*') {
-                    Some(pos) => {
-                        let scope = self
-                            .declare_expr(&key_expr.suffix.as_ref()[..pos])
-                            .res_sync()?;
-                        WireExpr {
-                            scope,
-                            suffix: key_expr.suffix.as_ref()[pos..].to_string().into(),
-                        }
-                    }
-                    None => {
-                        let scope = self.declare_expr(key_expr.suffix.as_ref()).res_sync()?;
-                        WireExpr {
-                            scope,
-                            suffix: "".into(),
-                        }
-                    }
+            let key_expr = if !key_expr.is_optimized() {
+                match key_expr.as_ref().find('*') {
+                    Some(0) => key_expr,
+                    Some(pos) => self.declare_expr(&key_expr.as_ref()[..pos]).res_sync()?,
+                    None => self.declare_expr(key_expr).res_sync()?,
                 }
             } else {
                 key_expr
             };
 
-            primitives.decl_subscriber(&key_expr, info, None);
+            primitives.decl_subscriber(&(&key_expr).into(), info, None);
         }
 
         Ok(sub_state)
@@ -799,29 +831,27 @@ impl Session {
 
     pub(crate) fn declare_local_subscriber(
         &self,
-        key_expr: &WireExpr,
+        key_expr: &KeyExpr,
         callback: Callback<Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let key_expr_str = state.localkey_to_expr(key_expr)?;
         let sub_state = Arc::new(SubscriberState {
             id,
-            key_expr: key_expr.to_owned(),
-            key_expr_str,
+            key_expr: key_expr.clone().into_owned(),
             callback,
         });
         state
             .local_subscribers
             .insert(sub_state.id, sub_state.clone());
         for res in state.local_resources.values_mut() {
-            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if key_expr.intersect(&*res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
         for res in state.remote_resources.values_mut() {
-            if wire_expr::matches(&sub_state.key_expr_str, &res.name) {
+            if key_expr.intersect(&*res.name) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
@@ -853,11 +883,12 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<WireExpr<'b>>,
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
@@ -882,39 +913,34 @@ impl Session {
 
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
-                state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
-                    match state
-                        .join_subscriptions
-                        .iter()
-                        .find(|s| wire_expr::include(s, &key_expr))
-                    {
-                        Some(join_sub) => {
-                            let joined_sub = state.subscribers.values().any(|s| {
-                                wire_expr::include(
-                                    join_sub,
-                                    &state.localkey_to_expr(&s.key_expr).unwrap(),
-                                )
-                            });
-                            if !joined_sub {
-                                let primitives = state.primitives.as_ref().unwrap().clone();
-                                let key_expr = join_sub.clone().into();
-                                drop(state);
-                                primitives.forget_subscriber(&key_expr, None);
-                            }
+                let key_expr = &sub_state.key_expr;
+                match state
+                    .join_subscriptions
+                    .iter()
+                    .find(|s| wire_expr::include(s, &key_expr))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| wire_expr::include(join_sub, &s.key_expr));
+                        if !joined_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let key_expr = WireExpr::from(join_sub).to_owned();
+                            drop(state);
+                            primitives.forget_subscriber(&key_expr, None);
                         }
-                        None => {
-                            let twin_sub = state.subscribers.values().any(|s| {
-                                state.localkey_to_expr(&s.key_expr).unwrap()
-                                    == state.localkey_to_expr(&sub_state.key_expr).unwrap()
-                            });
-                            if !twin_sub {
-                                let primitives = state.primitives.as_ref().unwrap().clone();
-                                drop(state);
-                                primitives.forget_subscriber(&sub_state.key_expr, None);
-                            }
+                    }
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                        if !twin_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_subscriber(&key_expr.into(), None);
                         }
-                    };
-                })
+                    }
+                };
+                Ok(())
             } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
                 trace!("unsubscribe({:?})", sub_state);
                 for res in state.local_resources.values_mut() {
@@ -1048,11 +1074,13 @@ impl Session {
         key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<WireExpr<'b>>,
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
+            Into<zenoh_core::Error> + Send + Sync + 'static,
     {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             kind: zenoh_protocol_core::queryable::ALL_KINDS,
             complete: true,
         }
@@ -1133,18 +1161,17 @@ impl Session {
     /// publisher.put("value").unwrap();
     /// # })
     /// ```
-    pub fn publish<'a, 'b, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+    pub fn publish<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
-        IntoKeyExpr: Into<WireExpr<'b>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
         PublishBuilder {
-            publisher: Publisher {
-                session: SessionRef::Borrow(self),
-                key_expr: key_expr.into().to_owned(),
-                congestion_control: CongestionControl::default(),
-                priority: Priority::default(),
-                local_routing: None,
-            },
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+            local_routing: None,
         }
     }
 
@@ -1177,11 +1204,12 @@ impl Session {
         value: IntoValue,
     ) -> PutBuilder<'a>
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
-            publisher: self.publish(key_expr).publisher,
+            publisher: self.publish(key_expr),
             value: value.into(),
             kind: SampleKind::Put,
         }
@@ -1206,10 +1234,11 @@ impl Session {
     #[inline]
     pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> DeleteBuilder<'a>
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
         PutBuilder {
-            publisher: self.publish(key_expr).publisher,
+            publisher: self.publish(key_expr),
             value: Value::empty(),
             kind: SampleKind::Delete,
         }
@@ -1261,9 +1290,9 @@ impl Session {
                 Ok(key_expr) => {
                     if !local || local_routing {
                         for sub in state.subscribers.values() {
-                            if wire_expr::matches(&sub.key_expr_str, &key_expr) {
+                            if key_expr.intersect(&*sub.key_expr) {
                                 (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into(),
+                                    key_expr.clone().into_owned(),
                                     payload.clone(),
                                     info.clone(),
                                 ));
@@ -1272,9 +1301,9 @@ impl Session {
                     }
                     if local {
                         for sub in state.local_subscribers.values() {
-                            if wire_expr::matches(&sub.key_expr_str, &key_expr) {
+                            if key_expr.intersect(&*sub.key_expr) {
                                 (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into(),
+                                    key_expr.clone().into_owned(),
                                     payload.clone(),
                                     info.clone(),
                                 ));
@@ -1289,14 +1318,13 @@ impl Session {
         }
     }
 
-    #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-    pub(crate) fn pull<'a>(&'a self, key_expr: &'a WireExpr) -> impl Resolve<ZResult<()>> + 'a {
+    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
         ClosureResolve(move || {
             trace!("pull({:?})", key_expr);
             let state = zread!(self.state);
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.send_pull(true, key_expr, 0, &None);
+            primitives.send_pull(true, &key_expr.into(), 0, &None);
             Ok(())
         })
     }
@@ -1457,7 +1485,7 @@ impl Session {
 
         for (kind, req_sender) in kinds_and_senders {
             req_sender(Query {
-                key_selector: key_expr.clone().into(),
+                key_selector: WireExpr::from(&key_expr).to_owned(),
                 value_selector: value_selector.clone(),
                 kind,
                 replies_sender: rep_sender.clone(),
@@ -1476,7 +1504,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid,
-                        key_expr,
+                        (&key_expr).into(),
                         Some(data_info),
                         payload,
                     );
@@ -1491,7 +1519,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid,
-                        key_expr,
+                        (&key_expr).into(),
                         Some(data_info),
                         payload,
                     );
@@ -1499,11 +1527,6 @@ impl Session {
                 primitives.send_reply_final(qid);
             });
         }
-    }
-
-    pub fn key_expr_to_expr(&self, key_expr: &WireExpr) -> ZResult<String> {
-        let state = zread!(self.state);
-        state.remotekey_to_expr(key_expr)
     }
 }
 
@@ -1531,11 +1554,13 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
     where
-        IntoKeyExpr: Into<WireExpr<'b>>,
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
+            Into<zenoh_core::Error> + Send + Sync + 'static,
     {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
@@ -1570,11 +1595,13 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn queryable<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'b>
     where
-        IntoKeyExpr: Into<WireExpr<'b>>,
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
+            Into<zenoh_core::Error> + Send + Sync + 'static,
     {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
-            key_expr: key_expr.into(),
+            key_expr: key_expr.try_into().map_err(Into::into),
             kind: zenoh_protocol_core::queryable::EVAL,
             complete: true,
         }
@@ -1599,16 +1626,16 @@ impl EntityFactory for Arc<Session> {
     /// ```
     fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
-        IntoKeyExpr: Into<WireExpr<'a>>,
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
+            Into<zenoh_core::Error> + Send + Sync + 'static,
     {
         PublishBuilder {
-            publisher: Publisher {
-                session: SessionRef::Shared(self.clone()),
-                key_expr: key_expr.into().to_owned(),
-                congestion_control: CongestionControl::default(),
-                priority: Priority::default(),
-                local_routing: None,
-            },
+            session: SessionRef::Shared(self.clone()),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+            local_routing: None,
         }
     }
 }
@@ -1619,9 +1646,9 @@ impl Primitives for Session {
         let state = &mut zwrite!(self.state);
         match state.remotekey_to_expr(key_expr) {
             Ok(key_expr) => {
-                let mut res = Resource::new(key_expr.clone());
+                let mut res = Resource::new(key_expr.clone().into());
                 for sub in state.subscribers.values() {
-                    if wire_expr::matches(&key_expr, &sub.key_expr_str) {
+                    if key_expr.intersect(&*sub.key_expr) {
                         res.subscribers.push(sub.clone());
                     }
                 }
@@ -1744,7 +1771,7 @@ impl Primitives for Session {
         match state.queries.get_mut(&qid) {
             Some(query) => {
                 let new_reply = Reply {
-                    sample: Ok(Sample::with_info(key_expr.into(), payload, data_info)),
+                    sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
                 };
                 match query.reception_mode {

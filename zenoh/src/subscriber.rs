@@ -13,7 +13,7 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{locked, Callback, Id, Sample, WireExpr};
+use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
 use crate::time::Period;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
@@ -32,8 +32,7 @@ pub use zenoh_protocol_core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
-    pub(crate) key_expr: WireExpr<'static>,
-    pub(crate) key_expr_str: String,
+    pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) callback: Callback<Sample>,
 }
 
@@ -41,7 +40,7 @@ impl fmt::Debug for SubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Subscriber")
             .field("id", &self.id)
-            .field("key_expr", &self.key_expr_str)
+            .field("key_expr", &self.key_expr)
             .finish()
     }
 }
@@ -183,15 +182,30 @@ impl Drop for CallbackSubscriber<'_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: WireExpr<'b>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: SubMode,
     pub(crate) period: Option<Period>,
     pub(crate) local: bool,
+}
+impl<'a, 'b> Clone for SubscriberBuilder<'a, 'b> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match self.key_expr.as_ref() {
+                Ok(ke) => Ok(ke.clone()),
+                Err(e) => Err(zerror!("Cloned Error: {}", e).into()),
+            },
+            reliability: self.reliability.clone(),
+            mode: self.mode.clone(),
+            period: self.period.clone(),
+            local: self.local.clone(),
+        }
+    }
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
@@ -468,10 +482,11 @@ where
 
 impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(self) -> Self::Output {
+        let key_expr = self.builder.key_expr?;
         let session = self.builder.session;
         if self.builder.local {
             session
-                .declare_local_subscriber(&self.builder.key_expr, Box::new(self.callback))
+                .declare_local_subscriber(&key_expr, Box::new(self.callback))
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -479,7 +494,7 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
         } else {
             session
                 .declare_subscriber(
-                    &self.builder.key_expr,
+                    &key_expr,
                     Box::new(self.callback),
                     &SubInfo {
                         reliability: self.builder.reliability,
@@ -710,10 +725,11 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let session = self.builder.session;
+        let key_expr = self.builder.key_expr?;
         let (callback, receiver) = self.handler.into_handler();
         let subscriber = if self.builder.local {
             session
-                .declare_local_subscriber(&self.builder.key_expr, callback)
+                .declare_local_subscriber(&key_expr, callback)
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -721,7 +737,7 @@ where
         } else {
             session
                 .declare_subscriber(
-                    &self.builder.key_expr,
+                    &key_expr,
                     callback,
                     &SubInfo {
                         reliability: self.builder.reliability,

@@ -32,13 +32,13 @@ async fn main() {
     println!(" => ExprId {}", expr_id);
 
     println!("Declaring publication on '{}'...", expr_id);
-    session.declare_publication(expr_id).res().await.unwrap();
+    session.declare_publication(&expr_id).res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Putting Data ('{}': '{}')...", expr_id, buf);
-        session.put(expr_id, buf).res().await.unwrap();
+        println!("Putting Data ('{}': '{}')...", &expr_id, buf);
+        session.put(&expr_id, buf).res().await.unwrap();
     }
 }
 

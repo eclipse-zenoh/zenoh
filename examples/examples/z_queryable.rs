@@ -15,6 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -27,6 +28,7 @@ async fn main() {
 
     let (config, key_expr, value) = parse_args();
 
+    let key_expr = KeyExpr::try_from(key_expr).unwrap();
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 

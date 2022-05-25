@@ -24,10 +24,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::AsyncResolve;
-use zenoh_core::Resolvable;
-use zenoh_core::Resolve;
-use zenoh_core::SyncResolve;
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
 
 /// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
@@ -278,13 +275,26 @@ impl Drop for CallbackQueryable<'_> {
 /// let queryable = session.queryable("/key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: WireExpr<'b>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
+}
+impl<'a, 'b> Clone for QueryableBuilder<'a, 'b> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match &self.key_expr {
+                Ok(k) => Ok(k.clone()),
+                Err(e) => Err(zerror!("Cloned KE error: {}", e).into()),
+            },
+            kind: self.kind.clone(),
+            complete: self.complete.clone(),
+        }
+    }
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
@@ -469,7 +479,7 @@ where
         let session = self.builder.session;
         session
             .declare_queryable(
-                &self.builder.key_expr,
+                &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,
                 Box::new(self.callback),
@@ -589,7 +599,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
         session
             .declare_queryable(
-                &self.builder.key_expr,
+                &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,
                 callback,

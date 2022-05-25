@@ -16,6 +16,7 @@
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
@@ -42,19 +43,18 @@ impl Plugin for ExamplePlugin {
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
-        let selector;
-        match self_cfg.get("storage-selector") {
-            Some(serde_json::Value::String(s)) => {
-                selector = s.clone();
-            }
-            None => selector = DEFAULT_SELECTOR.into(),
+        let selector: KeyExpr = match self_cfg.get("storage-selector") {
+            Some(serde_json::Value::String(s)) => KeyExpr::try_from(s)?,
+            None => KeyExpr::try_from(DEFAULT_SELECTOR).unwrap(),
             _ => {
                 bail!("storage-selector is a mandatory option for {}", name)
             }
         }
+        .clone()
+        .into_owned();
         std::mem::drop(config);
         let flag = Arc::new(AtomicBool::new(true));
-        async_std::task::spawn(run(runtime.clone(), selector.into(), flag.clone()));
+        async_std::task::spawn(run(runtime.clone(), selector, flag.clone()));
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
                 flag,
@@ -87,11 +87,16 @@ impl RunningPluginTrait for RunningPlugin {
                         let mut guard = zlock!(&plugin.0);
                         guard.flag.store(false, Relaxed);
                         guard.flag = Arc::new(AtomicBool::new(true));
-                        async_std::task::spawn(run(
-                            guard.runtime.clone(),
-                            selector.clone().into(),
-                            guard.flag.clone(),
-                        ));
+                        match KeyExpr::try_from(selector.clone()) {
+                            Err(e) => log::error!("{}", e),
+                            Ok(selector) => {
+                                async_std::task::spawn(run(
+                                    guard.runtime.clone(),
+                                    selector,
+                                    guard.flag.clone(),
+                                ));
+                            }
+                        }
                         return Ok(None);
                     }
                     (_, None) => {
@@ -120,7 +125,7 @@ impl Drop for RunningPlugin {
     }
 }
 
-async fn run(runtime: Runtime, selector: WireExpr<'_>, flag: Arc<AtomicBool>) {
+async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     let session = zenoh::Session::init(runtime, true, vec![], vec![])

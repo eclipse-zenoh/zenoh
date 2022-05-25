@@ -32,6 +32,12 @@ impl keyexpr {
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         std::mem::transmute(s)
     }
+    pub fn try_from<'a, T, E>(t: T) -> Result<&'a Self, E>
+    where
+        &'a Self: TryFrom<T, Error = E>,
+    {
+        t.try_into()
+    }
 }
 
 impl std::fmt::Debug for keyexpr {
@@ -97,6 +103,14 @@ impl<'a> TryFrom<&'a mut str> for &'a keyexpr {
     }
 }
 
+impl<'a> TryFrom<&'a mut String> for &'a keyexpr {
+    type Error = ZError;
+    fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
+        super::canon::Canonizable::canonize(value);
+        (value.as_str()).try_into()
+    }
+}
+
 impl std::ops::Deref for keyexpr {
     type Target = str;
     fn deref(&self) -> &Self::Target {
@@ -113,6 +127,9 @@ impl keyexpr {
     pub fn intersect(&self, other: &Self) -> bool {
         use super::intersect::Intersector;
         super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
+    }
+    pub fn as_str(&self) -> &str {
+        self
     }
 }
 
