@@ -146,7 +146,10 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = z.put(&state.event_expr, buf.clone()).priority(state.local_member.priority).await;
+        let _ = z
+            .put(&state.event_expr, buf.clone())
+            .priority(state.local_member.priority)
+            .await;
     }
 }
 
@@ -305,7 +308,10 @@ impl Group {
         log::debug!("Sending Join Message for local member:\n{:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
-        let _ = z.put(&event_expr, buf).priority(state.local_member.priority).await;
+        let _ = z
+            .put(&event_expr, buf)
+            .priority(state.local_member.priority)
+            .await;
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {
