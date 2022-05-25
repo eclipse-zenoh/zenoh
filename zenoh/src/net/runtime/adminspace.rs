@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::face::Face;
 use super::Runtime;
+use crate::key_expr::keyexpr;
 use crate::plugins::PluginsManager;
-use crate::prelude::Selector;
+use crate::prelude::{KeyExpr, Selector};
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -408,6 +409,11 @@ impl Primitives for AdminSpace {
             ));
             if ask_plugins {
                 futures::join!(handler_tasks, async {
+                    let key_expr = if key_expr.scope != 0 {
+                        KeyExpr::from(unsafe { keyexpr::from_str_unchecked(&key_expr.suffix) })
+                    } else {
+                        unreachable!("An unresolved WireExpr reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.")
+                    };
                     let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
                     for status in plugin_status {
                         let crate::plugins::Response { key, mut value } = status;
@@ -598,7 +604,7 @@ pub async fn linkstate_peers_data(
 
 pub async fn plugins_status(
     context: &AdminContext,
-    key: &WireExpr<'_>,
+    key: &KeyExpr<'_>,
     args: &str,
 ) -> Vec<crate::plugins::Response> {
     let selector = Selector {

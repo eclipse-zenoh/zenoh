@@ -304,7 +304,16 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         ))
     } else {
         let url = req.url();
-        let key_expr = path_to_key_expr(url.path(), &req.state().1);
+        let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
+            Ok(ke) => ke,
+            Err(e) => {
+                return Ok(response(
+                    StatusCode::BadRequest,
+                    Mime::from_str("text/plain").unwrap(),
+                    &e.to_string(),
+                ))
+            }
+        };
         let query_part = url.query().map(|q| format!("?{}", q));
         let selector = if let Some(q) = &query_part {
             Selector::from(key_expr).with_value_selector(q)
@@ -352,7 +361,16 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
-            let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
+            let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                Ok(ke) => ke,
+                Err(e) => {
+                    return Ok(response(
+                        StatusCode::BadRequest,
+                        Mime::from_str("text/plain").unwrap(),
+                        &e.to_string(),
+                    ))
+                }
+            };
             let encoding: Encoding = req
                 .content_type()
                 .map(|m| m.essence().to_owned().into())
@@ -415,12 +433,12 @@ pub async fn run(runtime: Runtime, conf: Config) {
     }
 }
 
-fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> WireExpr<'a> {
+fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> ZResult<KeyExpr<'a>> {
     if path == "/@/router/local" {
-        WireExpr::from(format!("/@/router/{}", pid))
+        KeyExpr::try_from(format!("/@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        WireExpr::from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::try_from(format!("/@/router/{}/{}", pid, suffix))
     } else {
-        WireExpr::from(path)
+        KeyExpr::try_from(path)
     }
 }

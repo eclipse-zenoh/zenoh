@@ -29,7 +29,7 @@ use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResol
 /// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: WireExpr<'static>,
+    pub(crate) key_selector: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
 
@@ -51,7 +51,7 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &WireExpr<'_> {
+    pub fn key_selector(&self) -> &KeyExpr<'_> {
         &self.key_selector
     }
 

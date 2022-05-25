@@ -791,7 +791,7 @@ pub(crate) mod common {
     pub struct Selector<'a> {
         /// The part of this selector identifying which keys should be part of the selection.
         /// I.e. all characters before `?`.
-        pub key_selector: WireExpr<'a>,
+        pub key_selector: KeyExpr<'a>,
         /// the part of this selector identifying which values should be part of the selection.
         /// I.e. all characters starting from `?`.
         pub value_selector: Cow<'a, str>,
@@ -800,7 +800,7 @@ pub(crate) mod common {
     impl<'a> Selector<'a> {
         pub fn to_owned(&self) -> Selector<'static> {
             Selector {
-                key_selector: self.key_selector.to_owned(),
+                key_selector: self.key_selector.clone().into_owned(),
                 value_selector: self.value_selector.to_string().into(),
             }
         }
@@ -839,32 +839,35 @@ pub(crate) mod common {
         }
     }
 
-    impl From<String> for Selector<'_> {
-        fn from(s: String) -> Self {
+    impl TryFrom<String> for Selector<'_> {
+        type Error = zenoh_core::Error;
+        fn try_from(s: String) -> Result<Self, Self::Error> {
             let (key_selector, value_selector) = s
                 .find(|c| c == '?')
                 .map_or((s.as_str(), ""), |i| s.split_at(i));
-            Selector {
-                key_selector: key_selector.to_string().into(),
+            Ok(Selector {
+                key_selector: key_selector.to_string().try_into()?,
                 value_selector: value_selector.to_string().into(),
-            }
+            })
         }
     }
 
-    impl<'a> From<&'a str> for Selector<'a> {
-        fn from(s: &'a str) -> Self {
+    impl<'a> TryFrom<&'a str> for Selector<'a> {
+        type Error = zenoh_core::Error;
+        fn try_from(s: &'a str) -> Result<Self, Self::Error> {
             let (key_selector, value_selector) =
                 s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
-            Selector {
-                key_selector: key_selector.into(),
+            Ok(Selector {
+                key_selector: key_selector.try_into()?,
                 value_selector: value_selector.into(),
-            }
+            })
         }
     }
 
-    impl<'a> From<&'a String> for Selector<'a> {
-        fn from(s: &'a String) -> Self {
-            Self::from(s.as_str())
+    impl<'a> TryFrom<&'a String> for Selector<'a> {
+        type Error = zenoh_core::Error;
+        fn try_from(s: &'a String) -> Result<Self, Self::Error> {
+            Self::try_from(s.as_str())
         }
     }
 
@@ -877,8 +880,8 @@ pub(crate) mod common {
         }
     }
 
-    impl<'a> From<&WireExpr<'a>> for Selector<'a> {
-        fn from(key_selector: &WireExpr<'a>) -> Self {
+    impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
+        fn from(key_selector: &KeyExpr<'a>) -> Self {
             Self {
                 key_selector: key_selector.clone(),
                 value_selector: "".into(),
@@ -886,8 +889,8 @@ pub(crate) mod common {
         }
     }
 
-    impl<'a> From<WireExpr<'a>> for Selector<'a> {
-        fn from(key_selector: WireExpr<'a>) -> Self {
+    impl<'a> From<KeyExpr<'a>> for Selector<'a> {
+        fn from(key_selector: KeyExpr<'a>) -> Self {
             Self {
                 key_selector,
                 value_selector: "".into(),
