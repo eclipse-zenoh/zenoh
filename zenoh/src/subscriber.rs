@@ -74,6 +74,7 @@ impl fmt::Debug for SubscriberState {
 pub struct CallbackSubscriber<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<SubscriberState>,
+    pub(crate) alive: bool,
 }
 
 impl<'l> CallbackSubscriber<'l> {
@@ -126,42 +127,33 @@ impl<'l> CallbackSubscriber<'l> {
     /// ```
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'l {
-        CallbackSubscriberClose {
-            s: std::mem::ManuallyDrop::new(self),
-            alive: true,
-        }
+        CallbackSubscriberClose { s: self }
     }
 }
 struct CallbackSubscriberClose<'a> {
-    s: std::mem::ManuallyDrop<CallbackSubscriber<'a>>,
-    alive: bool,
+    s: CallbackSubscriber<'a>,
 }
 impl Resolvable for CallbackSubscriberClose<'_> {
     type Output = ZResult<()>;
 }
 impl SyncResolve for CallbackSubscriberClose<'_> {
     fn res_sync(mut self) -> Self::Output {
-        self.alive = false;
+        self.s.alive = false;
         self.s.session.unsubscribe(self.s.state.id).res_sync()
     }
 }
 impl AsyncResolve for CallbackSubscriberClose<'_> {
     type Future = futures::future::Ready<ZResult<()>>;
     fn res_async(mut self) -> Self::Future {
-        self.alive = false;
+        self.s.alive = false;
         self.s.session.unsubscribe(self.s.state.id).res_async()
-    }
-}
-impl Drop for CallbackSubscriberClose<'_> {
-    fn drop(&mut self) {
-        if self.alive {
-            unsafe { std::mem::ManuallyDrop::drop(&mut self.s) }
-        }
     }
 }
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
-        let _ = self.session.unsubscribe(self.state.id).res_sync();
+        if self.alive {
+            let _ = self.session.unsubscribe(self.state.id).res_sync();
+        }
     }
 }
 
@@ -475,6 +467,7 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
+                    alive: true,
                 })
         } else {
             session
@@ -490,6 +483,7 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
+                    alive: true,
                 })
         }
     }
@@ -717,6 +711,7 @@ where
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
+                    alive: true,
                 })
         } else {
             session
@@ -732,6 +727,7 @@ where
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
+                    alive: true,
                 })
         };
 

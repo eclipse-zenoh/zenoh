@@ -194,6 +194,7 @@ impl fmt::Debug for QueryableState {
 pub struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
+    pub(crate) alive: bool,
 }
 
 impl<'a> CallbackQueryable<'a> {
@@ -215,25 +216,19 @@ impl<'a> CallbackQueryable<'a> {
     /// ```
     #[inline]
     pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
-        QueryableCloser {
-            queryable: std::mem::ManuallyDrop::new(self),
-            alive: true,
-        }
+        QueryableCloser { q: self }
     }
 }
 pub struct QueryableCloser<'a> {
-    queryable: std::mem::ManuallyDrop<CallbackQueryable<'a>>,
-    alive: bool,
+    q: CallbackQueryable<'a>,
 }
 impl Resolvable for QueryableCloser<'_> {
     type Output = crate::Result<()>;
 }
 impl SyncResolve for QueryableCloser<'_> {
     fn res_sync(mut self) -> Self::Output {
-        self.alive = false;
-        self.queryable
-            .session
-            .close_queryable(self.queryable.state.id)
+        self.q.alive = false;
+        self.q.session.close_queryable(self.q.state.id)
     }
 }
 
@@ -251,17 +246,12 @@ impl AsyncResolve for QueryableCloser<'_> {
         QueryableCloserFuture(futures::future::ready(self.res_sync()))
     }
 }
-impl Drop for QueryableCloser<'_> {
-    fn drop(&mut self) {
-        if self.alive {
-            unsafe { std::mem::ManuallyDrop::drop(&mut self.queryable) }
-        }
-    }
-}
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        let _ = self.session.close_queryable(self.state.id);
+        if self.alive {
+            let _ = self.session.close_queryable(self.state.id);
+        }
     }
 }
 
@@ -477,6 +467,7 @@ where
             .map(move |qable_state| CallbackQueryable {
                 session,
                 state: qable_state,
+                alive: true,
             })
     }
 }
@@ -598,6 +589,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
+                    alive: true,
                 },
                 receiver,
             })
