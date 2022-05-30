@@ -15,6 +15,7 @@
 //! Subscribing primitives.
 use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
 use crate::time::Period;
+use crate::utils::ClosureResolve;
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
@@ -126,33 +127,18 @@ impl<'l> CallbackSubscriber<'l> {
     /// # })
     /// ```
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'l {
-        CallbackSubscriberClose { s: self }
+    pub fn close(mut self) -> impl Resolve<ZResult<()>> + 'l {
+        ClosureResolve(move || {
+            self.alive = false;
+            self.session.unsubscribe(self.state.id)
+        })
     }
 }
-struct CallbackSubscriberClose<'a> {
-    s: CallbackSubscriber<'a>,
-}
-impl Resolvable for CallbackSubscriberClose<'_> {
-    type Output = ZResult<()>;
-}
-impl SyncResolve for CallbackSubscriberClose<'_> {
-    fn res_sync(mut self) -> Self::Output {
-        self.s.alive = false;
-        self.s.session.unsubscribe(self.s.state.id).res_sync()
-    }
-}
-impl AsyncResolve for CallbackSubscriberClose<'_> {
-    type Future = futures::future::Ready<ZResult<()>>;
-    fn res_async(mut self) -> Self::Future {
-        self.s.alive = false;
-        self.s.session.unsubscribe(self.s.state.id).res_async()
-    }
-}
+
 impl Drop for CallbackSubscriber<'_> {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.session.unsubscribe(self.state.id).res_sync();
+            let _ = self.session.unsubscribe(self.state.id);
         }
     }
 }

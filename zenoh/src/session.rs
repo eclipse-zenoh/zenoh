@@ -865,69 +865,64 @@ impl Session {
         }
     }
 
-    pub(crate) fn unsubscribe(
-        &self,
-        sid: usize,
-    ) -> ClosureResolve<impl FnOnce() -> ZResult<()> + '_> {
-        ClosureResolve(move || {
-            let mut state = zwrite!(self.state);
-            if let Some(sub_state) = state.subscribers.remove(&sid) {
-                trace!("unsubscribe({:?})", sub_state);
-                for res in state.local_resources.values_mut() {
-                    res.subscribers.retain(|sub| sub.id != sub_state.id);
-                }
-                for res in state.remote_resources.values_mut() {
-                    res.subscribers.retain(|sub| sub.id != sub_state.id);
-                }
-
-                // Note: there might be several Subscribers on the same KeyExpr.
-                // Before calling forget_subscriber(key_expr), check if this was the last one.
-                state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
-                    match state
-                        .join_subscriptions
-                        .iter()
-                        .find(|s| key_expr::include(s, &key_expr))
-                    {
-                        Some(join_sub) => {
-                            let joined_sub = state.subscribers.values().any(|s| {
-                                key_expr::include(
-                                    join_sub,
-                                    &state.localkey_to_expr(&s.key_expr).unwrap(),
-                                )
-                            });
-                            if !joined_sub {
-                                let primitives = state.primitives.as_ref().unwrap().clone();
-                                let key_expr = join_sub.clone().into();
-                                drop(state);
-                                primitives.forget_subscriber(&key_expr, None);
-                            }
-                        }
-                        None => {
-                            let twin_sub = state.subscribers.values().any(|s| {
-                                state.localkey_to_expr(&s.key_expr).unwrap()
-                                    == state.localkey_to_expr(&sub_state.key_expr).unwrap()
-                            });
-                            if !twin_sub {
-                                let primitives = state.primitives.as_ref().unwrap().clone();
-                                drop(state);
-                                primitives.forget_subscriber(&sub_state.key_expr, None);
-                            }
-                        }
-                    };
-                })
-            } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
-                trace!("unsubscribe({:?})", sub_state);
-                for res in state.local_resources.values_mut() {
-                    res.local_subscribers.retain(|sub| sub.id != sub_state.id);
-                }
-                for res in state.remote_resources.values_mut() {
-                    res.local_subscribers.retain(|sub| sub.id != sub_state.id);
-                }
-                Ok(())
-            } else {
-                Err(zerror!("Unable to find subscriber").into())
+    pub(crate) fn unsubscribe(&self, sid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
+            trace!("unsubscribe({:?})", sub_state);
+            for res in state.local_resources.values_mut() {
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
-        })
+            for res in state.remote_resources.values_mut() {
+                res.subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+
+            // Note: there might be several Subscribers on the same KeyExpr.
+            // Before calling forget_subscriber(key_expr), check if this was the last one.
+            state.localkey_to_expr(&sub_state.key_expr).map(|key_expr| {
+                match state
+                    .join_subscriptions
+                    .iter()
+                    .find(|s| key_expr::include(s, &key_expr))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            key_expr::include(
+                                join_sub,
+                                &state.localkey_to_expr(&s.key_expr).unwrap(),
+                            )
+                        });
+                        if !joined_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let key_expr = join_sub.clone().into();
+                            drop(state);
+                            primitives.forget_subscriber(&key_expr, None);
+                        }
+                    }
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| {
+                            state.localkey_to_expr(&s.key_expr).unwrap()
+                                == state.localkey_to_expr(&sub_state.key_expr).unwrap()
+                        });
+                        if !twin_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_subscriber(&sub_state.key_expr, None);
+                        }
+                    }
+                };
+            })
+        } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
+            trace!("unsubscribe({:?})", sub_state);
+            for res in state.local_resources.values_mut() {
+                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+            for res in state.remote_resources.values_mut() {
+                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+            }
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find subscriber").into())
+        }
     }
 
     pub(crate) fn declare_queryable(
