@@ -79,7 +79,7 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
      `curl 'http://localhost:8000/@/router/local/**/storages/*'`
     - add another memory storage on `/demo/mystore/**`:  
-      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"/demo/mystore/**","volume"="memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
+      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"/demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
