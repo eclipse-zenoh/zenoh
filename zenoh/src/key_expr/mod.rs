@@ -15,19 +15,21 @@
 use std::convert::{TryFrom, TryInto};
 use zenoh_core::Result as ZResult;
 
-pub(crate) mod owned;
-use owned::*;
+pub use zenoh_protocol_core::key_expr::*;
 
-pub(crate) mod borrowed;
-pub use borrowed::*;
+#[derive(Clone)]
+pub(crate) enum KeyExprInner<'a> {
+    Borrowed(&'a keyexpr),
+    Owned(OwnedKeyExpr),
+    Wire {
+        key_expr: OwnedKeyExpr,
+        expr_id: u32,
+        prefix_len: u32,
+    },
+}
 
-pub mod canon;
-pub(crate) mod intersect;
-pub(crate) mod utils;
-
-#[cfg(test)]
-pub(crate) mod test;
-
+/// A possibly-owned, possibly pre-optimized version of [`keyexpr`].
+/// Check [`keyexpr`]'s documentation for detailed explainations.
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct KeyExpr<'a>(pub(crate) KeyExprInner<'a>);
@@ -38,6 +40,14 @@ impl std::ops::Deref for KeyExpr<'_> {
             KeyExprInner::Borrowed(s) => *s,
             KeyExprInner::Owned(s) => s,
             KeyExprInner::Wire { key_expr, .. } => key_expr,
+        }
+    }
+}
+impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
+    fn from(val: super::KeyExpr<'a>) -> Self {
+        match val.0 {
+            KeyExprInner::Borrowed(s) => s.into(),
+            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr,
         }
     }
 }
@@ -71,7 +81,7 @@ impl<'a> TryFrom<&'a String> for KeyExpr<'a> {
 impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
     type Error = zenoh_core::Error;
     fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
-        Ok(Self::from(keyexpr::try_from(value)?))
+        Ok(Self::from(keyexpr::new(value)?))
     }
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
@@ -114,14 +124,32 @@ impl std::hash::Hash for KeyExpr<'_> {
 }
 
 impl KeyExpr<'static> {
-    pub(crate) unsafe fn from_string_unchecked(s: String) -> Self {
-        Self::from_boxed_string_unchecked(s.into_boxed_str())
+    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// # Safety
+    /// Key Expressions must follow some rules to be accepted by a Zenoh network.
+    /// Messages addressed with invalid key expressions will be dropped.
+    pub unsafe fn from_string_unchecked(s: String) -> Self {
+        Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
     }
-    pub(crate) unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
-        Self(KeyExprInner::Owned(OwnedKeyExpr(s)))
+
+    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// # Safety
+    /// Key Expressions must follow some rules to be accepted by a Zenoh network.
+    /// Messages addressed with invalid key expressions will be dropped.
+    pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
+        Self(KeyExprInner::Owned(
+            OwnedKeyExpr::from_boxed_string_unchecked(s),
+        ))
     }
 }
 impl<'a> KeyExpr<'a> {
+    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// # Safety
+    /// Key Expressions must follow some rules to be accepted by a Zenoh network.
+    /// Messages addressed with invalid key expressions will be dropped.
+    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
+        keyexpr::from_str_unchecked(s).into()
+    }
     pub fn keyexpr(&self) -> &keyexpr {
         self
     }
@@ -130,9 +158,7 @@ impl<'a> KeyExpr<'a> {
     }
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
-            KeyExprInner::Borrowed(s) => {
-                KeyExpr(KeyExprInner::Owned(OwnedKeyExpr(s.as_ref().into())))
-            }
+            KeyExprInner::Borrowed(s) => KeyExpr(KeyExprInner::Owned(s.into())),
             KeyExprInner::Owned(s) => KeyExpr(KeyExprInner::Owned(s)),
             KeyExprInner::Wire {
                 key_expr,
@@ -145,7 +171,7 @@ impl<'a> KeyExpr<'a> {
             }),
         }
     }
-    pub fn concat<S: AsRef<str>>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
+    pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
         if self.ends_with('*') && s.starts_with('*') {
             bail!("Tried to concatenate {} (ends with *) and {} (starts with *), which would likely have caused bugs. If you're sure you want to do this, concatenate these into a string and then try to convert.", self, s)
@@ -156,10 +182,7 @@ impl<'a> KeyExpr<'a> {
         format!("{}/{}", self, s.as_ref()).try_into()
     }
     pub(crate) fn is_optimized(&self) -> bool {
-        match &self.0 {
-            KeyExprInner::Wire { expr_id, .. } if *expr_id != 0 => true,
-            _ => false,
-        }
+        matches!(&self.0, KeyExprInner::Wire { expr_id, .. } if *expr_id != 0)
     }
 }
 

@@ -22,23 +22,36 @@ use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::utils::{wire_expr, ClosureResolve};
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{bail, zerror, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
 
 /// The builder of PublicationCache, allowing to configure it.
-#[derive(Clone)]
 pub struct PublicationCacheBuilder<'a, 'b> {
     session: &'a Session,
-    pub_key_expr: WireExpr<'b>,
+    pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
+}
+impl Clone for PublicationCacheBuilder<'_, '_> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session,
+            pub_key_expr: match &self.pub_key_expr {
+                Ok(ke) => Ok(ke.clone()),
+                Err(e) => Err(zerror!("Cloned KE Error {}", e).into()),
+            },
+            queryable_prefix: self.queryable_prefix.clone(),
+            history: self.history,
+            resources_limit: self.resources_limit,
+        }
+    }
 }
 
 impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
-        pub_key_expr: WireExpr<'b>,
+        pub_key_expr: ZResult<KeyExpr<'b>>,
     ) -> PublicationCacheBuilder<'a, 'b> {
         PublicationCacheBuilder {
             session,
@@ -91,9 +104,10 @@ pub struct PublicationCache<'a> {
 
 impl<'a> PublicationCache<'a> {
     fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
+        let key_expr = conf.pub_key_expr?;
         log::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
-            conf.pub_key_expr,
+            &key_expr,
             conf.history,
             conf.resources_limit
         );
@@ -102,33 +116,20 @@ impl<'a> PublicationCache<'a> {
             bail!(
                 "Failed requirement for PublicationCache on {}: \
                      the Session is not configured with 'add_timestamp=true'",
-                conf.pub_key_expr
+                key_expr
             )
         }
 
         // declare the local subscriber that will store the local publications
-        let local_sub = conf
-            .session
-            .subscribe(&conf.pub_key_expr)
-            .local()
-            .res_sync()?;
+        let local_sub = conf.session.subscribe(&key_expr).local().res_sync()?;
 
         // declare the queryable that will answer to queries on cache
-        let queryable_key_expr = if let Some(prefix) = &conf.queryable_prefix {
-            WireExpr::from(format!(
-                "{}{}",
-                prefix,
-                conf.session.key_expr_to_expr(&conf.pub_key_expr)?
-            ))
-        } else {
-            conf.pub_key_expr.clone()
-        };
-        let queryable = conf.session.queryable(&queryable_key_expr).res_sync()?;
+        let queryable = conf.session.queryable(&key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();
         let quer_recv = queryable.receiver.clone();
-        let pub_key_expr = conf.pub_key_expr.to_owned();
+        let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;

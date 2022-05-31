@@ -25,10 +25,10 @@ use zenoh::utils::wire_expr::*;
 /// # Examples:
 /// ```
 /// # use zenoh_backend_traits::utils::get_keys_prefix;
-/// assert_eq!("/demo/example/", get_keys_prefix("/demo/example/**"));
-/// assert_eq!("/demo/", get_keys_prefix("/demo/**/test/**"));
-/// assert_eq!("/", get_keys_prefix("/**"));
-/// assert_eq!("/demo/example/test", get_keys_prefix("/demo/example/test"));
+/// assert_eq!("demo/example/", get_keys_prefix("demo/example/**"));
+/// assert_eq!("demo/", get_keys_prefix("demo/**/test/**"));
+/// assert_eq!("", get_keys_prefix("**"));
+/// assert_eq!("demo/example/test", get_keys_prefix("demo/example/test"));
 /// ```
 pub fn get_keys_prefix(key_selector: &str) -> &str {
     // keys_prefix is the longest prefix in key_selector without a '*'
@@ -54,27 +54,27 @@ pub fn get_keys_prefix(key_selector: &str) -> &str {
 /// # use zenoh_backend_traits::utils::get_sub_key_selectors;
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_key_selectors("/demo/example/test/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("demo/example/test/**", "demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_key_selectors("/demo/example/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("demo/example/**", "demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_key_selectors("/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("**", "demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**/xyz"],
-///     get_sub_key_selectors("/demo/**/xyz", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("demo/**/xyz", "demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["**"],
-///     get_sub_key_selectors("/demo/**/test/**", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("demo/**/test/**", "demo/example/test/").as_slice()
 /// );
 /// assert_eq!(
 ///     ["xyz", "**/ex*/*/xyz"],
-///     get_sub_key_selectors("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
+///     get_sub_key_selectors("demo/**/ex*/*/xyz", "demo/example/test/").as_slice()
 /// );
 /// ```
 pub fn get_sub_key_selectors<'a>(key_selector: &'a str, prefix: &str) -> Vec<&'a str> {
@@ -110,42 +110,42 @@ pub fn get_sub_key_selectors<'a>(key_selector: &'a str, prefix: &str) -> Vec<&'a
 fn test_get_sub_key_exprs() {
     assert_eq!(
         ["**"],
-        get_sub_key_selectors("/demo/example/test/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/example/test/**", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_key_selectors("/demo/example/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/example/**", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_key_selectors("/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("**", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**/x*/**"],
-        get_sub_key_selectors("/demo/example/test/**/x*/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/example/test/**/x*/**", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**/xyz"],
-        get_sub_key_selectors("/demo/**/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/**/xyz", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["**"],
-        get_sub_key_selectors("/demo/**/test/**", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/**/test/**", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["xyz", "**/ex*/*/xyz"],
-        get_sub_key_selectors("/demo/**/ex*/*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/**/ex*/*/xyz", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["xyz", "**/ex*/t*/xyz"],
-        get_sub_key_selectors("/demo/**/ex*/t*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/**/ex*/t*/xyz", "demo/example/test/").as_slice()
     );
     assert_eq!(
         ["*/xyz", "**/te*/*/xyz"],
-        get_sub_key_selectors("/demo/**/te*/*/xyz", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/**/te*/*/xyz", "demo/example/test/").as_slice()
     );
     assert_eq!(
         [""],
-        get_sub_key_selectors("/demo/example/test", "/demo/example/test/").as_slice()
+        get_sub_key_selectors("demo/example/test", "demo/example/test/").as_slice()
     );
 }

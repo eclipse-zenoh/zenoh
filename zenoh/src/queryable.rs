@@ -180,10 +180,10 @@ impl fmt::Debug for QueryableState {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.queryable("key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
 /// }
 /// # })
 /// ```
@@ -206,7 +206,7 @@ impl<'a> CallbackQueryable<'a> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+    /// let queryable = session.queryable("key/expression").res().await.unwrap();
     /// queryable.close().res().await.unwrap();
     /// # })
     /// ```
@@ -272,7 +272,7 @@ impl Drop for CallbackQueryable<'_> {
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug)]
@@ -291,8 +291,8 @@ impl<'a, 'b> Clone for QueryableBuilder<'a, 'b> {
                 Ok(k) => Ok(k.clone()),
                 Err(e) => Err(zerror!("Cloned KE error: {}", e).into()),
             },
-            kind: self.kind.clone(),
-            complete: self.complete.clone(),
+            kind: self.kind,
+            complete: self.complete,
         }
     }
 }
@@ -308,7 +308,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
     ///     .res()
     ///     .await
@@ -340,7 +340,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .queryable("key/expression")
     ///     .callback_mut(move |query| {n += 1;})
     ///     .res()
     ///     .await
@@ -368,7 +368,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .queryable("key/expression")
     ///     .with(flume::bounded(32))
     ///     .res()
     ///     .await
@@ -428,7 +428,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
@@ -508,14 +508,14 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
-///     .queryable("/key/expression")
+///     .queryable("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
 /// }
 /// # })
 /// ```
@@ -551,7 +551,7 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
-///     .queryable("/key/expression")
+///     .queryable("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await

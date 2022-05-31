@@ -1233,7 +1233,7 @@ fn compute_final_route(
                     {
                         route
                             .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), target.target.clone()));
+                            .or_insert_with(|| (qabl.direction.clone(), target.target));
                     }
                     #[cfg(not(feature = "complete_n"))]
                     {
@@ -1256,7 +1256,7 @@ fn compute_final_route(
                     {
                         route
                             .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), target.target.clone()));
+                            .or_insert_with(|| (qabl.direction.clone(), target.target));
                     }
                     #[cfg(not(feature = "complete_n"))]
                     {
@@ -1298,10 +1298,7 @@ fn compute_final_route(
                 let mut route = HashMap::new();
                 #[cfg(feature = "complete_n")]
                 {
-                    route.insert(
-                        qabl.direction.0.id,
-                        (qabl.direction.clone(), target.target.clone()),
-                    );
+                    route.insert(qabl.direction.0.id, (qabl.direction.clone(), target.target));
                 }
                 #[cfg(not(feature = "complete_n"))]
                 {
@@ -1498,9 +1495,9 @@ pub fn route_query(
                         qid,
                         QueryTAK {
                             kind: target.kind,
-                            target: t.clone(),
+                            target: *t,
                         },
-                        consolidation.clone(),
+                        consolidation,
                         *context,
                     );
                 }

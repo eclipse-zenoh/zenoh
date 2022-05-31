@@ -30,7 +30,7 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").res().unwrap();
+    let key_expr = session.declare_expr("test/thr").res().unwrap();
 
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();

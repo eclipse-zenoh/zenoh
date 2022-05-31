@@ -33,7 +33,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let key_expr_set = [
         WireExpr::from(1),
-        WireExpr::from("/frame/bench"),
+        WireExpr::from("frame/bench"),
         WireExpr::from(1).with_suffix("/frame/bench"),
     ];
 

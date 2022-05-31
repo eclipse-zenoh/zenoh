@@ -14,6 +14,7 @@
 
 use futures::StreamExt;
 use http_types::Method;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 use tide::http::Mime;
@@ -257,7 +258,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
+                let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                    Ok(ke) => ke.into_owned(),
+                    Err(e) => {
+                        return Err(tide::Error::new(
+                            tide::StatusCode::BadRequest,
+                            anyhow::anyhow!("{}", e),
+                        ))
+                    }
+                };
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
@@ -435,9 +444,9 @@ pub async fn run(runtime: Runtime, conf: Config) {
 
 fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> ZResult<KeyExpr<'a>> {
     if path == "/@/router/local" {
-        KeyExpr::try_from(format!("/@/router/{}", pid))
-    } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        KeyExpr::try_from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::try_from(format!("@/router/{}", pid))
+    } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
+        KeyExpr::try_from(format!("@/router/{}/{}", pid, suffix))
     } else {
         KeyExpr::try_from(path)
     }

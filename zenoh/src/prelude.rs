@@ -37,7 +37,7 @@ pub(crate) mod common {
     use crate::buf::SharedMemoryBuf;
     use crate::buf::ZBuf;
     use crate::data_kind;
-    pub use crate::key_expr::KeyExpr;
+    pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     use crate::publication::PublishBuilder;
     use crate::queryable::{Query, QueryableBuilder};
     use crate::subscriber::SubscriberBuilder;
@@ -556,6 +556,25 @@ pub(crate) mod common {
                 source_info: SourceInfo::empty(),
             }
         }
+        /// Creates a new Sample.
+        #[inline]
+        pub fn try_from<IntoKeyExpr, IntoValue>(
+            key_expr: IntoKeyExpr,
+            value: IntoValue,
+        ) -> Result<Self, zenoh_core::Error>
+        where
+            IntoKeyExpr: TryInto<KeyExpr<'static>>,
+            <IntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::Error>,
+            IntoValue: Into<Value>,
+        {
+            Ok(Sample {
+                key_expr: key_expr.try_into().map_err(Into::into)?,
+                value: value.into(),
+                kind: SampleKind::default(),
+                timestamp: None,
+                source_info: SourceInfo::empty(),
+            })
+        }
 
         #[inline]
         pub(crate) fn with_info(
@@ -889,6 +908,33 @@ pub(crate) mod common {
         }
     }
 
+    impl<'a> From<&'a keyexpr> for Selector<'a> {
+        fn from(key_selector: &'a keyexpr) -> Self {
+            Self {
+                key_selector: key_selector.into(),
+                value_selector: "".into(),
+            }
+        }
+    }
+
+    impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
+        fn from(key_selector: &'a OwnedKeyExpr) -> Self {
+            Self {
+                key_selector: key_selector.deref().into(),
+                value_selector: "".into(),
+            }
+        }
+    }
+
+    impl From<OwnedKeyExpr> for Selector<'static> {
+        fn from(key_selector: OwnedKeyExpr) -> Self {
+            Self {
+                key_selector: key_selector.into(),
+                value_selector: "".into(),
+            }
+        }
+    }
+
     impl<'a> From<KeyExpr<'a>> for Selector<'a> {
         fn from(key_selector: KeyExpr<'a>) -> Self {
             Self {
@@ -919,7 +965,7 @@ pub(crate) mod common {
     ///
     /// use std::convert::TryInto;
     ///
-    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+    /// let queryable = session.queryable("key/expression").res().await.unwrap();
     /// while let Ok(query) = queryable.recv_async().await {
     ///     let selector = query.selector();
     ///     let value_selector = selector.parse_value_selector().unwrap();
@@ -943,7 +989,7 @@ pub(crate) mod common {
     ///     .with_fragment(Some("x;y"));
     ///
     /// let mut replies = session.get(
-    ///     &Selector::from("/key/expression").with_value_selector(&value_selector.to_string())
+    ///     &Selector::from(keyexpr::new("key/expression").unwrap()).with_value_selector(&value_selector.to_string())
     /// ).res().await.unwrap();
     /// # })
     /// ```
@@ -1071,7 +1117,7 @@ pub(crate) mod common {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
@@ -1093,7 +1139,7 @@ pub(crate) mod common {
         /// use r#async::AsyncResolve;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+        /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
         /// async_std::task::spawn(async move {
         ///     while let Ok(sample) = subscriber.recv_async().await {
         ///         println!("Received : {:?}", sample);
@@ -1124,13 +1170,13 @@ pub(crate) mod common {
         /// use zenoh::prelude::*;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+        /// let queryable = session.queryable("key/expression").res().await.unwrap();
         /// async_std::task::spawn(async move {
         ///     while let Ok(query) = queryable.recv_async().await {
-        ///         query.reply(Ok(Sample::new(
-        ///             "/key/expression".to_string(),
+        ///         query.reply(Ok(Sample::try_from(
+        ///             "key/expression",
         ///             "value",
-        ///         ))).res().await.unwrap();
+        ///         ).unwrap())).res().await.unwrap();
         ///     }
         /// }).await;
         /// # })
@@ -1157,7 +1203,7 @@ pub(crate) mod common {
         /// use r#async::AsyncResolve;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let publisher = session.publish("/key/expression").res().await.unwrap();
+        /// let publisher = session.publish("key/expression").res().await.unwrap();
         /// publisher.put("value").unwrap();
         /// # })
         /// ```

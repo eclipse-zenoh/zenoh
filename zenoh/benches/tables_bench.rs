@@ -45,13 +45,13 @@ fn tables_bench(c: &mut Criterion) {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
-        &"/bench/tables".into(),
+        &"bench/tables".into(),
     );
     register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        &"/bench/tables/*".into(),
+        &"bench/tables/*".into(),
     );
 
     let face1 = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
@@ -69,7 +69,7 @@ fn tables_bench(c: &mut Criterion) {
                 &mut tables,
                 &mut face1.upgrade().unwrap(),
                 i,
-                &["/bench/tables/AA", &i.to_string()].concat().into(),
+                &["bench/tables/AA", &i.to_string()].concat().into(),
             );
             declare_client_subscription(
                 &mut tables,
@@ -102,7 +102,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    &"/bench/tables/*".into(),
+                    &"bench/tables/*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,
@@ -117,7 +117,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    &"/bench/tables/A*".into(),
+                    &"bench/tables/A*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,

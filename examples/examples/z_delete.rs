@@ -50,7 +50,7 @@ fn parse_args() -> (Config, String) {
             Arg::from_usage(
                 "-k, --key=[KEYEXPR]        'The key expression matching resources to delete.'",
             )
-            .default_value("/demo/example/zenoh-rs-put"),
+            .default_value("demo/example/zenoh-rs-put"),
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",

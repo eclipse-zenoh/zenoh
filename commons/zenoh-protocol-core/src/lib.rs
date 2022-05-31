@@ -22,6 +22,8 @@ pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_core::{bail, zerror};
 
+pub mod key_expr;
+
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
@@ -393,7 +395,7 @@ pub enum ConsolidationMode {
 
 /// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
@@ -478,7 +480,7 @@ impl Default for ConsolidationStrategy {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QueryTarget {
     BestMatching,
     All,

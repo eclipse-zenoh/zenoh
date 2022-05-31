@@ -18,12 +18,40 @@ use std::{
 };
 use zenoh_core::{bail, Error as ZError};
 
+use crate::WireExpr;
+
+use super::OwnedKeyExpr;
+
+/// A [`str`] newtype that is statically known to be a valid key expression.
+///
+/// The exact key expression specification can be found [here](https://github.com/eclipse-zenoh/roadmap/discussions/24#discussioncomment-2766713). Here are the major lines:
+/// * Key expressions must be valid UTF8 strings.  
+///   Be aware that Zenoh does not perform UTF normalization for you, so get familiar with that concept if your key expression contains glyphs that may have several unicode representation, such as accented characters.
+/// * Key expressions may never start or end with `'/'`, nor contain `"//"` or any of the following characters: `#$?`
+/// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).  
+///   Note that safe constructors will perform canonization for you if this can be done without extraneous allocations.
+///
+/// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of intersection between such sets:
+/// * Trivially, two sets can have no elements in common: `a/**` and `b/**` for example define two disjoint sets of keys.
+/// * Two sets [`keyexpr::intersect()`] if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
+/// * One set A includes the other set B if all of B's elements are in A: `a/*/**` includes `a/b/**`
+/// * Two sets A and B are equal if all A includes B and B includes A. The Key Expression language is designed so that string equality is equivalent to set equality.
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
 pub struct keyexpr(str);
 
 impl keyexpr {
+    /// Returns `true` if the `keyexpr`s intersect, i.e. there exists at least one key which is contained in both of the sets defined by `self` and `other`.
+    pub fn intersect(&self, other: &Self) -> bool {
+        use super::intersect::Intersector;
+        super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
+    }
+
+    pub fn as_str(&self) -> &str {
+        self
+    }
+
     /// # Safety
     /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
     ///
@@ -32,7 +60,7 @@ impl keyexpr {
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         std::mem::transmute(s)
     }
-    pub fn try_from<'a, T, E>(t: T) -> Result<&'a Self, E>
+    pub fn new<'a, T, E>(t: T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<T, Error = E>,
     {
@@ -123,24 +151,23 @@ impl AsRef<str> for keyexpr {
     }
 }
 
-impl keyexpr {
-    pub fn intersect(&self, other: &Self) -> bool {
-        use super::intersect::Intersector;
-        super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
-    }
-    pub fn as_str(&self) -> &str {
-        self
-    }
-}
-
-impl Borrow<keyexpr> for super::KeyExpr<'_> {
+impl Borrow<keyexpr> for OwnedKeyExpr {
     fn borrow(&self) -> &keyexpr {
         self
     }
 }
 impl ToOwned for keyexpr {
-    type Owned = super::KeyExpr<'static>;
+    type Owned = OwnedKeyExpr;
     fn to_owned(&self) -> Self::Owned {
-        super::KeyExpr::from(self).into_owned()
+        OwnedKeyExpr::from(self)
+    }
+}
+
+impl<'a> From<&'a keyexpr> for WireExpr<'a> {
+    fn from(val: &'a keyexpr) -> Self {
+        WireExpr {
+            scope: 0,
+            suffix: std::borrow::Cow::Borrowed(val.as_str()),
+        }
     }
 }

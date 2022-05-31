@@ -56,14 +56,14 @@ To access the v0.5 version of the code and matching README, please go to the [0.
 
  - **put/store/get**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
     - in another shell run: `./target/release/examples/z_put`
     - then run `./target/release/examples/z_get`
     - the get should receive the stored publication.
 
  - **REST API using `curl` tool**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
     - in another shell, do a publication via the REST API:  
       `curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test`
     - get it back via the REST API:  
@@ -71,7 +71,7 @@ To access the v0.5 version of the code and matching README, please go to the [0.
 
   - **router admin space via the REST API**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
     - in another shell, get info of the zenoh router via the zenoh admin space:  
       `curl http://localhost:8000/@/router/local`
     - get the volumes of the router (only memory by default):  
@@ -79,7 +79,7 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
      `curl 'http://localhost:8000/@/router/local/**/storages/*'`
     - add another memory storage on `/demo/mystore/**`:  
-      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"/demo/mystore/**","volume"="memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
+      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume"="memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 

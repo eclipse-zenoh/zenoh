@@ -73,7 +73,7 @@ fn parse_args() -> (Config, String, String) {
             Arg::from_usage(
                 "-k, --key=[KEYEXPR]        'The key expression matching queries to reply to.'",
             )
-            .default_value("/demo/example/zenoh-rs-queryable"),
+            .default_value("demo/example/zenoh-rs-queryable"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")

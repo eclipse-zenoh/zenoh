@@ -39,6 +39,7 @@ crate-type = ["cdylib", "rlib"]
 
 
 [dependencies]
+anyhow = "1.0.57"
 async-std = "=1.11.0"
 base64 = "0.13.0"
 clap = "2.33.3"

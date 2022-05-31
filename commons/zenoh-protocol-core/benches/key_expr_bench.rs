@@ -32,74 +32,74 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
     c.bench_function("bench_key_expr_same_str_with_seps", |b| {
         let data = [(
-            "/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
-            "/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
+            "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
+            "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
         )];
         b.iter(|| {
             run_intersections(data);
         })
     });
     c.bench_function("bench_key_expr_single_star", |b| {
-        let data = [("/*", "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")];
+        let data = [("*", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")];
         b.iter(|| run_intersections(data))
     });
     c.bench_function("bench_key_expr_double_star", |b| {
         let data = [(
-            "/**",
-            "/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
+            "**",
+            "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
         )];
         b.iter(|| run_intersections(data))
     });
     c.bench_function("bench_key_expr_many_exprs", |b| {
         let data = [
-            ("/", "/"),
-            ("/a", "/a"),
-            ("/a/", "/a"),
-            ("/a", "/a/"),
-            ("/a/b", "/a/b"),
-            ("/*", "/abc"),
-            ("/*", "/abc/"),
-            ("/*/", "/abc"),
-            ("/*", "/"),
-            ("/*", "xxx"),
-            ("/ab*", "/abcd"),
-            ("/ab*d", "/abcd"),
-            ("/ab*", "/ab"),
-            ("/ab/*", "/ab"),
-            ("/a/*/c/*/e", "/a/b/c/d/e"),
-            ("/a/*b/c/*d/e", "/a/xb/c/xd/e"),
-            ("/a/*/c/*/e", "/a/c/e"),
-            ("/a/*/c/*/e", "/a/b/c/d/x/e"),
-            ("/ab*cd", "/abxxcxxd"),
-            ("/ab*cd", "/abxxcxxcd"),
-            ("/ab*cd", "/abxxcxxcdx"),
-            ("/**", "/abc"),
-            ("/**", "/a/b/c"),
-            ("/**", "/a/b/c/"),
-            ("/**/", "/a/b/c"),
-            ("/**/", "/"),
-            ("/ab/**", "/ab"),
-            ("/**/xyz", "/a/b/xyz/d/e/f/xyz"),
-            ("/**/xyz*xyz", "/a/b/xyz/d/e/f/xyz"),
-            ("/a/**/c/**/e", "/a/b/b/b/c/d/d/d/e"),
-            ("/a/**/c/**/e", "/a/c/e"),
-            ("/a/**/c/*/e/*", "/a/b/b/b/c/d/d/c/d/e/f"),
-            ("/a/**/c/*/e/*", "/a/b/b/b/c/d/d/c/d/d/e/f"),
-            ("/ab*cd", "/abxxcxxcdx"),
-            ("/x/abc", "/x/abc"),
-            ("/x/abc", "/abc"),
-            ("/x/*", "/x/abc"),
-            ("/x/*", "/abc"),
-            ("/*", "/x/abc"),
-            ("/x/*", "/x/abc*"),
-            ("/x/*abc", "/x/abc*"),
-            ("/x/a*", "/x/abc*"),
-            ("/x/a*de", "/x/abc*de"),
-            ("/x/a*d*e", "/x/a*e"),
-            ("/x/a*d*e", "/x/a*c*e"),
-            ("/x/a*d*e", "/x/ade"),
-            ("/x/c*", "/x/abc*"),
-            ("/x/*d", "/x/*e"),
+            ("", ""),
+            ("a", "a"),
+            ("a/", "a"),
+            ("a", "a/"),
+            ("a/b", "a/b"),
+            ("*", "abc"),
+            ("*", "abc/"),
+            ("*/", "abc"),
+            ("*", ""),
+            ("*", "xxx"),
+            ("ab*", "abcd"),
+            ("ab*d", "abcd"),
+            ("ab*", "ab"),
+            ("ab/*", "ab"),
+            ("a/*/c/*/e", "a/b/c/d/e"),
+            ("a/*b/c/*d/e", "a/xb/c/xd/e"),
+            ("a/*/c/*/e", "a/c/e"),
+            ("a/*/c/*/e", "a/b/c/d/x/e"),
+            ("ab*cd", "abxxcxxd"),
+            ("ab*cd", "abxxcxxcd"),
+            ("ab*cd", "abxxcxxcdx"),
+            ("**", "abc"),
+            ("**", "a/b/c"),
+            ("**", "a/b/c/"),
+            ("**/", "a/b/c"),
+            ("**/", ""),
+            ("ab/**", "ab"),
+            ("**/xyz", "a/b/xyz/d/e/f/xyz"),
+            ("**/xyz*xyz", "a/b/xyz/d/e/f/xyz"),
+            ("a/**/c/**/e", "a/b/b/b/c/d/d/d/e"),
+            ("a/**/c/**/e", "a/c/e"),
+            ("a/**/c/*/e/*", "a/b/b/b/c/d/d/c/d/e/f"),
+            ("a/**/c/*/e/*", "a/b/b/b/c/d/d/c/d/d/e/f"),
+            ("ab*cd", "abxxcxxcdx"),
+            ("x/abc", "x/abc"),
+            ("x/abc", "abc"),
+            ("x/*", "x/abc"),
+            ("x/*", "abc"),
+            ("*", "x/abc"),
+            ("x/*", "x/abc*"),
+            ("x/*abc", "x/abc*"),
+            ("x/a*", "x/abc*"),
+            ("x/a*de", "x/abc*de"),
+            ("x/a*d*e", "x/a*e"),
+            ("x/a*d*e", "x/a*c*e"),
+            ("x/a*d*e", "x/ade"),
+            ("x/c*", "x/abc*"),
+            ("x/*d", "x/*e"),
         ];
         b.iter(|| run_intersections(data))
     });
@@ -121,14 +121,14 @@ fn criterion_benchmark(c: &mut Criterion) {
             .map(|(tld, site, room, robot, sensor)| [tld, site, room, robot, sensor])
             .collect::<Vec<_>>();
         fn mk_route([tld, site, room, robot, sensor]: [&str; 5]) -> String {
-            format!("/{}/{}/{}/{}/{}", tld, site, room, robot, sensor)
+            format!("{}/{}/{}/{}/{}", tld, site, room, robot, sensor)
         }
         let mut rng = rand::rngs::StdRng::from_seed([32; 32]);
-        let mut routes = vec!["/**".to_owned(), "/*/**".to_owned()];
-        routes.push("/**/site_0/**".to_owned());
-        routes.push("/**/site_1/**".to_owned());
-        routes.push("/**/site_5/**".to_owned());
-        routes.push("/**/site_9/**".to_owned());
+        let mut routes = vec!["**".to_owned(), "*/**".to_owned()];
+        routes.push("**/site_0/**".to_owned());
+        routes.push("**/site_1/**".to_owned());
+        routes.push("**/site_5/**".to_owned());
+        routes.push("**/site_9/**".to_owned());
         for _ in 0..100 {
             let selected_route_id: usize = rng.gen_range(0..all_existing.len());
             let mut selected_route_components = all_existing[selected_route_id];
@@ -146,7 +146,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                     })
                     .count()
             }
-            count_matches(&routes, "/**");
+            count_matches(&routes, "**");
             count_matches(&routes, "**/room_7/**");
             for route in &all_existing {
                 count_matches(&routes, route);

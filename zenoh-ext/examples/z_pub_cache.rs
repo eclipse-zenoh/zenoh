@@ -32,8 +32,8 @@ async fn main() {
     let expr_id = session.declare_expr(&key_expr).res().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
-    println!("Creating PublicationCache on {}", expr_id);
-    let mut publication_cache_builder = session.publication_cache(expr_id).history(history);
+    println!("Creating PublicationCache on {}", &expr_id);
+    let mut publication_cache_builder = session.publication_cache(&expr_id).history(history);
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
@@ -42,8 +42,8 @@ async fn main() {
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Put Data ('{}': '{}')", expr_id, buf);
-        session.put(expr_id, buf).res().await.unwrap();
+        println!("Put Data ('{}': '{}')", &expr_id, buf);
+        session.put(&expr_id, buf).res().await.unwrap();
     }
 }
 

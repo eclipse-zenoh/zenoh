@@ -21,7 +21,7 @@
   listen: {
     endpoints: [
       // "<proto>/<address>"
-    ]
+    ],
   },
 
   /**
@@ -31,7 +31,7 @@
   connect: {
     endpoints: [
       // "<proto>/<address>"
-    ]
+    ],
   },
 
   /**
@@ -59,7 +59,7 @@
    * Directories where plugins configured by name should be looked for.
    * Plugins configured by __path__ are not subject to lookup
    */
-  plugins_search_dirs: [ "/usr/lib" ],
+  plugins_search_dirs: ["/usr/lib"],
 
   plugins: {
     /**
@@ -71,7 +71,6 @@
     //   __required__: true,
     //   http_port: 8000,
     // },
-
     /**
      * Storages plugin configuration . Uncomment to activate it and configure backends/storages
      */
@@ -84,12 +83,11 @@
     //       storages: {
     //         /* Each storage must be named */
     //         demo: {
-    //           key_expr: "/demo/example/**",
+    //           key_expr: "demo/example/**",
     //         },
     //       },
     //     },
     //   },
     // },
   },
-
 }

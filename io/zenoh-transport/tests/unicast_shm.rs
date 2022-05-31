@@ -212,7 +212,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "/test".into();
+            let key = "test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -265,7 +265,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "/test".into();
+            let key = "test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),

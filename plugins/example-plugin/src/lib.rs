@@ -16,7 +16,7 @@
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
@@ -33,7 +33,7 @@ pub struct ExamplePlugin {}
 
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
-const DEFAULT_SELECTOR: &str = "/demo/example/**";
+const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;

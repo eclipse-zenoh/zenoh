@@ -5,6 +5,7 @@ use futures::prelude::*;
 use futures::select;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -15,7 +16,7 @@ use zenoh_core::AsyncResolve;
 use zenoh_core::SyncResolve;
 use zenoh_sync::Condition;
 
-const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
+const GROUP_PREFIX: &str = "zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";
 const VIEW_REFRESH_LEASE_RATIO: f32 = 0.75f32;
 const DEFAULT_LEASE: Duration = Duration::from_secs(18);
@@ -116,9 +117,8 @@ struct GroupState {
     gid: String,
     local_member: Member,
     members: Mutex<HashMap<String, (Member, Instant)>>,
-    _group_expr: String,
-    _group_expr_id: u64,
-    event_expr: WireExpr<'static>,
+    _group_expr: KeyExpr<'static>,
+    event_expr: KeyExpr<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
 }
@@ -171,10 +171,12 @@ fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
-    let qres = format!(
+    let qres: KeyExpr = format!(
         "{}/{}/{}",
         GROUP_PREFIX, &state.gid, &state.local_member.mid
-    );
+    )
+    .try_into()
+    .unwrap();
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
     let queryable = z.queryable(&qres).res_sync().unwrap();
@@ -294,14 +296,18 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
-        let expr_id = z.declare_expr(&_group_expr).res_async().await.unwrap();
-        let event_expr = WireExpr::from(expr_id).with_suffix(EVENT_POSTFIX);
+        let _group_expr = z
+            .declare_expr(&_group_expr)
+            .res_async()
+            .await
+            .unwrap()
+            .into_owned();
+        let event_expr = _group_expr.concat(EVENT_POSTFIX).unwrap();
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),
             members: Mutex::new(Default::default()),
             _group_expr,
-            _group_expr_id: expr_id,
             event_expr: event_expr.clone(),
             user_events_tx: Mutex::new(Default::default()),
             cond: Condition::new(),

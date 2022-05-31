@@ -43,7 +43,7 @@ fn parse_args() -> (Config, String, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to write.'")
-                .default_value("/demo/example/zenoh-rs-put"),
+                .default_value("demo/example/zenoh-rs-put"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to write.'")

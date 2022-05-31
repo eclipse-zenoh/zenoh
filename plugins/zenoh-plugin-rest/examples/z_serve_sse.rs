@@ -13,16 +13,16 @@
 //
 
 use clap::{App, Arg};
-use zenoh::config::Config;
 use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
+use zenoh::{config::Config, key_expr::keyexpr};
 use zenoh_core::{AsyncResolve, SyncResolve};
 
 const HTML: &str = r#"
 <div id="result"></div>
 <script>
 if(typeof(EventSource) !== "undefined") {
-  var source = new EventSource("/demo/sse/event");
+  var source = new EventSource("demo/sse/event");
   source.addEventListener("PUT", function(e) {
     document.getElementById("result").innerHTML += e.data + "<br>";
   }, false);
@@ -37,7 +37,7 @@ async fn main() {
     env_logger::init();
 
     let config = parse_args();
-    let key = "/demo/sse";
+    let key = keyexpr::new("demo/sse").unwrap();
     let value = "Pub from sse server!";
 
     println!("Opening session...");
@@ -51,7 +51,7 @@ async fn main() {
         async move {
             while let Ok(request) = receiver.recv_async().await {
                 request
-                    .reply(Ok(Sample::new(key.to_string(), HTML)))
+                    .reply(Ok(Sample::new(key, HTML)))
                     .res_async()
                     .await
                     .unwrap();
@@ -62,17 +62,20 @@ async fn main() {
     let event_key = [key, "/event"].concat();
 
     print!("Declaring key expression '{}'...", event_key);
-    let expr_id = session.declare_expr(&event_key).res_async().await.unwrap();
-    println!(" => ExprId {}", expr_id);
+    let event_key = session.declare_expr(&event_key).res_async().await.unwrap();
+    println!(" => ExprId {}", event_key);
 
-    println!("Declaring publication on '{}'...", expr_id);
+    println!("Declaring publication on '{}'...", &event_key);
     session
-        .declare_publication(expr_id)
+        .declare_publication(&event_key)
         .res_async()
         .await
         .unwrap();
 
-    println!("Putting Data periodically ('{}': '{}')...", expr_id, value);
+    println!(
+        "Putting Data periodically ('{}': '{}')...",
+        &event_key, value
+    );
 
     println!(
         "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
@@ -80,7 +83,7 @@ async fn main() {
     );
     loop {
         session
-            .put(expr_id, value)
+            .put(&event_key, value)
             .encoding(KnownEncoding::TextPlain)
             .congestion_control(CongestionControl::Block)
             .res_async()

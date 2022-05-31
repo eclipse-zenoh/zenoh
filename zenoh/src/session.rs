@@ -16,8 +16,8 @@ use crate::config::Config;
 use crate::config::Notifier;
 use crate::info::*;
 use crate::key_expr::keyexpr;
-use crate::key_expr::owned::KeyExprInner;
-use crate::key_expr::owned::OwnedKeyExpr;
+use crate::key_expr::KeyExprInner;
+use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -282,16 +282,8 @@ impl Session {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let subscriptions = config.startup().subscribe();
-            let mut join_subscriptions: Vec<OwnedKeyExpr> = Vec::with_capacity(subscriptions.len());
-            for sub in subscriptions {
-                join_subscriptions.push(sub.clone().try_into()?)
-            }
-            let pubs = config.startup().declare_publications();
-            let mut join_publications = Vec::with_capacity(pubs.len());
-            for publ in pubs {
-                join_publications.push(publ.clone().try_into()?)
-            }
+            let join_subscriptions = config.startup().subscribe().clone();
+            let join_publications = config.startup().declare_publications().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
@@ -356,7 +348,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
@@ -388,7 +380,7 @@ impl Session {
     /// use zenoh::Session;
     ///
     /// let session = Session::leak(zenoh::open(config::peer()).res().await.unwrap());
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
@@ -548,7 +540,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let expr_id = session.declare_expr("/key/expression").res().await.unwrap();
+    /// let expr_id = session.declare_expr("key/expression").res().await.unwrap();
     /// # })
     /// ```
     pub fn declare_expr<'a, IntoKeyExpr>(
@@ -557,14 +549,13 @@ impl Session {
     ) -> impl Resolve<ZResult<KeyExpr<'a>>> + 'a
     where
         IntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
-            Into<zenoh_core::Error> + Send + Sync + 'static,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
-        let key_expr = key_expr.try_into();
+        let key_expr = key_expr.try_into().map_err(Into::into);
         ClosureResolve(move || {
             let key_expr: KeyExpr = match key_expr {
                 Ok(k) => k,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             };
             if let KeyExprInner::Wire { expr_id, .. } = &key_expr.0 {
                 if *expr_id != 0 {
@@ -623,12 +614,20 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let expr_id = session.declare_expr("/key/expression").res().await.unwrap();
-    /// session.undeclare_expr(expr_id).res().await;
+    /// let expr = session.declare_expr("key/expression").res().await.unwrap();
+    /// session.undeclare_expr(expr).res().await;
     /// # })
     /// ```
-    pub fn undeclare_expr(&self, expr_id: ExprId) -> impl Resolve<ZResult<()>> + '_ {
+    pub fn undeclare_expr<'a>(&'a self, expr: KeyExpr<'a>) -> impl Resolve<ZResult<()>> + 'a {
         ClosureResolve(move || {
+            let expr_id = match &expr.0 {
+                KeyExprInner::Wire {
+                    key_expr,
+                    expr_id,
+                    prefix_len,
+                } if *prefix_len as usize == key_expr.len() => *expr_id as u64,
+                _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_expr` to call `Session::undeclare_expr`", expr).into()),
+            };
             trace!("undeclare_expr({:?})", expr_id);
             let mut state = zwrite!(self.state);
             state.local_resources.remove(&expr_id);
@@ -657,8 +656,8 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.declare_publication("/key/expression").res().await.unwrap();
-    /// session.put("/key/expression", "value").res().await.unwrap();
+    /// session.declare_publication("key/expression").res().await.unwrap();
+    /// session.put("key/expression", "value").res().await.unwrap();
     /// # })
     /// ```
     pub fn declare_publication<'a, IntoKeyExpr>(
@@ -714,9 +713,9 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.declare_publication("/key/expression").res().await.unwrap();
-    /// session.put("/key/expression", "value").res().await.unwrap();
-    /// session.undeclare_publication("/key/expression").res().await.unwrap();
+    /// session.declare_publication("key/expression").res().await.unwrap();
+    /// session.put("key/expression", "value").res().await.unwrap();
+    /// session.undeclare_publication("key/expression").res().await.unwrap();
     /// # })
     /// ```
     pub fn undeclare_publication<'a, IntoKeyExpr>(
@@ -781,7 +780,7 @@ impl Session {
         let declared_sub = match state
             .join_subscriptions // TODO: can this be an OwnedKeyExpr?
             .iter()
-            .find(|s| wire_expr::include(s, &key_expr))
+            .find(|s| wire_expr::include(s, key_expr))
         {
             Some(join_sub) => {
                 let joined_sub = state
@@ -872,7 +871,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }
@@ -917,7 +916,7 @@ impl Session {
                 match state
                     .join_subscriptions
                     .iter()
-                    .find(|s| wire_expr::include(s, &key_expr))
+                    .find(|s| wire_expr::include(s, key_expr))
                 {
                     Some(join_sub) => {
                         let joined_sub = state
@@ -1060,12 +1059,12 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+    /// let queryable = session.queryable("key/expression").res().await.unwrap();
     /// while let Ok(query) = queryable.recv_async().await {
-    ///     query.reply(Ok(Sample::new(
-    ///         "/key/expression".to_string(),
+    ///     query.reply(Ok(Sample::try_from(
+    ///         "key/expression",
     ///         "value",
-    ///     ))).res().await.unwrap();
+    ///     ).unwrap())).res().await.unwrap();
     /// }
     /// # })
     /// ```
@@ -1157,7 +1156,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.publish("/key/expression").res().await.unwrap();
+    /// let publisher = session.publish("key/expression").res().await.unwrap();
     /// publisher.put("value").unwrap();
     /// # })
     /// ```
@@ -1190,7 +1189,7 @@ impl Session {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// session
-    ///     .put("/key/expression", "value")
+    ///     .put("key/expression", "value")
     ///     .encoding(KnownEncoding::TextPlain)
     ///     .res()
     ///     .await
@@ -1228,7 +1227,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.delete("/key/expression").res().await.unwrap();
+    /// session.delete("key/expression").res().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -1376,9 +1375,9 @@ impl Session {
             qid,
             zenoh_protocol_core::QueryTAK {
                 kind: zenoh_protocol_core::queryable::ALL_KINDS,
-                target: target.clone(),
+                target,
             },
-            consolidation.clone(),
+            consolidation,
             None,
         );
         if local_routing {
@@ -1410,7 +1409,7 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let replies = session.get("/key/expression").res().await.unwrap();
+    /// let replies = session.get("key/expression").res().await.unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
     ///     println!(">> Received {:?}", reply.sample);
     /// }
@@ -1418,9 +1417,10 @@ impl Session {
     /// ```
     pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
     where
-        IntoSelector: Into<Selector<'b>>,
+        IntoSelector: TryInto<Selector<'b>>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        let selector = selector.into();
+        let selector = selector.try_into().map_err(Into::into);
         GetBuilder {
             session: self,
             selector,
@@ -1544,7 +1544,7 @@ impl EntityFactory for Arc<Session> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
@@ -1582,13 +1582,13 @@ impl EntityFactory for Arc<Session> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
+    /// let queryable = session.queryable("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(query) = queryable.recv_async().await {
-    ///         query.reply(Ok(Sample::new(
-    ///             "/key/expression".to_string(),
+    ///         query.reply(Ok(Sample::try_from(
+    ///             "key/expression",
     ///             "value",
-    ///         ))).res().await.unwrap();
+    ///         ).unwrap())).res().await.unwrap();
     ///     }
     /// }).await;
     /// # })
@@ -1620,7 +1620,7 @@ impl EntityFactory for Arc<Session> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").res().await.unwrap();
+    /// let publisher = session.publish("key/expression").res().await.unwrap();
     /// publisher.put("value").unwrap();
     /// # })
     /// ```

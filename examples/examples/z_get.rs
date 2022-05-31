@@ -55,7 +55,7 @@ fn parse_args() -> (Config, String, QueryTarget) {
         ))
         .arg(
             Arg::from_usage("-s, --selector=[SELECTOR] 'The selection of resources to query'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(
             Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")

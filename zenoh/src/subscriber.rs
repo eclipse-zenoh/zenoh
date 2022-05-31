@@ -62,7 +62,7 @@ impl fmt::Debug for SubscriberState {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .subscribe("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
 ///     .res()
 ///     .await
@@ -87,7 +87,7 @@ impl<'l> CallbackSubscriber<'l> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .mode(SubMode::Pull)
     ///     .res()
@@ -115,7 +115,7 @@ impl<'l> CallbackSubscriber<'l> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .callback(data_handler)
     ///     .res()
     ///     .await
@@ -174,7 +174,7 @@ impl Drop for CallbackSubscriber<'_> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .subscribe("key/expression")
 ///     .best_effort()
 ///     .pull_mode()
 ///     .res()
@@ -200,10 +200,10 @@ impl<'a, 'b> Clone for SubscriberBuilder<'a, 'b> {
                 Ok(ke) => Ok(ke.clone()),
                 Err(e) => Err(zerror!("Cloned Error: {}", e).into()),
             },
-            reliability: self.reliability.clone(),
-            mode: self.mode.clone(),
-            period: self.period.clone(),
-            local: self.local.clone(),
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
+            local: self.local,
         }
     }
 }
@@ -219,7 +219,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .res()
     ///     .await
@@ -251,7 +251,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .callback_mut(move |sample| { n += 1; })
     ///     .res()
     ///     .await
@@ -279,7 +279,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .with(flume::bounded(32))
     ///     .res()
     ///     .await
@@ -393,7 +393,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .subscribe("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
 ///     .best_effort()
 ///     .pull_mode()
@@ -526,7 +526,7 @@ impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_,
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .subscribe("key/expression")
 ///     .with(flume::bounded(32))
 ///     .best_effort()
 ///     .pull_mode()
@@ -624,7 +624,7 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .subscribe("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await
@@ -652,7 +652,7 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .subscribe("key/expression")
     ///     .with(flume::bounded(32))
     ///     .mode(SubMode::Pull)
     ///     .res()
@@ -677,7 +677,7 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
     /// subscriber.close().res().await.unwrap();
     /// # })
     /// ```

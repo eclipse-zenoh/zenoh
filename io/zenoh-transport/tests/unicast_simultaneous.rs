@@ -66,7 +66,7 @@ impl TransportEventHandler for SHPeer {
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         // Create the message to send
-        let key = "/test".into();
+        let key = "test".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::Control,

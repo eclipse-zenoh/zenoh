@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -18,31 +19,49 @@ use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{zerror, zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
-#[derive(Clone)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
-    sub_key_expr: WireExpr<'b>,
+    key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
-    query_key_expr: WireExpr<'b>,
-    query_value_selector: String,
+    query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
+}
+impl Clone for QueryingSubscriberBuilder<'_, '_> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match &self.key_expr {
+                Ok(ke) => Ok(ke.clone()),
+                Err(e) => Err(zerror!("Cloned KE Error {}", e).into()),
+            },
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
+            query_selector: match &self.query_selector {
+                Some(Ok(s)) => Some(Ok(s.clone())),
+                None => None,
+                Some(Err(e)) => Some(Err(zerror!("Cloned Selector Error: {}", e).into())),
+            },
+            query_target: self.query_target,
+            query_consolidation: self.query_consolidation,
+        }
+    }
 }
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
         session: SessionRef<'a>,
-        sub_key_expr: WireExpr<'b>,
+        key_expr: ZResult<KeyExpr<'b>>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget::All;
@@ -53,12 +72,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
         QueryingSubscriberBuilder {
             session,
-            sub_key_expr: sub_key_expr.clone(),
+            key_expr,
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
-            query_key_expr: sub_key_expr,
-            query_value_selector: "".into(),
+            query_selector: None,
             query_target,
             query_consolidation,
         }
@@ -160,11 +178,10 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
-        IntoSelector: Into<Selector<'b>>,
+        IntoSelector: TryInto<Selector<'b>>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        let selector = query_selector.into();
-        self.query_key_expr = selector.key_selector.to_owned();
-        self.query_value_selector = selector.value_selector.to_string();
+        self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self
     }
 
@@ -185,12 +202,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
         QueryingSubscriberBuilder {
             session: self.session,
-            sub_key_expr: self.sub_key_expr.to_owned(),
+            key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
             mode: self.mode,
             period: self.period,
-            query_key_expr: self.query_key_expr.to_owned(),
-            query_value_selector: "".to_string(),
+            query_selector: self.query_selector.map(|s| s.map(|s| s.to_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
         }
@@ -340,7 +356,7 @@ struct InnerState {
 
 pub struct CallbackQueryingSubscriber<'a> {
     session: SessionRef<'a>,
-    query_key_expr: WireExpr<'a>,
+    query_key_expr: KeyExpr<'a>,
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -374,17 +390,30 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             }
         };
 
+        let key_expr = conf.key_expr?;
+        let Selector {
+            key_selector,
+            value_selector,
+        } = match conf.query_selector {
+            Some(Ok(s)) => s,
+            Some(Err(e)) => return Err(e),
+            None => Selector {
+                key_selector: key_expr.clone(),
+                value_selector: std::borrow::Cow::Borrowed(""),
+            },
+        };
+
         // declare subscriber at first
         let subscriber = match conf.session.clone() {
             SessionRef::Borrow(session) => session
-                .subscribe(&conf.sub_key_expr)
+                .subscribe(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
                 .period(conf.period)
                 .res_sync()?,
             SessionRef::Shared(session) => session
-                .subscribe(&conf.sub_key_expr)
+                .subscribe(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
@@ -394,8 +423,8 @@ impl<'a> CallbackQueryingSubscriber<'a> {
 
         let mut query_subscriber = CallbackQueryingSubscriber {
             session: conf.session,
-            query_key_expr: conf.query_key_expr,
-            query_value_selector: conf.query_value_selector,
+            query_key_expr: key_selector,
+            query_value_selector: value_selector.into_owned(),
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
             _subscriber: subscriber,
@@ -440,8 +469,8 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 key_selector: self.query_key_expr.clone(),
                 value_selector: self.query_value_selector.clone().into(),
             },
-            self.query_target.clone(),
-            self.query_consolidation.clone(),
+            self.query_target,
+            self.query_consolidation,
         )
     }
 

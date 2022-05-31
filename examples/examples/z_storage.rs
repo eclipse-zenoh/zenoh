@@ -94,7 +94,7 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The selection of resources to store'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

@@ -220,7 +220,7 @@ pub fn include(this: &str, sub: &str) -> bool {
     res_include(this.as_bytes(), sub.as_bytes())
 }
 
-pub const ADMIN_PREFIX: &str = "/@/";
+pub const ADMIN_PREFIX: &str = "@/";
 
 #[inline(always)]
 pub fn matches(s1: &str, s2: &str) -> bool {

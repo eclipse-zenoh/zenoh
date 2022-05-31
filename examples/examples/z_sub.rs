@@ -70,7 +70,7 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

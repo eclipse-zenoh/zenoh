@@ -31,7 +31,7 @@ pub(crate) enum StorageMessage {
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
     admin_key: String,
-    key_expr: String,
+    key_expr: KeyExpr<'static>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
