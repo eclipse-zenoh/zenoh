@@ -61,7 +61,7 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
-        let root_key = format!("/@/router/{}", pid_str);
+        let root_key = format!("@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
@@ -304,7 +304,7 @@ impl Primitives for AdminSpace {
 
         if let Some(key) = key_expr
             .as_str()
-            .strip_prefix(&format!("/@/router/{}/config/", &self.context.pid_str))
+            .strip_prefix(&format!("@/router/{}/config/", &self.context.pid_str))
         {
             if let Some(DataInfo {
                 kind: Some(data_kind::DELETE),
@@ -367,7 +367,7 @@ impl Primitives for AdminSpace {
             _consolidation
         );
         let pid = self.pid;
-        let plugin_key = format!("/@/router/{}/status/plugins/**", &pid);
+        let plugin_key = format!("@/router/{}/status/plugins/**", &pid);
         let mut ask_plugins = false;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
@@ -612,7 +612,7 @@ pub async fn plugins_status(
         value_selector: args.into(),
     };
     let guard = zlock!(context.plugins_mgr);
-    let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);
+    let mut root_key = format!("@/router/{}/status/plugins/", &context.pid_str);
     let mut responses = Vec::new();
     for (name, (path, plugin)) in guard.running_plugins() {
         with_extended_string(&mut root_key, &[name], |plugin_key| {
