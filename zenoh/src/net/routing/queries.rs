@@ -1525,7 +1525,7 @@ pub fn route_query(
                         value_selector,
                         qid,
                         target.clone(),
-                        consolidation.clone(),
+                        consolidation,
                         *context,
                     );
                 }

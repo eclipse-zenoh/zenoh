@@ -1069,8 +1069,7 @@ impl Session {
     ) -> QueryableBuilder<'a, 'b>
     where
         IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
-            Into<zenoh_core::Error> + Send + Sync + 'static,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
@@ -1550,8 +1549,7 @@ impl EntityFactory for Arc<Session> {
     fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
     where
         IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
-            Into<zenoh_core::Error> + Send + Sync + 'static,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1591,8 +1589,7 @@ impl EntityFactory for Arc<Session> {
     fn queryable<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'b>
     where
         IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error:
-            Into<zenoh_core::Error> + Send + Sync + 'static,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1622,8 +1619,7 @@ impl EntityFactory for Arc<Session> {
     fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
-            Into<zenoh_core::Error> + Send + Sync + 'static,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
         PublishBuilder {
             session: SessionRef::Shared(self.clone()),

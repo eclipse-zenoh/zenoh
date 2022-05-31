@@ -1153,8 +1153,7 @@ pub(crate) mod common {
         ) -> SubscriberBuilder<'static, 'a>
         where
             IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
-                Into<zenoh_core::Error> + Send + Sync + 'static;
+            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
         ///
@@ -1187,8 +1186,7 @@ pub(crate) mod common {
         ) -> QueryableBuilder<'static, 'a>
         where
             IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
-                Into<zenoh_core::Error> + Send + Sync + 'static;
+            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
         ///
@@ -1210,8 +1208,7 @@ pub(crate) mod common {
         fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
         where
             IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error:
-                Into<zenoh_core::Error> + Send + Sync + 'static;
+            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
     }
 
     pub type Dyn<T> = std::boxed::Box<T>;
