@@ -15,6 +15,7 @@
 //! Queryable primitives.
 
 use crate::prelude::*;
+use crate::utils::ClosureResolve;
 use crate::SessionRef;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::FutureExt;
@@ -191,6 +192,7 @@ impl fmt::Debug for QueryableState {
 pub struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
+    pub(crate) alive: bool,
 }
 
 impl<'a> CallbackQueryable<'a> {
@@ -211,54 +213,19 @@ impl<'a> CallbackQueryable<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
-        QueryableCloser {
-            queryable: std::mem::ManuallyDrop::new(self),
-            alive: true,
-        }
-    }
-}
-pub struct QueryableCloser<'a> {
-    queryable: std::mem::ManuallyDrop<CallbackQueryable<'a>>,
-    alive: bool,
-}
-impl Resolvable for QueryableCloser<'_> {
-    type Output = crate::Result<()>;
-}
-impl SyncResolve for QueryableCloser<'_> {
-    fn res_sync(mut self) -> Self::Output {
-        self.alive = false;
-        self.queryable
-            .session
-            .close_queryable(self.queryable.state.id)
-    }
-}
-
-#[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct QueryableCloserFuture(futures::future::Ready<crate::Result<()>>);
-impl std::future::Future for QueryableCloserFuture {
-    type Output = crate::Result<()>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.get_mut().0.poll_unpin(cx)
-    }
-}
-impl AsyncResolve for QueryableCloser<'_> {
-    type Future = QueryableCloserFuture;
-    fn res_async(self) -> Self::Future {
-        QueryableCloserFuture(futures::future::ready(self.res_sync()))
-    }
-}
-impl Drop for QueryableCloser<'_> {
-    fn drop(&mut self) {
-        if self.alive {
-            unsafe { std::mem::ManuallyDrop::drop(&mut self.queryable) }
-        }
+    pub fn close(mut self) -> impl Resolve<crate::Result<()>> + 'a {
+        ClosureResolve(move || {
+            self.alive = false;
+            self.session.close_queryable(self.state.id)
+        })
     }
 }
 
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
-        let _ = self.session.close_queryable(self.state.id);
+        if self.alive {
+            let _ = self.session.close_queryable(self.state.id);
+        }
     }
 }
 
@@ -487,6 +454,7 @@ where
             .map(move |qable_state| CallbackQueryable {
                 session,
                 state: qable_state,
+                alive: true,
             })
     }
 }
@@ -608,6 +576,7 @@ where
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
+                    alive: true,
                 },
                 receiver,
             })

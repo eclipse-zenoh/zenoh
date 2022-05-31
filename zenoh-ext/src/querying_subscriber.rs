@@ -441,24 +441,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     /// Close this QueryingSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        struct Undeclare<'a> {
-            inner: Option<CallbackQueryingSubscriber<'a>>,
-        }
-        impl Resolvable for Undeclare<'_> {
-            type Output = ZResult<()>;
-        }
-        impl AsyncResolve for Undeclare<'_> {
-            type Future = futures::future::Ready<Self::Output>;
-            fn res_async(self) -> Self::Future {
-                futures::future::ready(self.res_sync())
-            }
-        }
-        impl SyncResolve for Undeclare<'_> {
-            fn res_sync(mut self) -> Self::Output {
-                self.inner.take().unwrap().close().res_sync()
-            }
-        }
-        Undeclare { inner: Some(self) }
+        self._subscriber.close()
     }
 
     /// Issue a new query using the configured selector.

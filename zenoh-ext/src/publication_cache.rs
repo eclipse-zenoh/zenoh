@@ -13,14 +13,15 @@
 //
 use async_std::channel::{bounded, Sender};
 use async_std::task;
-use futures::select;
 use futures::FutureExt;
 use futures::StreamExt;
+use futures::{select, Future};
 use std::collections::{HashMap, VecDeque};
+use std::pin::Pin;
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::utils::{wire_expr, ClosureResolve};
+use zenoh::utils::wire_expr;
 use zenoh::Session;
 use zenoh_core::{bail, zerror, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
@@ -210,10 +211,29 @@ impl<'a> PublicationCache<'a> {
     /// Close this PublicationCache
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        // just drop self and all its content
-        ClosureResolve(move || {
-            std::mem::drop(self);
-            Ok(())
-        })
+        struct PublicationCacheCloser<'a> {
+            p: PublicationCache<'a>,
+        }
+        impl Resolvable for PublicationCacheCloser<'_> {
+            type Output = ZResult<()>;
+        }
+        impl SyncResolve for PublicationCacheCloser<'_> {
+            fn res_sync(self) -> Self::Output {
+                drop(self);
+                Ok(())
+            }
+        }
+        impl<'a> AsyncResolve for PublicationCacheCloser<'a> {
+            type Future = Pin<Box<dyn Future<Output = ZResult<()>> + Send + 'a>>;
+            fn res_async(self) -> Self::Future {
+                Box::pin(async move {
+                    self.p._queryable.close().res_async().await?;
+                    self.p._local_sub.close().res_async().await?;
+                    drop(self.p._stoptx);
+                    Ok(())
+                })
+            }
+        }
+        PublicationCacheCloser { p: self }
     }
 }
