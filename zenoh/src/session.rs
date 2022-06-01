@@ -593,7 +593,13 @@ impl Session {
                         prefix_len: expr.len() as u32,
                         key_expr: owned_expr,
                     });
-                    primitives.decl_resource(expr_id, &(&key_expr).into());
+                    primitives.decl_resource(
+                        expr_id,
+                        &WireExpr {
+                            scope: 0,
+                            suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+                        },
+                    );
                     Ok(key_expr)
                 }
             }
