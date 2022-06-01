@@ -965,7 +965,7 @@ pub(crate) mod common {
     ///
     /// use std::convert::TryInto;
     ///
-    /// let queryable = session.queryable("key/expression").res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
     /// while let Ok(query) = queryable.recv_async().await {
     ///     let selector = query.selector();
     ///     let value_selector = selector.parse_value_selector().unwrap();
@@ -1117,7 +1117,7 @@ pub(crate) mod common {
     /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
     ///         println!("Received : {:?}", sample);
@@ -1139,7 +1139,7 @@ pub(crate) mod common {
         /// use r#async::AsyncResolve;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
+        /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
         /// async_std::task::spawn(async move {
         ///     while let Ok(sample) = subscriber.recv_async().await {
         ///         println!("Received : {:?}", sample);
@@ -1169,7 +1169,7 @@ pub(crate) mod common {
         /// use zenoh::prelude::*;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let queryable = session.queryable("key/expression").res().await.unwrap();
+        /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
         /// async_std::task::spawn(async move {
         ///     while let Ok(query) = queryable.recv_async().await {
         ///         query.reply(Ok(Sample::try_from(
@@ -1201,8 +1201,8 @@ pub(crate) mod common {
         /// use r#async::AsyncResolve;
         ///
         /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-        /// let publisher = session.publish("key/expression").res().await.unwrap();
-        /// publisher.put("value").unwrap();
+        /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+        /// publisher.put("value").res().await.unwrap();
         /// # })
         /// ```
         fn declare_publisher<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>

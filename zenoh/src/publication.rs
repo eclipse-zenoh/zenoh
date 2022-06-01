@@ -181,12 +181,11 @@ use zenoh_core::zresult::Error;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-/// let publisher = session.publish("key/expression").res().await.unwrap();
-/// publisher.put("value").unwrap();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.put("value").res().await.unwrap();
 /// # })
 /// ```
 ///
@@ -199,8 +198,8 @@ use zenoh_core::zresult::Error;
 /// use r#async::AsyncResolve;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-/// let mut subscriber = session.subscribe("key/expression").res().await.unwrap();
-/// let publisher = session.publish("another/key/expression").res().await.unwrap();
+/// let mut subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+/// let publisher = session.declare_publisher("another/key/expression").res().await.unwrap();
 /// subscriber.forward(publisher).await.unwrap();
 /// # })
 /// ```
@@ -247,12 +246,11 @@ impl<'a> Publisher<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-    /// let publisher = session.publish("key/expression").res().await.unwrap();
-    /// publisher.put("value").unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -410,7 +408,7 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
-///     .publish("key/expression")
+///     .declare_publisher("key/expression")
 ///     .congestion_control(CongestionControl::Block)
 ///     .res()
 ///     .await
