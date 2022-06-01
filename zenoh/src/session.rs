@@ -269,40 +269,6 @@ pub struct Session {
 }
 
 impl Session {
-    pub(crate) fn clone(&self) -> Self {
-        Session {
-            runtime: self.runtime.clone(),
-            state: self.state.clone(),
-            alive: false,
-        }
-    }
-
-    #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
-        FutureResolve(async {
-            log::debug!("Config: {:?}", &config);
-            let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.startup().subscribe().clone();
-            let join_publications = config.startup().declare_publications().clone();
-            match Runtime::new(config).await {
-                Ok(runtime) => {
-                    let session = Self::init(
-                        runtime,
-                        local_routing,
-                        join_subscriptions,
-                        join_publications,
-                    )
-                    .res_async()
-                    .await;
-                    // Workaround for the declare_and_shoot problem
-                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                    Ok(session)
-                }
-                Err(err) => Err(err),
-            }
-        })
-    }
-
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
     #[doc(hidden)]
@@ -646,6 +612,250 @@ impl Session {
         })
     }
 
+    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    pub fn declare_subscriber<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        key_expr: IntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b>
+    where
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        SubscriberBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
+            local: false,
+        }
+    }
+
+    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](HandlerQueryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.queryable("key/expression").res().await.unwrap();
+    /// while let Ok(query) = queryable.recv_async().await {
+    ///     query.reply(Ok(Sample::try_from(
+    ///         "key/expression",
+    ///         "value",
+    ///     ).unwrap())).res().await.unwrap();
+    /// }
+    /// # })
+    /// ```
+    pub fn declare_queryable<'a, 'b, IntoKeyExpr>(
+        &'a self,
+        key_expr: IntoKeyExpr,
+    ) -> QueryableBuilder<'a, 'b>
+    where
+        IntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        QueryableBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            kind: zenoh_protocol_core::queryable::ALL_KINDS,
+            complete: true,
+        }
+    }
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.publish("key/expression").res().await.unwrap();
+    /// publisher.put("value").unwrap();
+    /// # })
+    /// ```
+    pub fn declare_publisher<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+    where
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+    {
+        PublishBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+            local_routing: None,
+        }
+    }
+
+    /// Put data.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to put
+    /// * `value` - The value to put
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// session
+    ///     .put("key/expression", "value")
+    ///     .encoding(KnownEncoding::TextPlain)
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn put<'a, IntoKeyExpr, IntoValue>(
+        &'a self,
+        key_expr: IntoKeyExpr,
+        value: IntoValue,
+    ) -> PutBuilder<'a>
+    where
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        IntoValue: Into<Value>,
+    {
+        PutBuilder {
+            publisher: self.declare_publisher(key_expr),
+            value: value.into(),
+            kind: SampleKind::Put,
+        }
+    }
+
+    /// Delete data.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to delete
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// session.delete("key/expression").res().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> DeleteBuilder<'a>
+    where
+        IntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+    {
+        PutBuilder {
+            publisher: self.declare_publisher(key_expr),
+            value: Value::empty(),
+            kind: SampleKind::Delete,
+        }
+    }
+    /// Query data from the matching queryables in the system.
+    ///
+    /// # Arguments
+    ///
+    /// * `selector` - The selection of resources to query
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let replies = session.get("key/expression").res().await.unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     println!(">> Received {:?}", reply.sample);
+    /// }
+    /// # })
+    /// ```
+    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
+    where
+        IntoSelector: TryInto<Selector<'b>>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        let selector = selector.try_into().map_err(Into::into);
+        GetBuilder {
+            session: self,
+            selector,
+            target: QueryTarget::default(),
+            consolidation: QueryConsolidation::default(),
+            local_routing: None,
+        }
+    }
+}
+
+impl Session {
+    pub(crate) fn clone(&self) -> Self {
+        Session {
+            runtime: self.runtime.clone(),
+            state: self.state.clone(),
+            alive: false,
+        }
+    }
+
+    #[allow(clippy::new_ret_no_self)]
+    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
+        FutureResolve(async {
+            log::debug!("Config: {:?}", &config);
+            let local_routing = config.local_routing().unwrap_or(true);
+            let join_subscriptions = config.startup().subscribe().clone();
+            let join_publications = config.startup().declare_publications().clone();
+            match Runtime::new(config).await {
+                Ok(runtime) => {
+                    let session = Self::init(
+                        runtime,
+                        local_routing,
+                        join_subscriptions,
+                        join_publications,
+                    )
+                    .res_async()
+                    .await;
+                    // Workaround for the declare_and_shoot problem
+                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                    Ok(session)
+                }
+                Err(err) => Err(err),
+            }
+        })
+    }
     /// Declare a publication for the given key expression.
     ///
     /// Puts that match the given key expression will only be sent on the network
@@ -863,44 +1073,6 @@ impl Session {
 
         Ok(sub_state)
     }
-
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The resourkey expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe("key/expression").res().await.unwrap();
-    /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {:?}", sample);
-    /// }
-    /// # })
-    /// ```
-    pub fn declare_subscriber<'a, 'b, IntoKeyExpr>(
-        &'a self,
-        key_expr: IntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b>
-    where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        SubscriberBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            reliability: Reliability::default(),
-            mode: SubMode::default(),
-            period: None,
-            local: false,
-        }
-    }
-
     pub(crate) fn unsubscribe(&self, sid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
@@ -955,7 +1127,6 @@ impl Session {
             Err(zerror!("Unable to find subscriber").into())
         }
     }
-
     pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
@@ -1045,46 +1216,6 @@ impl Session {
             })
             .count() as ZInt
     }
-
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.queryable("key/expression").res().await.unwrap();
-    /// while let Ok(query) = queryable.recv_async().await {
-    ///     query.reply(Ok(Sample::try_from(
-    ///         "key/expression",
-    ///         "value",
-    ///     ).unwrap())).res().await.unwrap();
-    /// }
-    /// # })
-    /// ```
-    pub fn declare_queryable<'a, 'b, IntoKeyExpr>(
-        &'a self,
-        key_expr: IntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b>
-    where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        QueryableBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            kind: zenoh_protocol_core::queryable::ALL_KINDS,
-            complete: true,
-        }
-    }
-
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
@@ -1142,107 +1273,6 @@ impl Session {
             Err(zerror!("Unable to find queryable").into())
         }
     }
-
-    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.publish("key/expression").res().await.unwrap();
-    /// publisher.put("value").unwrap();
-    /// # })
-    /// ```
-    pub fn declare_publisher<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
-    where
-        IntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        PublishBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
-        }
-    }
-
-    /// Put data.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to put
-    /// * `value` - The value to put
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session
-    ///     .put("key/expression", "value")
-    ///     .encoding(KnownEncoding::TextPlain)
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn put<'a, IntoKeyExpr, IntoValue>(
-        &'a self,
-        key_expr: IntoKeyExpr,
-        value: IntoValue,
-    ) -> PutBuilder<'a>
-    where
-        IntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-        IntoValue: Into<Value>,
-    {
-        PutBuilder {
-            publisher: self.declare_publisher(key_expr),
-            value: value.into(),
-            kind: SampleKind::Put,
-        }
-    }
-
-    /// Delete data.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to delete
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// session.delete("key/expression").res().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn delete<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> DeleteBuilder<'a>
-    where
-        IntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        PutBuilder {
-            publisher: self.declare_publisher(key_expr),
-            value: Value::empty(),
-            kind: SampleKind::Delete,
-        }
-    }
-
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1394,40 +1424,6 @@ impl Session {
             );
         }
         Ok(())
-    }
-
-    /// Query data from the matching queryables in the system.
-    ///
-    /// # Arguments
-    ///
-    /// * `selector` - The selection of resources to query
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let replies = session.get("key/expression").res().await.unwrap();
-    /// while let Ok(reply) = replies.recv_async().await {
-    ///     println!(">> Received {:?}", reply.sample);
-    /// }
-    /// # })
-    /// ```
-    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
-    where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        let selector = selector.try_into().map_err(Into::into);
-        GetBuilder {
-            session: self,
-            selector,
-            target: QueryTarget::default(),
-            consolidation: QueryConsolidation::default(),
-            local_routing: None,
-        }
     }
 
     pub(crate) fn handle_query(
