@@ -75,10 +75,10 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 /// // Configure the unicast transports parameters
 /// let unicast = TransportManager::config_unicast()
 ///         .lease(Duration::from_secs(1))
-///         .keep_alive(Duration::from_millis(100))
+///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
-///         .accept_pending(10)   // Set to 10 the number of simultanous pending incoming transports        
-///         .max_links(1)    // Allow max 1 inbound link per transport
+///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
+///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
 ///         .pid(ZenohId::rand())

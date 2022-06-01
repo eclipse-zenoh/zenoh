@@ -174,14 +174,14 @@
         sequence_number_resolution: 268435456,
         /// Link lease duration in milliseconds to announce to other zenoh nodes
         lease: 10000,
-        /// Link keep-alive interval in milliseconds. If no data is sent, keep alive
+        /// Number of keep-alive messages in a link lease duration. If no data is sent, keep alive
         /// messages will be sent at the configured time interval.
         /// NOTE: In order to consider eventual packet loss and transmission latency and jitter,
         ///       set the actual keep_alive timeout to one fourth of the lease time.
         ///       This is in-line with the ITU-T G.8013/Y.1731 specification on continous connectivity
         ///       check which considers a link as failed when no messages are received in 3.5 times the
         ///       target interval.
-        keep_alive: 2500,
+        keep_alive: 4,
         /// Batch size in bytes is expressed as a 16bit unsigned integer.
         /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
         /// The default batch size value is the maximum batch size: 65535.
