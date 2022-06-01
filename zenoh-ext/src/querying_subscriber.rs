@@ -406,14 +406,14 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         // declare subscriber at first
         let subscriber = match conf.session.clone() {
             SessionRef::Borrow(session) => session
-                .subscribe(&key_expr)
+                .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
                 .period(conf.period)
                 .res_sync()?,
             SessionRef::Shared(session) => session
-                .subscribe(&key_expr)
+                .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)

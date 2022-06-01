@@ -34,7 +34,7 @@ async fn main() {
     println!("Creating Subscriber on '{}'...", key_expr);
 
     let subscriber = session
-        .subscribe(&key_expr)
+        .declare_subscriber(&key_expr)
         .mode(SubMode::Pull)
         .res_async()
         .await

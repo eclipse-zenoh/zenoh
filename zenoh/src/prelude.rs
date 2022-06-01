@@ -1147,7 +1147,7 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn subscribe<'a, IntoKeyExpr>(
+        fn declare_subscriber<'a, IntoKeyExpr>(
             &self,
             key_expr: IntoKeyExpr,
         ) -> SubscriberBuilder<'static, 'a>
@@ -1180,7 +1180,7 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn queryable<'a, IntoKeyExpr>(
+        fn declare_queryable<'a, IntoKeyExpr>(
             &self,
             key_expr: IntoKeyExpr,
         ) -> QueryableBuilder<'static, 'a>
@@ -1205,7 +1205,7 @@ pub(crate) mod common {
         /// publisher.put("value").unwrap();
         /// # })
         /// ```
-        fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+        fn declare_publisher<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
         where
             IntoKeyExpr: TryInto<KeyExpr<'a>>,
             <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;

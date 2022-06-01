@@ -445,7 +445,7 @@ where
     fn res_sync(self) -> Self::Output {
         let session = self.builder.session;
         session
-            .declare_queryable(
+            .declare_queryable_inner(
                 &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,
@@ -566,7 +566,7 @@ where
         let session = self.builder.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .declare_queryable(
+            .declare_queryable_inner(
                 &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,

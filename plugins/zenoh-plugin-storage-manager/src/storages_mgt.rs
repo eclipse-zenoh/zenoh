@@ -41,7 +41,7 @@ pub(crate) async fn start_storage(
     let (tx, rx) = bounded(1);
     task::spawn(async move {
         // subscribe on key_expr
-        let storage_sub = match zenoh.subscribe(&key_expr).res_async().await {
+        let storage_sub = match zenoh.declare_subscriber(&key_expr).res_async().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);
@@ -90,7 +90,7 @@ pub(crate) async fn start_storage(
         }
 
         // answer to queries on key_expr
-        let storage_queryable = match zenoh.queryable(&key_expr).res_sync() {
+        let storage_queryable = match zenoh.declare_queryable(&key_expr).res_sync() {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", admin_key, e);

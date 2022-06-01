@@ -666,7 +666,7 @@ impl Session {
     /// session.put("key/expression", "value").res().await.unwrap();
     /// # })
     /// ```
-    pub fn declare_publication<'a, IntoKeyExpr>(
+    pub(crate) fn declare_publication_intent<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
@@ -724,7 +724,7 @@ impl Session {
     /// session.undeclare_publication("key/expression").res().await.unwrap();
     /// # })
     /// ```
-    pub fn undeclare_publication<'a, IntoKeyExpr>(
+    pub(crate) fn undeclare_publication_intent<'a, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> impl Resolve<ZResult<()>> + 'a
@@ -769,7 +769,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_subscriber(
+    pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
         callback: Callback<Sample>,
@@ -883,7 +883,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn subscribe<'a, 'b, IntoKeyExpr>(
+    pub fn declare_subscriber<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b>
@@ -956,7 +956,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn declare_queryable(
+    pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
         kind: ZInt,
@@ -1069,7 +1069,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn queryable<'a, 'b, IntoKeyExpr>(
+    pub fn declare_queryable<'a, 'b, IntoKeyExpr>(
         &'a self,
         key_expr: IntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b>
@@ -1160,7 +1160,7 @@ impl Session {
     /// publisher.put("value").unwrap();
     /// # })
     /// ```
-    pub fn publish<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+    pub fn declare_publisher<'a, IntoKeyExpr>(&'a self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: TryInto<KeyExpr<'a>>,
         <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
@@ -1208,7 +1208,7 @@ impl Session {
         IntoValue: Into<Value>,
     {
         PutBuilder {
-            publisher: self.publish(key_expr),
+            publisher: self.declare_publisher(key_expr),
             value: value.into(),
             kind: SampleKind::Put,
         }
@@ -1237,7 +1237,7 @@ impl Session {
         <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
     {
         PutBuilder {
-            publisher: self.publish(key_expr),
+            publisher: self.declare_publisher(key_expr),
             value: Value::empty(),
             kind: SampleKind::Delete,
         }
@@ -1552,7 +1552,10 @@ impl EntityFactory for Arc<Session> {
     /// }).await;
     /// # })
     /// ```
-    fn subscribe<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> SubscriberBuilder<'static, 'b>
+    fn declare_subscriber<'b, IntoKeyExpr>(
+        &self,
+        key_expr: IntoKeyExpr,
+    ) -> SubscriberBuilder<'static, 'b>
     where
         IntoKeyExpr: TryInto<KeyExpr<'b>>,
         <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1592,7 +1595,10 @@ impl EntityFactory for Arc<Session> {
     /// }).await;
     /// # })
     /// ```
-    fn queryable<'b, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> QueryableBuilder<'static, 'b>
+    fn declare_queryable<'b, IntoKeyExpr>(
+        &self,
+        key_expr: IntoKeyExpr,
+    ) -> QueryableBuilder<'static, 'b>
     where
         IntoKeyExpr: TryInto<KeyExpr<'b>>,
         <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1622,7 +1628,7 @@ impl EntityFactory for Arc<Session> {
     /// publisher.put("value").unwrap();
     /// # })
     /// ```
-    fn publish<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+    fn declare_publisher<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
     where
         IntoKeyExpr: TryInto<KeyExpr<'a>>,
         <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,

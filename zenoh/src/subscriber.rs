@@ -472,7 +472,7 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                 })
         } else {
             session
-                .declare_subscriber(
+                .declare_subscriber_inner(
                     &key_expr,
                     Box::new(self.callback),
                     &SubInfo {
@@ -717,7 +717,7 @@ where
                 })
         } else {
             session
-                .declare_subscriber(
+                .declare_subscriber_inner(
                     &key_expr,
                     callback,
                     &SubInfo {

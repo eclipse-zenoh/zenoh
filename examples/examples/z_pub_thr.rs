@@ -30,19 +30,17 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("test/thr").res().unwrap();
+    let publisher = session
+        .declare_publisher("test/thr")
+        .congestion_control(CongestionControl::Block)
+        .priority(prio)
+        .res()
+        .unwrap();
 
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
-        session
-            .put(&key_expr, data.clone())
-            // Make sure to not drop messages because of congestion control
-            .congestion_control(CongestionControl::Block)
-            // Set the right priority
-            .priority(prio)
-            .res()
-            .unwrap();
+        publisher.put(data.clone()).res().unwrap();
 
         if print {
             if count < number {

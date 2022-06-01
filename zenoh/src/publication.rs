@@ -17,9 +17,11 @@
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
+use crate::utils::ClosureResolve;
 use crate::Encoding;
 use crate::SessionRef;
 use zenoh_core::zresult::ZResult;
+use zenoh_core::Resolve;
 use zenoh_core::{zread, AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::proto::{data_kind, DataInfo, Options};
 use zenoh_protocol_core::Channel;
@@ -114,12 +116,54 @@ impl Resolvable for PutBuilder<'_> {
 impl SyncResolve for PutBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        self.publisher.res_sync()?.write(self.kind, self.value)
+        let PutBuilder {
+            publisher,
+            value,
+            kind,
+        } = self;
+        let key_expr = publisher.key_expr?;
+        log::trace!("write({:?}, [...])", &key_expr);
+        let state = zread!(publisher.session.state);
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+
+        let mut info = DataInfo::new();
+        let kind = kind as u64;
+        info.kind = match kind {
+            data_kind::DEFAULT => None,
+            kind => Some(kind),
+        };
+        info.encoding = if value.encoding != Encoding::default() {
+            Some(value.encoding)
+        } else {
+            None
+        };
+        info.timestamp = publisher.session.runtime.new_timestamp();
+        let data_info = if info.has_options() { Some(info) } else { None };
+
+        primitives.send_data(
+            &(&key_expr).into(),
+            value.payload.clone(),
+            Channel {
+                priority: publisher.priority.into(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            },
+            publisher.congestion_control,
+            data_info.clone(),
+            None,
+        );
+        publisher.session.handle_data(
+            true,
+            &(&key_expr).into(),
+            data_info,
+            value.payload,
+            publisher.local_routing,
+        );
+        Ok(())
     }
 }
 impl AsyncResolve for PutBuilder<'_> {
     type Future = futures::future::Ready<Self::Output>;
-
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
     }
@@ -169,7 +213,7 @@ pub struct Publisher<'a> {
     pub(crate) local_routing: Option<bool>,
 }
 
-impl Publisher<'_> {
+impl<'a> Publisher<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -191,45 +235,12 @@ impl Publisher<'_> {
         self
     }
 
-    pub fn write(&self, kind: SampleKind, value: Value) -> zenoh_core::Result<()> {
-        log::trace!("write({:?}, [...])", self.key_expr);
-        let state = zread!(self.session.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
-
-        let mut info = DataInfo::new();
-        let kind = kind as u64;
-        info.kind = match kind {
-            data_kind::DEFAULT => None,
-            kind => Some(kind),
-        };
-        info.encoding = if value.encoding != Encoding::default() {
-            Some(value.encoding)
-        } else {
-            None
-        };
-        info.timestamp = self.session.runtime.new_timestamp();
-        let data_info = if info.has_options() { Some(info) } else { None };
-
-        primitives.send_data(
-            &(&self.key_expr).into(),
-            value.payload.clone(),
-            Channel {
-                priority: self.priority.into(),
-                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-            },
-            self.congestion_control,
-            data_info.clone(),
-            None,
-        );
-        self.session.handle_data(
-            true,
-            &(&self.key_expr).into(),
-            data_info,
-            value.payload,
-            self.local_routing,
-        );
-        Ok(())
+    pub fn write(&self, kind: SampleKind, value: Value) -> Publication {
+        Publication {
+            publisher: self,
+            value,
+            kind,
+        }
     }
     /// Send a value.
     ///
@@ -245,14 +256,97 @@ impl Publisher<'_> {
     /// # })
     /// ```
     #[inline]
-    pub fn put<IntoValue>(&self, value: IntoValue) -> zenoh_core::Result<()>
+    pub fn put<IntoValue>(&self, value: IntoValue) -> Publication
     where
         IntoValue: Into<Value>,
     {
         self.write(SampleKind::Put, value.into())
     }
-    pub fn delete(&self) -> zenoh_core::Result<()> {
+    pub fn delete(&self) -> Publication {
         self.write(SampleKind::Delete, Value::empty())
+    }
+    /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
+    pub fn undeclare(mut self) -> impl Resolve<ZResult<()>> + 'a {
+        ClosureResolve(move || {
+            let Publisher {
+                session, key_expr, ..
+            } = &self;
+            session.undeclare_publication_intent(key_expr).res_sync()?;
+            self.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
+            Ok(())
+        })
+    }
+}
+impl Drop for Publisher<'_> {
+    fn drop(&mut self) {
+        if !self.key_expr.is_empty() {
+            let _ = self
+                .session
+                .undeclare_publication_intent(&self.key_expr)
+                .res_sync();
+        }
+    }
+}
+
+pub struct Publication<'a> {
+    publisher: &'a Publisher<'a>,
+    value: Value,
+    kind: SampleKind,
+}
+impl Resolvable for Publication<'_> {
+    type Output = ZResult<()>;
+}
+impl AsyncResolve for Publication<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+impl SyncResolve for Publication<'_> {
+    fn res_sync(self) -> Self::Output {
+        let Publication {
+            publisher,
+            value,
+            kind,
+        } = self;
+        log::trace!("write({:?}, [...])", publisher.key_expr);
+        let state = zread!(publisher.session.state);
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+
+        let mut info = DataInfo::new();
+        let kind = kind as u64;
+        info.kind = match kind {
+            data_kind::DEFAULT => None,
+            kind => Some(kind),
+        };
+        info.encoding = if value.encoding != Encoding::default() {
+            Some(value.encoding)
+        } else {
+            None
+        };
+        info.timestamp = publisher.session.runtime.new_timestamp();
+        let data_info = if info.has_options() { Some(info) } else { None };
+
+        primitives.send_data(
+            &(&publisher.key_expr).into(),
+            value.payload.clone(),
+            Channel {
+                priority: publisher.priority.into(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            },
+            publisher.congestion_control,
+            data_info.clone(),
+            None,
+        );
+        publisher.session.handle_data(
+            true,
+            &(&publisher.key_expr).into(),
+            data_info,
+            value.payload,
+            publisher.local_routing,
+        );
+        Ok(())
     }
 }
 
@@ -269,7 +363,7 @@ where
 
     #[inline]
     fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
-        self.put(item.into())
+        self.put(item.into()).res_sync()
     }
 
     #[inline]
@@ -353,9 +447,15 @@ impl<'a> Resolvable for PublishBuilder<'a> {
 impl SyncResolve for PublishBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
+        let key_expr = self
+            .session
+            .declare_expr(self.key_expr?)
+            .res_sync()?
+            .into_owned();
+        self.session.declare_publication_intent(&key_expr);
         let publisher = Publisher {
             session: self.session,
-            key_expr: self.key_expr?,
+            key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
             local_routing: self.local_routing,

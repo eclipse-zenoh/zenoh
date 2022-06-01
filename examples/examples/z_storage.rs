@@ -38,10 +38,10 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let subscriber = session.subscribe(&key_expr).res().await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let queryable = session.queryable(&key_expr).res().await.unwrap();
+    let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();

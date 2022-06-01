@@ -26,9 +26,9 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.subscribe(&key_expr).res().await.unwrap();
+    let mut subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
-    let publisher = session.publish(&forward).res().await.unwrap();
+    let publisher = session.declare_publisher(&forward).res().await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
     subscriber.forward(publisher).await.unwrap();
 }

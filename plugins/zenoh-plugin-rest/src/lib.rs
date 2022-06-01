@@ -277,7 +277,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                     let sub = req
                         .state()
                         .0
-                        .subscribe(&key_expr)
+                        .declare_subscriber(&key_expr)
                         .res_async()
                         .await
                         .unwrap();

@@ -44,7 +44,7 @@ async fn main() {
     let session = zenoh::open(config).res_async().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let queryable = session.queryable(key).res_sync().unwrap();
+    let queryable = session.declare_queryable(key).res_sync().unwrap();
 
     async_std::task::spawn({
         let receiver = queryable.receiver.clone();
@@ -61,13 +61,10 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Declaring key expression '{}'...", event_key);
-    let event_key = session.declare_expr(&event_key).res_async().await.unwrap();
-    println!(" => ExprId {}", event_key);
-
-    println!("Declaring publication on '{}'...", &event_key);
-    session
-        .declare_publication(&event_key)
+    print!("Declaring publisher on '{}'...", event_key);
+    let publisher = session
+        .declare_publisher(&event_key)
+        .congestion_control(CongestionControl::Block)
         .res_async()
         .await
         .unwrap();
@@ -82,10 +79,8 @@ async fn main() {
         key
     );
     loop {
-        session
-            .put(&event_key, value)
-            .encoding(KnownEncoding::TextPlain)
-            .congestion_control(CongestionControl::Block)
+        publisher
+            .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
             .res_async()
             .await
             .unwrap();

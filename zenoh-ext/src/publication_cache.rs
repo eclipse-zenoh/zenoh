@@ -122,10 +122,14 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let local_sub = conf.session.subscribe(&key_expr).local().res_sync()?;
+        let local_sub = conf
+            .session
+            .declare_subscriber(&key_expr)
+            .local()
+            .res_sync()?;
 
         // declare the queryable that will answer to queries on cache
-        let queryable = conf.session.queryable(&key_expr).res_sync()?;
+        let queryable = conf.session.declare_queryable(&key_expr).res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();

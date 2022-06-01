@@ -31,7 +31,7 @@ fn main() {
 
     let mut nm = 0;
     let _sub = session
-        .subscribe(&key_expr)
+        .declare_subscriber(&key_expr)
         .callback_mut(move |_sample| {
             if count == 0 {
                 start = Instant::now();

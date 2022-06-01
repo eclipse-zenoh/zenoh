@@ -31,7 +31,7 @@ fn main() {
     // The key expression to wait the response back
     let key_expr_pong = session.declare_expr("test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).res().unwrap();
+    let sub = session.declare_subscriber(&key_expr_pong).res().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
