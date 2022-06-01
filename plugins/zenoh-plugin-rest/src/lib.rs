@@ -301,7 +301,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.close().res_async().await {
+                            if let Err(e) = sub.undeclare().res_async().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;

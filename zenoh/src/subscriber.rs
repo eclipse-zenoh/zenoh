@@ -15,9 +15,8 @@
 //! Subscribing primitives.
 use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
 use crate::time::Period;
-use crate::utils::ClosureResolve;
-use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
+use crate::{Undeclarable, API_DATA_RECEPTION_CHANNEL_SIZE};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -126,11 +125,36 @@ impl<'l> CallbackSubscriber<'l> {
     /// # })
     /// ```
     #[inline]
-    pub fn close(mut self) -> impl Resolve<ZResult<()>> + 'l {
-        ClosureResolve(move || {
-            self.alive = false;
-            self.session.unsubscribe(self.state.id)
-        })
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
+        Undeclarable::undeclare(self, ())
+    }
+}
+
+impl<'a> Undeclarable<()> for CallbackSubscriber<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = SubscriberUndeclaration<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        SubscriberUndeclaration { subscriber: self }
+    }
+}
+pub struct SubscriberUndeclaration<'a> {
+    subscriber: CallbackSubscriber<'a>,
+}
+impl Resolvable for SubscriberUndeclaration<'_> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for SubscriberUndeclaration<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        self.subscriber.alive = false;
+        self.subscriber
+            .session
+            .unsubscribe(self.subscriber.state.id)
+    }
+}
+impl AsyncResolve for SubscriberUndeclaration<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -662,8 +686,15 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.close()
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        self.subscriber.undeclare()
+    }
+}
+impl<'a, T> Undeclarable<()> for HandlerSubscriber<'a, T> {
+    type Output = <CallbackSubscriber<'a> as Undeclarable<()>>::Output;
+    type Undeclaration = <CallbackSubscriber<'a> as Undeclarable<()>>::Undeclaration;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        Undeclarable::undeclare(self.subscriber, ())
     }
 }
 

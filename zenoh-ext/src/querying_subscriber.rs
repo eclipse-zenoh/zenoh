@@ -441,7 +441,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     /// Close this QueryingSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self._subscriber.close()
+        self._subscriber.undeclare()
     }
 
     /// Issue a new query using the configured selector.

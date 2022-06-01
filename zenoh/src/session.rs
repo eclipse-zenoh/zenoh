@@ -48,6 +48,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_core::AsyncResolve;
+use zenoh_core::Resolvable;
 use zenoh_core::Resolve;
 use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
@@ -260,6 +261,65 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
+pub trait Undeclarable<T> {
+    type Output;
+    type Undeclaration: Resolve<Self::Output>;
+    fn undeclare(self, _: T) -> Self::Undeclaration;
+}
+impl<'a, T: Undeclarable<()>> Undeclarable<&'a Session> for T {
+    type Output = <T as Undeclarable<()>>::Output;
+    type Undeclaration = <T as Undeclarable<()>>::Undeclaration;
+    fn undeclare(self, _: &'a Session) -> Self::Undeclaration {
+        self.undeclare(())
+    }
+}
+
+impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = KeyExprUndeclaration<'a>;
+    fn undeclare(self, session: &'a Session) -> Self::Undeclaration {
+        KeyExprUndeclaration {
+            session,
+            expr: self,
+        }
+    }
+}
+pub struct KeyExprUndeclaration<'a> {
+    session: &'a Session,
+    expr: KeyExpr<'a>,
+}
+impl Resolvable for KeyExprUndeclaration<'_> {
+    type Output = ZResult<()>;
+}
+impl AsyncResolve for KeyExprUndeclaration<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+impl SyncResolve for KeyExprUndeclaration<'_> {
+    fn res_sync(self) -> Self::Output {
+        let KeyExprUndeclaration { session, expr } = self;
+        let expr_id = match &expr.0 {
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+            } if *prefix_len as usize == key_expr.len() => *expr_id as u64,
+            _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_expr` to call `Session::undeclare`", expr).into()),
+        };
+        trace!("undeclare_expr({:?})", expr_id);
+        let mut state = zwrite!(session.state);
+        state.local_resources.remove(&expr_id);
+
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+        primitives.forget_resource(expr_id);
+
+        Ok(())
+    }
+}
+
 /// A zenoh session.
 ///
 pub struct Session {
@@ -394,6 +454,10 @@ impl Session {
         })
     }
 
+    pub fn undeclare<'a, T: Undeclarable<&'a Self>>(&'a self, decl: T) -> T::Undeclaration {
+        decl.undeclare(self)
+    }
+
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
     /// The returned configuration [`Notifier`] can be used to read the current
@@ -506,7 +570,8 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let expr_id = session.declare_expr("key/expression").res().await.unwrap();
+    /// let expr = session.declare_expr("key/expression").res().await.unwrap();
+    /// session.undeclare(expr).res().await.unwrap(); // don't forget to undeclare `expr` when done with it
     /// # })
     /// ```
     pub fn declare_expr<'a, IntoKeyExpr>(
@@ -569,46 +634,6 @@ impl Session {
                     Ok(key_expr)
                 }
             }
-        })
-    }
-
-    /// Undeclare the *numerical Id/resource key* association previously declared
-    /// with [`declare_expr`](Session::declare_expr).
-    ///
-    /// # Arguments
-    ///
-    /// * `expr_id` - The numerical Id to unmap
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let expr = session.declare_expr("key/expression").res().await.unwrap();
-    /// session.undeclare_expr(expr).res().await;
-    /// # })
-    /// ```
-    pub fn undeclare_expr<'a>(&'a self, expr: KeyExpr<'a>) -> impl Resolve<ZResult<()>> + 'a {
-        ClosureResolve(move || {
-            let expr_id = match &expr.0 {
-                KeyExprInner::Wire {
-                    key_expr,
-                    expr_id,
-                    prefix_len,
-                } if *prefix_len as usize == key_expr.len() => *expr_id as u64,
-                _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_expr` to call `Session::undeclare_expr`", expr).into()),
-            };
-            trace!("undeclare_expr({:?})", expr_id);
-            let mut state = zwrite!(self.state);
-            state.local_resources.remove(&expr_id);
-
-            let primitives = state.primitives.as_ref().unwrap().clone();
-            drop(state);
-            primitives.forget_resource(expr_id);
-
-            Ok(())
         })
     }
 
@@ -856,6 +881,7 @@ impl Session {
             }
         })
     }
+
     /// Declare a publication for the given key expression.
     ///
     /// Puts that match the given key expression will only be sent on the network

@@ -231,8 +231,8 @@ impl<'a> PublicationCache<'a> {
             type Future = Pin<Box<dyn Future<Output = ZResult<()>> + Send + 'a>>;
             fn res_async(self) -> Self::Future {
                 Box::pin(async move {
-                    self.p._queryable.close().res_async().await?;
-                    self.p._local_sub.close().res_async().await?;
+                    self.p._queryable.undeclare().res_async().await?;
+                    self.p._local_sub.undeclare().res_async().await?;
                     drop(self.p._stoptx);
                     Ok(())
                 })

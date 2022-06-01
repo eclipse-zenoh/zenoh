@@ -15,8 +15,8 @@
 //! Queryable primitives.
 
 use crate::prelude::*;
-use crate::utils::ClosureResolve;
 use crate::SessionRef;
+use crate::Undeclarable;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::FutureExt;
 use std::fmt;
@@ -213,11 +213,36 @@ impl<'a> CallbackQueryable<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn close(mut self) -> impl Resolve<crate::Result<()>> + 'a {
-        ClosureResolve(move || {
-            self.alive = false;
-            self.session.close_queryable(self.state.id)
-        })
+    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = QueryableUndeclare<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        QueryableUndeclare { queryable: self }
+    }
+}
+pub struct QueryableUndeclare<'a> {
+    queryable: CallbackQueryable<'a>,
+}
+impl<'a> Resolvable for QueryableUndeclare<'a> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for QueryableUndeclare<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        self.queryable.alive = false;
+        self.queryable
+            .session
+            .close_queryable(self.queryable.state.id)
+    }
+}
+impl AsyncResolve for QueryableUndeclare<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -495,8 +520,15 @@ pub struct HandlerQueryable<'a, Receiver> {
 
 impl<'a, Receiver> HandlerQueryable<'a, Receiver> {
     #[inline]
-    pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
-        self.queryable.close()
+    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a, T> Undeclarable<()> for HandlerQueryable<'a, T> {
+    type Output = <CallbackQueryable<'a> as Undeclarable<()>>::Output;
+    type Undeclaration = <CallbackQueryable<'a> as Undeclarable<()>>::Undeclaration;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        Undeclarable::undeclare(self.queryable, ())
     }
 }
 

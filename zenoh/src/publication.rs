@@ -17,9 +17,9 @@
 use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::subscriber::Reliability;
-use crate::utils::ClosureResolve;
 use crate::Encoding;
 use crate::SessionRef;
+use crate::Undeclarable;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::Resolve;
 use zenoh_core::{zread, AsyncResolve, Resolvable, SyncResolve};
@@ -266,15 +266,37 @@ impl<'a> Publisher<'a> {
         self.write(SampleKind::Delete, Value::empty())
     }
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
-    pub fn undeclare(mut self) -> impl Resolve<ZResult<()>> + 'a {
-        ClosureResolve(move || {
-            let Publisher {
-                session, key_expr, ..
-            } = &self;
-            session.undeclare_publication_intent(key_expr).res_sync()?;
-            self.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
-            Ok(())
-        })
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a> Undeclarable<()> for Publisher<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = PublisherUndeclare<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        PublisherUndeclare { publisher: self }
+    }
+}
+pub struct PublisherUndeclare<'a> {
+    publisher: Publisher<'a>,
+}
+impl Resolvable for PublisherUndeclare<'_> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for PublisherUndeclare<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        let Publisher {
+            session, key_expr, ..
+        } = &self.publisher;
+        session.undeclare_publication_intent(key_expr).res_sync()?;
+        self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
+        Ok(())
+    }
+}
+impl AsyncResolve for PublisherUndeclare<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 impl Drop for Publisher<'_> {
