@@ -19,6 +19,7 @@ const GROUP_PREFIX: &str = "/zenoh/ext/net/group";
 const EVENT_POSTFIX: &str = "evt";
 const VIEW_REFRESH_LEASE_RATIO: f32 = 0.75f32;
 const DEFAULT_LEASE: Duration = Duration::from_secs(18);
+const DEFAULT_PRIORITY: Priority = Priority::DataHigh;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct JoinEvent {
@@ -75,6 +76,8 @@ pub struct Member {
     liveliness: MemberLiveliness,
     lease: Duration,
     refresh_ratio: f32,
+    #[serde(skip)]
+    priority: Priority,
 }
 
 impl Member {
@@ -85,6 +88,7 @@ impl Member {
             liveliness: MemberLiveliness::Auto,
             lease: DEFAULT_LEASE,
             refresh_ratio: VIEW_REFRESH_LEASE_RATIO,
+            priority: DEFAULT_PRIORITY,
         }
     }
 
@@ -108,6 +112,11 @@ impl Member {
 
     pub fn refresh_ratio(mut self, r: f32) -> Self {
         self.refresh_ratio = r;
+        self
+    }
+
+    pub fn priority(mut self, p: Priority) -> Self {
+        self.priority = p;
         self
     }
 }
@@ -138,7 +147,11 @@ async fn keep_alive_task(z: Arc<Session>, state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::debug!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = z.put(&state.event_expr, buf.clone()).res_async().await;
+        let _ = z
+            .put(&state.event_expr, buf.clone())
+            .priority(state.local_member.priority)
+            .res_async()
+            .await;
     }
 }
 
@@ -161,6 +174,7 @@ fn spawn_watchdog(s: Arc<GroupState>, period: Duration) -> JoinHandle<()> {
             let u_evt = &*s.user_events_tx.lock().await;
             for e in expired_members {
                 if let Some(tx) = u_evt {
+                    log::debug!("Member with lease expired: {}", e);
                     tx.send(GroupEvent::LeaseExpired(LeaseExpiredEvent { mid: e }))
                         .unwrap()
                 }
@@ -312,7 +326,11 @@ impl Group {
         log::debug!("Sending Join Message for local member:\n{:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
-        let _ = z.put(&event_expr, buf).res_async().await;
+        let _ = z
+            .put(&event_expr, buf)
+            .priority(state.local_member.priority)
+            .res_async()
+            .await;
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {

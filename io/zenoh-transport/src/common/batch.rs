@@ -114,10 +114,7 @@ impl SerializationBatch {
     /// * `sn_best_effort` - The sequence number generator for the best effort channel.
     ///
     pub(crate) fn new(size: u16, is_streamed: bool) -> SerializationBatch {
-        let mut size: usize = size as usize;
-        if is_streamed {
-            size += 2;
-        }
+        let size: usize = size as usize;
         let mut batch = SerializationBatch {
             buffer: WBuf::new(size, true).into(),
             is_streamed,

@@ -196,13 +196,13 @@ pub const ZN_LINK_LEASE_KEY: u64 = 0x63;
 pub const ZN_LINK_LEASE_STR: &str = "link_lease";
 pub const ZN_LINK_LEASE_DEFAULT: &str = "10000";
 
-/// Configures the link keep alive expressed in milliseconds.
+/// Configures the number of keep-alive messages in a link lease duration.
 /// String key : `"link_keep_alive"`.
 /// Accepted values : `<unsigned integer>`.
-/// Default value : `2500 (2.5 seconds)`.
+/// Default value : `4 (2.5 seconds)`.
 pub const ZN_LINK_KEEP_ALIVE_KEY: u64 = 0x64;
 pub const ZN_LINK_KEEP_ALIVE_STR: &str = "link_keep_alive";
-pub const ZN_LINK_KEEP_ALIVE_DEFAULT: &str = "2500";
+pub const ZN_LINK_KEEP_ALIVE_DEFAULT: &str = "4";
 
 /// Configures the sequence number resolution.
 /// String key : `"seq_num_resolution"`.
