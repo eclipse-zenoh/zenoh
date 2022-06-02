@@ -69,7 +69,7 @@ pub type DeleteBuilder<'a> = PutBuilder<'a>;
 /// ```
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a> {
-    pub(crate) publisher: PublishBuilder<'a>,
+    pub(crate) publisher: PublisherBuilder<'a>,
     pub(crate) value: Value,
     pub(crate) kind: SampleKind,
 }
@@ -416,14 +416,14 @@ where
 /// # })
 /// ```
 #[derive(Debug)]
-pub struct PublishBuilder<'a> {
+pub struct PublisherBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'a>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
     pub(crate) local_routing: Option<bool>,
 }
-impl<'a> Clone for PublishBuilder<'a> {
+impl<'a> Clone for PublisherBuilder<'a> {
     fn clone(&self) -> Self {
         Self {
             session: self.session.clone(),
@@ -438,7 +438,7 @@ impl<'a> Clone for PublishBuilder<'a> {
     }
 }
 
-impl<'a> PublishBuilder<'a> {
+impl<'a> PublisherBuilder<'a> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -461,15 +461,15 @@ impl<'a> PublishBuilder<'a> {
     }
 }
 
-impl<'a> Resolvable for PublishBuilder<'a> {
+impl<'a> Resolvable for PublisherBuilder<'a> {
     type Output = ZResult<Publisher<'a>>;
 }
-impl SyncResolve for PublishBuilder<'_> {
+impl SyncResolve for PublisherBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
         let key_expr = self
             .session
-            .declare_expr(self.key_expr?)
+            .declare_keyexpr(self.key_expr?)
             .res_sync()?
             .into_owned();
         self.session.declare_publication_intent(&key_expr);
@@ -484,7 +484,7 @@ impl SyncResolve for PublishBuilder<'_> {
         Ok(publisher)
     }
 }
-impl AsyncResolve for PublishBuilder<'_> {
+impl AsyncResolve for PublisherBuilder<'_> {
     type Future = futures::future::Ready<Self::Output>;
 
     fn res_async(self) -> Self::Future {

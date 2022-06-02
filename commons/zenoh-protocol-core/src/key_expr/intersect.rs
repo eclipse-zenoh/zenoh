@@ -14,31 +14,8 @@
 
 use crate::key_expr::utils::Split;
 
-use super::keyexpr;
+use super::{keyexpr, DELIMITER, DOUBLE_WILD, SINGLE_WILD};
 
-// #[cfg(test)]
-// pub trait UTF8 {
-//     fn utf(&self) -> &str;
-// }
-// #[cfg(test)]
-// impl UTF8 for [u8] {
-//     fn utf(&self) -> &str {
-//         std::str::from_utf8(self).unwrap()
-//     }
-// }
-// macro_rules! utfdbg {
-//     ($e: expr) => {{
-//         let r = $e;
-//         if (cfg!(test)) {
-//             println!("[{}:{}] {} = {}", file!(), line!(), stringify!($e), r.utf());
-//         }
-//         r
-//     }};
-// }
-
-const DELIMITER: u8 = b'/';
-const SMALL_WILD: u8 = b'*';
-const BIG_WILD: &[u8] = b"**";
 pub const DEFAULT_INTERSECTOR: LeftToRightIntersector<LTRChunkIntersector> =
     LeftToRightIntersector(LTRChunkIntersector);
 
@@ -80,8 +57,10 @@ impl<'a, ChunkIntersector: Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]
             let (l, new_left) = left.split_once(&DELIMITER);
             let (r, new_right) = right.split_once(&DELIMITER);
             match ((l, new_left), (r, new_right)) {
-                (([], []), ([], [])) | ((BIG_WILD, []), _) | (_, (BIG_WILD, [])) => return true,
-                ((BIG_WILD, _), _) => {
+                (([], []), ([], [])) | ((DOUBLE_WILD, []), _) | (_, (DOUBLE_WILD, [])) => {
+                    return true
+                }
+                ((DOUBLE_WILD, _), _) => {
                     if self.intersect(new_left, right) {
                         return true;
                     }
@@ -90,7 +69,7 @@ impl<'a, ChunkIntersector: Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]
                     }
                     right = new_right
                 }
-                (_, (BIG_WILD, _)) => {
+                (_, (DOUBLE_WILD, _)) => {
                     if self.intersect(left, new_right) {
                         return true;
                     }
@@ -116,14 +95,14 @@ impl Intersector<NoBigWilds<&[u8]>, NoBigWilds<&[u8]>> for LTRChunkIntersector {
     fn intersect(&self, mut left: NoBigWilds<&[u8]>, mut right: NoBigWilds<&[u8]>) -> bool {
         loop {
             match (left.0, right.0) {
-                ([], []) | (b"*", _) | (_, b"*") => return true,
-                ([SMALL_WILD, new_left @ ..], [_, new_right @ ..]) => {
+                ([], []) | ([SINGLE_WILD], _) | (_, [SINGLE_WILD]) => return true,
+                ([SINGLE_WILD, new_left @ ..], [_, new_right @ ..]) => {
                     if self.intersect(NoBigWilds(new_left), right) {
                         return true;
                     }
                     right = NoBigWilds(new_right)
                 }
-                ([_, new_left @ ..], [SMALL_WILD, new_right @ ..]) => {
+                ([_, new_left @ ..], [SINGLE_WILD, new_right @ ..]) => {
                     if self.intersect(left, NoBigWilds(new_right)) {
                         return true;
                     }
@@ -144,8 +123,8 @@ impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a 
     Intersector<&[u8], &[u8]> for MiddleOutIntersector<ChunkIntersector>
 {
     fn intersect(&self, left: &[u8], right: &[u8]) -> bool {
-        let mut split_left = left.spliter(BIG_WILD);
-        let mut split_right = right.spliter(BIG_WILD);
+        let mut split_left = left.spliter(DOUBLE_WILD);
+        let mut split_right = right.spliter(DOUBLE_WILD);
         let ll = split_left
             .left()
             .map(|x| NoBigWilds(&x[..(x.len().saturating_sub(1))]));
@@ -290,7 +269,7 @@ impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a 
     /// This is only called if `str` doesn't contain any `**`. `needle` might contain some though.
     fn contains(&self, str: &[u8], needle: &[u8]) -> bool {
         let mut chunks = str.spliter(&DELIMITER);
-        for needle in needle.spliter(BIG_WILD) {
+        for needle in needle.spliter(DOUBLE_WILD) {
             let original_needle = needle.spliter(&DELIMITER).filter(|chunk| !chunk.is_empty());
             'current_needle: loop {
                 let mut chunks_preview = chunks.clone();

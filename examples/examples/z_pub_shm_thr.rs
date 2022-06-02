@@ -32,7 +32,7 @@ async fn main() {
         *b = rand::random::<u8>();
     }
 
-    let key_expr = z.declare_expr("test/thr").res().await.unwrap();
+    let key_expr = z.declare_keyexpr("test/thr").res().await.unwrap();
 
     loop {
         z.put(&key_expr, buf.clone())

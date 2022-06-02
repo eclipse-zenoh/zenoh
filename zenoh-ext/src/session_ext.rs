@@ -75,31 +75,31 @@ pub trait SessionExt {
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         QueryingSubscriberBuilder::new(
             SessionRef::Borrow(self),
@@ -107,26 +107,26 @@ impl SessionExt for Session {
         )
     }
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
 }
 
 impl SessionExt for Arc<Session> {
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         QueryingSubscriberBuilder::new(
             SessionRef::Shared(self.clone()),
@@ -134,13 +134,13 @@ impl SessionExt for Arc<Session> {
         )
     }
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <IntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }

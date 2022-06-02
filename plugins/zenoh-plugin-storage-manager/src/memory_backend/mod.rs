@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
-use zenoh::utils::wire_expr;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
@@ -218,10 +217,6 @@ impl Storage for MemoryStorage {
                     }
                 },
             },
-            SampleKind::Patch => {
-                warn!("Received PATCH for {}: not yet supported", sample.key_expr);
-                return Ok(StorageInsertionResult::Outdated);
-            }
         }
     }
 
@@ -236,8 +231,7 @@ impl Storage for MemoryStorage {
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if wire_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
-                    {
+                    if query.key_selector().intersects(&sample.key_expr) {
                         let s: Sample = sample.clone();
                         query.reply(s).res_async().await?;
                     }

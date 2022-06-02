@@ -21,7 +21,6 @@ use std::pin::Pin;
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::utils::wire_expr;
 use zenoh::Session;
 use zenoh_core::{bail, zerror, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
@@ -185,7 +184,7 @@ impl<'a> PublicationCache<'a> {
                                 }
                             } else {
                                 for (key_expr, queue) in cache.iter() {
-                                    if wire_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
+                                    if query.selector().key_selector.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
                                             if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);

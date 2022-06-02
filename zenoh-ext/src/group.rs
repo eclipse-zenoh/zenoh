@@ -315,7 +315,7 @@ impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
         let _group_expr = z
-            .declare_expr(&_group_expr)
+            .declare_keyexpr(&_group_expr)
             .res_async()
             .await
             .unwrap()

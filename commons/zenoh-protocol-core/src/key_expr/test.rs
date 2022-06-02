@@ -128,8 +128,8 @@ pub fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
     }
 }
 
-pub struct KeyFuzzer<Rng: rand::Rng>(pub Rng);
-impl<Rng: rand::Rng> Iterator for KeyFuzzer<Rng> {
+pub struct KeyExprFuzzer<Rng: rand::Rng>(pub Rng);
+impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
         let mut next = Vec::new();
@@ -147,7 +147,7 @@ fn fuzz() {
     use crate::key_expr::canon::Canonizable;
     const FUZZ_ROUNDS: usize = 10000;
     let rng = rand::thread_rng();
-    let mut fuzzer = KeyFuzzer(rng);
+    let mut fuzzer = KeyExprFuzzer(rng);
     let mut ke1 = fuzzer.next().unwrap();
     ke1.canonize();
     for mut ke2 in fuzzer.take(FUZZ_ROUNDS) {

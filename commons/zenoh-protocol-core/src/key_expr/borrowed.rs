@@ -20,7 +20,7 @@ use zenoh_core::{bail, Error as ZError};
 
 use crate::WireExpr;
 
-use super::OwnedKeyExpr;
+use super::{OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -43,7 +43,7 @@ pub struct keyexpr(str);
 
 impl keyexpr {
     /// Returns `true` if the `keyexpr`s intersect, i.e. there exists at least one key which is contained in both of the sets defined by `self` and `other`.
-    pub fn intersect(&self, other: &Self) -> bool {
+    pub fn intersects(&self, other: &Self) -> bool {
         use super::intersect::Intersector;
         super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
     }
@@ -113,7 +113,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
             }
         }
-        if value.contains(['#', '?', '$']) {
+        if value.contains(FORBIDDEN_CHARS) {
             bail!(
                 "Invalid Key Expr `{}`: `#?$` are forbidden characters",
                 value

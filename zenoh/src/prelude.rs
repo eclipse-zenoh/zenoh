@@ -38,7 +38,7 @@ pub(crate) mod common {
     use crate::buf::ZBuf;
     use crate::data_kind;
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    use crate::publication::PublishBuilder;
+    use crate::publication::PublisherBuilder;
     use crate::queryable::{Query, QueryableBuilder};
     use crate::subscriber::SubscriberBuilder;
     use crate::time::{new_reception_timestamp, Timestamp};
@@ -71,7 +71,7 @@ pub(crate) mod common {
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol_core::ZenohId;
 
-    /// A numerical Id mapped to a key expression with [`declare_expr`](crate::Session::declare_expr).
+    /// A numerical Id mapped to a key expression with [`declare_keyexpr`](crate::Session::declare_keyexpr).
     pub use zenoh_protocol_core::ExprId;
 
     /// A key expression.
@@ -481,14 +481,13 @@ pub(crate) mod common {
     }
 
     /// The kind of a [`Sample`].
+    #[repr(u8)]
     #[derive(Debug, Copy, Clone, PartialEq)]
     pub enum SampleKind {
         /// if the [`Sample`] was caused by a `put` operation.
-        Put = data_kind::PUT as isize,
-        /// if the [`Sample`] was caused by a `patch` operation.
-        Patch = data_kind::PATCH as isize,
+        Put = data_kind::PUT as u8,
         /// if the [`Sample`] was caused by a `delete` operation.
-        Delete = data_kind::DELETE as isize,
+        Delete = data_kind::DELETE as u8,
     }
 
     impl Default for SampleKind {
@@ -501,7 +500,6 @@ pub(crate) mod common {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 SampleKind::Put => write!(f, "PUT"),
-                SampleKind::Patch => write!(f, "PATCH"),
                 SampleKind::Delete => write!(f, "DELETE"),
             }
         }
@@ -511,7 +509,6 @@ pub(crate) mod common {
         fn from(kind: ZInt) -> Self {
             match kind {
                 data_kind::PUT => SampleKind::Put,
-                data_kind::PATCH => SampleKind::Patch,
                 data_kind::DELETE => SampleKind::Delete,
                 _ => {
                     log::warn!(
@@ -558,13 +555,13 @@ pub(crate) mod common {
         }
         /// Creates a new Sample.
         #[inline]
-        pub fn try_from<IntoKeyExpr, IntoValue>(
-            key_expr: IntoKeyExpr,
+        pub fn try_from<TryIntoKeyExpr, IntoValue>(
+            key_expr: TryIntoKeyExpr,
             value: IntoValue,
         ) -> Result<Self, zenoh_core::Error>
         where
-            IntoKeyExpr: TryInto<KeyExpr<'static>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::Error>,
+            TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::Error>,
             IntoValue: Into<Value>,
         {
             Ok(Sample {
@@ -1147,13 +1144,13 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn declare_subscriber<'a, IntoKeyExpr>(
+        fn declare_subscriber<'a, TryIntoKeyExpr>(
             &self,
-            key_expr: IntoKeyExpr,
+            key_expr: TryIntoKeyExpr,
         ) -> SubscriberBuilder<'static, 'a>
         where
-            IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
         ///
@@ -1180,13 +1177,13 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn declare_queryable<'a, IntoKeyExpr>(
+        fn declare_queryable<'a, TryIntoKeyExpr>(
             &self,
-            key_expr: IntoKeyExpr,
+            key_expr: TryIntoKeyExpr,
         ) -> QueryableBuilder<'static, 'a>
         where
-            IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
         ///
@@ -1205,10 +1202,13 @@ pub(crate) mod common {
         /// publisher.put("value").res().await.unwrap();
         /// # })
         /// ```
-        fn declare_publisher<'a, IntoKeyExpr>(&self, key_expr: IntoKeyExpr) -> PublishBuilder<'a>
+        fn declare_publisher<'a, TryIntoKeyExpr>(
+            &self,
+            key_expr: TryIntoKeyExpr,
+        ) -> PublisherBuilder<'a>
         where
-            IntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <IntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
     }
 
     pub type Dyn<T> = std::boxed::Box<T>;

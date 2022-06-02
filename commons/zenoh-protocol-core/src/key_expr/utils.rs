@@ -29,11 +29,11 @@ impl Writer {
 }
 
 #[derive(Debug)]
-pub struct Spliter<'a, S: ?Sized, D: ?Sized> {
+pub struct Splitter<'a, S: ?Sized, D: ?Sized> {
     s: Option<&'a S>,
     d: &'a D,
 }
-impl<'a, S: ?Sized, D: ?Sized> Clone for Spliter<'a, S, D> {
+impl<'a, S: ?Sized, D: ?Sized> Clone for Splitter<'a, S, D> {
     fn clone(&self) -> Self {
         Self {
             s: self.s,
@@ -42,7 +42,7 @@ impl<'a, S: ?Sized, D: ?Sized> Clone for Spliter<'a, S, D> {
     }
 }
 
-impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Spliter<'a, S, D> {
+impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
     pub fn into_inner(self) -> Option<&'a S> {
         self.s
     }
@@ -74,7 +74,7 @@ impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Spliter<'a, S, D> {
         }
     }
 }
-impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Spliter<'a, S, D> {
+impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Splitter<'a, S, D> {
     type Item = &'a S;
     fn next(&mut self) -> Option<Self::Item> {
         match self.s {
@@ -94,7 +94,7 @@ fn splits() {
         Some(b"".as_ref())
     );
 }
-impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Spliter<'a, S, D> {
+impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Splitter<'a, S, D> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self.s {
             Some(s) => {
@@ -111,8 +111,8 @@ pub trait Split<Delimiter: ?Sized> {
     fn try_split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, Option<&'a Self>);
     fn rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
     fn try_rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (Option<&'a Self>, &'a Self);
-    fn spliter<'a>(&'a self, delimiter: &'a Delimiter) -> Spliter<'a, Self, Delimiter> {
-        Spliter {
+    fn spliter<'a>(&'a self, delimiter: &'a Delimiter) -> Splitter<'a, Self, Delimiter> {
+        Splitter {
             s: Some(self),
             d: delimiter,
         }

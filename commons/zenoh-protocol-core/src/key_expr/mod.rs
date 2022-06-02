@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub(crate) const DELIMITER: u8 = b'/';
+pub(crate) const SINGLE_WILD: u8 = b'*';
+pub(crate) const DOUBLE_WILD: &[u8] = b"**";
+pub(crate) const FORBIDDEN_CHARS: [char; 3] = ['#', '?', '$'];
+
 pub(crate) mod owned;
 pub use owned::OwnedKeyExpr;
 

@@ -24,7 +24,7 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("test/thr").res().unwrap();
+    let key_expr = session.declare_keyexpr("test/thr").res().unwrap();
 
     let mut count = 0;
     let mut start = Instant::now();

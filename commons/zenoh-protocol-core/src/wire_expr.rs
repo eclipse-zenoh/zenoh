@@ -246,7 +246,7 @@ pub fn matches(s1: &str, s2: &str) -> bool {
 ///
 /// Finally, it is worth mentioning that for time and space efficiency matters,
 /// zenoh will automatically map key expressions to small integers. The mapping is automatic,
-/// but it can be triggered excplicily by with `zenoh::Session::declare_expr()`.
+/// but it can be triggered excplicily by with `zenoh::Session::declare_keyexpr()`.
 ///
 //
 //  7 6 5 4 3 2 1 0

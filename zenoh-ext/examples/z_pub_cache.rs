@@ -29,7 +29,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     print!("Declare key expression {}", key_expr);
-    let expr_id = session.declare_expr(&key_expr).res().await.unwrap();
+    let expr_id = session.declare_keyexpr(&key_expr).res().await.unwrap();
     println!(" => ExprId {}", expr_id);
 
     println!("Creating PublicationCache on {}", &expr_id);

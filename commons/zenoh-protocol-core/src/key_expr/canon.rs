@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::key_expr::utils::{Split, Writer};
+use crate::key_expr::{
+    utils::{Split, Writer},
+    DELIMITER, DOUBLE_WILD, SINGLE_WILD,
+};
 pub trait Canonizable {
     fn canonize(&mut self);
 }
@@ -31,11 +34,11 @@ impl Canonizable for &mut str {
             }
             if in_big_wild {
                 match chunk {
-                    b"*" => {
+                    [SINGLE_WILD] => {
                         writer.write_byte(b'*');
                         break;
                     }
-                    b"**" => continue,
+                    DOUBLE_WILD => continue,
                     _ => {
                         writer.write(b"**/");
                         writer.write(chunk);
@@ -43,7 +46,7 @@ impl Canonizable for &mut str {
                         break;
                     }
                 }
-            } else if chunk == b"**" {
+            } else if chunk == DOUBLE_WILD {
                 in_big_wild = true;
                 continue;
             } else {
@@ -57,28 +60,28 @@ impl Canonizable for &mut str {
             }
             if in_big_wild {
                 match chunk {
-                    b"*" => {
+                    [SINGLE_WILD] => {
                         writer.write(b"/*");
                     }
-                    b"**" => {}
+                    DOUBLE_WILD => {}
                     _ => {
                         writer.write(b"/**/");
                         writer.write(chunk);
                         in_big_wild = false;
                     }
                 }
-            } else if chunk == b"**" {
+            } else if chunk == DOUBLE_WILD {
                 in_big_wild = true;
             } else {
-                writer.write(b"/");
+                writer.write_byte(DELIMITER);
                 writer.write(chunk);
             }
         }
         if in_big_wild {
             if writer.len != 0 {
-                writer.write_byte(b'/');
+                writer.write_byte(DELIMITER);
             }
-            writer.write(b"**")
+            writer.write(DOUBLE_WILD)
         }
         *self = unsafe {
             std::str::from_utf8_unchecked_mut(std::slice::from_raw_parts_mut(

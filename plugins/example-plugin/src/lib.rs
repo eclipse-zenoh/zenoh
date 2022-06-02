@@ -24,7 +24,6 @@ use std::sync::{
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::utils::wire_expr;
 use zenoh_core::AsyncResolve;
 use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};
@@ -158,7 +157,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
                 for (key_expr, sample) in stored.iter() {
-                    if wire_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
+                    if query.selector().key_selector.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
                         query.reply(Ok(sample.clone())).res_async().await.unwrap();
                     }
                 }

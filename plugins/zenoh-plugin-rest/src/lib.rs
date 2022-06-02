@@ -126,7 +126,6 @@ async fn to_html(results: flume::Receiver<Reply>) -> String {
 fn method_to_kind(method: Method) -> SampleKind {
     match method {
         Method::Put => SampleKind::Put,
-        Method::Patch => SampleKind::Patch,
         Method::Delete => SampleKind::Delete,
         _ => SampleKind::default(),
     }
