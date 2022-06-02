@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    str::FromStr,
+};
 use zenoh_core::Result as ZResult;
 
 pub use zenoh_protocol_core::key_expr::*;
@@ -41,6 +44,12 @@ impl std::ops::Deref for KeyExpr<'_> {
             KeyExprInner::Owned(s) => s,
             KeyExprInner::Wire { key_expr, .. } => key_expr,
         }
+    }
+}
+impl FromStr for KeyExpr<'static> {
+    type Err = zenoh_core::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(KeyExprInner::Owned(s.parse()?)))
     }
 }
 impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {

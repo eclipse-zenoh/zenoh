@@ -15,7 +15,7 @@
 use crate::WireExpr;
 
 use super::{canon::Canonizable, keyexpr};
-use std::convert::TryFrom;
+use std::{convert::TryFrom, str::FromStr};
 
 #[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String")]
@@ -53,6 +53,12 @@ impl std::ops::Deref for OwnedKeyExpr {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
         unsafe { keyexpr::from_str_unchecked(&self.0) }
+    }
+}
+impl FromStr for OwnedKeyExpr {
+    type Err = zenoh_core::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s.to_string())
     }
 }
 impl TryFrom<String> for OwnedKeyExpr {
