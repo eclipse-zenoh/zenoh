@@ -19,6 +19,10 @@ use super::{keyexpr, DELIMITER, DOUBLE_WILD, SINGLE_WILD};
 pub const DEFAULT_INTERSECTOR: LeftToRightIntersector<LTRChunkIntersector> =
     LeftToRightIntersector(LTRChunkIntersector);
 
+/// The trait used to implement key expression intersectors.
+///
+/// Note that `Intersector<&keyexpr, &keyexpr>` is auto-implemented with quickchecks (`streq->true`, `strne&nowild->false`)
+/// for any `Intersector<&[u8], &[u8]>`. Implementing `Intersector<&[u8], &[u8]>` is the recommended way to implement intersectors.
 pub trait Intersector<Left, Right> {
     fn intersect(&self, left: Left, right: Right) -> bool;
 }
