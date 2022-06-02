@@ -110,10 +110,6 @@
 //!                 //  - if not: drop the sample
 //!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
-//!             SampleKind::Patch => {
-//!                 println!("Received PATCH for {}: not yet supported", sample.key_expr);
-//!                 return Ok(StorageInsertionResult::Outdated);
-//!             }
 //!         }
 //!     }
 //!
