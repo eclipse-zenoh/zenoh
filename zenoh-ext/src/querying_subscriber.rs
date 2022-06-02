@@ -19,7 +19,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
-use zenoh_core::{zerror, zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
@@ -35,27 +35,6 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
-}
-impl Clone for QueryingSubscriberBuilder<'_, '_> {
-    fn clone(&self) -> Self {
-        Self {
-            session: self.session.clone(),
-            key_expr: match &self.key_expr {
-                Ok(ke) => Ok(ke.clone()),
-                Err(e) => Err(zerror!("Cloned KE Error {}", e).into()),
-            },
-            reliability: self.reliability,
-            mode: self.mode,
-            period: self.period,
-            query_selector: match &self.query_selector {
-                Some(Ok(s)) => Some(Ok(s.clone())),
-                None => None,
-                Some(Err(e)) => Some(Err(zerror!("Cloned Selector Error: {}", e).into())),
-            },
-            query_target: self.query_target,
-            query_consolidation: self.query_consolidation,
-        }
-    }
 }
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
@@ -238,7 +217,6 @@ impl SyncResolve for QueryingSubscriberBuilder<'_, '_> {
 }
 
 /// The builder of QueryingSubscriber, allowing to configure it.
-#[derive(Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     builder: QueryingSubscriberBuilder<'a, 'b>,

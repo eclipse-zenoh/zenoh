@@ -13,7 +13,7 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;

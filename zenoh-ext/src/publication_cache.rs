@@ -22,7 +22,7 @@ use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
-use zenoh_core::{bail, zerror, AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -32,20 +32,6 @@ pub struct PublicationCacheBuilder<'a, 'b> {
     queryable_prefix: Option<String>,
     history: usize,
     resources_limit: Option<usize>,
-}
-impl Clone for PublicationCacheBuilder<'_, '_> {
-    fn clone(&self) -> Self {
-        Self {
-            session: self.session,
-            pub_key_expr: match &self.pub_key_expr {
-                Ok(ke) => Ok(ke.clone()),
-                Err(e) => Err(zerror!("Cloned KE Error {}", e).into()),
-            },
-            queryable_prefix: self.queryable_prefix.clone(),
-            history: self.history,
-            resources_limit: self.resources_limit,
-        }
-    }
 }
 
 impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {

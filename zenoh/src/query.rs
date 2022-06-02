@@ -151,20 +151,6 @@ pub struct GetBuilder<'a, 'b> {
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) local_routing: Option<bool>,
 }
-impl Clone for GetBuilder<'_, '_> {
-    fn clone(&self) -> Self {
-        Self {
-            session: self.session,
-            selector: match &self.selector {
-                Ok(s) => Ok(s.clone()),
-                Err(e) => Err(zerror!("Cloned Selector Error: {}", e).into()),
-            },
-            target: self.target,
-            consolidation: self.consolidation,
-            local_routing: self.local_routing,
-        }
-    }
-}
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
     /// Receive the replies for this query with a callback.
@@ -319,7 +305,7 @@ impl AsyncResolve for GetBuilder<'_, '_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
@@ -411,7 +397,7 @@ where
 /// }
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
 where
