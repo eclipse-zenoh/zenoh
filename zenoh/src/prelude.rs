@@ -779,7 +779,6 @@ pub(crate) mod common {
     /// The "stoptime" property key for time-range selection
     pub const PROP_STOPTIME: &str = "stoptime";
 
-    #[derive(Clone, Debug, PartialEq)]
     /// An expression identifying a selection of resources.
     ///
     /// A selector is the conjunction of an key expression identifying a set
@@ -787,9 +786,9 @@ pub(crate) mod common {
     ///
     /// Structure of a selector:
     /// ```text
-    /// /s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)[a;b;x;y;...;z]
-    /// |key_selector||---------------- value_selector --------------------|
-    ///                |--- filter --| |---- properties ---|  |--fragment-|
+    /// s1/s2/..../sn?x>1&y<2&...&z=4(p1=v1;p2=v2;...;pn=vn)[a;b;x;y;...;z]
+    /// |- key_expr-| |---------------- value_selector -------------------|
+    ///               |--- filter --| |---- properties ---|  |--fragment-|
     /// ```
     /// where:
     ///  * __key_selector__: an expression identifying a set of Resources.
@@ -804,10 +803,11 @@ pub(crate) mod common {
     ///    will be used in place of the original value.
     ///
     /// _**NOTE**_: _the filters and fragments are not yet supported in current zenoh version._
+    #[derive(Clone, Debug, PartialEq)]
     pub struct Selector<'a> {
         /// The part of this selector identifying which keys should be part of the selection.
         /// I.e. all characters before `?`.
-        pub key_selector: KeyExpr<'a>,
+        pub key_expr: KeyExpr<'a>,
         /// the part of this selector identifying which values should be part of the selection.
         /// I.e. all characters starting from `?`.
         pub value_selector: Cow<'a, str>,
@@ -816,7 +816,7 @@ pub(crate) mod common {
     impl<'a> Selector<'a> {
         pub fn to_owned(&self) -> Selector<'static> {
             Selector {
-                key_selector: self.key_selector.clone().into_owned(),
+                key_expr: self.key_expr.clone().into_owned(),
                 value_selector: self.value_selector.to_string().into(),
             }
         }
@@ -845,7 +845,7 @@ pub(crate) mod common {
 
     impl fmt::Display for Selector<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(f, "{}{}", self.key_selector, self.value_selector)
+            write!(f, "{}{}", self.key_expr, self.value_selector)
         }
     }
 
@@ -862,7 +862,7 @@ pub(crate) mod common {
                 .find(|c| c == '?')
                 .map_or((s.as_str(), ""), |i| s.split_at(i));
             Ok(Selector {
-                key_selector: key_selector.to_string().try_into()?,
+                key_expr: key_selector.to_string().try_into()?,
                 value_selector: value_selector.to_string().into(),
             })
         }
@@ -874,7 +874,7 @@ pub(crate) mod common {
             let (key_selector, value_selector) =
                 s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
             Ok(Selector {
-                key_selector: key_selector.try_into()?,
+                key_expr: key_selector.try_into()?,
                 value_selector: value_selector.into(),
             })
         }
@@ -890,7 +890,7 @@ pub(crate) mod common {
     impl<'a> From<&'a Query> for Selector<'a> {
         fn from(q: &'a Query) -> Self {
             Selector {
-                key_selector: q.key_selector.clone(),
+                key_expr: q.key_expr.clone(),
                 value_selector: (&q.value_selector).into(),
             }
         }
@@ -899,7 +899,7 @@ pub(crate) mod common {
     impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
         fn from(key_selector: &KeyExpr<'a>) -> Self {
             Self {
-                key_selector: key_selector.clone(),
+                key_expr: key_selector.clone(),
                 value_selector: "".into(),
             }
         }
@@ -908,7 +908,7 @@ pub(crate) mod common {
     impl<'a> From<&'a keyexpr> for Selector<'a> {
         fn from(key_selector: &'a keyexpr) -> Self {
             Self {
-                key_selector: key_selector.into(),
+                key_expr: key_selector.into(),
                 value_selector: "".into(),
             }
         }
@@ -917,7 +917,7 @@ pub(crate) mod common {
     impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
         fn from(key_selector: &'a OwnedKeyExpr) -> Self {
             Self {
-                key_selector: key_selector.deref().into(),
+                key_expr: key_selector.deref().into(),
                 value_selector: "".into(),
             }
         }
@@ -926,7 +926,7 @@ pub(crate) mod common {
     impl From<OwnedKeyExpr> for Selector<'static> {
         fn from(key_selector: OwnedKeyExpr) -> Self {
             Self {
-                key_selector: key_selector.into(),
+                key_expr: key_selector.into(),
                 value_selector: "".into(),
             }
         }
@@ -935,7 +935,7 @@ pub(crate) mod common {
     impl<'a> From<KeyExpr<'a>> for Selector<'a> {
         fn from(key_selector: KeyExpr<'a>) -> Self {
             Self {
-                key_selector,
+                key_expr: key_selector,
                 value_selector: "".into(),
             }
         }

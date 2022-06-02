@@ -119,7 +119,7 @@
 //!
 //!     // When receiving a Query (i.e. on GET operations)
 //!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-//!         let _key_elector = query.key_selector();
+//!         let _key_elector = query.key_expr();
 //!         // @TODO:
 //!         //  - test if key selector contains *
 //!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
@@ -222,8 +222,8 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
-        self.q.key_selector()
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        self.q.key_expr()
     }
 
     /// The value selector part of this Query.

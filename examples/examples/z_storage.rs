@@ -62,7 +62,7 @@ async fn main() {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if query.selector().key_selector.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
+                    if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
                         query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
                 }

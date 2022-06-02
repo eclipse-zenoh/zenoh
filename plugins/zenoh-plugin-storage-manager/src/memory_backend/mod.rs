@@ -221,17 +221,17 @@ impl Storage for MemoryStorage {
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        trace!("on_query for {}", query.key_selector());
-        if !query.key_selector().as_str().contains('*') {
+        trace!("on_query for {}", query.key_expr());
+        if !query.key_expr().as_str().contains('*') {
             if let Some(Present { sample, ts: _ }) =
-                self.map.read().await.get(query.key_selector().as_str())
+                self.map.read().await.get(query.key_expr().as_str())
             {
                 query.reply(sample.clone()).res_async().await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if query.key_selector().intersects(&sample.key_expr) {
+                    if query.key_expr().intersects(&sample.key_expr) {
                         let s: Sample = sample.clone();
                         query.reply(s).res_async().await?;
                     }

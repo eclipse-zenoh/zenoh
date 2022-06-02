@@ -30,7 +30,7 @@ use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResol
 /// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: KeyExpr<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
 
@@ -45,15 +45,15 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_selector: self.key_selector.clone(),
+            key_expr: self.key_expr.clone(),
             value_selector: (&self.value_selector).into(),
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
-        &self.key_selector
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        &self.key_expr
     }
 
     /// The value selector part of this Query.
@@ -75,7 +75,7 @@ impl Query {
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
-            .field("key_selector", &self.key_selector)
+            .field("key_selector", &self.key_expr)
             .field("value_selector", &self.value_selector)
             .finish()
     }
@@ -86,7 +86,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_selector, &self.value_selector),
+                &format!("{}{}", &self.key_expr, &self.value_selector),
             )
             .finish()
     }

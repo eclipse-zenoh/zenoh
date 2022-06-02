@@ -370,13 +370,13 @@ impl<'a> CallbackQueryingSubscriber<'a> {
 
         let key_expr = conf.key_expr?;
         let Selector {
-            key_selector,
+            key_expr: key_selector,
             value_selector,
         } = match conf.query_selector {
             Some(Ok(s)) => s,
             Some(Err(e)) => return Err(e),
             None => Selector {
-                key_selector: key_expr.clone(),
+                key_expr: key_expr.clone(),
                 value_selector: std::borrow::Cow::Borrowed(""),
             },
         };
@@ -427,7 +427,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
         self.query_on_selector(
             Selector {
-                key_selector: self.query_key_expr.clone(),
+                key_expr: self.query_key_expr.clone(),
                 value_selector: self.query_value_selector.clone().into(),
             },
             self.query_target,

@@ -311,7 +311,7 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<zenoh::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        let key_selector = selector.key_selector.as_str();
+        let key_selector = selector.key_expr.as_str();
         with_extended_string(&mut key, &["/version"], |key| {
             if zenoh::utils::wire_expr::intersect(key, key_selector) {
                 responses.push(zenoh::plugins::Response {

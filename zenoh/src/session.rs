@@ -1403,7 +1403,7 @@ impl Session {
 
         drop(state);
         primitives.send_query(
-            &(&selector.key_selector).into(),
+            &(&selector.key_expr).into(),
             selector.value_selector.as_ref(),
             qid,
             zenoh_protocol_core::QueryTAK {
@@ -1416,7 +1416,7 @@ impl Session {
         if local_routing {
             self.handle_query(
                 true,
-                &(&selector.key_selector).into(),
+                &(&selector.key_expr).into(),
                 selector.value_selector.as_ref(),
                 qid,
                 zenoh_protocol_core::QueryTAK {
@@ -1484,7 +1484,7 @@ impl Session {
 
         for (kind, req_sender) in kinds_and_senders {
             req_sender(Query {
-                key_selector: key_expr.clone().into_owned(),
+                key_expr: key_expr.clone().into_owned(),
                 value_selector: value_selector.clone(),
                 kind,
                 replies_sender: rep_sender.clone(),

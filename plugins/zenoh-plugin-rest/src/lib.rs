@@ -205,7 +205,7 @@ impl RunningPluginTrait for RunningPlugin {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::wire_expr::intersect(key, selector.key_selector.as_str()) {
+            if zenoh::utils::wire_expr::intersect(key, selector.key_expr.as_str()) {
                 responses.push(zenoh::plugins::Response {
                     key: key.clone(),
                     value: GIT_VERSION.into(),
@@ -213,7 +213,7 @@ impl RunningPluginTrait for RunningPlugin {
             }
         });
         with_extended_string(&mut key, &["/port"], |port_key| {
-            if zenoh::utils::wire_expr::intersect(selector.key_selector.as_str(), port_key) {
+            if zenoh::utils::wire_expr::intersect(selector.key_expr.as_str(), port_key) {
                 responses.push(zenoh::plugins::Response {
                     key: port_key.clone(),
                     value: (&self.0).into(),
