@@ -23,7 +23,7 @@ pub(crate) enum KeyExprInner<'a> {
     Owned(OwnedKeyExpr),
     Wire {
         key_expr: OwnedKeyExpr,
-        expr_id: u32,
+        expr_id: u64,
         prefix_len: u32,
     },
 }

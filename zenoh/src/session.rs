@@ -605,7 +605,7 @@ impl Session {
                 .find(|(_expr_id, res)| &*res.name == expr)
             {
                 Some((expr_id, _res)) => Ok(KeyExpr(KeyExprInner::Wire {
-                    expr_id: *expr_id as u32,
+                    expr_id: *expr_id,
                     prefix_len: expr.len() as u32,
                     key_expr: owned_expr,
                 })),
@@ -621,7 +621,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     let key_expr = KeyExpr(KeyExprInner::Wire {
-                        expr_id: expr_id as u32,
+                        expr_id,
                         prefix_len: expr.len() as u32,
                         key_expr: owned_expr,
                     });
