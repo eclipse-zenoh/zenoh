@@ -42,7 +42,7 @@ pub trait MessageReader {
     fn read_deco_reply_context(&mut self, header: u8) -> Option<ReplyContext>;
     fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage>;
     fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody>;
-    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>>;
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<WireExpr<'static>>;
     fn read_data_info(&mut self) -> Option<DataInfo>;
     fn read_queryable_info(&mut self) -> Option<QueryableInfo>;
     fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody>;
@@ -550,16 +550,16 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     #[inline(always)]
-    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>> {
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<WireExpr<'static>> {
         let id = self.read_zint()?;
         if has_suffix {
             let s = self.read_string()?;
-            Some(KeyExpr {
+            Some(WireExpr {
                 scope: id,
                 suffix: s.into(),
             })
         } else {
-            Some(KeyExpr {
+            Some(WireExpr {
                 scope: id,
                 suffix: "".into(),
             })

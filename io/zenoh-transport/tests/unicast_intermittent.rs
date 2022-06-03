@@ -249,7 +249,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
             task::sleep(SLEEP).await;
 
-            print!("/");
+            print!("");
             std::io::stdout().flush().unwrap();
 
             ztimeout!(c_ses3.close()).unwrap();
@@ -263,7 +263,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     let c_router_manager = router_manager.clone();
     let res = ztimeout!(task::spawn_blocking(move || {
         // Create the message to send
-        let key = "/test".into();
+        let key = "test".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),

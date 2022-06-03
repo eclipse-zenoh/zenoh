@@ -624,7 +624,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -699,7 +699,7 @@ pub enum Declaration {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resource {
     pub expr_id: ZInt,
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for Resource {
@@ -743,7 +743,7 @@ impl Header for ForgetResource {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Publisher {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for Publisher {
@@ -767,7 +767,7 @@ impl Header for Publisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetPublisher {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for ForgetPublisher {
@@ -795,7 +795,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscriber {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub info: SubInfo,
 }
 
@@ -826,7 +826,7 @@ impl Header for Subscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetSubscriber {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for ForgetSubscriber {
@@ -854,7 +854,7 @@ impl Header for ForgetSubscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Queryable {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub kind: ZInt,
     pub info: QueryableInfo,
 }
@@ -885,7 +885,7 @@ impl Header for Queryable {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForgetQueryable {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub kind: ZInt,
 }
 
@@ -941,7 +941,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pull {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -984,7 +984,7 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Query {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTAK>,
@@ -1136,7 +1136,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: KeyExpr<'static>,
+        key: WireExpr<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1182,7 +1182,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: KeyExpr<'static>,
+        key: WireExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1204,7 +1204,7 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: KeyExpr<'static>,
+        key: WireExpr<'static>,
         value_selector: String,
         qid: ZInt,
         target: Option<QueryTAK>,

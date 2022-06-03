@@ -1007,7 +1007,7 @@ mod tests {
                     c_size.store(*size, Ordering::Release);
 
                     // Send reliable messages
-                    let key = "/pipeline/thr".into();
+                    let key = "pipeline/thr".into();
                     let payload = ZBuf::from(vec![0_u8; *size]);
                     let channel = Channel {
                         priority: Priority::Control,

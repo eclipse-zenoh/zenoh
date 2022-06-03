@@ -33,7 +33,7 @@ pub use zenoh_protocol_core::ConsolidationMode;
 pub use zenoh_protocol_core::ConsolidationStrategy;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum QueryConsolidation {
     Auto,
     Manual(ConsolidationStrategy),
@@ -132,7 +132,7 @@ pub(crate) struct QueryState {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let replies = session
-///     .get("/key/expression?value>1")
+///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
 ///     .consolidation(QueryConsolidation::none())
 ///     .res()
@@ -143,11 +143,10 @@ pub(crate) struct QueryState {
 /// }
 /// # })
 /// ```
-#[derive(Debug, Clone)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct GetBuilder<'a, 'b> {
     pub(crate) session: &'a Session,
-    pub(crate) selector: Selector<'b>,
+    pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) local_routing: Option<bool>,
@@ -164,7 +163,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
-    ///     .get("/key/expression")
+    ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
     ///     .res()
     ///     .await
@@ -193,7 +192,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
-    ///     .get("/key/expression")
+    ///     .get("key/expression")
     ///     .callback_mut(move |reply| {n += 1;})
     ///     .res()
     ///     .await
@@ -221,7 +220,7 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session
-    ///     .get("/key/expression")
+    ///     .get("key/expression")
     ///     .with(flume::bounded(32))
     ///     .res()
     ///     .await
@@ -297,7 +296,7 @@ impl AsyncResolve for GetBuilder<'_, '_> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
-///     .get("/key/expression?value>1")
+///     .get("key/expression?value>1")
 ///     .callback(|reply| {println!("Received {:?}", reply.sample)})
 ///     .target(QueryTarget::All)
 ///     .consolidation(QueryConsolidation::none())
@@ -306,7 +305,7 @@ impl AsyncResolve for GetBuilder<'_, '_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackGetBuilder<'a, 'b, Callback>
 where
@@ -355,7 +354,7 @@ where
 {
     fn res_sync(self) -> Self::Output {
         self.builder.session.query(
-            &self.builder.selector,
+            &self.builder.selector?,
             self.builder.target,
             self.builder.consolidation,
             self.builder.local_routing,
@@ -386,7 +385,7 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let replies = session
-///     .get("/key/expression?value>1")
+///     .get("key/expression?value>1")
 ///     .with(flume::bounded(32))
 ///     .target(QueryTarget::All)
 ///     .consolidation(QueryConsolidation::none())
@@ -398,7 +397,7 @@ where
 /// }
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerGetBuilder<'a, 'b, IntoHandler, Receiver>
 where
@@ -452,7 +451,7 @@ where
         self.builder
             .session
             .query(
-                &self.builder.selector,
+                &self.builder.selector?,
                 self.builder.target,
                 self.builder.consolidation,
                 self.builder.local_routing,

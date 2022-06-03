@@ -112,7 +112,7 @@ fn parse_args() -> (Config, String, String) {
         ))
         .arg(
             Arg::from_usage("-p, --path=[PATH]        'The key expression to publish onto.'")
-                .default_value("/demo/example/zenoh-rs-pub"),
+                .default_value("demo/example/zenoh-rs-pub"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value of to publish.'")

@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -25,16 +26,13 @@ use crate::session_ext::SessionRef;
 const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
-#[derive(Clone)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
-    sub_key_expr: KeyExpr<'b>,
+    key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
     mode: SubMode,
     period: Option<Period>,
-    query_key_expr: KeyExpr<'b>,
-    query_value_selector: String,
+    query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
 }
@@ -42,7 +40,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub(crate) fn new(
         session: SessionRef<'a>,
-        sub_key_expr: KeyExpr<'b>,
+        key_expr: ZResult<KeyExpr<'b>>,
     ) -> QueryingSubscriberBuilder<'a, 'b> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget::All;
@@ -53,12 +51,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
         QueryingSubscriberBuilder {
             session,
-            sub_key_expr: sub_key_expr.clone(),
+            key_expr,
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
-            query_key_expr: sub_key_expr,
-            query_value_selector: "".into(),
+            query_selector: None,
             query_target,
             query_consolidation,
         }
@@ -160,11 +157,10 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
-        IntoSelector: Into<Selector<'b>>,
+        IntoSelector: TryInto<Selector<'b>>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        let selector = query_selector.into();
-        self.query_key_expr = selector.key_selector.to_owned();
-        self.query_value_selector = selector.value_selector.to_string();
+        self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self
     }
 
@@ -185,12 +181,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
         QueryingSubscriberBuilder {
             session: self.session,
-            sub_key_expr: self.sub_key_expr.to_owned(),
+            key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
             mode: self.mode,
             period: self.period,
-            query_key_expr: self.query_key_expr.to_owned(),
-            query_value_selector: "".to_string(),
+            query_selector: self.query_selector.map(|s| s.map(|s| s.to_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
         }
@@ -222,7 +217,6 @@ impl SyncResolve for QueryingSubscriberBuilder<'_, '_> {
 }
 
 /// The builder of QueryingSubscriber, allowing to configure it.
-#[derive(Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     builder: QueryingSubscriberBuilder<'a, 'b>,
@@ -374,17 +368,30 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             }
         };
 
+        let key_expr = conf.key_expr?;
+        let Selector {
+            key_expr: key_selector,
+            value_selector,
+        } = match conf.query_selector {
+            Some(Ok(s)) => s,
+            Some(Err(e)) => return Err(e),
+            None => Selector {
+                key_expr: key_expr.clone(),
+                value_selector: std::borrow::Cow::Borrowed(""),
+            },
+        };
+
         // declare subscriber at first
         let subscriber = match conf.session.clone() {
             SessionRef::Borrow(session) => session
-                .subscribe(&conf.sub_key_expr)
+                .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
                 .period(conf.period)
                 .res_sync()?,
             SessionRef::Shared(session) => session
-                .subscribe(&conf.sub_key_expr)
+                .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .mode(conf.mode)
@@ -394,8 +401,8 @@ impl<'a> CallbackQueryingSubscriber<'a> {
 
         let mut query_subscriber = CallbackQueryingSubscriber {
             session: conf.session,
-            query_key_expr: conf.query_key_expr,
-            query_value_selector: conf.query_value_selector,
+            query_key_expr: key_selector,
+            query_value_selector: value_selector.into_owned(),
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
             _subscriber: subscriber,
@@ -412,7 +419,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     /// Close this QueryingSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self._subscriber.close()
+        self._subscriber.undeclare()
     }
 
     /// Issue a new query using the configured selector.
@@ -420,11 +427,11 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
         self.query_on_selector(
             Selector {
-                key_selector: self.query_key_expr.clone(),
+                key_expr: self.query_key_expr.clone(),
                 value_selector: self.query_value_selector.clone().into(),
             },
-            self.query_target.clone(),
-            self.query_consolidation.clone(),
+            self.query_target,
+            self.query_consolidation,
         )
     }
 

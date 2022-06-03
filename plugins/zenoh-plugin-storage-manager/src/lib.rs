@@ -72,7 +72,7 @@ struct StorageRuntimeInner {
 impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
-            "/@/router/{}/status/plugins/{}",
+            "@/router/{}/status/plugins/{}",
             &self.runtime.pid, &self.name
         )
     }
@@ -311,9 +311,9 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<zenoh::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        let key_selector = selector.key_selector.as_str();
+        let key_selector = selector.key_expr.as_str();
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::key_expr::intersect(key, key_selector) {
+            if zenoh::utils::wire_expr::intersect(key, key_selector) {
                 responses.push(zenoh::plugins::Response {
                     key: key.clone(),
                     value: GIT_VERSION.into(),
@@ -325,14 +325,14 @@ impl RunningPluginTrait for StorageRuntime {
             for (volume_id, volume) in &guard.volumes {
                 with_extended_string(key, &[volume_id], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
-                        if zenoh::utils::key_expr::intersect(key, key_selector) {
+                        if zenoh::utils::wire_expr::intersect(key, key_selector) {
                             responses.push(zenoh::plugins::Response {
                                 key: key.clone(),
                                 value: volume.lib_path.clone().into(),
                             })
                         }
                     });
-                    if zenoh::utils::key_expr::intersect(key, key_selector) {
+                    if zenoh::utils::wire_expr::intersect(key, key_selector) {
                         responses.push(zenoh::plugins::Response {
                             key: key.clone(),
                             value: volume.backend.get_admin_status(),
@@ -345,7 +345,7 @@ impl RunningPluginTrait for StorageRuntime {
             for storages in guard.storages.values() {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
-                        if zenoh::utils::key_expr::intersect(key, key_selector) {
+                        if zenoh::utils::wire_expr::intersect(key, key_selector) {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
                                 let _ = handle.send(StorageMessage::GetStatus(tx)).await;

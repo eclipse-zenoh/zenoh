@@ -22,6 +22,8 @@ pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_core::{bail, zerror};
 
+pub mod key_expr;
+
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
@@ -38,13 +40,13 @@ pub type WhatAmI = whatami::WhatAmI;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 
-/// A numerical Id mapped to a key expression with `zenoh::Session::declare_expr()`.
+/// A numerical Id mapped to a key expression with `zenoh::Session::declare_keyexpr()`.
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
-pub mod key_expr;
-pub use crate::key_expr::KeyExpr;
+pub mod wire_expr;
+pub use crate::wire_expr::WireExpr;
 
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
@@ -393,7 +395,7 @@ pub enum ConsolidationMode {
 
 /// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
@@ -478,7 +480,7 @@ impl Default for ConsolidationStrategy {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QueryTarget {
     BestMatching,
     All,

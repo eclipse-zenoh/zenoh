@@ -187,7 +187,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let key = "/test02".into();
+        let key = "test02".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),
@@ -299,7 +299,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         );
 
         // Create the message to send
-        let key = "/test02".into();
+        let key = "test02".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
         let channel = Channel {
             priority: Priority::default(),

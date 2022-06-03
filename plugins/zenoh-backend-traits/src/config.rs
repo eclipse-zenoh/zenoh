@@ -1,7 +1,7 @@
 use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
-use zenoh::Result as ZResult;
+use zenoh::{key_expr::keyexpr, prelude::KeyExpr, Result as ZResult};
 use zenoh_core::{bail, zerror, Error};
 
 #[derive(Debug, Clone, AsMut, AsRef)]
@@ -28,7 +28,7 @@ pub struct VolumeConfig {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StorageConfig {
     pub name: String,
-    pub key_expr: String,
+    pub key_expr: KeyExpr<'static>,
     pub strip_prefix: String,
     pub volume_id: String,
     pub volume_cfg: Value,
@@ -246,7 +246,10 @@ impl VolumeConfig {
 impl StorageConfig {
     pub fn to_json_value(&self) -> Value {
         let mut result = serde_json::Map::new();
-        result.insert("key_expr".into(), Value::String(self.key_expr.clone()));
+        result.insert(
+            "key_expr".into(),
+            Value::String(self.key_expr.keyexpr().to_owned().into()),
+        );
         if !self.strip_prefix.is_empty() {
             result.insert(
                 "strip_prefix".into(),
@@ -274,11 +277,15 @@ impl StorageConfig {
                 plugin_name,
             )
         })?;
-        let key_expr = if let Some(Value::String(s)) = config.get("key_expr") {
-            s.clone()
-        } else {
-            bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` field",
+        let key_expr = match config.get("key_expr").and_then(|x| x.as_str()) {
+            Some(s) => match keyexpr::new(s) {
+                Ok(ke) => ke.to_owned(),
+                Err(e) => bail!("{} is not a valid key-expression: {}", s, e),
+            },
+            None => {
+                bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` string-typed field",
             plugin_name,)
+            }
         };
         let strip_prefix = match config.get("strip_prefix") {
             Some(Value::String(s)) => s.clone(),
@@ -309,7 +316,7 @@ impl StorageConfig {
         };
         Ok(StorageConfig {
             name: storage_name.into(),
-            key_expr,
+            key_expr: key_expr.into(),
             strip_prefix,
             volume_id,
             volume_cfg,

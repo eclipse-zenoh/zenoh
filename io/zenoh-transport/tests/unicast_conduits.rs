@@ -263,7 +263,7 @@ async fn single_run(
     msg_size: usize,
 ) {
     // Create the message to send
-    let key = "/test".into();
+    let key = "test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;

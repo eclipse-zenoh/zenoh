@@ -48,7 +48,7 @@ pub trait MessageWriter {
     ) -> bool;
     fn write_zenoh_message(&mut self, msg: &mut ZenohMessage) -> bool;
     fn write_data(&mut self, data: &Data) -> bool;
-    fn write_key_expr(&mut self, key: &KeyExpr) -> bool;
+    fn write_key_expr(&mut self, key: &WireExpr) -> bool;
     fn write_data_info(&mut self, info: &DataInfo) -> bool;
     fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool;
     fn write_declare(&mut self, declare: &Declare) -> bool;
@@ -397,7 +397,7 @@ impl MessageWriter for WBuf {
     }
 
     #[inline(always)]
-    fn write_key_expr(&mut self, key: &KeyExpr) -> bool {
+    fn write_key_expr(&mut self, key: &WireExpr) -> bool {
         if key.has_suffix() {
             self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
         } else {

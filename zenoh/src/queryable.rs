@@ -15,8 +15,8 @@
 //! Queryable primitives.
 
 use crate::prelude::*;
-use crate::utils::ClosureResolve;
 use crate::SessionRef;
+use crate::Undeclarable;
 use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
 use futures::FutureExt;
 use std::fmt;
@@ -25,15 +25,12 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::AsyncResolve;
-use zenoh_core::Resolvable;
-use zenoh_core::Resolve;
-use zenoh_core::SyncResolve;
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
 
 /// Structs received by a [`Queryable`](HandlerQueryable).
 pub struct Query {
     /// The key_selector of this Query.
-    pub(crate) key_selector: KeyExpr<'static>,
+    pub(crate) key_expr: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
 
@@ -48,15 +45,15 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_selector: self.key_selector.clone(),
+            key_expr: self.key_expr.clone(),
             value_selector: (&self.value_selector).into(),
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
-        &self.key_selector
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        &self.key_expr
     }
 
     /// The value selector part of this Query.
@@ -78,7 +75,7 @@ impl Query {
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
-            .field("key_selector", &self.key_selector)
+            .field("key_selector", &self.key_expr)
             .field("value_selector", &self.value_selector)
             .finish()
     }
@@ -89,7 +86,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_selector, &self.value_selector),
+                &format!("{}{}", &self.key_expr, &self.value_selector),
             )
             .finish()
     }
@@ -149,7 +146,7 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
 
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr: WireExpr<'static>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
@@ -184,10 +181,10 @@ impl fmt::Debug for QueryableState {
 /// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
 /// }
 /// # })
 /// ```
@@ -211,16 +208,41 @@ impl<'a> CallbackQueryable<'a> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.queryable("/key/expression").res().await.unwrap();
-    /// queryable.close().res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+    /// queryable.undeclare().res().await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn close(mut self) -> impl Resolve<crate::Result<()>> + 'a {
-        ClosureResolve(move || {
-            self.alive = false;
-            self.session.close_queryable(self.state.id)
-        })
+    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = QueryableUndeclare<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        QueryableUndeclare { queryable: self }
+    }
+}
+pub struct QueryableUndeclare<'a> {
+    queryable: CallbackQueryable<'a>,
+}
+impl<'a> Resolvable for QueryableUndeclare<'a> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for QueryableUndeclare<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        self.queryable.alive = false;
+        self.queryable
+            .session
+            .close_queryable(self.queryable.state.id)
+    }
+}
+impl AsyncResolve for QueryableUndeclare<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -242,16 +264,29 @@ impl Drop for CallbackQueryable<'_> {
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) kind: ZInt,
     pub(crate) complete: bool,
+}
+impl<'a, 'b> Clone for QueryableBuilder<'a, 'b> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match &self.key_expr {
+                Ok(k) => Ok(k.clone()),
+                Err(e) => Err(zerror!("Cloned KE error: {}", e).into()),
+            },
+            kind: self.kind,
+            complete: self.complete,
+        }
+    }
 }
 
 impl<'a, 'b> QueryableBuilder<'a, 'b> {
@@ -265,7 +300,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .declare_queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
     ///     .res()
     ///     .await
@@ -297,7 +332,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .declare_queryable("key/expression")
     ///     .callback_mut(move |query| {n += 1;})
     ///     .res()
     ///     .await
@@ -325,7 +360,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
-    ///     .queryable("/key/expression")
+    ///     .declare_queryable("key/expression")
     ///     .with(flume::bounded(32))
     ///     .res()
     ///     .await
@@ -385,7 +420,7 @@ impl AsyncResolve for QueryableBuilder<'_, '_> {
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.queryable("/key/expression").res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
@@ -435,8 +470,8 @@ where
     fn res_sync(self) -> Self::Output {
         let session = self.builder.session;
         session
-            .declare_queryable(
-                &self.builder.key_expr,
+            .declare_queryable_inner(
+                &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,
                 Box::new(self.callback),
@@ -466,14 +501,14 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
-///     .queryable("/key/expression")
+///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::new("/key/expression", "value"))).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
 /// }
 /// # })
 /// ```
@@ -485,8 +520,15 @@ pub struct HandlerQueryable<'a, Receiver> {
 
 impl<'a, Receiver> HandlerQueryable<'a, Receiver> {
     #[inline]
-    pub fn close(self) -> impl Resolve<crate::Result<()>> + 'a {
-        self.queryable.close()
+    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a, T> Undeclarable<()> for HandlerQueryable<'a, T> {
+    type Output = <CallbackQueryable<'a> as Undeclarable<()>>::Output;
+    type Undeclaration = <CallbackQueryable<'a> as Undeclarable<()>>::Undeclaration;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        Undeclarable::undeclare(self.queryable, ())
     }
 }
 
@@ -509,7 +551,7 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
-///     .queryable("/key/expression")
+///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await
@@ -556,8 +598,8 @@ where
         let session = self.builder.session;
         let (callback, receiver) = self.handler.into_handler();
         session
-            .declare_queryable(
-                &self.builder.key_expr,
+            .declare_queryable_inner(
+                &(&self.builder.key_expr?).into(),
                 self.builder.kind,
                 self.builder.complete,
                 callback,

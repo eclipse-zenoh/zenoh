@@ -26,9 +26,9 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.subscribe(&key_expr).res().await.unwrap();
+    let mut subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
-    let publisher = session.publish(&forward).res().await.unwrap();
+    let publisher = session.declare_publisher(&forward).res().await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
     subscriber.forward(publisher).await.unwrap();
 }
@@ -47,11 +47,11 @@ fn parse_args() -> (Config, String, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(
             Arg::from_usage("-f, --forward=[KEYEXPR] 'The key expression to forward to.'")
-                .default_value("/demo/forward"),
+                .default_value("demo/forward"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

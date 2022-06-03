@@ -32,7 +32,11 @@ async fn main() {
 
     println!("Creating Subscriber on '{}'...", key_expr);
 
-    let subscriber = session.subscribe(&key_expr).res_async().await.unwrap();
+    let subscriber = session
+        .declare_subscriber(&key_expr)
+        .res_async()
+        .await
+        .unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -70,7 +74,7 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe to.'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

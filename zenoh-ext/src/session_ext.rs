@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
+use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -68,67 +69,79 @@ pub trait SessionExt {
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe_with_query("/key/expr").res().await.unwrap();
+    /// let subscriber = session.subscribe_with_query("key/expr").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        QueryingSubscriberBuilder::new(SessionRef::Borrow(self), sub_key_expr.into())
+        QueryingSubscriberBuilder::new(
+            SessionRef::Borrow(self),
+            sub_key_expr.try_into().map_err(Into::into),
+        )
     }
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        PublicationCacheBuilder::new(self, pub_key_expr.into())
+        PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
 }
 
 impl SessionExt for Arc<Session> {
-    fn subscribe_with_query<'a, 'b, IntoKeyExpr>(
+    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        sub_key_expr: IntoKeyExpr,
+        sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        QueryingSubscriberBuilder::new(SessionRef::Shared(self.clone()), sub_key_expr.into())
+        QueryingSubscriberBuilder::new(
+            SessionRef::Shared(self.clone()),
+            sub_key_expr.try_into().map_err(Into::into),
+        )
     }
 
-    fn publication_cache<'a, 'b, IntoKeyExpr>(
+    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
         &'a self,
-        pub_key_expr: IntoKeyExpr,
+        pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b>
     where
-        IntoKeyExpr: Into<KeyExpr<'b>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        PublicationCacheBuilder::new(self, pub_key_expr.into())
+        PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
 }

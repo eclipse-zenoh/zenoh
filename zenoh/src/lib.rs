@@ -36,7 +36,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     session.put("/key/expression", "value").res().await.unwrap();
+//!     session.put("key/expression", "value").res().await.unwrap();
 //!     session.close().res().await.unwrap();
 //! }
 //! ```
@@ -50,7 +50,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let subscriber = session.subscribe("/key/expression").res().await.unwrap();
+//!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received : {}", sample);
 //!     };
@@ -67,7 +67,7 @@
 //! #[async_std::main]
 //! async fn main() {
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
-//!     let replies = session.get("/key/expression").res().await.unwrap();
+//!     let replies = session.get("key/expression").res().await.unwrap();
 //!     while let Ok(reply) = replies.recv_async().await {
 //!         println!(">> Received {:?}", reply.sample);
 //!     }
@@ -98,17 +98,17 @@ pub use session::*;
 #[doc(hidden)]
 pub mod net;
 
+pub mod key_expr;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod info;
+pub mod plugins;
 pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
 pub mod subscriber;
 pub mod utils;
-
-pub mod plugins;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.

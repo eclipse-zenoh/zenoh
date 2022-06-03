@@ -24,14 +24,14 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_expr("/test/thr").res().unwrap();
+    let key_expr = session.declare_keyexpr("test/thr").res().unwrap();
 
     let mut count = 0;
     let mut start = Instant::now();
 
     let mut nm = 0;
     let _sub = session
-        .subscribe(&key_expr)
+        .declare_subscriber(&key_expr)
         .callback_mut(move |_sample| {
             if count == 0 {
                 start = Instant::now();

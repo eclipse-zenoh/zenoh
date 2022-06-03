@@ -13,7 +13,7 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo, SubInfo,
+    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, SubInfo, WireExpr,
     ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
@@ -35,7 +35,7 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         let d = Declaration::Resource(Resource {
             expr_id,
             key: key_expr.to_owned(),
@@ -56,7 +56,7 @@ impl Primitives for Mux {
 
     fn decl_subscriber(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
@@ -70,7 +70,7 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_subscriber(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetSubscriber(ForgetSubscriber {
             key: key_expr.to_owned(),
         });
@@ -80,7 +80,7 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn decl_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
+    fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::Publisher(Publisher {
             key: key_expr.to_owned(),
         });
@@ -90,7 +90,7 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_publisher(&self, key_expr: &KeyExpr, routing_context: Option<RoutingContext>) {
+    fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetPublisher(ForgetPublisher {
             key: key_expr.to_owned(),
         });
@@ -102,7 +102,7 @@ impl Primitives for Mux {
 
     fn decl_queryable(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
@@ -120,7 +120,7 @@ impl Primitives for Mux {
 
     fn forget_queryable(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         kind: ZInt,
         routing_context: Option<RoutingContext>,
     ) {
@@ -136,7 +136,7 @@ impl Primitives for Mux {
 
     fn send_data(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         payload: ZBuf,
         channel: Channel,
         cogestion_control: CongestionControl,
@@ -157,7 +157,7 @@ impl Primitives for Mux {
 
     fn send_query(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
@@ -185,7 +185,7 @@ impl Primitives for Mux {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: ZenohId,
-        key_expr: KeyExpr,
+        key_expr: WireExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -219,7 +219,7 @@ impl Primitives for Mux {
     fn send_pull(
         &self,
         is_final: bool,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {

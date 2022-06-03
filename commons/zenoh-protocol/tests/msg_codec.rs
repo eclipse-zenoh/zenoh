@@ -193,12 +193,12 @@ fn gen_declarations() -> Vec<Declaration> {
     ]
 }
 
-fn gen_key() -> KeyExpr<'static> {
+fn gen_key() -> WireExpr<'static> {
     let num: u8 = thread_rng().gen_range(0..3);
     match num {
-        0 => KeyExpr::from(gen!(ZInt)),
-        1 => KeyExpr::from("my_resource"),
-        _ => KeyExpr::from(gen!(ZInt)).with_suffix("my_resource"),
+        0 => WireExpr::from(gen!(ZInt)),
+        1 => WireExpr::from("my_resource"),
+        _ => WireExpr::from(gen!(ZInt)).with_suffix("my_resource"),
     }
 }
 

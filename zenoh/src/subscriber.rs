@@ -15,9 +15,8 @@
 //! Subscribing primitives.
 use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
 use crate::time::Period;
-use crate::utils::ClosureResolve;
-use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 use crate::{Result as ZResult, SessionRef};
+use crate::{Undeclarable, API_DATA_RECEPTION_CHANNEL_SIZE};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -34,7 +33,6 @@ pub use zenoh_protocol_core::Reliability;
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) key_expr_str: String,
     pub(crate) callback: Callback<Sample>,
 }
 
@@ -42,7 +40,7 @@ impl fmt::Debug for SubscriberState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Subscriber")
             .field("id", &self.id)
-            .field("key_expr", &self.key_expr_str)
+            .field("key_expr", &self.key_expr)
             .finish()
     }
 }
@@ -64,7 +62,7 @@ impl fmt::Debug for SubscriberState {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
 ///     .res()
 ///     .await
@@ -90,7 +88,7 @@ impl<'l> CallbackSubscriber<'l> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .mode(SubMode::Pull)
     ///     .res()
@@ -118,20 +116,45 @@ impl<'l> CallbackSubscriber<'l> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.close().res().await.unwrap();
+    /// subscriber.undeclare().res().await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn close(mut self) -> impl Resolve<ZResult<()>> + 'l {
-        ClosureResolve(move || {
-            self.alive = false;
-            self.session.unsubscribe(self.state.id)
-        })
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
+        Undeclarable::undeclare(self, ())
+    }
+}
+
+impl<'a> Undeclarable<()> for CallbackSubscriber<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = SubscriberUndeclaration<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        SubscriberUndeclaration { subscriber: self }
+    }
+}
+pub struct SubscriberUndeclaration<'a> {
+    subscriber: CallbackSubscriber<'a>,
+}
+impl Resolvable for SubscriberUndeclaration<'_> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for SubscriberUndeclaration<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        self.subscriber.alive = false;
+        self.subscriber
+            .session
+            .unsubscribe(self.subscriber.state.id)
+    }
+}
+impl AsyncResolve for SubscriberUndeclaration<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
@@ -153,7 +176,7 @@ impl Drop for CallbackSubscriber<'_> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .declare_subscriber("key/expression")
 ///     .best_effort()
 ///     .pull_mode()
 ///     .res()
@@ -161,15 +184,30 @@ impl Drop for CallbackSubscriber<'_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: KeyExpr<'b>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: SubMode,
     pub(crate) period: Option<Period>,
     pub(crate) local: bool,
+}
+impl<'a, 'b> Clone for SubscriberBuilder<'a, 'b> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match self.key_expr.as_ref() {
+                Ok(ke) => Ok(ke.clone()),
+                Err(e) => Err(zerror!("Cloned Error: {}", e).into()),
+            },
+            reliability: self.reliability,
+            mode: self.mode,
+            period: self.period,
+            local: self.local,
+        }
+    }
 }
 
 impl<'a, 'b> SubscriberBuilder<'a, 'b> {
@@ -183,7 +221,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .res()
     ///     .await
@@ -215,7 +253,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .callback_mut(move |sample| { n += 1; })
     ///     .res()
     ///     .await
@@ -243,7 +281,7 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
     ///     .res()
     ///     .await
@@ -357,7 +395,7 @@ impl<'a> AsyncResolve for SubscriberBuilder<'a, '_> {
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
 ///     .best_effort()
 ///     .pull_mode()
@@ -446,10 +484,11 @@ where
 
 impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, '_, F> {
     fn res_sync(self) -> Self::Output {
+        let key_expr = self.builder.key_expr?;
         let session = self.builder.session;
         if self.builder.local {
             session
-                .declare_local_subscriber(&self.builder.key_expr, Box::new(self.callback))
+                .declare_local_subscriber(&key_expr, Box::new(self.callback))
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -457,8 +496,8 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                 })
         } else {
             session
-                .declare_subscriber(
-                    &self.builder.key_expr,
+                .declare_subscriber_inner(
+                    &key_expr,
                     Box::new(self.callback),
                     &SubInfo {
                         reliability: self.builder.reliability,
@@ -491,7 +530,7 @@ impl<F: Fn(Sample) + Send + Sync> AsyncResolve for CallbackSubscriberBuilder<'_,
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
 ///     .best_effort()
 ///     .pull_mode()
@@ -589,7 +628,7 @@ where
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
-///     .subscribe("/key/expression")
+///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
 ///     .res()
 ///     .await
@@ -617,7 +656,7 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
-    ///     .subscribe("/key/expression")
+    ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
     ///     .mode(SubMode::Pull)
     ///     .res()
@@ -642,13 +681,20 @@ impl<'a, Receiver> HandlerSubscriber<'a, Receiver> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe("/key/expression").res().await.unwrap();
-    /// subscriber.close().res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// subscriber.undeclare().res().await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.close()
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        self.subscriber.undeclare()
+    }
+}
+impl<'a, T> Undeclarable<()> for HandlerSubscriber<'a, T> {
+    type Output = <CallbackSubscriber<'a> as Undeclarable<()>>::Output;
+    type Undeclaration = <CallbackSubscriber<'a> as Undeclarable<()>>::Undeclaration;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        Undeclarable::undeclare(self.subscriber, ())
     }
 }
 
@@ -690,10 +736,11 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let session = self.builder.session;
+        let key_expr = self.builder.key_expr?;
         let (callback, receiver) = self.handler.into_handler();
         let subscriber = if self.builder.local {
             session
-                .declare_local_subscriber(&self.builder.key_expr, callback)
+                .declare_local_subscriber(&key_expr, callback)
                 .map(|sub_state| CallbackSubscriber {
                     session,
                     state: sub_state,
@@ -701,8 +748,8 @@ where
                 })
         } else {
             session
-                .declare_subscriber(
-                    &self.builder.key_expr,
+                .declare_subscriber_inner(
+                    &key_expr,
                     callback,
                     &SubInfo {
                         reliability: self.builder.reliability,

@@ -23,7 +23,6 @@ use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::*;
-use zenoh::utils::key_expr;
 
 #[async_std::main]
 async fn main() {
@@ -38,10 +37,10 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let subscriber = session.subscribe(&key_expr).res().await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let queryable = session.queryable(&key_expr).res().await.unwrap();
+    let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -63,7 +62,7 @@ async fn main() {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
-                    if key_expr::intersect(query.selector().key_selector.as_str(), stored_name) {
+                    if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
                         query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
                 }
@@ -94,7 +93,7 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The selection of resources to store'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

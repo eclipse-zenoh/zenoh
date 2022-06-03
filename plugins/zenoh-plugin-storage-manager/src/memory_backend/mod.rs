@@ -13,14 +13,13 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
-use zenoh::utils::key_expr;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
@@ -218,26 +217,21 @@ impl Storage for MemoryStorage {
                     }
                 },
             },
-            SampleKind::Patch => {
-                warn!("Received PATCH for {}: not yet supported", sample.key_expr);
-                return Ok(StorageInsertionResult::Outdated);
-            }
         }
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-        trace!("on_query for {}", query.key_selector());
-        if !query.key_selector().as_str().contains('*') {
+        trace!("on_query for {}", query.key_expr());
+        if !query.key_expr().as_str().contains('*') {
             if let Some(Present { sample, ts: _ }) =
-                self.map.read().await.get(query.key_selector().as_str())
+                self.map.read().await.get(query.key_expr().as_str())
             {
                 query.reply(sample.clone()).res_async().await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
-                    if key_expr::intersect(query.key_selector().as_str(), sample.key_expr.as_str())
-                    {
+                    if query.key_expr().intersects(&sample.key_expr) {
                         let s: Sample = sample.clone();
                         query.reply(s).res_async().await?;
                     }

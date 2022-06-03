@@ -34,7 +34,7 @@ async fn main() {
     println!("Creating Subscriber on '{}'...", key_expr);
 
     let subscriber = session
-        .subscribe(&key_expr)
+        .declare_subscriber(&key_expr)
         .mode(SubMode::Pull)
         .res_async()
         .await
@@ -77,7 +77,7 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression matching resources to pull'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

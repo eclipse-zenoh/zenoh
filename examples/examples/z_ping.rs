@@ -26,12 +26,12 @@ fn main() {
     let session = zenoh::open(config).res().unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = session.declare_expr("/test/ping").res().unwrap();
+    let key_expr_ping = session.declare_keyexpr("test/ping").res().unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = session.declare_expr("/test/pong").res().unwrap();
+    let key_expr_pong = session.declare_keyexpr("test/pong").res().unwrap();
 
-    let sub = session.subscribe(&key_expr_pong).res().unwrap();
+    let sub = session.declare_subscriber(&key_expr_pong).res().unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)

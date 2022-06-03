@@ -2,11 +2,11 @@
 /// For a more complete view of the configuration's structure, check out `zenoh/src/config.rs`'s `Config` structure.
 /// Note that the values here are correctly typed, but may not be sensible, so copying this file to change only the parts that matter to you is not good practice.
 {
-  /// The identifier (as hex-string) that zenohd must use. 
+  /// The identifier (as hex-string) that zenohd must use.
   /// If not set, a random UUIDv4 will be used.
   /// WARNING: this id must be unique in your zenoh network.
-  // id: "5975702c206974277320415343494921", 
-  
+  // id: "5975702c206974277320415343494921",
+
   /// The node's mode (router, peer or client)
   mode: "router",
 
@@ -57,10 +57,10 @@
 
   /// Operations to be executed at startup time.
   startup: {
-    /// Automatically subscribe 
-    subscribe: ["/demo/subs/**"],
-    /// Automatically declare publications 
-    declare_publications: ["/demo/pubs/**"],
+    /// Automatically subscribe
+    subscribe: ["demo/subs/**"],
+    /// Automatically declare publications
+    declare_publications: ["demo/pubs/**"],
   },
 
   /// Whether data messages should be timestamped
@@ -74,7 +74,7 @@
   /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
   plugins: {
     /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzplugin_rest.so` would be searched for on linux)
-    
+
     /// Configure the REST API plugin
     rest: {
       /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
@@ -117,15 +117,15 @@
       storages: {
         demo: {
           /// Storages always need to know what set of keys they must work with. These sets are defined by a key expression.
-          key_expr: "/demo/memory/**",
+          key_expr: "demo/memory/**",
           /// Storages also need to know which volume will be used to actually store their key-value pairs.
           /// The "memory" volume is always available, and doesn't require any per-storage options, so requesting "memory" by string is always sufficient.
           volume: "memory",
         },
         influx_demo: {
-          key_expr: "/demo/influxdb/**",
+          key_expr: "demo/influxdb/**",
           /// This prefix will be stripped of the received keys when storing.
-          strip_prefix: "/demo/influxdb/",
+          strip_prefix: "demo/influxdb/",
           /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
           volume: {
             id: "influxdb",
@@ -133,8 +133,8 @@
           },
         },
         influx_demo2: {
-          key_expr: "/demo/influxdb2/**",
-          strip_prefix: "/demo/influxdb2/",
+          key_expr: "demo/influxdb2/**",
+          strip_prefix: "demo/influxdb2/",
           volume: {
             id: "influxdb2",
             db: "example",
@@ -145,7 +145,7 @@
   },
 
   /// Configure internal transport parameters
-  transport: {        
+  transport: {
     unicast: {
       /// Timeout in milliseconds when opening a link
       accept_timeout: 10000,
@@ -162,13 +162,13 @@
       /// Maximum number of sessions that can be simultaneously alive
       max_sessions: 1024,
     },
-    qos: { 
+    qos: {
       enabled: false,
     },
     link: {
-      /// Configure the zenoh TX parameters of a link        
+      /// Configure the zenoh TX parameters of a link
       tx: {
-        /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). 
+        /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached).
         /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
         /// Defaults to 2^28.
         sequence_number_resolution: 268435456,
@@ -186,27 +186,27 @@
         /// Therefore, the maximum batch size is 2^16-1 (i.e. 65535).
         /// The default batch size value is the maximum batch size: 65535.
         batch_size: 65535,
-        /// Each zenoh link has a transmission queue that can be configured        
+        /// Each zenoh link has a transmission queue that can be configured
         queue: {
-            /// The size of each priority queue indicates the number of batches a given queue can contain.
-            /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
-            /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE, 
-            /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
-            /// If qos is false, then only the DATA priority will be allocated.
-            size: {
-              control: 1,
-              real_time: 1,
-              interactive_high: 1,
-              interactive_low: 1,
-              data_high: 2,
-              data: 4,
-              data_low: 4,
-              background: 4, 
-            },
-            /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
-            /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-            backoff: 100,
-        }        
+          /// The size of each priority queue indicates the number of batches a given queue can contain.
+          /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
+          /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
+          /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
+          /// If qos is false, then only the DATA priority will be allocated.
+          size: {
+            control: 1,
+            real_time: 1,
+            interactive_high: 1,
+            interactive_low: 1,
+            data_high: 2,
+            data: 4,
+            data_low: 4,
+            background: 4,
+          },
+          /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
+          /// Higher values lead to a more aggressive batching but it will introduce additional latency.
+          backoff: 100,
+        },
       },
       /// Configure the zenoh RX parameters of a link
       rx: {

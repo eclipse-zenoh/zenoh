@@ -40,8 +40,7 @@ pub mod data_kind {
     use super::ZInt;
 
     pub const PUT: ZInt = 0;
-    pub const PATCH: ZInt = 1;
-    pub const DELETE: ZInt = 2;
+    pub const DELETE: ZInt = 1;
 
     pub const DEFAULT: ZInt = PUT;
 

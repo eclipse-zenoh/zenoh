@@ -28,6 +28,7 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+use zenoh_protocol_core::key_expr::OwnedKeyExpr;
 pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_util::LibLoader;
 
@@ -116,9 +117,9 @@ validated_struct::validator! {
         pub startup: #[derive(Default)]
         JoinConfig {
             /// A list of key-expressions to subscribe to upon startup.
-            subscribe: Vec<String>,
+            subscribe: Vec<OwnedKeyExpr>,
             /// A list of key-expressions to declare publications onto upon startup.
-            declare_publications: Vec<String>,
+            declare_publications: Vec<OwnedKeyExpr>,
         },
         pub scouting: #[derive(Default)]
         ScoutingConf {

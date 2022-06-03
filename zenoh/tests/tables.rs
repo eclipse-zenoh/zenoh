@@ -20,10 +20,10 @@ use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::key_expr::intersect;
+use zenoh_protocol_core::wire_expr::intersect;
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, KeyExpr, QueryTAK, QueryableInfo,
-    Reliability, SubInfo, SubMode, WhatAmI, ZInt, ZenohId, EMPTY_EXPR_ID,
+    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, Reliability,
+    SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
@@ -58,7 +58,7 @@ fn base_test() {
     declare_client_subscription(
         &mut tables,
         &mut face.upgrade().unwrap(),
-        &KeyExpr::from(1).with_suffix("/four/five"),
+        &WireExpr::from(1).with_suffix("/four/five"),
         &sub_info,
     );
 
@@ -248,7 +248,7 @@ fn clean_test() {
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &KeyExpr::from(1).with_suffix("/todrop12"),
+        &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
     );
     let optres3 = Resource::get_resource(tables._get_root(), "/todrop1/todrop12")
@@ -260,7 +260,7 @@ fn clean_test() {
     forget_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &KeyExpr::from(1).with_suffix("/todrop12"),
+        &WireExpr::from(1).with_suffix("/todrop12"),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
@@ -360,7 +360,7 @@ fn clean_test() {
 }
 
 pub struct ClientPrimitives {
-    data: std::sync::Mutex<Option<KeyExpr<'static>>>,
+    data: std::sync::Mutex<Option<WireExpr<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
 }
 
@@ -384,7 +384,7 @@ impl Default for ClientPrimitives {
 }
 
 impl ClientPrimitives {
-    fn get_name(&self, key_expr: &KeyExpr) -> String {
+    fn get_name(&self, key_expr: &WireExpr) -> String {
         let mapping = self.mapping.lock().unwrap();
         let (scope, suffix) = key_expr.as_id_and_suffix();
         if scope == EMPTY_EXPR_ID {
@@ -405,13 +405,13 @@ impl ClientPrimitives {
     }
 
     #[allow(dead_code)]
-    fn get_last_key(&self) -> Option<KeyExpr> {
+    fn get_last_key(&self) -> Option<WireExpr> {
         self.data.lock().unwrap().as_ref().cloned()
     }
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         let name = self.get_name(key_expr);
         zlock!(self.mapping).insert(expr_id, name);
     }
@@ -420,21 +420,21 @@ impl Primitives for ClientPrimitives {
         zlock!(self.mapping).remove(&expr_id);
     }
 
-    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
-    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
+    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_subscriber(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {}
+    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn decl_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
@@ -442,7 +442,7 @@ impl Primitives for ClientPrimitives {
     }
     fn forget_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -450,7 +450,7 @@ impl Primitives for ClientPrimitives {
 
     fn send_data(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         _payload: ZBuf,
         _channel: Channel,
         _congestion_control: CongestionControl,
@@ -462,7 +462,7 @@ impl Primitives for ClientPrimitives {
 
     fn send_query(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTAK,
@@ -476,7 +476,7 @@ impl Primitives for ClientPrimitives {
         _qid: ZInt,
         _replier_kind: ZInt,
         _replier_id: ZenohId,
-        _key_expr: KeyExpr,
+        _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
@@ -486,7 +486,7 @@ impl Primitives for ClientPrimitives {
     fn send_pull(
         &self,
         _is_final: bool,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {
@@ -525,16 +525,16 @@ fn client_test() {
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &KeyExpr::from(11).with_suffix("/**"),
+        &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         12,
-        &KeyExpr::from(11).with_suffix("/z1_pub1"),
+        &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
-    primitives0.decl_resource(12, &KeyExpr::from(11).with_suffix("/z1_pub1"));
+    primitives0.decl_resource(12, &WireExpr::from(11).with_suffix("/z1_pub1"));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
@@ -552,16 +552,16 @@ fn client_test() {
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
-        &KeyExpr::from(21).with_suffix("/**"),
+        &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
         &mut tables,
         &mut face1.upgrade().unwrap(),
         22,
-        &KeyExpr::from(21).with_suffix("/z2_pub1"),
+        &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
-    primitives1.decl_resource(22, &KeyExpr::from(21).with_suffix("/z2_pub1"));
+    primitives1.decl_resource(22, &WireExpr::from(21).with_suffix("/z2_pub1"));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
@@ -579,7 +579,7 @@ fn client_test() {
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),
-        &KeyExpr::from(31).with_suffix("/**"),
+        &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
     );
 
@@ -615,7 +615,7 @@ fn client_test() {
     route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        &KeyExpr::from(11).with_suffix("/z1_wr2"),
+        &WireExpr::from(11).with_suffix("/z1_wr2"),
         Channel::default(),
         CongestionControl::default(),
         None,

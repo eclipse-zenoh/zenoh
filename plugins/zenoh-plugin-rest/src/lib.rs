@@ -14,6 +14,7 @@
 
 use futures::StreamExt;
 use http_types::Method;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 use tide::http::Mime;
@@ -125,7 +126,6 @@ async fn to_html(results: flume::Receiver<Reply>) -> String {
 fn method_to_kind(method: Method) -> SampleKind {
     match method {
         Method::Put => SampleKind::Put,
-        Method::Patch => SampleKind::Patch,
         Method::Delete => SampleKind::Delete,
         _ => SampleKind::default(),
     }
@@ -205,7 +205,7 @@ impl RunningPluginTrait for RunningPlugin {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::key_expr::intersect(key, selector.key_selector.as_str()) {
+            if zenoh::utils::wire_expr::intersect(key, selector.key_expr.as_str()) {
                 responses.push(zenoh::plugins::Response {
                     key: key.clone(),
                     value: GIT_VERSION.into(),
@@ -213,7 +213,7 @@ impl RunningPluginTrait for RunningPlugin {
             }
         });
         with_extended_string(&mut key, &["/port"], |port_key| {
-            if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), port_key) {
+            if zenoh::utils::wire_expr::intersect(selector.key_expr.as_str(), port_key) {
                 responses.push(zenoh::plugins::Response {
                     key: port_key.clone(),
                     value: (&self.0).into(),
@@ -257,7 +257,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
+                let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                    Ok(ke) => ke.into_owned(),
+                    Err(e) => {
+                        return Err(tide::Error::new(
+                            tide::StatusCode::BadRequest,
+                            anyhow::anyhow!("{}", e),
+                        ))
+                    }
+                };
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
@@ -268,7 +276,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                     let sub = req
                         .state()
                         .0
-                        .subscribe(&key_expr)
+                        .declare_subscriber(&key_expr)
                         .res_async()
                         .await
                         .unwrap();
@@ -292,7 +300,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                 "SSE timeout! Unsubscribe and terminate (task {})",
                                 async_std::task::current().id()
                             );
-                            if let Err(e) = sub.close().res_async().await {
+                            if let Err(e) = sub.undeclare().res_async().await {
                                 log::error!("Error undeclaring subscriber: {}", e);
                             }
                             break;
@@ -304,7 +312,16 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         ))
     } else {
         let url = req.url();
-        let key_expr = path_to_key_expr(url.path(), &req.state().1);
+        let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
+            Ok(ke) => ke,
+            Err(e) => {
+                return Ok(response(
+                    StatusCode::BadRequest,
+                    Mime::from_str("text/plain").unwrap(),
+                    &e.to_string(),
+                ))
+            }
+        };
         let query_part = url.query().map(|q| format!("?{}", q));
         let selector = if let Some(q) = &query_part {
             Selector::from(key_expr).with_value_selector(q)
@@ -352,7 +369,16 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
-            let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
+            let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                Ok(ke) => ke,
+                Err(e) => {
+                    return Ok(response(
+                        StatusCode::BadRequest,
+                        Mime::from_str("text/plain").unwrap(),
+                        &e.to_string(),
+                    ))
+                }
+            };
             let encoding: Encoding = req
                 .content_type()
                 .map(|m| m.essence().to_owned().into())
@@ -415,12 +441,12 @@ pub async fn run(runtime: Runtime, conf: Config) {
     }
 }
 
-fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
+fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> ZResult<KeyExpr<'a>> {
     if path == "/@/router/local" {
-        KeyExpr::from(format!("/@/router/{}", pid))
-    } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
+        KeyExpr::try_from(format!("@/router/{}", pid))
+    } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
+        KeyExpr::try_from(format!("@/router/{}/{}", pid, suffix))
     } else {
-        KeyExpr::from(path)
+        KeyExpr::try_from(path)
     }
 }

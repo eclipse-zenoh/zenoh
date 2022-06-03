@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::face::Face;
 use super::Runtime;
+use crate::key_expr::keyexpr;
 use crate::plugins::PluginsManager;
-use crate::prelude::Selector;
+use crate::prelude::{KeyExpr, Selector};
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -25,8 +26,8 @@ use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    key_expr, queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KeyExpr, KnownEncoding, QueryTAK, QueryableInfo, SubInfo, ZInt, ZenohId, EMPTY_EXPR_ID,
+    queryable::EVAL, wire_expr, Channel, CongestionControl, ConsolidationStrategy, Encoding,
+    KnownEncoding, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -38,7 +39,7 @@ pub struct AdminContext {
 }
 
 type Handler = Box<
-    dyn for<'a> Fn(&'a AdminContext, &'a KeyExpr<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
+    dyn for<'a> Fn(&'a AdminContext, &'a WireExpr<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
         + Send
         + Sync,
 >;
@@ -60,7 +61,7 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
-        let root_key = format!("/@/router/{}", pid_str);
+        let root_key = format!("@/router/{}", pid_str);
 
         let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
         handlers.insert(
@@ -215,7 +216,7 @@ impl AdminSpace {
         );
     }
 
-    pub fn key_expr_to_string(&self, key_expr: &KeyExpr) -> Option<String> {
+    pub fn key_expr_to_string(&self, key_expr: &WireExpr) -> Option<String> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Some(key_expr.suffix.to_string())
         } else if key_expr.suffix.is_empty() {
@@ -229,7 +230,7 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &KeyExpr) {
+    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Some(s) => {
@@ -243,30 +244,30 @@ impl Primitives for AdminSpace {
         trace!("recv Forget Resource {}", _expr_id);
     }
 
-    fn decl_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Publisher {:?}", _key_expr);
     }
 
-    fn forget_publisher(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Publisher {:?}", _key_expr);
     }
 
     fn decl_subscriber(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Subscriber {:?} , {:?}", _key_expr, _sub_info);
     }
 
-    fn forget_subscriber(&self, _key_expr: &KeyExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", _key_expr);
     }
 
     fn decl_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
@@ -276,7 +277,7 @@ impl Primitives for AdminSpace {
 
     fn forget_queryable(
         &self,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _kind: ZInt,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -285,7 +286,7 @@ impl Primitives for AdminSpace {
 
     fn send_data(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -303,7 +304,7 @@ impl Primitives for AdminSpace {
 
         if let Some(key) = key_expr
             .as_str()
-            .strip_prefix(&format!("/@/router/{}/config/", &self.context.pid_str))
+            .strip_prefix(&format!("@/router/{}/config/", &self.context.pid_str))
         {
             if let Some(DataInfo {
                 kind: Some(data_kind::DELETE),
@@ -351,7 +352,7 @@ impl Primitives for AdminSpace {
 
     fn send_query(
         &self,
-        key_expr: &KeyExpr,
+        key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
@@ -366,7 +367,7 @@ impl Primitives for AdminSpace {
             _consolidation
         );
         let pid = self.pid;
-        let plugin_key = format!("/@/router/{}/status/plugins/**", &pid);
+        let plugin_key = format!("@/router/{}/status/plugins/**", &pid);
         let mut ask_plugins = false;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
@@ -374,9 +375,9 @@ impl Primitives for AdminSpace {
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
             Some(name) => {
-                ask_plugins = key_expr::intersect(&name, &plugin_key);
+                ask_plugins = wire_expr::intersect(&name, &plugin_key);
                 for (key, handler) in &self.handlers {
-                    if key_expr::intersect(&name, key) {
+                    if wire_expr::intersect(&name, key) {
                         matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
@@ -408,6 +409,11 @@ impl Primitives for AdminSpace {
             ));
             if ask_plugins {
                 futures::join!(handler_tasks, async {
+                    let key_expr = if key_expr.scope != 0 {
+                        KeyExpr::from(unsafe { keyexpr::from_str_unchecked(&key_expr.suffix) })
+                    } else {
+                        unreachable!("An unresolved WireExpr reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.")
+                    };
                     let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
                     for status in plugin_status {
                         let crate::plugins::Response { key, mut value } = status;
@@ -439,7 +445,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         replier_kind: ZInt,
         replier_id: ZenohId,
-        key_expr: KeyExpr,
+        key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
@@ -461,7 +467,7 @@ impl Primitives for AdminSpace {
     fn send_pull(
         &self,
         _is_final: bool,
-        _key_expr: &KeyExpr,
+        _key_expr: &WireExpr,
         _pull_id: ZInt,
         _max_samples: &Option<ZInt>,
     ) {
@@ -481,7 +487,7 @@ impl Primitives for AdminSpace {
 
 pub async fn router_data(
     context: &AdminContext,
-    _key: &KeyExpr<'_>,
+    _key: &WireExpr<'_>,
     #[allow(unused_variables)] selector: &str,
 ) -> (ZBuf, Encoding) {
     let transport_mgr = context.runtime.manager().clone();
@@ -558,7 +564,7 @@ pub async fn router_data(
 
 pub async fn linkstate_routers_data(
     context: &AdminContext,
-    _key: &KeyExpr<'_>,
+    _key: &WireExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
@@ -579,7 +585,7 @@ pub async fn linkstate_routers_data(
 
 pub async fn linkstate_peers_data(
     context: &AdminContext,
-    _key: &KeyExpr<'_>,
+    _key: &WireExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
     let data: Vec<u8> = context
@@ -602,16 +608,16 @@ pub async fn plugins_status(
     args: &str,
 ) -> Vec<crate::plugins::Response> {
     let selector = Selector {
-        key_selector: key.clone(),
+        key_expr: key.clone(),
         value_selector: args.into(),
     };
     let guard = zlock!(context.plugins_mgr);
-    let mut root_key = format!("/@/router/{}/status/plugins/", &context.pid_str);
+    let mut root_key = format!("@/router/{}/status/plugins/", &context.pid_str);
     let mut responses = Vec::new();
     for (name, (path, plugin)) in guard.running_plugins() {
         with_extended_string(&mut root_key, &[name], |plugin_key| {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
-                if key_expr::intersect(key.as_str(), plugin_path_key) {
+                if wire_expr::intersect(key.as_str(), plugin_path_key) {
                     responses.push(crate::plugins::Response {
                         key: plugin_path_key.clone(),
                         value: path.into(),
@@ -619,7 +625,7 @@ pub async fn plugins_status(
                 }
             });
             let matches_plugin = |plugin_status_space: &mut String| {
-                key_expr::intersect(key.as_str(), plugin_status_space)
+                wire_expr::intersect(key.as_str(), plugin_status_space)
             };
             if !with_extended_string(plugin_key, &["/**"], matches_plugin) {
                 return;
