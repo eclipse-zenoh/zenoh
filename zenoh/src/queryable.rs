@@ -323,6 +323,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
 
     /// Receive the queries for this Queryable with a mutable callback.
     ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](QueryableBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {

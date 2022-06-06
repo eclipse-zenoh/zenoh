@@ -69,6 +69,9 @@ where
     }
 
     /// Receive the [`Hello`] messages from this scout with a mutable callback.
+    ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](ScoutBuilder::callback) method, we suggest you use it instead of `callback_mut`
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,

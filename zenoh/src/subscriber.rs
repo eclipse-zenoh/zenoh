@@ -244,6 +244,9 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b> {
 
     /// Receive the samples for this subscription with a mutable callback.
     ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {

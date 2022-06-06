@@ -183,6 +183,9 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
 
     /// Receive the replies for this query with a mutable callback.
     ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](GetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {

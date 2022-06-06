@@ -77,6 +77,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     }
 
     /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
