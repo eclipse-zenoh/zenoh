@@ -54,8 +54,8 @@ use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        queryable, wire_expr, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy,
-        ExprId, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
+        queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
+        QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -916,12 +916,9 @@ impl Session {
                 let declared_pub = if let Some(join_pub) = state
                     .join_publications
                     .iter()
-                    .find(|s| wire_expr::include(s, &key_expr))
+                    .find(|s| s.includes(&key_expr))
                 {
-                    let joined_pub = state
-                        .publications
-                        .iter()
-                        .any(|p| wire_expr::include(join_pub, p));
+                    let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
                     (!joined_pub).then(|| join_pub.clone().into())
                 } else {
                     Some(key_expr.clone())
@@ -962,13 +959,10 @@ impl Session {
                 match state
                     .join_publications
                     .iter()
-                    .find(|s| wire_expr::include(s, &key_expr))
+                    .find(|s| s.includes(&key_expr))
                 {
                     Some(join_pub) => {
-                        let joined_pub = state
-                            .publications
-                            .iter()
-                            .any(|p| wire_expr::include(join_pub, p));
+                        let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
                         if !joined_pub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             let key_expr = WireExpr::from(join_pub).to_owned();
@@ -1006,13 +1000,13 @@ impl Session {
         let declared_sub = match state
             .join_subscriptions // TODO: can this be an OwnedKeyExpr?
             .iter()
-            .find(|s| wire_expr::include(s, key_expr))
+            .find(|s| s.includes( key_expr))
         {
             Some(join_sub) => {
                 let joined_sub = state
                     .subscribers
                     .values()
-                    .any(|s| wire_expr::include(join_sub, &s.key_expr));
+                    .any(|s| join_sub.includes(&s.key_expr));
                 (!joined_sub).then(|| join_sub.clone().into())
             }
             None => {
@@ -1100,13 +1094,13 @@ impl Session {
             match state
                 .join_subscriptions
                 .iter()
-                .find(|s| wire_expr::include(s, key_expr))
+                .find(|s| s.includes(key_expr))
             {
                 Some(join_sub) => {
                     let joined_sub = state
                         .subscribers
                         .values()
-                        .any(|s| wire_expr::include(join_sub, &s.key_expr));
+                        .any(|s| join_sub.includes(&s.key_expr));
                     if !joined_sub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         let key_expr = WireExpr::from(join_sub).to_owned();
@@ -1455,7 +1449,7 @@ impl Session {
                         .filter(
                             |queryable| match state.local_wireexpr_to_expr(&queryable.key_expr) {
                                 Ok(qablname) => {
-                                    wire_expr::matches(&qablname, &key_expr)
+                                    qablname.intersects(&key_expr)
                                         && ((queryable.kind == queryable::ALL_KINDS
                                             || target.kind == queryable::ALL_KINDS)
                                             || (queryable.kind & target.kind != 0))

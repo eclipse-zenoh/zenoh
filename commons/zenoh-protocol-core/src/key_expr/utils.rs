@@ -49,6 +49,10 @@ impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
     pub fn unwrap(self) -> &'a S {
         self.s.unwrap()
     }
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.s.is_none()
+    }
     pub fn left(&mut self) -> Option<&'a S> {
         match self.s {
             Some(s) => match s.try_split_once(self.d) {

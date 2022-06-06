@@ -163,9 +163,13 @@ impl<'a> KeyExpr<'a> {
     pub fn keyexpr(&self) -> &keyexpr {
         self
     }
+    /// Creates a `KeyExpr` that borrows `self`'s internal `str`.
+    ///
+    /// This is only useful when you need to pass a `KeyExpr<'a>` by value.
     pub fn borrowing_clone(&'a self) -> Self {
         Self::from(self.as_ref())
     }
+    /// Ensure's `self` owns all of its data, and informs rustc that it does.
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
             KeyExprInner::Borrowed(s) => KeyExpr(KeyExprInner::Owned(s.into())),
@@ -183,16 +187,66 @@ impl<'a> KeyExpr<'a> {
             }),
         }
     }
+
+    /// Joins both sides, inserting a `/` in between them.
+    ///
+    /// This should be your prefered method when concatenating path segments.
+    ///
+    /// This is notably useful for workspaces:
+    /// ```rust
+    /// # use std::convert::TryFrom;
+    /// # use zenoh::prelude::KeyExpr;
+    /// # let get_workspace = || KeyExpr::try_from("some/workspace").unwrap();
+    /// let workspace: KeyExpr = get_workspace();
+    /// let topic = workspace.join("some/topic").unwrap();
+    /// ```
+    pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
+        let r = OwnedKeyExpr::try_from(format!("{}/{}", self, s.as_ref()))?;
+        if let KeyExprInner::Wire {
+            expr_id,
+            prefix_len,
+            session_id,
+            ..
+        } = &self.0
+        {
+            Ok(KeyExpr(KeyExprInner::Wire {
+                key_expr: r,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }))
+        } else {
+            Ok(r.into())
+        }
+    }
+
+    /// Performs string concatenation and returns the result as a [`KeyExpr`] if possible.
+    ///
+    /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierachical separation it inserts.
     pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
         if self.ends_with('*') && s.starts_with('*') {
             bail!("Tried to concatenate {} (ends with *) and {} (starts with *), which would likely have caused bugs. If you're sure you want to do this, concatenate these into a string and then try to convert.", self, s)
         }
-        format!("{}{}", self, s).try_into()
+        let r = OwnedKeyExpr::try_from(format!("{}{}", self, s))?;
+        if let KeyExprInner::Wire {
+            expr_id,
+            prefix_len,
+            session_id,
+            ..
+        } = &self.0
+        {
+            Ok(KeyExpr(KeyExprInner::Wire {
+                key_expr: r,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }))
+        } else {
+            Ok(r.into())
+        }
     }
-    pub fn join<S: AsRef<str>>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
-        format!("{}/{}", self, s.as_ref()).try_into()
-    }
+
     pub(crate) fn is_optimized(&self) -> bool {
         matches!(&self.0, KeyExprInner::Wire { expr_id, .. } if *expr_id != 0)
     }

@@ -24,6 +24,8 @@ pub(crate) mod borrowed;
 pub use borrowed::*;
 
 pub mod canon;
+
+pub(crate) mod include;
 pub(crate) mod intersect;
 pub(crate) mod utils;
 

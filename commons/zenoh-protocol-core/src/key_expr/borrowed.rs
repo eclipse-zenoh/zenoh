@@ -47,6 +47,29 @@ impl keyexpr {
         use super::intersect::Intersector;
         super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
     }
+    /// Returns `true` if `self` includes `other`, i.e. the set defined by `self` contains every key belonging to the set defined by `other`.
+    pub fn includes(&self, other: &Self) -> bool {
+        use super::include::Includer;
+        super::include::DEFAULT_INCLUDER.includes(self, other)
+    }
+
+    /// Returns the relation between `self` and `other` from `self`'s point of view ([`SetIntersectionLevel::Includes`] signifies that `self` includes `other`).
+    ///
+    /// Note that this is slower than [`keyexpr::intersects`] and [`keyexpr::includes`], so you should favor these methods for most applications.
+    pub fn relation_to(&self, other: &Self) -> SetIntersectionLevel {
+        use SetIntersectionLevel::*;
+        if self.intersects(other) {
+            if self == other {
+                Equals
+            } else if self.includes(other) {
+                Includes
+            } else {
+                Intersects
+            }
+        } else {
+            Disjoint
+        }
+    }
 
     pub fn as_str(&self) -> &str {
         self
@@ -66,6 +89,26 @@ impl keyexpr {
     {
         t.try_into()
     }
+}
+
+/// The possible relations between two sets.
+///
+/// Note that [`Equals`](SetIntersectionLevel::Equals) implies [`Includes`](SetIntersectionLevel::Includes), which itself implies [`Intersects`](SetIntersectionLevel::Intersects).
+///
+/// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SetIntersectionLevel {
+    Disjoint,
+    Intersects,
+    Includes,
+    Equals,
+}
+#[test]
+fn intersection_level_cmp() {
+    use SetIntersectionLevel::*;
+    assert!(Disjoint < Intersects);
+    assert!(Intersects < Includes);
+    assert!(Includes < Equals);
 }
 
 impl std::fmt::Debug for keyexpr {

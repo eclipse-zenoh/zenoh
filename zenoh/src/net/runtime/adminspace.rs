@@ -20,6 +20,7 @@ use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
 use serde_json::json;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
@@ -617,7 +618,7 @@ pub async fn plugins_status(
     for (name, (path, plugin)) in guard.running_plugins() {
         with_extended_string(&mut root_key, &[name], |plugin_key| {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
-                if wire_expr::intersect(key.as_str(), plugin_path_key) {
+                if key.intersects(plugin_path_key.as_str().try_into().unwrap()) {
                     responses.push(crate::plugins::Response {
                         key: plugin_path_key.clone(),
                         value: path.into(),
@@ -625,7 +626,7 @@ pub async fn plugins_status(
                 }
             });
             let matches_plugin = |plugin_status_space: &mut String| {
-                wire_expr::intersect(key.as_str(), plugin_status_space)
+                key.intersects(plugin_status_space.as_str().try_into().unwrap())
             };
             if !with_extended_string(plugin_key, &["/**"], matches_plugin) {
                 return;
