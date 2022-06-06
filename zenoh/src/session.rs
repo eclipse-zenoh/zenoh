@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -306,7 +306,8 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 key_expr,
                 expr_id,
                 prefix_len,
-            } if *prefix_len as usize == key_expr.len() => *expr_id as u64,
+                session_id
+            } if *prefix_len as usize == key_expr.len() => if *session_id == session.id {*expr_id as u64} else {return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())},
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
         trace!("undeclare_keyexpr({:?})", expr_id);
@@ -326,9 +327,11 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
 pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
+    pub(crate) id: u16,
     pub(crate) alive: bool,
 }
 
+static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     /// Initialize a Session with an existing Runtime.
     /// This operation is used by the plugins to share the same Runtime than the router.
@@ -349,6 +352,7 @@ impl Session {
             let session = Session {
                 runtime,
                 state: state.clone(),
+                id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
             };
             let primitives = Some(router.new_primitives(Arc::new(session.clone())));
@@ -608,6 +612,7 @@ impl Session {
                     expr_id: *expr_id,
                     prefix_len: expr.len() as u32,
                     key_expr: owned_expr,
+                    session_id: self.id,
                 })),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
@@ -624,6 +629,7 @@ impl Session {
                         expr_id,
                         prefix_len: expr.len() as u32,
                         key_expr: owned_expr,
+                        session_id: self.id,
                     });
                     primitives.decl_resource(
                         expr_id,
@@ -854,6 +860,7 @@ impl Session {
         Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
+            id: self.id,
             alive: false,
         }
     }
@@ -924,7 +931,7 @@ impl Session {
                 if let Some(res) = declared_pub {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.decl_publisher(&(&res).into(), None);
+                    primitives.decl_publisher(&res.to_wire(self), None);
                 }
             }
             Ok(())
@@ -972,7 +979,7 @@ impl Session {
                     None => {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_publisher(&(&key_expr).into(), None);
+                        primitives.forget_publisher(&key_expr.to_wire(self), None);
                     }
                 };
             } else {
@@ -1041,7 +1048,7 @@ impl Session {
                 key_expr
             };
 
-            primitives.decl_subscriber(&(&key_expr).into(), info, None);
+            primitives.decl_subscriber(&key_expr.to_wire(self), info, None);
         }
 
         Ok(sub_state)
@@ -1112,7 +1119,7 @@ impl Session {
                     if !twin_sub {
                         let primitives = state.primitives.as_ref().unwrap().clone();
                         drop(state);
-                        primitives.forget_subscriber(&key_expr.into(), None);
+                        primitives.forget_subscriber(&key_expr.to_wire(self), None);
                     }
                 }
             };
@@ -1356,7 +1363,7 @@ impl Session {
             let state = zread!(self.state);
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.send_pull(true, &key_expr.into(), 0, &None);
+            primitives.send_pull(true, &key_expr.to_wire(self), 0, &None);
             Ok(())
         })
     }
@@ -1403,7 +1410,7 @@ impl Session {
 
         drop(state);
         primitives.send_query(
-            &(&selector.key_expr).into(),
+            &selector.key_expr.to_wire(self),
             selector.value_selector.as_ref(),
             qid,
             zenoh_protocol_core::QueryTAK {
@@ -1416,7 +1423,7 @@ impl Session {
         if local_routing {
             self.handle_query(
                 true,
-                &(&selector.key_expr).into(),
+                &selector.key_expr.to_wire(self),
                 selector.value_selector.as_ref(),
                 qid,
                 zenoh_protocol_core::QueryTAK {
@@ -1503,7 +1510,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid,
-                        (&key_expr).into(),
+                        key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
                         payload,
                     );
@@ -1511,6 +1518,7 @@ impl Session {
                 this.send_reply_final(qid);
             });
         } else {
+            let this = self.clone();
             task::spawn(async move {
                 while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
@@ -1518,7 +1526,7 @@ impl Session {
                         qid,
                         replier_kind,
                         pid,
-                        (&key_expr).into(),
+                        key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
                         payload,
                     );

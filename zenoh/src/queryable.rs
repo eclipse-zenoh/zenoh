@@ -474,7 +474,7 @@ where
         let session = self.builder.session;
         session
             .declare_queryable_inner(
-                &(&self.builder.key_expr?).into(),
+                &self.builder.key_expr?.to_wire(&session),
                 self.builder.kind,
                 self.builder.complete,
                 Box::new(self.callback),
@@ -602,7 +602,7 @@ where
         let (callback, receiver) = self.handler.into_handler();
         session
             .declare_queryable_inner(
-                &(&self.builder.key_expr?).into(),
+                &self.builder.key_expr?.to_wire(&session),
                 self.builder.kind,
                 self.builder.complete,
                 callback,

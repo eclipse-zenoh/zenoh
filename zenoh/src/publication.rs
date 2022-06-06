@@ -142,7 +142,7 @@ impl SyncResolve for PutBuilder<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &(&key_expr).into(),
+            &key_expr.to_wire(&publisher.session),
             value.payload.clone(),
             Channel {
                 priority: publisher.priority.into(),
@@ -154,7 +154,7 @@ impl SyncResolve for PutBuilder<'_> {
         );
         publisher.session.handle_data(
             true,
-            &(&key_expr).into(),
+            &key_expr.to_wire(&publisher.session),
             data_info,
             value.payload,
             publisher.local_routing,
@@ -349,7 +349,7 @@ impl SyncResolve for Publication<'_> {
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &(&publisher.key_expr).into(),
+            &publisher.key_expr.to_wire(&publisher.session),
             value.payload.clone(),
             Channel {
                 priority: publisher.priority.into(),
@@ -361,7 +361,7 @@ impl SyncResolve for Publication<'_> {
         );
         publisher.session.handle_data(
             true,
-            &(&publisher.key_expr).into(),
+            &publisher.key_expr.to_wire(&publisher.session),
             data_info,
             value.payload,
             publisher.local_routing,
