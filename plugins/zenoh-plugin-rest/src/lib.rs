@@ -448,7 +448,8 @@ pub async fn run(runtime: Runtime, conf: Config) {
 }
 
 fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> ZResult<KeyExpr<'a>> {
-    if path == "/@/router/local" {
+    let path = path.strip_prefix('/').unwrap_or(path);
+    if path == "@/router/local" {
         KeyExpr::try_from(format!("@/router/{}", pid))
     } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
         KeyExpr::try_from(format!("@/router/{}/{}", pid, suffix))

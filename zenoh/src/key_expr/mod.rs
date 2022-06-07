@@ -113,23 +113,23 @@ impl<'a> TryFrom<&'a mut str> for KeyExpr<'a> {
 }
 impl std::fmt::Debug for KeyExpr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self.keyexpr(), f)
+        std::fmt::Debug::fmt(self.as_keyexpr(), f)
     }
 }
 impl std::fmt::Display for KeyExpr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.keyexpr(), f)
+        std::fmt::Display::fmt(self.as_keyexpr(), f)
     }
 }
 impl PartialEq for KeyExpr<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.keyexpr() == other.keyexpr()
+        self.as_keyexpr() == other.as_keyexpr()
     }
 }
 impl Eq for KeyExpr<'_> {}
 impl std::hash::Hash for KeyExpr<'_> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.keyexpr().hash(state);
+        self.as_keyexpr().hash(state);
     }
 }
 
@@ -160,15 +160,19 @@ impl<'a> KeyExpr<'a> {
     pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
-    pub fn keyexpr(&self) -> &keyexpr {
+
+    /// Returns the borrowed version of `self`
+    pub fn as_keyexpr(&self) -> &keyexpr {
         self
     }
+
     /// Creates a `KeyExpr` that borrows `self`'s internal `str`.
     ///
     /// This is only useful when you need to pass a `KeyExpr<'a>` by value.
     pub fn borrowing_clone(&'a self) -> Self {
         Self::from(self.as_ref())
     }
+
     /// Ensure's `self` owns all of its data, and informs rustc that it does.
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
@@ -246,7 +250,9 @@ impl<'a> KeyExpr<'a> {
             Ok(r.into())
         }
     }
+}
 
+impl<'a> KeyExpr<'a> {
     pub(crate) fn is_optimized(&self) -> bool {
         matches!(&self.0, KeyExprInner::Wire { expr_id, .. } if *expr_id != 0)
     }

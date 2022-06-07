@@ -248,7 +248,7 @@ impl StorageConfig {
         let mut result = serde_json::Map::new();
         result.insert(
             "key_expr".into(),
-            Value::String(self.key_expr.keyexpr().to_owned().into()),
+            Value::String(self.key_expr.as_keyexpr().to_owned().into()),
         );
         if !self.strip_prefix.is_empty() {
             result.insert(

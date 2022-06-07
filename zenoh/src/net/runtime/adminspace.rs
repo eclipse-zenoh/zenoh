@@ -410,10 +410,10 @@ impl Primitives for AdminSpace {
             ));
             if ask_plugins {
                 futures::join!(handler_tasks, async {
-                    let key_expr = if key_expr.scope != 0 {
+                    let key_expr = if key_expr.scope == 0 {
                         KeyExpr::from(unsafe { keyexpr::from_str_unchecked(&key_expr.suffix) })
                     } else {
-                        unreachable!("An unresolved WireExpr reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.")
+                        unreachable!("An unresolved WireExpr ({:?}) reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.", key_expr)
                     };
                     let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
                     for status in plugin_status {
