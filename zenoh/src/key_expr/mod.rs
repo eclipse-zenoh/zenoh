@@ -336,12 +336,16 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-// #[cfg(target_pointer_width = "64")]
+#[cfg(target_pointer_width = "64")]
 #[allow(non_snake_case)]
 #[test]
 fn size_of_KeyExpr() {
     assert_eq!(
         std::mem::size_of::<KeyExpr>(),
         4 * std::mem::size_of::<usize>()
-    )
+    );
+    assert_eq!(
+        std::mem::size_of::<Option<KeyExpr>>(),
+        4 * std::mem::size_of::<usize>()
+    );
 }
