@@ -168,6 +168,31 @@ impl Encoding {
     }
 }
 
+impl Encoding {
+    pub const EMPTY: Encoding = Encoding::Exact(KnownEncoding::Empty);
+    pub const APP_OCTET_STREAM: Encoding = Encoding::Exact(KnownEncoding::AppOctetStream);
+    pub const APP_CUSTOM: Encoding = Encoding::Exact(KnownEncoding::AppCustom);
+    pub const TEXT_PLAIN: Encoding = Encoding::Exact(KnownEncoding::TextPlain);
+    pub const APP_PROPERTIES: Encoding = Encoding::Exact(KnownEncoding::AppProperties);
+    pub const APP_JSON: Encoding = Encoding::Exact(KnownEncoding::AppJson);
+    pub const APP_SQL: Encoding = Encoding::Exact(KnownEncoding::AppSql);
+    pub const APP_INTEGER: Encoding = Encoding::Exact(KnownEncoding::AppInteger);
+    pub const APP_FLOAT: Encoding = Encoding::Exact(KnownEncoding::AppFloat);
+    pub const APP_XML: Encoding = Encoding::Exact(KnownEncoding::AppXml);
+    pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
+    pub const APP_XWWW_FORM_URLENCODED: Encoding =
+        Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
+    pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);
+    pub const TEXT_HTML: Encoding = Encoding::Exact(KnownEncoding::TextHtml);
+    pub const TEXT_XML: Encoding = Encoding::Exact(KnownEncoding::TextXml);
+    pub const TEXT_CSS: Encoding = Encoding::Exact(KnownEncoding::TextCss);
+    pub const TEXT_CSV: Encoding = Encoding::Exact(KnownEncoding::TextCsv);
+    pub const TEXT_JAVASCRIPT: Encoding = Encoding::Exact(KnownEncoding::TextJavascript);
+    pub const IMAGE_JPEG: Encoding = Encoding::Exact(KnownEncoding::ImageJpeg);
+    pub const IMAGE_PNG: Encoding = Encoding::Exact(KnownEncoding::ImagePng);
+    pub const IMAGE_GIF: Encoding = Encoding::Exact(KnownEncoding::ImageGif);
+}
+
 impl fmt::Display for Encoding {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
