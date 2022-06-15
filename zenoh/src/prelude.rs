@@ -36,7 +36,6 @@ pub(crate) mod common {
     #[cfg(feature = "shared-memory")]
     use crate::buf::SharedMemoryBuf;
     use crate::buf::ZBuf;
-    use crate::data_kind;
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     use crate::publication::PublisherBuilder;
     use crate::queryable::{Query, QueryableBuilder};
@@ -436,47 +435,7 @@ pub(crate) mod common {
         }
     }
 
-    /// The kind of a [`Sample`].
-    #[repr(u8)]
-    #[derive(Debug, Copy, Clone, PartialEq)]
-    pub enum SampleKind {
-        /// if the [`Sample`] was caused by a `put` operation.
-        Put = data_kind::PUT as u8,
-        /// if the [`Sample`] was caused by a `delete` operation.
-        Delete = data_kind::DELETE as u8,
-    }
-
-    impl Default for SampleKind {
-        fn default() -> Self {
-            SampleKind::Put
-        }
-    }
-
-    impl fmt::Display for SampleKind {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                SampleKind::Put => write!(f, "PUT"),
-                SampleKind::Delete => write!(f, "DELETE"),
-            }
-        }
-    }
-
-    impl From<ZInt> for SampleKind {
-        fn from(kind: ZInt) -> Self {
-            match kind {
-                data_kind::PUT => SampleKind::Put,
-                data_kind::DELETE => SampleKind::Delete,
-                _ => {
-                    log::warn!(
-                        "Received DataInfo with kind={} which doesn't correspond to a SampleKind. \
-                       Assume a PUT with RAW encoding",
-                        kind
-                    );
-                    SampleKind::Put
-                }
-            }
-        }
-    }
+    pub use zenoh_protocol_core::SampleKind;
 
     /// A zenoh sample.
     #[derive(Clone, Debug)]
@@ -539,7 +498,7 @@ pub(crate) mod common {
                 Sample {
                     key_expr,
                     value,
-                    kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
+                    kind: data_info.kind,
                     timestamp: data_info.timestamp,
                 }
             } else {
@@ -555,11 +514,7 @@ pub(crate) mod common {
         #[inline]
         pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
             let info = DataInfo {
-                kind: if self.kind == SampleKind::Put {
-                    None
-                } else {
-                    Some(self.kind as u64)
-                },
+                kind: self.kind,
                 encoding: Some(self.value.encoding),
                 timestamp: self.timestamp,
                 #[cfg(feature = "shared-memory")]

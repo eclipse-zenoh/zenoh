@@ -530,7 +530,7 @@ impl Header for Priority {
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
-    pub kind: Option<ZInt>,
+    pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
 }
@@ -548,7 +548,7 @@ impl Options for DataInfo {
         if self.sliced {
             options |= zmsg::data::info::SLICED;
         }
-        if self.kind.is_some() {
+        if self.kind != SampleKind::Put {
             options |= zmsg::data::info::KIND;
         }
         if self.encoding.is_some() {
@@ -574,7 +574,10 @@ impl Options for DataInfo {
             }};
         }
 
-        sliced!(self) || self.kind.is_some() || self.encoding.is_some() || self.timestamp.is_some()
+        sliced!(self)
+            || self.kind != SampleKind::Put
+            || self.encoding.is_some()
+            || self.timestamp.is_some()
     }
 }
 

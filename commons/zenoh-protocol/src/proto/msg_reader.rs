@@ -575,7 +575,13 @@ impl MessageReader for ZBufReader<'_> {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }
         if imsg::has_option(options, zmsg::data::info::KIND) {
-            info.kind = Some(self.read_zint()?);
+            info.kind = match self.read_zint()?.try_into() {
+                Ok(kind) => kind,
+                Err(e) => {
+                    log::error!("Received an unknown SampleKind: {}", e);
+                    return None;
+                }
+            }
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
             let prefix = self.read_zint()?;

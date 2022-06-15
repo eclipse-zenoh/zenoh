@@ -409,8 +409,8 @@ impl MessageWriter for WBuf {
     fn write_data_info(&mut self, info: &DataInfo) -> bool {
         zcheck!(self.write_zint(info.options()));
 
-        if let Some(kind) = info.kind {
-            zcheck!(self.write_zint(kind));
+        if info.kind != SampleKind::Put {
+            zcheck!(self.write_zint(info.kind as u64));
         }
         if let Some(enc) = info.encoding.as_ref() {
             zcheck!(self.write_byte(u8::from(*enc.prefix())).is_some());

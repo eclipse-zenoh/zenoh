@@ -35,21 +35,3 @@ pub mod defaults {
     ///       In any case, the length of a message must not exceed 65_535 bytes.
     pub const BATCH_SIZE: u16 = u16::MAX;
 }
-
-pub mod data_kind {
-    use super::ZInt;
-
-    pub const PUT: ZInt = 0;
-    pub const DELETE: ZInt = 1;
-
-    pub const DEFAULT: ZInt = PUT;
-
-    pub fn to_string(i: ZInt) -> String {
-        match i {
-            0 => "PUT".to_string(),
-            1 => "PATCH".to_string(),
-            2 => "DELETE".to_string(),
-            i => i.to_string(),
-        }
-    }
-}

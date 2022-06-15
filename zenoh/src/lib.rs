@@ -79,7 +79,6 @@ extern crate zenoh_core;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 use git_version::git_version;
-use net::protocol::proto::data_kind;
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;

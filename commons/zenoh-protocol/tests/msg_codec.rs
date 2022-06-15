@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use rand::*;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh_buffers::reader::HasReader;
@@ -243,7 +243,7 @@ fn gen_timestamp() -> Timestamp {
 
 fn gen_data_info() -> DataInfo {
     DataInfo {
-        kind: option_gen!(gen!(ZInt)),
+        kind: (gen!(ZInt) % 2).try_into().unwrap(),
         encoding: option_gen!(Encoding::Exact(TryFrom::try_from(gen!(u8) % 21).unwrap())),
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]

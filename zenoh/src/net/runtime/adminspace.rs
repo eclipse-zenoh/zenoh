@@ -14,6 +14,7 @@ use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::keyexpr;
 use crate::plugins::PluginsManager;
+use crate::prelude::sync::SampleKind;
 use crate::prelude::{KeyExpr, Selector};
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
@@ -25,7 +26,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
-use zenoh_protocol::proto::{data_kind, DataInfo, RoutingContext};
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
     queryable::EVAL, wire_expr, Channel, CongestionControl, ConsolidationStrategy, Encoding,
     KnownEncoding, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
@@ -308,7 +309,7 @@ impl Primitives for AdminSpace {
             .strip_prefix(&format!("@/router/{}/config/", &self.context.pid_str))
         {
             if let Some(DataInfo {
-                kind: Some(data_kind::DELETE),
+                kind: SampleKind::Delete,
                 ..
             }) = data_info
             {

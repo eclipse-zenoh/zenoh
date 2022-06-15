@@ -17,6 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 use std::convert::TryFrom;
 use std::sync::Arc;
+use zenoh_protocol_core::SampleKind;
 
 use zenoh::net::protocol::core::Encoding;
 use zenoh::net::protocol::core::{Channel, CongestionControl, WireExpr};
@@ -43,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 let info = Some(DataInfo {
                     #[cfg(feature = "shared-memory")]
                     sliced: false,
-                    kind: Some(0),
+                    kind: SampleKind::Put,
                     encoding: Some(Encoding::default()),
                     timestamp: Some(uhlc::Timestamp::new(
                         Default::default(),
@@ -92,7 +93,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let info = Some(DataInfo {
         #[cfg(feature = "shared-memory")]
         sliced: false,
-        kind: Some(0),
+        kind: SampleKind::Put,
         encoding: Some(Encoding::default()),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),

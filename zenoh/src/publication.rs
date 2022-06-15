@@ -23,7 +23,7 @@ use crate::Undeclarable;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::Resolve;
 use zenoh_core::{zread, AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::proto::{data_kind, DataInfo, Options};
+use zenoh_protocol::proto::{DataInfo, Options};
 use zenoh_protocol_core::Channel;
 
 /// The kind of congestion control.
@@ -128,11 +128,7 @@ impl SyncResolve for PutBuilder<'_> {
         drop(state);
 
         let mut info = DataInfo::new();
-        let kind = kind as u64;
-        info.kind = match kind {
-            data_kind::DEFAULT => None,
-            kind => Some(kind),
-        };
+        info.kind = kind;
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {
@@ -335,11 +331,7 @@ impl SyncResolve for Publication<'_> {
         drop(state);
 
         let mut info = DataInfo::new();
-        let kind = kind as u64;
-        info.kind = match kind {
-            data_kind::DEFAULT => None,
-            kind => Some(kind),
-        };
+        info.kind = kind;
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {

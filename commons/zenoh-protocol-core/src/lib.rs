@@ -62,6 +62,42 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
+/// The kind of a [`Sample`].
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum SampleKind {
+    /// if the [`Sample`] was caused by a `put` operation.
+    Put = 0,
+    /// if the [`Sample`] was caused by a `delete` operation.
+    Delete = 1,
+}
+
+impl Default for SampleKind {
+    fn default() -> Self {
+        SampleKind::Put
+    }
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<ZInt> for SampleKind {
+    type Error = ZInt;
+    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
+
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
 pub struct ZenohId(uhlc::ID);
