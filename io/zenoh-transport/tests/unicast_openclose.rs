@@ -13,6 +13,7 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;
@@ -82,7 +83,7 @@ impl TransportEventHandler for SHClientOpenClose {
 
 async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterOpenClose::default());
     // Create the router transport manager
@@ -97,8 +98,8 @@ async fn openclose_transport(endpoint: &EndPoint) {
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
-    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
+    let client01_id = ZenohId::try_from([2]).unwrap();
+    let client02_id = ZenohId::try_from([3]).unwrap();
 
     // Create the transport transport manager for the first client
     let unicast = TransportManager::config_unicast()

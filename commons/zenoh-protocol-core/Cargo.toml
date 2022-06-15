@@ -38,8 +38,8 @@ zenoh-core = { path = "../zenoh-core/" }
 
 hex = "0.4.2"
 lazy_static = "1.4.0"
-uhlc = "0.4.0"
-uuid = { version = "0.8.2", features = ["v4"] }
+uhlc = "0.5.0"
+uuid = { version = "1.1.2", features = ["v4"] }
 serde = "1.0.123"
 
 [dev-dependencies]

@@ -116,22 +116,21 @@ pub use zenoh_buffers as buf;
 
 /// Time related types and functions.
 pub mod time {
+    use std::convert::TryFrom;
+
     pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
 
     /// A time period.
     pub use zenoh_protocol_core::Period;
 
-    /// Generates a reception [`Timestamp`] with id=0x00.  
+    /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Timestamp::new(
-            now.into(),
-            TimestampId::new(1, [0_u8; TimestampId::MAX_SIZE]),
-        )
+        Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
     }
 }
 

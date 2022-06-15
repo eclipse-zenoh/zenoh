@@ -14,6 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
+use std::convert::TryFrom;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -155,8 +156,8 @@ async fn open_transport(
     TransportUnicast,
 ) {
     // Define client and router IDs
-    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
-    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());

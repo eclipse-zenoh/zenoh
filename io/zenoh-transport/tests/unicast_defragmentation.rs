@@ -13,8 +13,8 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
-use std::sync::Arc;
 use std::time::Duration;
+use std::{convert::TryFrom, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
@@ -36,8 +36,8 @@ macro_rules! ztimeout {
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
-    let router_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()

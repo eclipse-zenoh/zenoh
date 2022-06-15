@@ -39,8 +39,8 @@ zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 zenoh-buffers = { path = "../zenoh-buffers/" }
 
 log = "0.4"
-uhlc = "0.4.0"
+uhlc = "0.5.0"
 
 [dev-dependencies]
 rand = "0.8.3"
-uuid = { version = "0.8.2", features = ["v4"] }
+uuid = { version = "1.1.2", features = ["v4"] }

@@ -14,6 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
+use std::convert::TryFrom;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -135,8 +136,8 @@ impl TransportPeerEventHandler for MHPeer {
 
 async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoint>) {
     /* [Peers] */
-    let peer_id01 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
-    let peer_id02 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
+    let peer_id01 = ZenohId::try_from([2]).unwrap();
+    let peer_id02 = ZenohId::try_from([3]).unwrap();
 
     // Create the peer01 transport manager
     let peer_sh01 = Arc::new(SHPeer::new(peer_id01));

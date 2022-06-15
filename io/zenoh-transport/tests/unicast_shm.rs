@@ -17,6 +17,7 @@ mod tests {
     use async_std::task;
     use std::any::Any;
     use std::collections::HashSet;
+    use std::convert::TryFrom;
     use std::iter::FromIterator;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -132,9 +133,9 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
-        let peer_shm02 = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
-        let peer_net01 = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
+        let peer_shm01 = ZenohId::try_from([1]).unwrap();
+        let peer_shm02 = ZenohId::try_from([2]).unwrap();
+        let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();

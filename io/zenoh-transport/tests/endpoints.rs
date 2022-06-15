@@ -14,6 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;
@@ -81,7 +82,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]))
+        .pid(ZenohId::try_from([1]).unwrap())
         .build(Arc::new(SH::default()))
         .unwrap();
 

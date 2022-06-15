@@ -13,6 +13,7 @@
 //
 #[macro_use]
 extern crate criterion;
+use std::convert::TryFrom;
 use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion};
@@ -29,7 +30,7 @@ use zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 
 fn tables_bench(c: &mut Criterion) {
     let mut tables = Tables::new(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Router,
         None,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
@@ -37,7 +38,7 @@ fn tables_bench(c: &mut Criterion) {
     let primitives = Arc::new(DummyPrimitives {});
 
     let face0 = tables.open_face(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives.clone(),
     );
@@ -54,7 +55,7 @@ fn tables_bench(c: &mut Criterion) {
         &"bench/tables/*".into(),
     );
 
-    let face1 = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face1 = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
 
     let mut tables_bench = c.benchmark_group("tables_bench");
     let sub_info = SubInfo {

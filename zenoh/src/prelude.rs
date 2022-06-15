@@ -449,6 +449,11 @@ pub(crate) mod common {
         pub first_router_sn: Option<ZInt>,
     }
 
+    #[test]
+    fn source_info_stack_size() {
+        assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 4);
+    }
+
     impl SourceInfo {
         pub(crate) fn empty() -> Self {
             SourceInfo {

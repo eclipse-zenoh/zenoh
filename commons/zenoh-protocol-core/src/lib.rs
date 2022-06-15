@@ -64,26 +64,19 @@ pub struct Property {
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
-pub struct ZenohId {
-    size: usize,
-    id: [u8; ZenohId::MAX_SIZE],
-}
+pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
     pub const MAX_SIZE: usize = 16;
 
-    pub fn new(size: usize, id: [u8; ZenohId::MAX_SIZE]) -> ZenohId {
-        ZenohId { size, id }
-    }
-
     #[inline]
     pub fn size(&self) -> usize {
-        self.size
+        self.0.size()
     }
 
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        &self.id[..self.size]
+        self.0.as_slice()
     }
 
     pub fn rand() -> ZenohId {
@@ -100,12 +93,52 @@ impl Default for ZenohId {
 impl From<uuid::Uuid> for ZenohId {
     #[inline]
     fn from(uuid: uuid::Uuid) -> Self {
-        ZenohId {
-            size: 16,
-            id: *uuid.as_bytes(),
-        }
+        ZenohId(uuid.into())
     }
 }
+macro_rules! derive_tryfrom {
+    ($T: ty) => {
+        impl TryFrom<$T> for ZenohId {
+            type Error = zenoh_core::Error;
+            fn try_from(val: $T) -> Result<Self, Self::Error> {
+                Ok(Self(val.try_into()?))
+            }
+        }
+    };
+}
+derive_tryfrom!([u8; 1]);
+derive_tryfrom!(&[u8; 1]);
+derive_tryfrom!([u8; 2]);
+derive_tryfrom!(&[u8; 2]);
+derive_tryfrom!([u8; 3]);
+derive_tryfrom!(&[u8; 3]);
+derive_tryfrom!([u8; 4]);
+derive_tryfrom!(&[u8; 4]);
+derive_tryfrom!([u8; 5]);
+derive_tryfrom!(&[u8; 5]);
+derive_tryfrom!([u8; 6]);
+derive_tryfrom!(&[u8; 6]);
+derive_tryfrom!([u8; 7]);
+derive_tryfrom!(&[u8; 7]);
+derive_tryfrom!([u8; 8]);
+derive_tryfrom!(&[u8; 8]);
+derive_tryfrom!([u8; 9]);
+derive_tryfrom!(&[u8; 9]);
+derive_tryfrom!([u8; 10]);
+derive_tryfrom!(&[u8; 10]);
+derive_tryfrom!([u8; 11]);
+derive_tryfrom!(&[u8; 11]);
+derive_tryfrom!([u8; 12]);
+derive_tryfrom!(&[u8; 12]);
+derive_tryfrom!([u8; 13]);
+derive_tryfrom!(&[u8; 13]);
+derive_tryfrom!([u8; 14]);
+derive_tryfrom!(&[u8; 14]);
+derive_tryfrom!([u8; 15]);
+derive_tryfrom!(&[u8; 15]);
+derive_tryfrom!([u8; 16]);
+derive_tryfrom!(&[u8; 16]);
+derive_tryfrom!(&[u8]);
 
 impl FromStr for ZenohId {
     type Err = zenoh_core::Error;
@@ -114,20 +147,14 @@ impl FromStr for ZenohId {
         // filter-out '-' characters (in case s has UUID format)
         let s = s.replace('-', "");
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-        let size = vec.len();
-        if !(1..=ZenohId::MAX_SIZE).contains(&size) {
-            bail!("Invalid id size: {} (1-{} bytes)", size, ZenohId::MAX_SIZE);
-        }
-        let mut id = [0_u8; ZenohId::MAX_SIZE];
-        id[..size].copy_from_slice(vec.as_slice());
-        Ok(ZenohId::new(size, id))
+        vec.as_slice().try_into()
     }
 }
 
 impl PartialEq for ZenohId {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.size == other.size && self.as_slice() == other.as_slice()
+        self.0.eq(&other.0)
     }
 }
 
@@ -152,7 +179,7 @@ impl fmt::Display for ZenohId {
 // A PeerID can be converted into a Timestamp's ID
 impl From<&ZenohId> for uhlc::ID {
     fn from(pid: &ZenohId) -> Self {
-        uhlc::ID::new(pid.size, pid.id)
+        pid.0
     }
 }
 

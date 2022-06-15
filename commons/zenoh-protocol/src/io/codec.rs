@@ -137,7 +137,7 @@ impl<R: Reader> Decoder<ZenohId, R> for ZenohCodec {
         if !reader.read_exact(&mut id[..size]) {
             return Err(InsufficientDataErr.into());
         }
-        Ok(ZenohId::new(size, id))
+        ZenohId::try_from(&id[..size])
     }
 }
 impl<R: Reader> Decoder<Timestamp, R> for ZenohCodec {
@@ -156,7 +156,10 @@ impl<R: Reader> Decoder<Timestamp, R> for ZenohCodec {
         if !reader.read_exact(&mut id[..size]) {
             return Err(InsufficientDataErr.into());
         }
-        Ok(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
+        Ok(Timestamp::new(
+            uhlc::NTP64(time),
+            uhlc::ID::try_from(&id[..size])?,
+        ))
     }
 }
 impl<R: Reader> Decoder<Property, R> for ZenohCodec {
@@ -436,7 +439,10 @@ impl ZBufCodec for ZBufReader<'_> {
         }
         let mut id = [0_u8; ZenohId::MAX_SIZE];
         if self.read_exact(&mut id[..size]) {
-            Some(Timestamp::new(uhlc::NTP64(time), uhlc::ID::new(size, id)))
+            Some(Timestamp::new(
+                uhlc::NTP64(time),
+                uhlc::ID::try_from(&id[..size]).ok()?,
+            ))
         } else {
             None
         }

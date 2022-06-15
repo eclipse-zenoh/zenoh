@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::time::Duration;
 use uhlc::HLC;
@@ -30,13 +30,13 @@ use zenoh_transport::{DummyPrimitives, Primitives};
 #[test]
 fn base_test() {
     let mut tables = Tables::new(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
     register_expr(
         &mut tables,
         &mut face.upgrade().unwrap(),
@@ -123,13 +123,13 @@ fn match_test() {
     ];
 
     let mut tables = Tables::new(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &mut tables,
@@ -158,14 +158,14 @@ fn match_test() {
 #[test]
 fn clean_test() {
     let mut tables = Tables::new(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(ZenohId::new(0, [0; 16]), WhatAmI::Client, primitives);
+    let face0 = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
     assert!(face0.upgrade().is_some());
 
     // --------------
@@ -498,7 +498,7 @@ impl Primitives for ClientPrimitives {
 #[test]
 fn client_test() {
     let mut tables = Tables::new(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
@@ -511,7 +511,7 @@ fn client_test() {
 
     let primitives0 = Arc::new(ClientPrimitives::new());
     let face0 = tables.open_face(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives0.clone(),
     );
@@ -538,7 +538,7 @@ fn client_test() {
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = tables.open_face(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives1.clone(),
     );
@@ -565,7 +565,7 @@ fn client_test() {
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = tables.open_face(
-        ZenohId::new(0, [0; 16]),
+        ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives2.clone(),
     );

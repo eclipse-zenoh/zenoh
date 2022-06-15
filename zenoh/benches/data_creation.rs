@@ -15,6 +15,7 @@
 extern crate criterion;
 
 use criterion::Criterion;
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 use zenoh::net::protocol::core::Encoding;
@@ -46,11 +47,11 @@ fn criterion_benchmark(c: &mut Criterion) {
                     encoding: Some(Encoding::default()),
                     timestamp: Some(uhlc::Timestamp::new(
                         Default::default(),
-                        uhlc::ID::new(16, [1u8; uhlc::ID::MAX_SIZE]),
+                        uhlc::ID::try_from([2u8; uhlc::ID::MAX_SIZE]).unwrap(),
                     )),
-                    source_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
+                    source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
                     source_sn: Some(12345),
-                    first_router_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
+                    first_router_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
                     first_router_sn: Some(12345),
                 });
 
@@ -99,11 +100,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         encoding: Some(Encoding::default()),
         timestamp: Some(uhlc::Timestamp::new(
             Default::default(),
-            uhlc::ID::new(16, [0_u8; uhlc::ID::MAX_SIZE]),
+            uhlc::ID::try_from([1_u8; uhlc::ID::MAX_SIZE]).unwrap(),
         )),
-        source_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
+        source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
         source_sn: Some(12345),
-        first_router_id: Some(ZenohId::new(16, [0_u8; ZenohId::MAX_SIZE])),
+        first_router_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
         first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);

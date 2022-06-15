@@ -14,6 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
+use std::convert::TryFrom;
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -140,7 +141,7 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
-    let router_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
+    let router_id = ZenohId::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterIntermittent::default());
     // Create the router transport manager
@@ -155,9 +156,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     /* [CLIENT] */
-    let client01_id = ZenohId::new(1, [1_u8; ZenohId::MAX_SIZE]);
-    let client02_id = ZenohId::new(1, [2_u8; ZenohId::MAX_SIZE]);
-    let client03_id = ZenohId::new(1, [3_u8; ZenohId::MAX_SIZE]);
+    let client01_id = ZenohId::try_from([2]).unwrap();
+    let client02_id = ZenohId::try_from([3]).unwrap();
+    let client03_id = ZenohId::try_from([4]).unwrap();
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));

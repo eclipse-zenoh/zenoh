@@ -3104,16 +3104,16 @@ checksum = "56dee185309b50d1f11bfedef0fe6d036842e3fb77413abef29f8f8d1c5d4c1c"
 
 [[package]]
 name = "uhlc"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d74cc14aac0f650dae365e42250073bc0f89602bad5751d6159642be37690d6"
+checksum = "f6fee7320b7ecfdabacf27c5bb0da234c66934622b519e64b466f27e83090719"
 dependencies = [
  "hex",
  "humantime",
  "lazy_static",
  "log",
  "serde",
- "uuid",
+ "uuid 1.1.2",
 ]
 
 [[package]]
@@ -3194,6 +3194,15 @@ name = "uuid"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+dependencies = [
+ "getrandom 0.2.6",
+]
+
+[[package]]
+name = "uuid"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom 0.2.6",
 ]
@@ -3466,7 +3475,7 @@ dependencies = [
  "socket2",
  "stop-token",
  "uhlc",
- "uuid",
+ "uuid 1.1.2",
  "vec_map",
  "zenoh-buffers",
  "zenoh-cfg-properties",
@@ -3702,7 +3711,7 @@ dependencies = [
  "futures",
  "log",
  "nix 0.23.1",
- "uuid",
+ "uuid 0.8.2",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol-core",
@@ -3801,7 +3810,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "uhlc",
- "uuid",
+ "uuid 1.1.2",
  "zenoh-buffers",
  "zenoh-core",
  "zenoh-protocol-core",
@@ -3818,7 +3827,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "uhlc",
- "uuid",
+ "uuid 1.1.2",
  "zenoh-core",
 ]
 
