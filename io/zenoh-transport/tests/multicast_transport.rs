@@ -137,9 +137,10 @@ mod tests {
     async fn open_transport(
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
+        use std::convert::TryFrom;
         // Define peer01 and peer02 IDs
-        let peer01_id = ZenohId::new(1, [0_u8; ZenohId::MAX_SIZE]);
-        let peer02_id = ZenohId::new(1, [1u8; ZenohId::MAX_SIZE]);
+        let peer01_id = ZenohId::try_from([1]).unwrap();
+        let peer02_id = ZenohId::try_from([2]).unwrap();
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
