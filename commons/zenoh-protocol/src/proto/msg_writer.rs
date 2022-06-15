@@ -419,18 +419,6 @@ impl MessageWriter for WBuf {
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
         }
-        if let Some(pid) = info.source_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
-        }
-        if let Some(sn) = info.source_sn {
-            zcheck!(self.write_zint(sn));
-        }
-        if let Some(pid) = info.first_router_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
-        }
-        if let Some(sn) = info.first_router_sn {
-            zcheck!(self.write_zint(sn));
-        }
         true
     }
 

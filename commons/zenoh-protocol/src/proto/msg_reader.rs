@@ -569,7 +569,6 @@ impl MessageReader for ZBufReader<'_> {
     #[inline(always)]
     fn read_data_info(&mut self) -> Option<DataInfo> {
         let mut info = DataInfo::new();
-
         let options = self.read_zint()?;
         #[cfg(feature = "shared-memory")]
         {
@@ -586,19 +585,13 @@ impl MessageReader for ZBufReader<'_> {
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id = Some(self.read_peeexpr_id()?);
+        const RESERVED_FIELDS: u64 = zmsg::data::info::SRCID
+            | zmsg::data::info::SRCSN
+            | zmsg::data::info::RTRID
+            | zmsg::data::info::RTRSN;
+        if options & RESERVED_FIELDS != 0 {
+            log::error!("A message with set reserved bits has been received. This is likely to be because your network has different versions of zenoh linked together.")
         }
-        if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            info.source_sn = Some(self.read_zint()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id = Some(self.read_peeexpr_id()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::RTRSN) {
-            info.first_router_sn = Some(self.read_zint()?);
-        }
-
         Some(info)
     }
 

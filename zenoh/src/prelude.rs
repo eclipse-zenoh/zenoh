@@ -436,55 +436,6 @@ pub(crate) mod common {
         }
     }
 
-    /// Informations on the source of a zenoh [`Sample`].
-    #[derive(Debug, Clone)]
-    pub struct SourceInfo {
-        /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
-        pub source_id: Option<ZenohId>,
-        /// The sequence number of the [`Sample`] from the source.
-        pub source_sn: Option<ZInt>,
-        /// The [`ZenohId`] of the first zenoh router that routed this [`Sample`].
-        pub first_router_id: Option<ZenohId>,
-        /// The sequence number of the [`Sample`] from the first zenoh router that routed it.
-        pub first_router_sn: Option<ZInt>,
-    }
-
-    #[test]
-    fn source_info_stack_size() {
-        assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 4);
-    }
-
-    impl SourceInfo {
-        pub(crate) fn empty() -> Self {
-            SourceInfo {
-                source_id: None,
-                source_sn: None,
-                first_router_id: None,
-                first_router_sn: None,
-            }
-        }
-    }
-
-    impl From<DataInfo> for SourceInfo {
-        fn from(data_info: DataInfo) -> Self {
-            SourceInfo {
-                source_id: data_info.source_id,
-                source_sn: data_info.source_sn,
-                first_router_id: data_info.first_router_id,
-                first_router_sn: data_info.first_router_sn,
-            }
-        }
-    }
-
-    impl From<Option<DataInfo>> for SourceInfo {
-        fn from(data_info: Option<DataInfo>) -> Self {
-            match data_info {
-                Some(data_info) => data_info.into(),
-                None => SourceInfo::empty(),
-            }
-        }
-    }
-
     /// The kind of a [`Sample`].
     #[repr(u8)]
     #[derive(Debug, Copy, Clone, PartialEq)]
@@ -538,8 +489,6 @@ pub(crate) mod common {
         pub kind: SampleKind,
         /// The [`Timestamp`] of this Sample.
         pub timestamp: Option<Timestamp>,
-        /// Infos on the source of this Sample.
-        pub source_info: SourceInfo,
     }
 
     impl Sample {
@@ -555,7 +504,6 @@ pub(crate) mod common {
                 value: value.into(),
                 kind: SampleKind::default(),
                 timestamp: None,
-                source_info: SourceInfo::empty(),
             }
         }
         /// Creates a new Sample.
@@ -574,7 +522,6 @@ pub(crate) mod common {
                 value: value.into(),
                 kind: SampleKind::default(),
                 timestamp: None,
-                source_info: SourceInfo::empty(),
             })
         }
 
@@ -594,7 +541,6 @@ pub(crate) mod common {
                     value,
                     kind: data_info.kind.unwrap_or(data_kind::DEFAULT).into(),
                     timestamp: data_info.timestamp,
-                    source_info: data_info.into(),
                 }
             } else {
                 Sample {
@@ -602,7 +548,6 @@ pub(crate) mod common {
                     value,
                     kind: SampleKind::default(),
                     timestamp: None,
-                    source_info: SourceInfo::empty(),
                 }
             }
         }
@@ -619,10 +564,6 @@ pub(crate) mod common {
                 timestamp: self.timestamp,
                 #[cfg(feature = "shared-memory")]
                 sliced: false,
-                source_id: self.source_info.source_id,
-                source_sn: self.source_info.source_sn,
-                first_router_id: self.source_info.first_router_id,
-                first_router_sn: self.source_info.first_router_sn,
             };
             (self.key_expr, self.value.payload, info)
         }
@@ -637,13 +578,6 @@ pub(crate) mod common {
         #[inline]
         pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
             self.timestamp = Some(timestamp);
-            self
-        }
-
-        /// Sets the source info of this Sample.
-        #[inline]
-        pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
-            self.source_info = source_info;
             self
         }
 

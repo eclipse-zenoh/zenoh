@@ -248,10 +248,6 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
-        source_id: option_gen!(gen_pid()),
-        source_sn: option_gen!(gen!(ZInt)),
-        first_router_id: option_gen!(gen_pid()),
-        first_router_sn: option_gen!(gen!(ZInt)),
     }
 }
 

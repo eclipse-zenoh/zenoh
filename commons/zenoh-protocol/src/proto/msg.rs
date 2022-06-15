@@ -533,10 +533,6 @@ pub struct DataInfo {
     pub kind: Option<ZInt>,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<ZenohId>,
-    pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<ZenohId>,
-    pub first_router_sn: Option<ZInt>,
 }
 
 impl DataInfo {
@@ -561,18 +557,6 @@ impl Options for DataInfo {
         if self.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
         }
-        if self.source_id.is_some() {
-            options |= zmsg::data::info::SRCID;
-        }
-        if self.source_sn.is_some() {
-            options |= zmsg::data::info::SRCSN;
-        }
-        if self.first_router_id.is_some() {
-            options |= zmsg::data::info::RTRID;
-        }
-        if self.first_router_sn.is_some() {
-            options |= zmsg::data::info::RTRSN;
-        }
         options
     }
 
@@ -590,14 +574,7 @@ impl Options for DataInfo {
             }};
         }
 
-        sliced!(self)
-            || self.kind.is_some()
-            || self.encoding.is_some()
-            || self.timestamp.is_some()
-            || self.source_id.is_some()
-            || self.source_sn.is_some()
-            || self.first_router_id.is_some()
-            || self.first_router_sn.is_some()
+        sliced!(self) || self.kind.is_some() || self.encoding.is_some() || self.timestamp.is_some()
     }
 }
 

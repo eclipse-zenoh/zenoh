@@ -19,7 +19,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use zenoh::net::protocol::core::Encoding;
-use zenoh::net::protocol::core::{Channel, CongestionControl, WireExpr, ZenohId};
+use zenoh::net::protocol::core::{Channel, CongestionControl, WireExpr};
 use zenoh::net::protocol::io::ZBuf;
 use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
 
@@ -49,10 +49,6 @@ fn criterion_benchmark(c: &mut Criterion) {
                         Default::default(),
                         uhlc::ID::try_from([2u8; uhlc::ID::MAX_SIZE]).unwrap(),
                     )),
-                    source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
-                    source_sn: Some(12345),
-                    first_router_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
-                    first_router_sn: Some(12345),
                 });
 
                 let msg = ZenohMessage::make_data(
@@ -102,10 +98,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             Default::default(),
             uhlc::ID::try_from([1_u8; uhlc::ID::MAX_SIZE]).unwrap(),
         )),
-        source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
-        source_sn: Some(12345),
-        first_router_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
-        first_router_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);
     let channel = Channel::default();
