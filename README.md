@@ -56,14 +56,14 @@ To access the v0.5 version of the code and matching README, please go to the [0.
 
  - **put/store/get**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell run: `./target/release/examples/z_put`
     - then run `./target/release/examples/z_get`
     - the get should receive the stored publication.
 
  - **REST API using `curl` tool**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell, do a publication via the REST API:  
       `curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test`
     - get it back via the REST API:  
@@ -71,7 +71,7 @@ To access the v0.5 version of the code and matching README, please go to the [0.
 
   - **router admin space via the REST API**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume="memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell, get info of the zenoh router via the zenoh admin space:  
       `curl http://localhost:8000/@/router/local`
     - get the volumes of the router (only memory by default):  
@@ -122,7 +122,7 @@ See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/e
 
 -------------------------------
 ## Plugins
-By default the zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` cli option or via zenoh puts on individual parts of the configuration.
+By default the zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
 
 WARNING: since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Currently, plugins may only be loaded at startup.  
 
