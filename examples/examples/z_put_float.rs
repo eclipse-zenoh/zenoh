@@ -28,7 +28,7 @@ async fn main() {
     println!("Putting Float ('{}': '{}')...", key_expr, value);
     session.put(&key_expr, value).res().await.unwrap();
 
-    session.close().res_async().await.unwrap();
+    session.close().res().await.unwrap();
 }
 
 //

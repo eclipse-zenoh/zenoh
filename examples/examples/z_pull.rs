@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_std::prelude::FutureExt;
 use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
-use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
@@ -36,31 +36,40 @@ async fn main() {
     let subscriber = session
         .declare_subscriber(&key_expr)
         .mode(SubMode::Pull)
-        .res_async()
+        .res()
         .await
         .unwrap();
 
     println!("Press <enter> to pull data...");
 
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
-    loop {
-        select!(
-            sample = subscriber.recv_async() => {
-                let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
-            },
+    // Define the future to handle incoming samples of the subscription.
+    let subs = async {
+        while let Ok(sample) = subscriber.recv_async().await {
+            println!(
+                ">> [Subscriber] Received {} ('{}': '{}')",
+                sample.kind,
+                sample.key_expr.as_str(),
+                String::try_from(&sample.value).unwrap()
+            );
+        }
+    };
 
-            _ = stdin.read_exact(&mut input).fuse() => {
-                match input[0] {
-                    b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
-                    _ => subscriber.pull().res().await.unwrap(),
-                }
+    // Define the future to handle keyboard's input.
+    let keyb = async {
+        let mut stdin = async_std::io::stdin();
+        let mut input = [0_u8];
+        loop {
+            stdin.read_exact(&mut input).await.unwrap();
+            match input[0] {
+                b'q' => break,
+                0 => sleep(Duration::from_secs(1)).await,
+                _ => subscriber.pull().res().await.unwrap(),
             }
-        );
-    }
+        }
+    };
+
+    // Execute both futures concurrently until one of them returns.
+    subs.race(keyb).await;
 }
 
 fn parse_args() -> (Config, String) {

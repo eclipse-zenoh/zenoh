@@ -91,9 +91,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // Dropping the SharedMemoryBuf means to free it.
-    // drop(sbuf);
+    drop(sbuf);
     // Signal the SharedMemoryManager to garbage collect all the freed SharedMemoryBuf.
-    // let _freed = shm.garbage_collect();
+    let _freed = shm.garbage_collect();
 
     Ok(())
 }

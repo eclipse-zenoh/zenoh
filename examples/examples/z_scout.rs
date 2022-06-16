@@ -27,14 +27,13 @@ async fn main() {
         .await
         .unwrap();
 
-    let scout = async {
+    let _ = async {
         while let Ok(hello) = receiver.recv_async().await {
             println!("{}", hello);
         }
-    };
-    let timeout = async_std::task::sleep(std::time::Duration::from_secs(1));
-
-    scout.race(timeout).await;
+    }
+    .timeout(std::time::Duration::from_secs(1))
+    .await;
 
     // stop scouting
     drop(receiver);

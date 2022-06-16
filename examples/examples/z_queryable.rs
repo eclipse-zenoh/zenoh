@@ -43,7 +43,7 @@ async fn main() {
             query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
-                query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).res_async().await.unwrap();
+                query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).res().await.unwrap();
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
