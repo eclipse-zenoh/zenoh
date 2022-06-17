@@ -23,11 +23,8 @@ authors = [
 ]
 edition = "2018"
 
-# NOTE: as this library name doesn't start with 'zplugin_' prefix
-#       it won't be loaded automatically by zenod.
-#       To make zenohd load it, use the "-P <path_to_lib>" option. 
 [lib]
-name = "plugin_example"
+name = "zplugin_example"
 crate-type = ["cdylib"]
 
 
