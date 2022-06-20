@@ -21,7 +21,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::{Callback, EntityFactory, KeyExpr};
+use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -1579,7 +1579,7 @@ impl Session {
     }
 }
 
-impl EntityFactory for Arc<Session> {
+impl SessionDeclarations for Arc<Session> {
     /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments

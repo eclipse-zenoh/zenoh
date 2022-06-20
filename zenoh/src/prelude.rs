@@ -1016,7 +1016,7 @@ pub(crate) mod common {
     /// }).await;
     /// # })
     /// ```
-    pub trait EntityFactory {
+    pub trait SessionDeclarations {
         /// Create a [`Subscriber`](crate::subscriber::HandlerSubscriber) for the given key expression.
         ///
         /// # Arguments
