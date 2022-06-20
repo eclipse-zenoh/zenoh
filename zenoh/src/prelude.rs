@@ -37,9 +37,7 @@ pub(crate) mod common {
     use crate::buf::SharedMemoryBuf;
     use crate::buf::ZBuf;
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    use crate::publication::PublisherBuilder;
-    use crate::queryable::{Query, QueryableBuilder};
-    use crate::subscriber::SubscriberBuilder;
+    use crate::queryable::Query;
     use crate::time::{new_reception_timestamp, Timestamp};
     use regex::Regex;
     use std::borrow::Cow;
@@ -992,6 +990,12 @@ pub(crate) mod common {
         }
     }
 
+    pub trait SessionDeclarationsGATs<'a, 'b> {
+        type SubscriberBuilder;
+        type PublisherBuilder;
+        type QueryableBuilder;
+    }
+
     /// Functions to create zenoh entities with `'static` lifetime.
     ///
     /// This trait contains functions to create zenoh entities like
@@ -1016,7 +1020,7 @@ pub(crate) mod common {
     /// }).await;
     /// # })
     /// ```
-    pub trait EntityFactory {
+    pub trait SessionDeclarations: for<'a, 'b> SessionDeclarationsGATs<'a, 'b> {
         /// Create a [`Subscriber`](crate::subscriber::HandlerSubscriber) for the given key expression.
         ///
         /// # Arguments
@@ -1038,13 +1042,13 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn declare_subscriber<'a, TryIntoKeyExpr>(
-            &self,
+        fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
+            &'a self,
             key_expr: TryIntoKeyExpr,
-        ) -> SubscriberBuilder<'static, 'a>
+        ) -> <Self as SessionDeclarationsGATs<'a, 'b>>::SubscriberBuilder
         where
-            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
         ///
@@ -1071,13 +1075,13 @@ pub(crate) mod common {
         /// }).await;
         /// # })
         /// ```
-        fn declare_queryable<'a, TryIntoKeyExpr>(
-            &self,
+        fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
+            &'a self,
             key_expr: TryIntoKeyExpr,
-        ) -> QueryableBuilder<'static, 'a>
+        ) -> <Self as SessionDeclarationsGATs<'a, 'b>>::QueryableBuilder
         where
-            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
         /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
         ///
@@ -1096,13 +1100,13 @@ pub(crate) mod common {
         /// publisher.put("value").res().await.unwrap();
         /// # })
         /// ```
-        fn declare_publisher<'a, TryIntoKeyExpr>(
-            &self,
+        fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
+            &'a self,
             key_expr: TryIntoKeyExpr,
-        ) -> PublisherBuilder<'a>
+        ) -> <Self as SessionDeclarationsGATs<'a, 'b>>::PublisherBuilder
         where
-            TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-            <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+            TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
     }
 
     pub type Dyn<T> = std::boxed::Box<T>;

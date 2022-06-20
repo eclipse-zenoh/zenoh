@@ -13,8 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::keyexpr;
-use zenoh::prelude::sync::SyncResolve;
+use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {

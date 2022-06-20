@@ -21,8 +21,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {

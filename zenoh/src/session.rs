@@ -21,7 +21,8 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::{Callback, EntityFactory, KeyExpr};
+use crate::prelude::sync::SessionDeclarationsGATs;
+use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -597,115 +598,6 @@ impl Session {
         })
     }
 
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The resourkey expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
-    /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {:?}", sample);
-    /// }
-    /// # })
-    /// ```
-    pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
-        &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>> + std::fmt::Debug,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        SubscriberBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            reliability: Reliability::default(),
-            mode: SubMode::default(),
-            period: None,
-            local: false,
-        }
-    }
-
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-    /// while let Ok(query) = queryable.recv_async().await {
-    ///     query.reply(Ok(Sample::try_from(
-    ///         "key/expression",
-    ///         "value",
-    ///     ).unwrap())).res().await.unwrap();
-    /// }
-    /// # })
-    /// ```
-    pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
-        &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        QueryableBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            kind: zenoh_protocol_core::queryable::ALL_KINDS,
-            complete: true,
-        }
-    }
-
-    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.put("value").res().await.unwrap();
-    /// # })
-    /// ```
-    pub fn declare_publisher<'a, TryIntoKeyExpr>(
-        &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        PublisherBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            local_routing: None,
-        }
-    }
-
     /// Put data.
     ///
     /// # Arguments
@@ -728,14 +620,14 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, TryIntoKeyExpr, IntoValue>(
+    pub fn put<'a, 'b, TryIntoKeyExpr, IntoValue>(
         &'a self,
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> PutBuilder<'a>
+    ) -> PutBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
@@ -762,10 +654,13 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, TryIntoKeyExpr>(&'a self, key_expr: TryIntoKeyExpr) -> DeleteBuilder<'a>
+    pub fn delete<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> DeleteBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -803,6 +698,121 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
+            local_routing: None,
+        }
+    }
+}
+impl<'a, 'b> SessionDeclarationsGATs<'a, 'b> for Session {
+    type SubscriberBuilder = SubscriberBuilder<'a, 'b>;
+    type PublisherBuilder = PublisherBuilder<'a, 'b>;
+    type QueryableBuilder = QueryableBuilder<'a, 'b>;
+}
+impl SessionDeclarations for Session {
+    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received : {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        SubscriberBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            reliability: Reliability::default(),
+            mode: SubMode::default(),
+            period: None,
+            local: false,
+        }
+    }
+
+    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](HandlerQueryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+    /// while let Ok(query) = queryable.recv_async().await {
+    ///     query.reply(Ok(Sample::try_from(
+    ///         "key/expression",
+    ///         "value",
+    ///     ).unwrap())).res().await.unwrap();
+    /// }
+    /// # })
+    /// ```
+    fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> QueryableBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        QueryableBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            kind: zenoh_protocol_core::queryable::ALL_KINDS,
+            complete: true,
+        }
+    }
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
+    /// # })
+    /// ```
+    fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> PublisherBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        PublisherBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
             local_routing: None,
         }
     }
@@ -1578,8 +1588,12 @@ impl Session {
         }
     }
 }
-
-impl EntityFactory for Arc<Session> {
+impl<'a, 'b> SessionDeclarationsGATs<'a, 'b> for Arc<Session> {
+    type SubscriberBuilder = SubscriberBuilder<'static, 'b>;
+    type PublisherBuilder = PublisherBuilder<'static, 'b>;
+    type QueryableBuilder = QueryableBuilder<'static, 'b>;
+}
+impl SessionDeclarations for Arc<Session> {
     /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments
@@ -1601,7 +1615,7 @@ impl EntityFactory for Arc<Session> {
     /// }).await;
     /// # })
     /// ```
-    fn declare_subscriber<'b, TryIntoKeyExpr>(
+    fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'static, 'b>
@@ -1644,8 +1658,8 @@ impl EntityFactory for Arc<Session> {
     /// }).await;
     /// # })
     /// ```
-    fn declare_queryable<'b, TryIntoKeyExpr>(
-        &self,
+    fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> QueryableBuilder<'static, 'b>
     where
@@ -1677,13 +1691,13 @@ impl EntityFactory for Arc<Session> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    fn declare_publisher<'a, TryIntoKeyExpr>(
-        &self,
+    fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a>
+    ) -> PublisherBuilder<'static, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublisherBuilder {
             session: SessionRef::Shared(self.clone()),
