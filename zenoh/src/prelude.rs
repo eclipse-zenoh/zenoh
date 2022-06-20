@@ -39,7 +39,7 @@ pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     use crate::publication::PublisherBuilder;
     use crate::queryable::{Query, QueryableBuilder};
-    use crate::subscriber::SubscriberBuilder;
+    use crate::subscriber::{PushMode, SubscriberBuilder};
     use crate::time::{new_reception_timestamp, Timestamp};
     use regex::Regex;
     use std::borrow::Cow;
@@ -1041,7 +1041,7 @@ pub(crate) mod common {
         fn declare_subscriber<'a, TryIntoKeyExpr>(
             &self,
             key_expr: TryIntoKeyExpr,
-        ) -> SubscriberBuilder<'static, 'a>
+        ) -> SubscriberBuilder<'static, 'a, PushMode>
         where
             TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;

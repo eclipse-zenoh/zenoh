@@ -619,7 +619,7 @@ impl Session {
     pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b>
+    ) -> SubscriberBuilder<'a, 'b, PushMode>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>> + std::fmt::Debug,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -628,7 +628,7 @@ impl Session {
             session: SessionRef::Borrow(self),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
-            mode: SubMode::default(),
+            mode: PushMode,
             period: None,
             local: false,
         }
@@ -1604,7 +1604,7 @@ impl EntityFactory for Arc<Session> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b>
+    ) -> SubscriberBuilder<'static, 'b, PushMode>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1613,7 +1613,7 @@ impl EntityFactory for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
-            mode: SubMode::default(),
+            mode: PushMode,
             period: None,
             local: false,
         }

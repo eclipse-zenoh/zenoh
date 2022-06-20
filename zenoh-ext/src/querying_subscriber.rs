@@ -385,19 +385,31 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         // declare subscriber at first
-        let subscriber = match conf.session.clone() {
-            SessionRef::Borrow(session) => session
+        let subscriber = match (conf.session.clone(), conf.mode) {
+            (SessionRef::Borrow(session), SubMode::Pull) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .mode(conf.mode)
+                .pull_mode()
                 .period(conf.period)
                 .res_sync()?,
-            SessionRef::Shared(session) => session
+            (SessionRef::Shared(session), SubMode::Pull) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .mode(conf.mode)
+                .pull_mode()
+                .period(conf.period)
+                .res_sync()?,
+            (SessionRef::Borrow(session), SubMode::Push) => session
+                .declare_subscriber(&key_expr)
+                .callback(sub_callback)
+                .reliability(conf.reliability)
+                .period(conf.period)
+                .res_sync()?,
+            (SessionRef::Shared(session), SubMode::Push) => session
+                .declare_subscriber(&key_expr)
+                .callback(sub_callback)
+                .reliability(conf.reliability)
                 .period(conf.period)
                 .res_sync()?,
         };

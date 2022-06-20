@@ -19,7 +19,6 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::subscriber::SubMode;
 
 #[async_std::main]
 async fn main() {
@@ -35,7 +34,7 @@ async fn main() {
 
     let subscriber = session
         .declare_subscriber(&key_expr)
-        .mode(SubMode::Pull)
+        .pull_mode()
         .res()
         .await
         .unwrap();
