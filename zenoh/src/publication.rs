@@ -166,6 +166,7 @@ impl AsyncResolve for PutBuilder<'_> {
 }
 
 use futures::Sink;
+use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use zenoh_core::zresult::Error;
@@ -209,6 +210,9 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
+    pub fn key_expr(&self) -> &KeyExpr<'a> {
+        &self.key_expr
+    }
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
@@ -459,11 +463,35 @@ impl<'a> Resolvable for PublisherBuilder<'a> {
 impl SyncResolve for PublisherBuilder<'_> {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        let key_expr = self
-            .session
-            .declare_keyexpr(self.key_expr?)
-            .res_sync()?
-            .into_owned();
+        let mut key_expr = self.key_expr?;
+        if !key_expr.is_fully_optimized(&self.session) {
+            let session_id = self.session.id;
+            let expr_id = self.session.declare_prefix(key_expr.as_str()).res_sync();
+            let prefix_len = key_expr
+                .len()
+                .try_into()
+                .expect("How did you get a key expression with a length over 2^32!?");
+            key_expr = match key_expr.0 {
+                crate::key_expr::KeyExprInner::Borrowed(key_expr)
+                | crate::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
+                    KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id,
+                    })
+                }
+                crate::key_expr::KeyExprInner::Owned(key_expr)
+                | crate::key_expr::KeyExprInner::Wire { key_expr, .. } => {
+                    KeyExpr(crate::key_expr::KeyExprInner::Wire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id,
+                    })
+                }
+            }
+        }
         self.session.declare_publication_intent(&key_expr);
         let publisher = Publisher {
             session: self.session,

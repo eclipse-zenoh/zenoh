@@ -19,6 +19,8 @@ use std::{
 use zenoh_core::Result as ZResult;
 pub use zenoh_protocol_core::key_expr::*;
 
+use crate::Session;
+
 #[derive(Clone)]
 pub(crate) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
@@ -84,6 +86,16 @@ impl From<OwnedKeyExpr> for KeyExpr<'_> {
         Self(KeyExprInner::Owned(v))
     }
 }
+impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
+    fn from(v: &'a OwnedKeyExpr) -> Self {
+        Self(KeyExprInner::Borrowed(&*v))
+    }
+}
+impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
+    fn from(val: &'a KeyExpr<'a>) -> Self {
+        Self::from(val.as_keyexpr())
+    }
+}
 impl TryFrom<String> for KeyExpr<'static> {
     type Error = zenoh_core::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -100,11 +112,6 @@ impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
     type Error = zenoh_core::Error;
     fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
         Ok(Self::from(keyexpr::new(value)?))
-    }
-}
-impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
-    fn from(val: &'a KeyExpr<'a>) -> Self {
-        Self::from(val.as_ref())
     }
 }
 impl<'a> TryFrom<&'a str> for KeyExpr<'a> {
@@ -282,6 +289,12 @@ impl<'a> KeyExpr<'a> {
             prefix_len,
             session_id,
             ..
+        }
+        | KeyExprInner::BorrowedWire {
+            expr_id,
+            prefix_len,
+            session_id,
+            ..
         } = &self.0
         {
             Ok(KeyExpr(KeyExprInner::Wire {
@@ -297,8 +310,11 @@ impl<'a> KeyExpr<'a> {
 }
 
 impl<'a> KeyExpr<'a> {
-    pub(crate) fn is_optimized(&self) -> bool {
-        matches!(&self.0, KeyExprInner::Wire { expr_id, .. } if *expr_id != 0)
+    pub(crate) fn is_optimized(&self, session: &Session) -> bool {
+        matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
+    }
+    pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
+        matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     }
     pub(crate) fn to_wire(&'a self, session: &crate::Session) -> zenoh_protocol_core::WireExpr<'a> {
         match &self.0 {

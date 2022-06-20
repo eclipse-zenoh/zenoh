@@ -738,39 +738,14 @@ where
     IntoHandler: crate::prelude::IntoHandler<Sample, Receiver>,
 {
     fn res_sync(self) -> Self::Output {
-        let session = self.builder.session;
-        let key_expr = self.builder.key_expr?;
         let (callback, receiver) = self.handler.into_handler();
-        let subscriber = if self.builder.local {
-            session
-                .declare_local_subscriber(&key_expr, callback)
-                .map(|sub_state| CallbackSubscriber {
-                    session,
-                    state: sub_state,
-                    alive: true,
-                })
-        } else {
-            session
-                .declare_subscriber_inner(
-                    &key_expr,
-                    callback,
-                    &SubInfo {
-                        reliability: self.builder.reliability,
-                        mode: self.builder.mode,
-                        period: self.builder.period,
-                    },
-                )
-                .map(|sub_state| CallbackSubscriber {
-                    session,
-                    state: sub_state,
-                    alive: true,
-                })
-        };
-
-        subscriber.map(|subscriber| HandlerSubscriber {
-            subscriber,
-            receiver,
-        })
+        self.builder
+            .callback(callback)
+            .res_sync()
+            .map(|subscriber| HandlerSubscriber {
+                subscriber,
+                receiver,
+            })
     }
 }
 impl<'a, 'b, IntoHandler, Receiver: Send> AsyncResolve

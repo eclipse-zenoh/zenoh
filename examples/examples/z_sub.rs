@@ -19,6 +19,7 @@ use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
+use zenoh::prelude::KeyExpr;
 
 #[async_std::main]
 async fn main() {
@@ -30,7 +31,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating Subscriber on '{}'...", key_expr);
+    println!("Creating Subscriber on '{}'...", &key_expr);
 
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
@@ -56,7 +57,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String) {
+fn parse_args() -> (Config, KeyExpr<'static>) {
     let args = App::new("zenoh sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -104,7 +105,9 @@ fn parse_args() -> (Config, String) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let key_expr = args.value_of("key").unwrap().to_string();
+    let key_expr = KeyExpr::try_from(args.value_of("key").unwrap())
+        .unwrap()
+        .into_owned();
 
     (config, key_expr)
 }

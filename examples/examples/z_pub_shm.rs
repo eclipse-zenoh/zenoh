@@ -36,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut shm = SharedMemoryManager::make(id, N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
+    let publisher = session.declare_publisher(&path).res().await.unwrap();
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
@@ -80,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             path,
             String::from_utf8_lossy(&slice[0..slice_len])
         );
-        session.put(&path, sbuf.clone()).res().await?;
+        publisher.put(sbuf.clone()).res().await?;
         if idx % K == 0 {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {} bytes", freed);
@@ -88,10 +89,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             println!("De-framented {} bytes", defrag);
         }
         // sleep(Duration::from_millis(100)).await;
+        // Dropping the SharedMemoryBuf means to free it.
+        drop(sbuf);
     }
 
-    // Dropping the SharedMemoryBuf means to free it.
-    drop(sbuf);
     // Signal the SharedMemoryManager to garbage collect all the freed SharedMemoryBuf.
     let _freed = shm.garbage_collect();
 

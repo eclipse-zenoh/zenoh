@@ -28,12 +28,8 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    print!("Declare key expression {}", key_expr);
-    let expr_id = session.declare_keyexpr(&key_expr).res().await.unwrap();
-    println!(" => ExprId {}", expr_id);
-
-    println!("Creating PublicationCache on {}", &expr_id);
-    let mut publication_cache_builder = session.publication_cache(&expr_id).history(history);
+    println!("Creating PublicationCache on {}", &key_expr);
+    let mut publication_cache_builder = session.publication_cache(&key_expr).history(history);
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
@@ -42,8 +38,8 @@ async fn main() {
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Put Data ('{}': '{}')", &expr_id, buf);
-        session.put(&expr_id, buf).res().await.unwrap();
+        println!("Put Data ('{}': '{}')", &key_expr, buf);
+        session.put(&key_expr, buf).res().await.unwrap();
     }
 }
 

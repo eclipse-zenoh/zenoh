@@ -10,6 +10,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::*;
+use zenoh::publication::Publisher;
 use zenoh::query::QueryConsolidation;
 use zenoh::Session;
 use zenoh_core::AsyncResolve;
@@ -126,7 +127,7 @@ struct GroupState {
     gid: String,
     local_member: Member,
     members: Mutex<HashMap<String, (Member, Instant)>>,
-    _group_expr: KeyExpr<'static>,
+    _group_publisher: Publisher<'static>,
     event_expr: KeyExpr<'static>,
     user_events_tx: Mutex<Option<Sender<GroupEvent>>>,
     cond: Condition,
@@ -314,18 +315,13 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
 impl Group {
     pub async fn join(z: Arc<Session>, group: &str, with: Member) -> Group {
         let _group_expr = format!("{}/{}", GROUP_PREFIX, group);
-        let _group_expr = z
-            .declare_keyexpr(&_group_expr)
-            .res_async()
-            .await
-            .unwrap()
-            .into_owned();
-        let event_expr = _group_expr.concat(EVENT_POSTFIX).unwrap();
+        let publisher = z.declare_publisher(_group_expr).res_async().await.unwrap();
+        let event_expr = publisher.key_expr().concat(EVENT_POSTFIX).unwrap();
         let state = Arc::new(GroupState {
             gid: String::from(group),
             local_member: with.clone(),
             members: Mutex::new(Default::default()),
-            _group_expr,
+            _group_publisher: publisher,
             event_expr: event_expr.clone(),
             user_events_tx: Mutex::new(Default::default()),
             cond: Condition::new(),

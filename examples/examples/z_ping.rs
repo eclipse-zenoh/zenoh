@@ -26,12 +26,17 @@ fn main() {
     let session = zenoh::open(config).res().unwrap();
 
     // The key expression to publish data on
-    let key_expr_ping = session.declare_keyexpr("test/ping").res().unwrap();
+    let key_expr_ping = keyexpr::new("test/ping").unwrap();
 
     // The key expression to wait the response back
-    let key_expr_pong = session.declare_keyexpr("test/pong").res().unwrap();
+    let key_expr_pong = keyexpr::new("test/pong").unwrap();
 
-    let sub = session.declare_subscriber(&key_expr_pong).res().unwrap();
+    let sub = session.declare_subscriber(key_expr_pong).res().unwrap();
+    let publisher = session
+        .declare_publisher(key_expr_ping)
+        .congestion_control(CongestionControl::Block)
+        .res()
+        .unwrap();
 
     let data: Value = (0usize..size)
         .map(|i| (i % 10) as u8)
@@ -45,7 +50,7 @@ fn main() {
     for _ in 0..wun {
         let data = data.clone();
         session
-            .put(&key_expr_ping, data)
+            .put(key_expr_ping, data)
             // Make sure to not drop messages because of congestion control
             .congestion_control(CongestionControl::Block)
             .res()
@@ -57,10 +62,9 @@ fn main() {
     for _ in 0..n {
         let data = data.clone();
         let write_time = Instant::now();
-        session
-            .put(&key_expr_ping, data)
+        publisher
+            .put( data)
             // Make sure to not drop messages because of congestion control
-            .congestion_control(CongestionControl::Block)
             .res()
             .unwrap();
 

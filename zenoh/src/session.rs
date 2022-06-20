@@ -137,75 +137,90 @@ impl SessionState {
         }
     }
 
-    #[inline]
-    fn local_wireid_to_keyexpr<'a>(&'a self, id: &ExprId) -> ZResult<KeyExpr<'a>> {
-        match self.local_resources.get(id) {
-            Some(res) => Ok(KeyExpr::from(&*res.name)),
-            None => bail!("{}", id),
-        }
-    }
+    // #[inline]
+    // fn local_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
+    //     match self.local_resources.get(id) {
+    //         Some(res) => Ok(&res.name),
+    //         None => bail!("{}", id),
+    //     }
+    // }
 
-    #[inline]
-    fn wireid_to_keyexpr<'a>(&'a self, id: &ExprId) -> ZResult<KeyExpr<'a>> {
-        match self.remote_resources.get(id) {
-            Some(res) => Ok(KeyExpr::from(&*res.name)),
-            None => self.local_wireid_to_keyexpr(id),
-        }
-    }
+    // #[inline]
+    // fn remote_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
+    //     match self.remote_resources.get(id) {
+    //         Some(res) => Ok(&res.name),
+    //         None => self.local_wireid_to_str(id),
+    //     }
+    // }
 
-    pub(crate) fn remotekey_to_expr<'a, 'b>(
-        &'a self,
-        key_expr: &'b WireExpr,
-    ) -> ZResult<KeyExpr<'b>> {
+    pub(crate) fn remote_key_to_expr<'a>(&'a self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
         } else if key_expr.suffix.is_empty() {
-            self.wireid_to_keyexpr(&key_expr.scope)
-                .map(KeyExpr::into_owned)
+            match self.get_remote_res(&key_expr.scope) {
+                Some(Resource::Node(ResourceNode { key_expr, .. })) => Ok(key_expr.into()),
+                Some(Resource::Prefix { prefix }) => bail!(
+                    "Received {:?}, where {} is `{}`, which isn't a valid key expression",
+                    key_expr,
+                    key_expr.scope,
+                    prefix
+                ),
+                None => bail!("Remote resource {} not found", key_expr.scope),
+            }
         } else {
-            Ok(unsafe {
-                KeyExpr::from_string_unchecked(
-                    [
-                        self.wireid_to_keyexpr(&key_expr.scope)?.as_ref(),
-                        key_expr.suffix.as_ref(),
-                    ]
-                    .concat(),
-                )
-            })
+            [
+                match self.get_remote_res(&key_expr.scope) {
+                    Some(Resource::Node(ResourceNode { key_expr, .. })) => key_expr.as_str(),
+                    Some(Resource::Prefix { prefix }) => prefix.as_ref(),
+                    None => bail!("Remote resource {} not found", key_expr.scope),
+                },
+                key_expr.suffix.as_ref(),
+            ]
+            .concat()
+            .try_into()
         }
     }
 
-    pub(crate) fn local_wireexpr_to_expr<'a, 'b>(
+    pub(crate) fn local_wireexpr_to_expr<'a>(
         &'a self,
-        key_expr: &'b WireExpr,
-    ) -> ZResult<KeyExpr<'b>> {
+        key_expr: &'a WireExpr,
+    ) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
-            Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
+            key_expr.suffix.as_ref().try_into()
         } else if key_expr.suffix.is_empty() {
-            self.local_wireid_to_keyexpr(&key_expr.scope)
-                .map(KeyExpr::into_owned)
+            match self.get_local_res(&key_expr.scope) {
+                Some(Resource::Node(ResourceNode { key_expr, .. })) => Ok(key_expr.into()),
+                Some(Resource::Prefix { prefix }) => bail!(
+                    "Received {:?}, where {} is `{}`, which isn't a valid key expression",
+                    key_expr,
+                    key_expr.scope,
+                    prefix
+                ),
+                None => bail!("Remote resource {} not found", key_expr.scope),
+            }
         } else {
-            Ok(unsafe {
-                KeyExpr::from_string_unchecked(
-                    [
-                        self.local_wireid_to_keyexpr(&key_expr.scope)?.as_ref(),
-                        key_expr.suffix.as_ref(),
-                    ]
-                    .concat(),
-                )
-            })
+            [
+                match self.get_local_res(&key_expr.scope) {
+                    Some(Resource::Node(ResourceNode { key_expr, .. })) => key_expr.as_str(),
+                    Some(Resource::Prefix { prefix }) => prefix.as_ref(),
+                    None => bail!("Remote resource {} not found", key_expr.scope),
+                },
+                key_expr.suffix.as_ref(),
+            ]
+            .concat()
+            .try_into()
         }
     }
 
-    pub(crate) fn wireexpr_to_keyexpr<'a, 'b>(
+    pub(crate) fn wireexpr_to_keyexpr<'a>(
         &'a self,
-        key_expr: &'b WireExpr,
+        key_expr: &'a WireExpr,
         local: bool,
-    ) -> ZResult<KeyExpr<'b>> {
+    ) -> ZResult<KeyExpr<'a>> {
         if local {
             self.local_wireexpr_to_expr(key_expr)
         } else {
-            self.remotekey_to_expr(key_expr)
+            self.remote_key_to_expr(key_expr)
         }
     }
 }
@@ -220,18 +235,41 @@ impl fmt::Debug for SessionState {
     }
 }
 
-pub(crate) struct Resource {
-    pub(crate) name: OwnedKeyExpr,
+pub(crate) struct ResourceNode {
+    pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
     pub(crate) local_subscribers: Vec<Arc<SubscriberState>>,
 }
+pub(crate) enum Resource {
+    Prefix { prefix: Box<str> },
+    Node(ResourceNode),
+}
 
 impl Resource {
-    pub(crate) fn new(name: OwnedKeyExpr) -> Self {
-        Resource {
-            name,
-            subscribers: vec![],
-            local_subscribers: vec![],
+    pub(crate) fn new(name: Box<str>) -> Self {
+        if keyexpr::new(name.as_ref()).is_ok() {
+            Self::for_keyexpr(unsafe { OwnedKeyExpr::from_boxed_string_unchecked(name) })
+        } else {
+            Self::Prefix { prefix: name }
+        }
+    }
+    pub(crate) fn for_keyexpr(key_expr: OwnedKeyExpr) -> Self {
+        Self::Node(ResourceNode {
+            key_expr,
+            subscribers: Vec::new(),
+            local_subscribers: Vec::new(),
+        })
+    }
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            Resource::Prefix { prefix } => prefix.as_ref(),
+            Resource::Node(ResourceNode { key_expr, .. }) => key_expr.as_str(),
+        }
+    }
+    pub(crate) fn as_node_mut(&mut self) -> Option<&mut ResourceNode> {
+        match self {
+            Resource::Prefix { .. } => None,
+            Resource::Node(node) => Some(node),
         }
     }
 }
@@ -559,91 +597,6 @@ impl Session {
         })
     }
 
-    /// Associate a numerical Id with the given key expression.
-    ///
-    /// This numerical Id will be used on the network to save bandwidth and
-    /// ease the retrieval of the concerned key expression in the routing tables.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression to map to a numerical Id
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let expr = session.declare_keyexpr("key/expression").res().await.unwrap();
-    /// session.undeclare(expr).res().await.unwrap(); // don't forget to undeclare `expr` when done with it
-    /// # })
-    /// ```
-    pub fn declare_keyexpr<'a, TryIntoKeyExpr>(
-        &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> impl Resolve<ZResult<KeyExpr<'a>>> + 'a
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        let key_expr = key_expr.try_into().map_err(Into::into);
-        ClosureResolve(move || {
-            let key_expr: KeyExpr = match key_expr {
-                Ok(k) => k,
-                Err(e) => return Err(e),
-            };
-            if let KeyExprInner::Wire { expr_id, .. } = &key_expr.0 {
-                if *expr_id != 0 {
-                    return Ok(key_expr);
-                }
-            }
-            trace!("declare_keyexpr({:?})", key_expr);
-            let mut state = zwrite!(self.state);
-
-            let owned_expr = OwnedKeyExpr::from(key_expr);
-            let expr = &*owned_expr;
-            match state
-                .local_resources
-                .iter()
-                .find(|(_expr_id, res)| &*res.name == expr)
-            {
-                Some((expr_id, _res)) => Ok(KeyExpr(KeyExprInner::Wire {
-                    expr_id: *expr_id,
-                    prefix_len: expr.len() as u32,
-                    key_expr: owned_expr,
-                    session_id: self.id,
-                })),
-                None => {
-                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
-                    let mut res = Resource::new(owned_expr.clone());
-                    for sub in state.subscribers.values() {
-                        if expr.intersects(&*sub.key_expr) {
-                            res.subscribers.push(sub.clone());
-                        }
-                    }
-                    state.local_resources.insert(expr_id, res);
-                    let primitives = state.primitives.as_ref().unwrap().clone();
-                    drop(state);
-                    let key_expr = KeyExpr(KeyExprInner::Wire {
-                        expr_id,
-                        prefix_len: expr.len() as u32,
-                        key_expr: owned_expr,
-                        session_id: self.id,
-                    });
-                    primitives.decl_resource(
-                        expr_id,
-                        &WireExpr {
-                            scope: 0,
-                            suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
-                        },
-                    );
-                    Ok(key_expr)
-                }
-            }
-        })
-    }
-
     /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
     ///
     /// # Arguments
@@ -668,12 +621,12 @@ impl Session {
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>> + std::fmt::Debug,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: SubMode::default(),
             period: None,
@@ -891,6 +844,47 @@ impl Session {
         })
     }
 
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<u64> + 'a {
+        ClosureResolve(move || {
+            trace!("declare_prefix({:?})", prefix);
+            let mut state = zwrite!(self.state);
+            match state
+                .local_resources
+                .iter()
+                .find(|(_expr_id, res)| res.name() == prefix)
+            {
+                Some((expr_id, _res)) => *expr_id,
+                None => {
+                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as ZInt;
+                    let mut res = Resource::new(Box::from(prefix));
+                    if let Resource::Node(ResourceNode {
+                        key_expr,
+                        subscribers,
+                        ..
+                    }) = &mut res
+                    {
+                        for sub in state.subscribers.values() {
+                            if key_expr.intersects(&*sub.key_expr) {
+                                subscribers.push(sub.clone());
+                            }
+                        }
+                    }
+                    state.local_resources.insert(expr_id, res);
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.decl_resource(
+                        expr_id,
+                        &WireExpr {
+                            scope: 0,
+                            suffix: std::borrow::Cow::Borrowed(prefix),
+                        },
+                    );
+                    expr_id
+                }
+            }
+        })
+    }
+
     /// Declare a publication for the given key expression.
     ///
     /// Puts that match the given key expression will only be sent on the network
@@ -1016,13 +1010,21 @@ impl Session {
         };
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
-        for res in state.local_resources.values_mut() {
-            if key_expr.intersects(&res.name) {
+        for res in state
+            .local_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
                 res.subscribers.push(sub_state.clone());
             }
         }
-        for res in state.remote_resources.values_mut() {
-            if key_expr.intersects(&res.name) {
+        for res in state
+            .remote_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
                 res.subscribers.push(sub_state.clone());
             }
         }
@@ -1032,17 +1034,29 @@ impl Session {
             drop(state);
 
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            let key_expr = if !key_expr.is_optimized() {
-                match key_expr.as_ref().find('*') {
-                    Some(0) => key_expr,
-                    Some(pos) => self.declare_keyexpr(&key_expr.as_ref()[..pos]).res_sync()?,
-                    None => self.declare_keyexpr(key_expr).res_sync()?,
+            let key_expr = if !key_expr.is_optimized(self) {
+                match key_expr.as_str().find('*') {
+                    Some(0) => key_expr.to_wire(self),
+                    Some(pos) => {
+                        let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).res_sync();
+                        WireExpr {
+                            scope: expr_id,
+                            suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
+                        }
+                    }
+                    None => {
+                        let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+                        WireExpr {
+                            scope: expr_id,
+                            suffix: std::borrow::Cow::Borrowed(""),
+                        }
+                    }
                 }
             } else {
-                key_expr
+                key_expr.to_wire(self)
             };
 
-            primitives.decl_subscriber(&key_expr.to_wire(self), info, None);
+            primitives.decl_subscriber(&key_expr, info, None);
         }
 
         Ok(sub_state)
@@ -1064,13 +1078,21 @@ impl Session {
         state
             .local_subscribers
             .insert(sub_state.id, sub_state.clone());
-        for res in state.local_resources.values_mut() {
-            if key_expr.intersects(&*res.name) {
+        for res in state
+            .local_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
-        for res in state.remote_resources.values_mut() {
-            if key_expr.intersects(&*res.name) {
+        for res in state
+            .remote_resources
+            .values_mut()
+            .filter_map(Resource::as_node_mut)
+        {
+            if key_expr.intersects(&res.key_expr) {
                 res.local_subscribers.push(sub_state.clone());
             }
         }
@@ -1081,10 +1103,18 @@ impl Session {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
-            for res in state.local_resources.values_mut() {
+            for res in state
+                .local_resources
+                .values_mut()
+                .filter_map(Resource::as_node_mut)
+            {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
-            for res in state.remote_resources.values_mut() {
+            for res in state
+                .remote_resources
+                .values_mut()
+                .filter_map(Resource::as_node_mut)
+            {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
@@ -1120,10 +1150,18 @@ impl Session {
             Ok(())
         } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
-            for res in state.local_resources.values_mut() {
+            for res in state
+                .local_resources
+                .values_mut()
+                .filter_map(Resource::as_node_mut)
+            {
                 res.local_subscribers.retain(|sub| sub.id != sub_state.id);
             }
-            for res in state.remote_resources.values_mut() {
+            for res in state
+                .remote_resources
+                .values_mut()
+                .filter_map(Resource::as_node_mut)
+            {
                 res.local_subscribers.retain(|sub| sub.id != sub_state.id);
             }
             Ok(())
@@ -1289,15 +1327,19 @@ impl Session {
         let local_routing = local_routing.unwrap_or(state.local_routing);
         if key_expr.suffix.is_empty() {
             match state.get_res(&key_expr.scope, local) {
-                Some(res) => {
+                Some(Resource::Node(res)) => {
                     if !local && res.subscribers.len() == 1 {
                         let sub = res.subscribers.get(0).unwrap();
-                        (sub.callback)(Sample::with_info(res.name.clone().into(), payload, info));
+                        (sub.callback)(Sample::with_info(
+                            res.key_expr.clone().into(),
+                            payload,
+                            info,
+                        ));
                     } else {
                         if !local || local_routing {
                             for sub in &res.subscribers {
                                 (sub.callback)(Sample::with_info(
-                                    res.name.clone().into(),
+                                    res.key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
                                 ));
@@ -1306,7 +1348,7 @@ impl Session {
                         if local {
                             for sub in &res.local_subscribers {
                                 (sub.callback)(Sample::with_info(
-                                    res.name.clone().into(),
+                                    res.key_expr.clone().into(),
                                     payload.clone(),
                                     info.clone(),
                                 ));
@@ -1314,8 +1356,14 @@ impl Session {
                         }
                     }
                 }
+                Some(Resource::Prefix { prefix }) => {
+                    error!(
+                        "Received Data for `{}`, which isn't a key expression",
+                        prefix
+                    );
+                }
                 None => {
-                    error!("Received Data for unkown expr_id: {}", key_expr.scope);
+                    error!("Received Data for unknown expr_id: {}", key_expr.scope);
                 }
             }
         } else {
@@ -1467,7 +1515,7 @@ impl Session {
                         .collect::<Vec<(ZInt, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
-                        key_expr,
+                        key_expr.into_owned(),
                         kinds_and_senders,
                     )
                 }
@@ -1648,21 +1696,29 @@ impl EntityFactory for Arc<Session> {
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
-        trace!("recv Decl Resource {} {:?}", expr_id, key_expr);
+    fn decl_resource(&self, expr_id: ZInt, wire_expr: &WireExpr) {
+        trace!("recv Decl Resource {} {:?}", expr_id, wire_expr);
         let state = &mut zwrite!(self.state);
-        match state.remotekey_to_expr(key_expr) {
+        match state.remote_key_to_expr(wire_expr) {
             Ok(key_expr) => {
-                let mut res = Resource::new(key_expr.clone().into());
+                let mut subs = Vec::new();
                 for sub in state.subscribers.values() {
                     if key_expr.intersects(&*sub.key_expr) {
-                        res.subscribers.push(sub.clone());
+                        subs.push(sub.clone());
                     }
                 }
+                let res = Resource::Node(ResourceNode {
+                    key_expr: key_expr.into(),
+                    subscribers: subs,
+                    local_subscribers: Vec::new(),
+                });
 
                 state.remote_resources.insert(expr_id, res);
             }
-            Err(_) => error!("Received Resource for unkown key_expr: {}", key_expr),
+            Err(e) => error!(
+                "Received Resource for invalid wire_expr `{}`: {}",
+                wire_expr, e
+            ),
         }
     }
 
@@ -1768,8 +1824,8 @@ impl Primitives for Session {
             payload
         );
         let state = &mut zwrite!(self.state);
-        let key_expr = match state.remotekey_to_expr(&key_expr) {
-            Ok(name) => name,
+        let key_expr = match state.remote_key_to_expr(&key_expr) {
+            Ok(key) => key.into_owned(),
             Err(e) => {
                 error!("Received ReplyData for unkown key_expr: {}", e);
                 return;

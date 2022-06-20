@@ -12,9 +12,60 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
+use std::io::{stdin, Read};
 use std::time::Instant;
 use zenoh::config::Config;
 use zenoh::prelude::sync::SyncResolve;
+
+struct Stats {
+    round_count: usize,
+    round_size: usize,
+    finished_rounds: usize,
+    round_start: Instant,
+    global_start: Option<Instant>,
+}
+impl Stats {
+    fn new(round_size: usize) -> Self {
+        Stats {
+            round_count: 0,
+            round_size,
+            finished_rounds: 0,
+            round_start: Instant::now(),
+            global_start: None,
+        }
+    }
+    fn increment(&mut self) {
+        if self.round_count == 0 {
+            self.round_start = Instant::now();
+            if self.global_start.is_none() {
+                self.global_start = Some(self.round_start)
+            }
+            self.round_count += 1;
+        } else if self.round_count < self.round_size {
+            self.round_count += 1;
+        } else {
+            self.print_round();
+            self.finished_rounds += 1;
+            self.round_count = 0;
+        }
+    }
+    fn print_round(&self) {
+        let elapsed = self.round_start.elapsed().as_secs_f64();
+        let throughtput = (self.round_size as f64) / elapsed;
+        println!("{} msg/s", throughtput);
+    }
+}
+impl Drop for Stats {
+    fn drop(&mut self) {
+        let elapsed = self.global_start.unwrap().elapsed().as_secs_f64();
+        let total = self.round_size * self.finished_rounds + self.round_count;
+        let throughtput = total as f64 / elapsed;
+        println!(
+            "Received {} messages over {:.2}s: {}msg/s",
+            total, elapsed, throughtput
+        );
+    }
+}
 
 fn main() {
     // initiate logging
@@ -24,40 +75,26 @@ fn main() {
 
     let session = zenoh::open(config).res().unwrap();
 
-    let key_expr = session.declare_keyexpr("test/thr").res().unwrap();
+    let key_expr = "test/thr";
 
-    let mut count = 0;
-    let mut start = Instant::now();
-
-    let mut nm = 0;
+    let mut stats = Stats::new(n);
     let _sub = session
-        .declare_subscriber(&key_expr)
+        .declare_subscriber(key_expr)
         .callback_mut(move |_sample| {
-            if count == 0 {
-                start = Instant::now();
-                count += 1;
-            } else if count < n {
-                count += 1;
-            } else {
-                print_stats(start, n);
-                nm += 1;
-                count = 0;
-                if nm >= m {
-                    std::process::exit(0)
-                }
+            stats.increment();
+            if stats.finished_rounds >= m {
+                std::process::exit(0)
             }
         })
         .res()
         .unwrap();
 
-    // Stop forever
-    std::thread::park();
-}
-
-fn print_stats(start: Instant, n: usize) {
-    let elapsed = start.elapsed().as_secs_f64();
-    let thpt = (n as f64) / elapsed;
-    println!("{} msg/s", thpt);
+    for byte in stdin().bytes() {
+        match byte {
+            Ok(b'q') => break,
+            _ => std::thread::yield_now(),
+        }
+    }
 }
 
 fn parse_args() -> (Config, usize, usize) {
