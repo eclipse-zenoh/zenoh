@@ -16,7 +16,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
-use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
+use zenoh::subscriber::{CallbackSubscriber, Reliability};
 use zenoh::time::Period;
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
@@ -30,7 +30,6 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
-    mode: SubMode,
     period: Option<Period>,
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
@@ -53,7 +52,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             session,
             key_expr,
             reliability: Reliability::default(),
-            mode: SubMode::default(),
             period: None,
             query_selector: None,
             query_target,
@@ -127,28 +125,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the subscription mode.
-    #[inline]
-    pub fn mode(mut self, mode: SubMode) -> Self {
-        self.mode = mode;
-        self
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(mut self) -> Self {
-        self.mode = SubMode::Push;
-        self.period = None;
-        self
-    }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(mut self) -> Self {
-        self.mode = SubMode::Pull;
-        self
-    }
-
     /// Change the subscription period.
     #[inline]
     pub fn period(mut self, period: Option<Period>) -> Self {
@@ -186,7 +162,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
-            mode: self.mode,
             period: self.period,
             query_selector: self.query_selector.map(|s| s.map(|s| s.to_owned())),
             query_target: self.query_target,
@@ -273,28 +248,6 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.builder.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription mode.
-    #[inline]
-    pub fn mode(mut self, mode: SubMode) -> Self {
-        self.builder.mode = mode;
-        self
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(mut self) -> Self {
-        self.builder.mode = SubMode::Push;
-        self.builder.period = None;
-        self
-    }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(mut self) -> Self {
-        self.builder.mode = SubMode::Pull;
         self
     }
 
@@ -385,28 +338,14 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         // declare subscriber at first
-        let subscriber = match (conf.session.clone(), conf.mode) {
-            (SessionRef::Borrow(session), SubMode::Pull) => session
-                .declare_subscriber(&key_expr)
-                .callback(sub_callback)
-                .reliability(conf.reliability)
-                .pull_mode()
-                .period(conf.period)
-                .res_sync()?,
-            (SessionRef::Shared(session), SubMode::Pull) => session
-                .declare_subscriber(&key_expr)
-                .callback(sub_callback)
-                .reliability(conf.reliability)
-                .pull_mode()
-                .period(conf.period)
-                .res_sync()?,
-            (SessionRef::Borrow(session), SubMode::Push) => session
+        let subscriber = match conf.session.clone() {
+            SessionRef::Borrow(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .period(conf.period)
                 .res_sync()?,
-            (SessionRef::Shared(session), SubMode::Push) => session
+            SessionRef::Shared(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
@@ -582,27 +521,6 @@ impl<'a, 'b, Receiver> HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.builder = self.builder.best_effort();
-        self
-    }
-
-    /// Change the subscription mode.
-    #[inline]
-    pub fn mode(mut self, mode: SubMode) -> Self {
-        self.builder = self.builder.mode(mode);
-        self
-    }
-
-    /// Change the subscription mode to Push.
-    #[inline]
-    pub fn push_mode(mut self) -> Self {
-        self.builder = self.builder.push_mode();
-        self
-    }
-
-    /// Change the subscription mode to Pull.
-    #[inline]
-    pub fn pull_mode(mut self) -> Self {
-        self.builder = self.builder.pull_mode();
         self
     }
 
