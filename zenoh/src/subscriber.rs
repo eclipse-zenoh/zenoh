@@ -896,21 +896,6 @@ impl<Receiver> DerefMut for HandlerSubscriber<'_, Receiver> {
     }
 }
 
-impl HandlerSubscriber<'_, flume::Receiver<Sample>> {
-    pub fn forward<'selflifetime, E: 'selflifetime, S>(
-        &'selflifetime mut self,
-        sink: S,
-    ) -> futures::stream::Forward<
-        impl futures::TryStream<Ok = Sample, Error = E, Item = Result<Sample, E>> + 'selflifetime,
-        S,
-    >
-    where
-        S: futures::sink::Sink<Sample, Error = E>,
-    {
-        futures::StreamExt::forward(futures::StreamExt::map(self.receiver.stream(), Ok), sink)
-    }
-}
-
 impl<'a, 'b, IntoHandler, Receiver> Resolvable
     for HandlerSubscriberBuilder<'a, 'b, PushMode, IntoHandler, Receiver>
 where
