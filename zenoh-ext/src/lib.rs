@@ -22,3 +22,4 @@ pub use querying_subscriber::{
     HandlerQueryingSubscriberBuilder, QueryingSubscriberBuilder,
 };
 pub use session_ext::SessionExt;
+pub use subscriber_ext::HandlerSubscriberForward;
