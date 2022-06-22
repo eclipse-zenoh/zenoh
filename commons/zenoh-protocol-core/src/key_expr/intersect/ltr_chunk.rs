@@ -1,6 +1,6 @@
 use crate::key_expr::SINGLE_WILD;
 
-use super::{Intersector, NoBigWilds};
+use super::{restiction::NoBigWilds, Intersector};
 
 pub struct LTRChunkIntersector;
 impl Intersector<NoBigWilds<&[u8]>, NoBigWilds<&[u8]>> for LTRChunkIntersector {

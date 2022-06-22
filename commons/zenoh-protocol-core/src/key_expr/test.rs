@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::convert::TryInto;
+use std::{convert::TryInto, fmt::Debug};
 
 use super::{
     intersect::{Intersector, DEFAULT_INTERSECTOR},
@@ -30,18 +30,15 @@ lazy_static::lazy_static! {
     vec![
         Box::new(LeftToRightIntersector(LTRChunkIntersector)),
         Box::new(MiddleOutIntersector(LTRChunkIntersector)),
-        Box::new(classic_matcher::ClassicMatcher)
+        Box::new(classic_matcher::ClassicIntersector)
     ];
 }
 
-fn intersect<
-    'a,
-    A: TryInto<&'a keyexpr, Error = zenoh_core::Error>,
-    B: TryInto<&'a keyexpr, Error = zenoh_core::Error>,
->(
-    l: A,
-    r: B,
-) -> bool {
+fn intersect<'a, A: TryInto<&'a keyexpr>, B: TryInto<&'a keyexpr>>(l: A, r: B) -> bool
+where
+    <A as TryInto<&'a keyexpr>>::Error: Debug,
+    <B as TryInto<&'a keyexpr>>::Error: Debug,
+{
     let left = l.try_into().unwrap();
     let right = r.try_into().unwrap();
     let response = DEFAULT_INTERSECTOR.intersect(left, right);
@@ -159,64 +156,15 @@ fn inclusions() {
     assert!(!includes("x/*d", "x/*e"));
 }
 
-fn random_chunk(rng: &'_ mut impl rand::Rng) -> impl Iterator<Item = u8> + '_ {
-    let n = rng.gen_range(1..3);
-    (0..n).map(move |_| rng.sample(rand::distributions::Uniform::from(b'a'..b'c')))
-}
-pub fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
-    let mut iters = 0;
-    loop {
-        let n = rng.sample(rand::distributions::Uniform::<u8>::from(0..=255));
-        match n {
-            0..=15 => ke.extend(b"/**"),
-            16..=31 => ke.extend(b"/*"),
-            32..=47 => {
-                if !ke.ends_with(b"*") || ke.is_empty() {
-                    ke.extend(b"*")
-                } else {
-                    continue;
-                }
-            }
-            48.. => {
-                if n >= 128 || ke.ends_with(b"**") {
-                    ke.push(b'/')
-                }
-                ke.extend(random_chunk(rng))
-            }
-        }
-        if n % (10 - iters) == 0 {
-            return;
-        }
-        iters += 1;
-    }
-}
-
-pub struct KeyExprFuzzer<Rng: rand::Rng>(pub Rng);
-impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
-    type Item = String;
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut next = Vec::new();
-        make(&mut next, &mut self.0);
-        let mut next = String::from_utf8(next).unwrap();
-        if let Some(n) = next.strip_prefix('/') {
-            next = n.to_owned()
-        }
-        Some(next)
-    }
-}
-
 #[test]
 fn fuzz() {
-    use crate::key_expr::canon::Canonizable;
-    const FUZZ_ROUNDS: usize = 10000;
+    const FUZZ_ROUNDS: usize = 100000;
     let rng = rand::thread_rng();
-    let mut fuzzer = KeyExprFuzzer(rng);
+    let mut fuzzer = crate::key_expr::fuzzer::KeyExprFuzzer(rng);
     let mut ke1 = fuzzer.next().unwrap();
-    ke1.canonize();
-    for mut ke2 in fuzzer.take(FUZZ_ROUNDS) {
+    for ke2 in fuzzer.take(FUZZ_ROUNDS) {
         {
-            ke2.canonize();
-            intersect(ke1.as_str(), ke2.as_str());
+            intersect(&*ke1, &*ke2);
         }
         ke1 = ke2;
     }

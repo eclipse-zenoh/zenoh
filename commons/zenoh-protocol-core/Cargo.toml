@@ -32,6 +32,7 @@ description = "Internal crate for zenoh."
 
 [features]
 complete_n = []
+fuzzer = []
 
 [dependencies]
 zenoh-core = { path = "../zenoh-core/" }
@@ -41,12 +42,16 @@ lazy_static = "1.4.0"
 uhlc = "0.5.0"
 uuid = { version = "1.1.2", features = ["v4"] }
 serde = "1.0.123"
-
-[dev-dependencies]
-criterion = "0.3.4"
 rand = "0.8.4"
 itertools = "0.10.3"
 
+[dev-dependencies]
+criterion = "0.3.4"
+
 [[bench]]
-name = "key_expr_bench"
+name = "key_expr_legacy_bench"
 harness = false
+[[bench]]
+name = "ke_benches"
+harness = false
+test = true

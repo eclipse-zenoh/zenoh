@@ -1,6 +1,9 @@
 use crate::key_expr::{utils::Split, DELIMITER, DOUBLE_WILD};
 
-use super::{Intersector, NoBigWilds, NoSubWilds};
+use super::{
+    restiction::{NoBigWilds, NoSubWilds},
+    Intersector,
+};
 
 pub struct MiddleOutIntersector<ChunkIntersector>(pub ChunkIntersector);
 impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]>>>
@@ -58,7 +61,7 @@ impl<'a, ChunkIntersector: Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]
                 return false;
             }
         }
-        right.into_inner().is_none()
+        right.inner().is_none()
     }
 }
 
@@ -131,7 +134,7 @@ impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a 
                 return None;
             }
         }
-        str.into_inner().or(Some(b""))
+        str.inner().or(Some(b""))
     }
     fn strip_suffix<'a>(&self, str: &'a [u8], needle: &[u8]) -> Option<&'a [u8]> {
         if needle.is_empty() {
@@ -148,7 +151,7 @@ impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a 
                 return None;
             }
         }
-        str.into_inner().or(Some(b""))
+        str.inner().or(Some(b""))
     }
     /// This is only called if `str` doesn't contain any `**`. `needle` might contain some though.
     fn contains(&self, str: &[u8], needle: &[u8]) -> bool {
@@ -253,7 +256,7 @@ impl<'a, ChunkIntersector>
                 return false;
             }
         }
-        right.into_inner().is_none()
+        right.inner().is_none()
     }
 }
 
@@ -324,7 +327,7 @@ impl NoSubWildMatcher {
                 return None;
             }
         }
-        Some(from.into_inner().unwrap_or(&[]))
+        Some(from.inner().unwrap_or(&[]))
     }
     fn is_prefix<'a>(&self, from: &'a [u8], prefix: &[u8]) -> bool {
         self.strip_prefix(from, prefix).is_some()
@@ -341,33 +344,35 @@ impl NoSubWildMatcher {
                 return None;
             }
         }
-        Some(from.into_inner().unwrap_or(&[]))
+        Some(from.inner().unwrap_or(&[]))
     }
     fn is_suffix<'a>(&self, from: &'a [u8], prefix: &[u8]) -> bool {
         self.strip_suffix(from, prefix).is_some()
     }
-    fn contains(&self, mut container: &[u8], needle: &[u8]) -> bool {
-        'outer: while !container.is_empty() {
-            let mut split_container = container.splitter(&DELIMITER);
-            let mut container_chunk = split_container.next();
-            let container_rest = split_container.inner().unwrap_or(&[]);
-            let split_needle = needle.splitter(&DELIMITER);
-            for needle_chunk in split_needle {
-                if needle_chunk.is_empty() {
-                    return true;
-                }
-                if let Some(chunk) = container_chunk {
-                    if !(chunk == needle_chunk || chunk == b"*" || needle_chunk == b"*") {
-                        container = container_rest;
-                        continue 'outer;
+    //    fn contains(&self, str: &[u8], needle: &[u8]) -> bool {
+
+    fn contains(&self, container: &[u8], needle: &[u8]) -> bool {
+        let mut chunks = container.splitter(&DELIMITER);
+        for needle in needle.splitter(DOUBLE_WILD) {
+            let original_needle = needle
+                .splitter(&DELIMITER)
+                .filter(|chunk| !chunk.is_empty());
+            'current_needle: loop {
+                let mut chunks_preview = chunks.clone();
+                for needle in original_needle.clone() {
+                    if let Some(chunk) = chunks_preview.next() {
+                        if !(needle == chunk || chunk == b"*" || needle == b"*") {
+                            chunks.next();
+                            continue 'current_needle;
+                        }
+                    } else {
+                        return false;
                     }
-                    container_chunk = split_container.next();
-                } else {
-                    return false;
                 }
+                chunks = chunks_preview;
+                break 'current_needle;
             }
-            return true;
         }
-        needle.is_empty()
+        true
     }
 }

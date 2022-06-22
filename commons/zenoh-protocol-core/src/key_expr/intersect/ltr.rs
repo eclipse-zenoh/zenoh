@@ -1,6 +1,9 @@
 use crate::key_expr::{utils::Split, DELIMITER, DOUBLE_WILD};
 
-use super::{Intersector, NoBigWilds, NoSubWilds};
+use super::{
+    restiction::{NoBigWilds, NoSubWilds},
+    Intersector,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LeftToRightIntersector<ChunkIntersector>(pub ChunkIntersector);

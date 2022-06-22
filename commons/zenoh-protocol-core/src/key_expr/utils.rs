@@ -43,9 +43,6 @@ impl<'a, S: ?Sized, D: ?Sized> Clone for Splitter<'a, S, D> {
 }
 
 impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
-    pub fn into_inner(self) -> Option<&'a S> {
-        self.s
-    }
     pub fn inner(&self) -> Option<&'a S> {
         self.s
     }

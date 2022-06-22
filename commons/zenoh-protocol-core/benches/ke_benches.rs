@@ -1,0 +1,145 @@
+//
+// Copyright (c) 2017, 2020 ADLINK Technology Inc.
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ADLINK zenoh team, <zenoh@adlink-labs.tech>
+//
+use criterion::{criterion_group, criterion_main, Criterion};
+use lazy_static::__Deref;
+use rand::SeedableRng;
+use zenoh_protocol_core::key_expr::{
+    fuzzer::KeyExprFuzzer, intersect::Intersector, keyexpr, OwnedKeyExpr,
+};
+#[derive(Debug, Clone)]
+struct BoundedVec<T>(Vec<T>);
+impl<T> BoundedVec<T> {
+    fn new(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
+    fn push(&mut self, t: T) -> Result<(), ()> {
+        if self.full() {
+            Err(())
+        } else {
+            self.0.push(t);
+            Ok(())
+        }
+    }
+    fn full(&self) -> bool {
+        self.0.len() == self.0.capacity()
+    }
+}
+impl<T> std::ops::Deref for BoundedVec<T> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+struct BenchSet<'a, S: AsRef<str>, T> {
+    name: S,
+    set: BoundedVec<T>,
+    condition: Box<dyn Fn(T) -> bool + 'a>,
+}
+impl<'a, S: AsRef<str>, T> BenchSet<'a, S, T> {
+    fn new<F: Fn(T) -> bool + 'a>(name: S, capacity: usize, condition: F) -> Self {
+        BenchSet {
+            name,
+            set: BoundedVec::new(capacity),
+            condition: Box::new(condition),
+        }
+    }
+}
+
+fn bench<S: AsRef<str>, I: for<'a> Intersector<&'a keyexpr, &'a keyexpr>>(
+    c: &mut Criterion,
+    matcher: I,
+    matcher_type: &str,
+    set: &BenchSet<S, &keyexpr>,
+) {
+    let label = set.name.as_ref();
+    let label = format!("{matcher_type} {label}");
+    let set = &*set.set;
+    c.bench_function(&dbg!(label), |b| {
+        b.iter(|| {
+            for a in set {
+                for b in set {
+                    matcher.intersect(a, b);
+                }
+            }
+        })
+    });
+}
+macro_rules! bench_for {
+	($c: expr, $sets: expr, $($t: expr),*) => {
+		$(bench($c, $t, stringify!($t), $sets);)*
+	};
+}
+fn is_wild(ke: &keyexpr) -> bool {
+    ke.contains('*')
+}
+fn no_sub_wild(ke: &keyexpr) -> bool {
+    if !ke.contains('*') {
+        return false;
+    }
+    let mut previous_byte = b'/';
+    for byte in ke.bytes() {
+        match (previous_byte, byte) {
+            (b'*', b'*') | (b'/', b'*') | (b'*', b'/') => {}
+            (_, b'*') | (b'*', _) => return false,
+            _ => {}
+        }
+        previous_byte = byte;
+    }
+    true
+}
+fn isnt_wild(ke: &keyexpr) -> bool {
+    !ke.contains('*')
+}
+fn criterion_benchmark(c: &mut Criterion) {
+    const N_KEY_EXPR: usize = 100;
+    const RNG_SEED: [u8; 32] = [42; 32];
+    let mut ke_owner: Vec<OwnedKeyExpr> = Vec::new();
+    let mut bench_sets = [
+        BenchSet::new("anyKE", N_KEY_EXPR, |ke| {
+            isnt_wild(ke) || is_wild(ke) || no_sub_wild(ke)
+        }),
+        BenchSet::new("noWilds", N_KEY_EXPR, isnt_wild),
+        BenchSet::new("anyWilds", N_KEY_EXPR, is_wild),
+        BenchSet::new("noSubWilds", N_KEY_EXPR, no_sub_wild),
+    ];
+    for ke in KeyExprFuzzer(rand::rngs::StdRng::from_seed(RNG_SEED)) {
+        ke_owner.push(ke);
+        let ke =
+            unsafe { std::mem::transmute::<&keyexpr, &keyexpr>(ke_owner.last().unwrap().deref()) };
+        for set in bench_sets.iter_mut() {
+            if (set.condition)(ke) {
+                let _ = set.set.push(ke);
+            }
+        }
+        if bench_sets.iter().all(|set| set.set.full()) {
+            break;
+        }
+    }
+    use zenoh_protocol_core::key_expr::intersect::{
+        ClassicIntersector, LTRChunkIntersector, LeftToRightIntersector, MiddleOutIntersector,
+    };
+    for bench in &bench_sets {
+        bench_for!(
+            c,
+            bench,
+            ClassicIntersector,
+            LeftToRightIntersector(LTRChunkIntersector),
+            MiddleOutIntersector(LTRChunkIntersector)
+        );
+    }
+    println!("DONE")
+}
+
+criterion_group!(benches, criterion_benchmark);
+criterion_main!(benches);
