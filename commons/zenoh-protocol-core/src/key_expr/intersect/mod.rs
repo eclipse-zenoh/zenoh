@@ -22,6 +22,7 @@ impl Utf for [u8] {
         unsafe { std::str::from_utf8_unchecked(self) }
     }
 }
+/// This macro is generally useful when introducing new matchers to debug them.
 #[allow(unused_macros)]
 macro_rules! utfdbg {
     ($x: expr) => {{
