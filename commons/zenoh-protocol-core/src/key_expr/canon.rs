@@ -25,7 +25,7 @@ impl Canonizable for &mut str {
             ptr: self.as_mut_ptr(),
             len: 0,
         };
-        let mut ke = self.as_bytes().spliter(&b'/');
+        let mut ke = self.as_bytes().splitter(&b'/');
         let mut in_big_wild = false;
 
         for chunk in ke.by_ref() {

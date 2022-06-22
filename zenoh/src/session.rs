@@ -621,7 +621,7 @@ impl Session {
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b, PushMode>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>> + std::fmt::Debug,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         SubscriberBuilder {

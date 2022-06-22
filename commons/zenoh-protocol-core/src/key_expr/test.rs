@@ -30,6 +30,7 @@ lazy_static::lazy_static! {
     vec![
         Box::new(LeftToRightIntersector(LTRChunkIntersector)),
         Box::new(MiddleOutIntersector(LTRChunkIntersector)),
+        Box::new(classic_matcher::ClassicMatcher)
     ];
 }
 

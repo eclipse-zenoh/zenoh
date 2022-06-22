@@ -35,10 +35,10 @@ pub struct LTRIncluder;
 impl Includer<&[u8], &[u8]> for LTRIncluder {
     fn includes(&self, mut left: &[u8], mut right: &[u8]) -> bool {
         loop {
-            let (lchunk, lrest) = dbg!(left.split_once(&DELIMITER));
+            let (lchunk, lrest) = left.split_once(&DELIMITER);
             let lempty = lrest.is_empty();
-            if dbg!(lchunk == DOUBLE_WILD) {
-                if dbg!(lempty) || self.includes(lrest, right) {
+            if lchunk == DOUBLE_WILD {
+                if lempty || self.includes(lrest, right) {
                     return true;
                 }
                 right = right.split_once(&DELIMITER).1;
@@ -68,7 +68,7 @@ impl LTRIncluder {
                 if let Some(rightmost_star) = lchunk.iter().rposition(|c| *c == SINGLE_WILD) {
                     if let Some(mut rchunk) = rchunk.strip_suffix(&lchunk[(rightmost_star + 1)..]) {
                         lchunk = &lchunk[..rightmost_star];
-                        'left: for lneed in lchunk.spliter(&SINGLE_WILD) {
+                        'left: for lneed in lchunk.splitter(&SINGLE_WILD) {
                             while !rchunk.is_empty() {
                                 if rchunk.starts_with(lneed) {
                                     continue 'left;

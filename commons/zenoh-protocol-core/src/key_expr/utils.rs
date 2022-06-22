@@ -46,6 +46,9 @@ impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
     pub fn into_inner(self) -> Option<&'a S> {
         self.s
     }
+    pub fn inner(&self) -> Option<&'a S> {
+        self.s
+    }
     pub fn unwrap(self) -> &'a S {
         self.s.unwrap()
     }
@@ -94,7 +97,7 @@ impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Splitter<'a, S, D> {
 #[test]
 fn splits() {
     assert_eq!(
-        b"hello**".spliter(b"**".as_ref()).right(),
+        b"hello**".splitter(b"**".as_ref()).right(),
         Some(b"".as_ref())
     );
 }
@@ -115,7 +118,7 @@ pub trait Split<Delimiter: ?Sized> {
     fn try_split_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, Option<&'a Self>);
     fn rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (&'a Self, &'a Self);
     fn try_rsplit_once<'a>(&'a self, delimiter: &Delimiter) -> (Option<&'a Self>, &'a Self);
-    fn spliter<'a>(&'a self, delimiter: &'a Delimiter) -> Splitter<'a, Self, Delimiter> {
+    fn splitter<'a>(&'a self, delimiter: &'a Delimiter) -> Splitter<'a, Self, Delimiter> {
         Splitter {
             s: Some(self),
             d: delimiter,

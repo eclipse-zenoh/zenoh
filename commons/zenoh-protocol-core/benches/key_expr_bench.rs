@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,10 +16,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use rand::SeedableRng;
-use zenoh_protocol_core::wire_expr::intersect;
-fn run_intersections<const N: usize>(pool: [(&str, &str); N]) {
+use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
+fn run_intersections<const N: usize>(pool: [(&keyexpr, &keyexpr); N]) {
     for (l, r) in pool {
-        intersect(l, r);
+        l.intersects(r);
     }
 }
 fn criterion_benchmark(c: &mut Criterion) {
@@ -25,7 +27,8 @@ fn criterion_benchmark(c: &mut Criterion) {
         let data = [(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        )];
+        )]
+        .map(|(l, r)| (l.try_into().unwrap(), r.try_into().unwrap()));
         b.iter(|| {
             run_intersections(data);
         })
@@ -34,33 +37,30 @@ fn criterion_benchmark(c: &mut Criterion) {
         let data = [(
             "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
             "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
-        )];
+        )]
+        .map(|(l, r)| (l.try_into().unwrap(), r.try_into().unwrap()));
         b.iter(|| {
             run_intersections(data);
         })
     });
     c.bench_function("bench_key_expr_single_star", |b| {
-        let data = [("*", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")];
+        let data = [("*", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+            .map(|(l, r)| (l.try_into().unwrap(), r.try_into().unwrap()));
         b.iter(|| run_intersections(data))
     });
     c.bench_function("bench_key_expr_double_star", |b| {
         let data = [(
             "**",
             "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
-        )];
+        )]
+        .map(|(l, r)| (l.try_into().unwrap(), r.try_into().unwrap()));
         b.iter(|| run_intersections(data))
     });
     c.bench_function("bench_key_expr_many_exprs", |b| {
         let data = [
-            ("", ""),
             ("a", "a"),
-            ("a/", "a"),
-            ("a", "a/"),
             ("a/b", "a/b"),
             ("*", "abc"),
-            ("*", "abc/"),
-            ("*/", "abc"),
-            ("*", ""),
             ("*", "xxx"),
             ("ab*", "abcd"),
             ("ab*d", "abcd"),
@@ -75,9 +75,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ("ab*cd", "abxxcxxcdx"),
             ("**", "abc"),
             ("**", "a/b/c"),
-            ("**", "a/b/c/"),
-            ("**/", "a/b/c"),
-            ("**/", ""),
+            ("a/**", "a"),
             ("ab/**", "ab"),
             ("**/xyz", "a/b/xyz/d/e/f/xyz"),
             ("**/xyz*xyz", "a/b/xyz/d/e/f/xyz"),
@@ -100,7 +98,8 @@ fn criterion_benchmark(c: &mut Criterion) {
             ("x/a*d*e", "x/ade"),
             ("x/c*", "x/abc*"),
             ("x/*d", "x/*e"),
-        ];
+        ]
+        .map(|(l, r)| (l.try_into().unwrap(), r.try_into().unwrap()));
         b.iter(|| run_intersections(data))
     });
     c.bench_function("bench_keyexpr_matching", |b| {
@@ -120,15 +119,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         let all_existing = iproduct!(tlds, &sites, &rooms, &robots, sensors)
             .map(|(tld, site, room, robot, sensor)| [tld, site, room, robot, sensor])
             .collect::<Vec<_>>();
-        fn mk_route([tld, site, room, robot, sensor]: [&str; 5]) -> String {
+        fn mk_route([tld, site, room, robot, sensor]: [&str; 5]) -> OwnedKeyExpr {
             format!("{}/{}/{}/{}/{}", tld, site, room, robot, sensor)
+                .try_into()
+                .unwrap()
         }
         let mut rng = rand::rngs::StdRng::from_seed([32; 32]);
-        let mut routes = vec!["**".to_owned(), "*/**".to_owned()];
-        routes.push("**/site_0/**".to_owned());
-        routes.push("**/site_1/**".to_owned());
-        routes.push("**/site_5/**".to_owned());
-        routes.push("**/site_9/**".to_owned());
+        let mut routes: Vec<OwnedKeyExpr> = vec![
+            "**".to_owned().try_into().unwrap(),
+            "*/**".to_owned().try_into().unwrap(),
+        ];
+        routes.push("**/site_0/**".to_owned().try_into().unwrap());
+        routes.push("**/site_1/**".to_owned().try_into().unwrap());
+        routes.push("**/site_5/**".to_owned().try_into().unwrap());
+        routes.push("**/site_9/**".to_owned().try_into().unwrap());
         for _ in 0..100 {
             let selected_route_id: usize = rng.gen_range(0..all_existing.len());
             let mut selected_route_components = all_existing[selected_route_id];
@@ -138,16 +142,16 @@ fn criterion_benchmark(c: &mut Criterion) {
         }
         let all_existing = all_existing.into_iter().map(mk_route).collect::<Vec<_>>();
         b.iter(move || {
-            fn count_matches(routes: &[String], matching: &str) -> usize {
+            fn count_matches(routes: &[OwnedKeyExpr], matching: &keyexpr) -> usize {
                 routes
                     .iter()
-                    .filter_map(|r| {
-                        zenoh_protocol_core::wire_expr::intersect(r, matching).then(|| ())
-                    })
+                    .filter_map(|r| r.intersects(matching).then(|| ()))
                     .count()
             }
-            count_matches(&routes, "**");
-            count_matches(&routes, "**/room_7/**");
+            count_matches(&routes, unsafe { keyexpr::from_str_unchecked("**") });
+            count_matches(&routes, unsafe {
+                keyexpr::from_str_unchecked("**/room_7/**")
+            });
             for route in &all_existing {
                 count_matches(&routes, route);
             }
