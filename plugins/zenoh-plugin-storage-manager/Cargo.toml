@@ -45,7 +45,11 @@ futures = "0.3.12"
 git-version = "0.3.5"
 libloading = "0.7.0"
 log = "0.4.14"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
+crc = "2.1.0"
+derive-new = "0.5"
+flume = "0.10.10"
 zenoh = { path = "../../zenoh/" , default-features = false }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../commons/zenoh-util" }

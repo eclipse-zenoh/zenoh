@@ -13,8 +13,8 @@
 //
 #![recursion_limit = "512"]
 
-use async_std::channel::Sender;
 use async_std::task;
+use flume::Sender;
 use libloading::Library;
 use memory_backend::create_memory_backend;
 use std::collections::HashMap;
@@ -39,6 +39,7 @@ use zenoh_util::LibLoader;
 mod backends_mgt;
 use backends_mgt::*;
 mod memory_backend;
+mod replica;
 mod storages_mgt;
 
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
@@ -134,7 +135,7 @@ impl StorageRuntimeInner {
             async_std::task::block_on(futures::future::join_all(
                 storages
                     .into_iter()
-                    .map(|(_, s)| async move { s.send(StorageMessage::Stop).await }),
+                    .map(|(_, s)| async move { s.send(StorageMessage::Stop) }),
             ));
         }
         std::mem::drop(self.volumes.remove(&volume.name));
@@ -229,8 +230,13 @@ impl StorageRuntimeInner {
         let volume = &config.volume_id;
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
-                log::debug!("Closing storage {} from volume {}", config.name, volume);
-                let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
+                log::debug!(
+                    "Closing storage {} from volume {}",
+                    config.name,
+                    config.volume_id
+                );
+                // let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
+                let _ = storage.send(StorageMessage::Stop); // TODO: was previosuly spawning a task. do we need that?
             }
         }
     }
@@ -359,7 +365,7 @@ impl RunningPluginTrait for StorageRuntime {
                         {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
-                                let _ = handle.send(StorageMessage::GetStatus(tx)).await;
+                                let _ = handle.send(StorageMessage::GetStatus(tx));
                                 rx.recv().await
                             }) {
                                 responses.push(zenoh::plugins::Response::new(key.clone(), value))

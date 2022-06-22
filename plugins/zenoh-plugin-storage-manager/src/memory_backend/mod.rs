@@ -138,6 +138,8 @@ impl Storage for MemoryStorage {
 
     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
         trace!("on_sample for {}", sample.key_expr);
+        // NOTE: this will lead to inconsistencies, with different timestamps being generated for same sample
+        // Will be treated as different samples and LWW policy will be applied
         sample.ensure_timestamp();
         let timestamp = sample.timestamp.unwrap();
         match sample.kind {

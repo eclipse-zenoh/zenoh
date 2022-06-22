@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::storages_mgt::*;
-use async_std::channel::Sender;
+use flume::Sender;
 use log::trace;
 use std::sync::Arc;
 use zenoh::prelude::*;
@@ -30,9 +30,10 @@ pub(crate) async fn create_and_start_storage(
 ) -> ZResult<Sender<StorageMessage>> {
     trace!("Create storage {}", &admin_key);
     let key_expr = config.key_expr.clone();
-    let storage = backend.create_storage(config).await?;
+    let storage = backend.create_storage(config.clone()).await?;
     start_storage(
         storage,
+        config.replica_config,
         admin_key,
         key_expr,
         in_interceptor,
