@@ -22,6 +22,7 @@ impl Utf for [u8] {
         unsafe { std::str::from_utf8_unchecked(self) }
     }
 }
+#[allow(unused_macros)]
 macro_rules! utfdbg {
     ($x: expr) => {{
         let x = $x;
