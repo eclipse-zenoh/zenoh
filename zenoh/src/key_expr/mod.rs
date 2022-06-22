@@ -24,15 +24,15 @@ use crate::Session;
 #[derive(Clone)]
 pub(crate) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
-    Owned(OwnedKeyExpr),
-    Wire {
-        key_expr: OwnedKeyExpr,
+    BorrowedWire {
+        key_expr: &'a keyexpr,
         expr_id: u64,
         prefix_len: u32,
         session_id: u16,
     },
-    BorrowedWire {
-        key_expr: &'a keyexpr,
+    Owned(OwnedKeyExpr),
+    Wire {
+        key_expr: OwnedKeyExpr,
         expr_id: u64,
         prefix_len: u32,
         session_id: u16,

@@ -706,6 +706,46 @@ impl Session {
         }
     }
 
+    /// Informs Zenoh that you intend to use `key_expr` multiple times and that it should optimize its transmission.
+    ///
+    /// The returned `KeyExpr`'s internal structure may differ from what you would have obtained through a simple
+    /// `key_expr.try_into()`, to save time on detecting the optimizations that have been associated with it.
+    pub fn declare_keyexpr<'a, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> impl Resolve<ZResult<KeyExpr<'a>>>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+    {
+        let sid = self.id;
+        let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
+        ClosureResolve(move || {
+            let key_expr: KeyExpr = key_expr?;
+            let prefix_len = key_expr.len() as u32;
+            let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+            let key_expr = match key_expr.0 {
+                KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
+                    KeyExpr(KeyExprInner::BorrowedWire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id: sid,
+                    })
+                }
+                KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
+                    KeyExpr(KeyExprInner::Wire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id: sid,
+                    })
+                }
+            };
+            Ok(key_expr)
+        })
+    }
+
     /// Put data.
     ///
     /// # Arguments
