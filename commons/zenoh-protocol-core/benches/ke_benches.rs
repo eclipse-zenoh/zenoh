@@ -23,8 +23,11 @@ impl<T> BoundedVec<T> {
     fn new(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))
     }
-    fn push(&mut self, t: T) -> Result<(), ()> {
-        if self.full() {
+    fn push(&mut self, t: T) -> Result<(), ()>
+    where
+        T: PartialEq,
+    {
+        if self.full() || self.0.contains(&t) {
             Err(())
         } else {
             self.0.push(t);
@@ -63,9 +66,10 @@ fn bench<S: AsRef<str>, I: for<'a> Intersector<&'a keyexpr, &'a keyexpr>>(
     set: &BenchSet<S, &keyexpr>,
 ) {
     let label = set.name.as_ref();
-    let label = format!("{matcher_type} {label}");
-    let set = &*set.set;
-    c.bench_function(&dbg!(label), |b| {
+    let label = format!("{label} {matcher_type}");
+    eprintln!("Running bench {label}");
+    let set = set.set.deref();
+    c.bench_function(&label, |b| {
         b.iter(|| {
             for a in set {
                 for b in set {
@@ -77,6 +81,7 @@ fn bench<S: AsRef<str>, I: for<'a> Intersector<&'a keyexpr, &'a keyexpr>>(
 }
 macro_rules! bench_for {
 	($c: expr, $sets: expr, $($t: expr),*) => {
+        eprintln!();
 		$(bench($c, $t, stringify!($t), $sets);)*
 	};
 }
@@ -106,12 +111,17 @@ fn criterion_benchmark(c: &mut Criterion) {
     const RNG_SEED: [u8; 32] = [42; 32];
     let mut ke_owner: Vec<OwnedKeyExpr> = Vec::new();
     let mut bench_sets = [
-        BenchSet::new("anyKE", N_KEY_EXPR, |ke| {
+        BenchSet::new("isnt_wild|no_sub_wild", N_KEY_EXPR, |ke| {
+            isnt_wild(ke) || no_sub_wild(ke)
+        }),
+        BenchSet::new("isnt_wild", N_KEY_EXPR, isnt_wild),
+        BenchSet::new("no_sub_wild", N_KEY_EXPR, no_sub_wild),
+        BenchSet::new("is_sub_wild", N_KEY_EXPR, |ke| {
+            is_wild(ke) && !no_sub_wild(ke)
+        }),
+        BenchSet::new("isnt_wild|is_wild|no_sub_wild", N_KEY_EXPR, |ke| {
             isnt_wild(ke) || is_wild(ke) || no_sub_wild(ke)
         }),
-        BenchSet::new("noWilds", N_KEY_EXPR, isnt_wild),
-        BenchSet::new("anyWilds", N_KEY_EXPR, is_wild),
-        BenchSet::new("noSubWilds", N_KEY_EXPR, no_sub_wild),
     ];
     for ke in KeyExprFuzzer(rand::rngs::StdRng::from_seed(RNG_SEED)) {
         ke_owner.push(ke);
@@ -126,6 +136,22 @@ fn criterion_benchmark(c: &mut Criterion) {
             break;
         }
     }
+    for set in &bench_sets {
+        let (non_wilds, wilds, restricted_wilds) =
+            set.set
+                .iter()
+                .fold((0, 0, 0), |(non_wilds, wilds, restricted_wilds), ke| {
+                    (
+                        non_wilds + isnt_wild(ke) as usize,
+                        wilds + (is_wild(ke) && !no_sub_wild(ke)) as usize,
+                        restricted_wilds + no_sub_wild(ke) as usize,
+                    )
+                });
+        eprintln!(
+            "{} completed: {} non-wilds, {} restricted wilds, {} others",
+            set.name, non_wilds, restricted_wilds, wilds
+        );
+    }
     use zenoh_protocol_core::key_expr::intersect::{
         ClassicIntersector, LTRChunkIntersector, LeftToRightIntersector, MiddleOutIntersector,
     };
@@ -137,6 +163,26 @@ fn criterion_benchmark(c: &mut Criterion) {
             LeftToRightIntersector(LTRChunkIntersector),
             MiddleOutIntersector(LTRChunkIntersector)
         );
+    }
+
+    for set in &bench_sets {
+        let (non_wilds, wilds, restricted_wilds) =
+            set.set
+                .iter()
+                .fold((0, 0, 0), |(non_wilds, wilds, restricted_wilds), ke| {
+                    (
+                        non_wilds + isnt_wild(ke) as usize,
+                        wilds + (is_wild(ke) && !no_sub_wild(ke)) as usize,
+                        restricted_wilds + no_sub_wild(ke) as usize,
+                    )
+                });
+        eprintln!(
+            "{} completed: {} non-wilds, {} restricted wilds, {} others",
+            set.name, non_wilds, restricted_wilds, wilds
+        );
+        for ke in set.set.iter() {
+            eprintln!("\t{}", ke);
+        }
     }
     println!("DONE")
 }

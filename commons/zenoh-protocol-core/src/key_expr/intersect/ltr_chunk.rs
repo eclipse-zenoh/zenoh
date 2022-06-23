@@ -7,7 +7,7 @@ impl Intersector<NoBigWilds<&[u8]>, NoBigWilds<&[u8]>> for LTRChunkIntersector {
     fn intersect(&self, mut left: NoBigWilds<&[u8]>, mut right: NoBigWilds<&[u8]>) -> bool {
         loop {
             match (left.0, right.0) {
-                ([], []) | ([SINGLE_WILD], _) | (_, [SINGLE_WILD]) => return true,
+                ([], []) | (b"*", _) | (_, b"*") => return true,
                 ([SINGLE_WILD, new_left @ ..], [_, new_right @ ..]) => {
                     if self.intersect(NoBigWilds(new_left), right) {
                         return true;

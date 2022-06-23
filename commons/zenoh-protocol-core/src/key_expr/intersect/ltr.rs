@@ -1,4 +1,4 @@
-use crate::key_expr::{utils::Split, DELIMITER, DOUBLE_WILD};
+use crate::key_expr::{utils::Split, DELIMITER};
 
 use super::{
     restiction::{NoBigWilds, NoSubWilds},
@@ -17,10 +17,8 @@ impl<'a, ChunkIntersector> Intersector<NoSubWilds<&'a [u8]>, NoSubWilds<&'a [u8]
             let (l, new_left) = left.split_once(&DELIMITER);
             let (r, new_right) = right.split_once(&DELIMITER);
             match ((l, new_left), (r, new_right)) {
-                (([], []), ([], [])) | ((DOUBLE_WILD, []), _) | (_, (DOUBLE_WILD, [])) => {
-                    return true
-                }
-                ((DOUBLE_WILD, _), _) => {
+                (([], []), ([], [])) | ((b"**", []), _) | (_, (b"**", [])) => return true,
+                ((b"**", _), _) => {
                     if self.intersect(NoSubWilds(new_left), NoSubWilds(right)) {
                         return true;
                     }
@@ -29,7 +27,7 @@ impl<'a, ChunkIntersector> Intersector<NoSubWilds<&'a [u8]>, NoSubWilds<&'a [u8]
                     }
                     right = new_right
                 }
-                (_, (DOUBLE_WILD, _)) => {
+                (_, (b"**", _)) => {
                     if self.intersect(NoSubWilds(left), NoSubWilds(new_right)) {
                         return true;
                     }
@@ -59,10 +57,8 @@ impl<'a, ChunkIntersector: Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]
             let (l, new_left) = left.split_once(&DELIMITER);
             let (r, new_right) = right.split_once(&DELIMITER);
             match ((l, new_left), (r, new_right)) {
-                (([], []), ([], [])) | ((DOUBLE_WILD, []), _) | (_, (DOUBLE_WILD, [])) => {
-                    return true
-                }
-                ((DOUBLE_WILD, _), _) => {
+                (([], []), ([], [])) | ((b"**", []), _) | (_, (b"**", [])) => return true,
+                ((b"**", _), _) => {
                     if self.intersect(new_left, right) {
                         return true;
                     }
@@ -71,7 +67,7 @@ impl<'a, ChunkIntersector: Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]
                     }
                     right = new_right
                 }
-                (_, (DOUBLE_WILD, _)) => {
+                (_, (b"**", _)) => {
                     if self.intersect(left, new_right) {
                         return true;
                     }

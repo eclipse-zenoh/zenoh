@@ -31,22 +31,11 @@ macro_rules! utfdbg {
         x
     }};
 }
-pub(crate) mod classic_matcher {
-    use crate::key_expr::keyexpr;
-
-    use super::Intersector;
-
-    pub struct ClassicIntersector;
-    impl Intersector<&keyexpr, &keyexpr> for ClassicIntersector {
-        fn intersect(&self, left: &keyexpr, right: &keyexpr) -> bool {
-            crate::wire_expr::intersect(left, right)
-        }
-    }
-}
+mod classical;
 pub(crate) mod ltr;
 pub(crate) mod ltr_chunk;
 pub(crate) mod middle_out;
-pub use classic_matcher::ClassicIntersector;
+pub use classical::ClassicIntersector;
 pub use ltr::LeftToRightIntersector;
 pub use ltr_chunk::LTRChunkIntersector;
 pub use middle_out::MiddleOutIntersector;
@@ -62,8 +51,10 @@ pub trait Intersector<Left, Right> {
 }
 
 pub(crate) mod restiction {
+    #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct NoBigWilds<T>(pub T);
+    #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct NoSubWilds<T>(pub T);
     impl<T> std::ops::Deref for NoBigWilds<T> {
