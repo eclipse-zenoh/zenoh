@@ -28,20 +28,30 @@ use zenoh::queryable::STORAGE;
 use zenoh::utils::key_expr;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
+// The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
 
+// declaration of the plugin's VTable for zenohd to find the plugin's functions to be called
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
+// A default selector for this example of storage plugin (in case the config doesn't set it)
+// This plugin will subscribe to this selector and declare a queryable with this selector
 const DEFAULT_SELECTOR: &str = "/demo/example/**";
+
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
     type RunningPlugin = zenoh::plugins::RunningPlugin;
+
+    // A mandatory const to define, in case of the plugin is built as a standalone executable
     const STATIC_NAME: &'static str = "example";
 
+    // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
+
+        // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
         let selector;
         match self_cfg.get("storage-selector") {
             Some(serde_json::Value::String(s)) => {
@@ -53,8 +63,12 @@ impl Plugin for ExamplePlugin {
             }
         }
         std::mem::drop(config);
+
+        // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
+        // spawn the task running the plugin's loop
         async_std::task::spawn(run(runtime.clone(), selector.into(), flag.clone()));
+        // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
                 flag,
@@ -64,14 +78,20 @@ impl Plugin for ExamplePlugin {
         )))))
     }
 }
+
+// An inner-state for the RunningPlugin
 struct RunningPluginInner {
     flag: Arc<AtomicBool>,
     name: String,
     runtime: Runtime,
 }
+// The RunningPlugin struct implementing the RunningPluginTrait trait
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl RunningPluginTrait for RunningPlugin {
+
+    // Operation returning a ValidationFunction(path, old, new)-> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
+    // this function will be called each time the plugin's config is changed via the zenohd admin space
     fn config_checker(&self) -> ValidationFunction {
         let guard = zlock!(&self.0);
         let name = guard.name.clone();
@@ -106,6 +126,9 @@ impl RunningPluginTrait for RunningPlugin {
             bail!("unknown option {} for {}", path, &name)
         })
     }
+
+    // Function called on any query on admin space that matches this plugin's sub-part of the admin space.
+    // Thus the plugin can reply its contribution to the global admin space of this zenohd.
     fn adminspace_getter<'a>(
         &'a self,
         _selector: &'a Selector<'a>,
@@ -114,6 +137,8 @@ impl RunningPluginTrait for RunningPlugin {
         Ok(Vec::new())
     }
 }
+
+// If the plugin is dropped, set the flag to false to end the loop
 impl Drop for RunningPlugin {
     fn drop(&mut self) {
         zlock!(self.0).flag.store(false, Relaxed);
@@ -123,26 +148,33 @@ impl Drop for RunningPlugin {
 async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
+    // create a zenoh Session that shares the same Runtime than zenohd
     let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
 
+    // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     debug!("Run example-plugin with storage-selector={}", selector);
 
+    // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
     let mut sub = session.subscribe(&selector).await.unwrap();
 
+    // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
     let mut queryable = session.queryable(&selector).kind(STORAGE).await.unwrap();
 
+    // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
         select!(
+            // on sample received by the Subscriber
             sample = sub.next() => {
                 let sample = sample.unwrap();
                 info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
                 stored.insert(sample.key_expr.to_string(), sample);
             },
 
+            // on query received by the Queryable
             query = queryable.next() => {
                 let query = query.unwrap();
                 info!("Handling query '{}'", query.selector());
