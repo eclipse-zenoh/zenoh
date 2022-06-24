@@ -186,3 +186,27 @@ impl Split<[u8]> for [u8] {
         (None, self)
     }
 }
+
+pub(crate) trait Utf {
+    fn utf(&self) -> &str;
+}
+impl Utf for [u8] {
+    fn utf(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(self) }
+    }
+}
+/// This macro is generally useful when introducing new matchers to debug them.
+#[allow(unused_macros)]
+macro_rules! utfdbg {
+    ($x: expr) => {{
+        let x = $x;
+        println!(
+            "[{}:{}] {} = {}",
+            file!(),
+            line!(),
+            stringify!($x),
+            $crate::key_expr::utils::Utf::utf(x)
+        );
+        x
+    }};
+}

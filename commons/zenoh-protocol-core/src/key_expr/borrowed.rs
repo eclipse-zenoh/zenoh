@@ -131,6 +131,12 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             if chunk.is_empty() {
                 bail!("Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
             }
+            if chunk == "$*" {
+                bail!(
+                    "Invalid Key Expr `{}`: lone `$*`s must be replaced by `*` to reach canon-form",
+                    value
+                )
+            }
             if in_big_wild {
                 match chunk {
                     "**" => bail!(
@@ -156,11 +162,16 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
             }
         }
-        if value.contains(FORBIDDEN_CHARS) {
-            bail!(
-                "Invalid Key Expr `{}`: `#?$` are forbidden characters",
-                value
-            )
+        if let Some(forbidden) = value.find(FORBIDDEN_CHARS) {
+            let bytes = value.as_bytes();
+            match (bytes[forbidden], bytes.get(forbidden + 1)) {
+                (b'$', Some(b'*')) => {}
+                (b'$', _) => bail!("Invalid Key Expr `{}`: `$` is only allowed in `$*`", value),
+                _ => bail!(
+                    "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
+                    value
+                ),
+            }
         }
         Ok(unsafe { keyexpr::from_str_unchecked(value) })
     }
