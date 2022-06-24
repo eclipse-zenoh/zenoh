@@ -115,7 +115,7 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
@@ -127,12 +127,13 @@ impl Runtime {
                 listeners,
                 peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
+                guard.scouting().multicast().peer().listen().unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()
+                    .peer()
                     .autoconnect()
-                    .map(|m| m.matches(WhatAmI::Peer))
-                    .unwrap_or(true),
+                    .unwrap_or(WhatAmIMatcher::try_from(131).unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -158,39 +159,14 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(&ifaces);
-            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
-            if !ifaces.is_empty() {
-                let sockets: Vec<UdpSocket> = ifaces
-                    .into_iter()
-                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-                    .collect();
-                if !sockets.is_empty() {
-                    let this = self.clone();
-                    self.spawn(async move {
-                        async_std::prelude::FutureExt::race(
-                            this.responder(&mcast_socket, &sockets),
-                            this.connect_all(
-                                &sockets,
-                                if peers_autoconnect {
-                                    WhatAmI::Peer | WhatAmI::Router
-                                } else {
-                                    WhatAmI::Router.into()
-                                },
-                                &addr,
-                            ),
-                        )
-                        .await;
-                    });
-                }
-            }
+            self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
         async_std::task::sleep(delay).await;
         Ok(())
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
             let guard = self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
@@ -205,9 +181,15 @@ impl Runtime {
                 guard
                     .scouting()
                     .multicast()
+                    .router()
+                    .listen()
+                    .unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .router()
                     .autoconnect()
-                    .map(|m| m.matches(WhatAmI::Router))
-                    .unwrap_or(false),
+                    .unwrap_or(WhatAmIMatcher::try_from(128).unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -232,32 +214,52 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(&ifaces);
-            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
-            if !ifaces.is_empty() {
-                let sockets: Vec<UdpSocket> = ifaces
-                    .into_iter()
-                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-                    .collect();
-                if !sockets.is_empty() {
-                    let this = self.clone();
-                    if routers_autoconnect_multicast {
-                        self.spawn(async move {
+            self.start_scout(listen, autoconnect, addr, ifaces).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn start_scout(
+        &self,
+        listen: bool,
+        autoconnect: WhatAmIMatcher,
+        addr: SocketAddr,
+        ifaces: String,
+    ) -> ZResult<()> {
+        let ifaces = Runtime::get_interfaces(&ifaces);
+        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
+        if !ifaces.is_empty() {
+            let sockets: Vec<UdpSocket> = ifaces
+                .into_iter()
+                .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                .collect();
+            if !sockets.is_empty() {
+                let this = self.clone();
+                match (listen, autoconnect.is_empty()) {
+                    (true, false) => {
+                        async_std::task::spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, WhatAmI::Router, &addr),
+                                this.connect_all(&sockets, autoconnect, &addr),
                             )
                             .await;
                         });
-                    } else {
+                    }
+                    (true, true) => {
                         async_std::task::spawn(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
+                    (false, false) => {
+                        async_std::task::spawn(async move {
+                            this.connect_all(&sockets, autoconnect, &addr).await
+                        });
+                    }
+                    _ => {}
                 }
             }
         }
-
         Ok(())
     }
 

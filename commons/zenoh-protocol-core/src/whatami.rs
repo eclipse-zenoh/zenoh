@@ -118,6 +118,10 @@ impl WhatAmIMatcher {
         }
     }
 
+    pub fn is_empty(self) -> bool {
+        self.0.get() == 128
+    }
+
     pub fn matches(self, w: WhatAmI) -> bool {
         (self.0.get() & w as u8) != 0
     }

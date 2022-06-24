@@ -16,6 +16,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
+use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Locator;
 use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::proto::{LinkState, ZenohMessage};
@@ -84,8 +85,7 @@ pub(crate) struct Tree {
 
 pub(crate) struct Network {
     pub(crate) name: String,
-    pub(crate) peers_autoconnect: bool,
-    pub(crate) routers_autoconnect_gossip: bool,
+    pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
     pub(crate) trees: Vec<Tree>,
@@ -99,8 +99,7 @@ impl Network {
         name: String,
         pid: ZenohId,
         runtime: Runtime,
-        peers_autoconnect: bool,
-        routers_autoconnect_gossip: bool,
+        autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         log::debug!("{} Add node (self) {}", name, pid);
@@ -113,8 +112,7 @@ impl Network {
         });
         Network {
             name,
-            peers_autoconnect,
-            routers_autoconnect_gossip,
+            autoconnect,
             idx,
             links: VecMap::new(),
             trees: vec![Tree {
@@ -459,30 +457,25 @@ impl Network {
             .filter(|ls| !removed.iter().any(|(idx, _)| idx == &ls.1))
             .collect::<Vec<(Vec<ZenohId>, NodeIndex, bool)>>();
 
-        if (self.peers_autoconnect && self.runtime.whatami == WhatAmI::Peer)
-            || (self.routers_autoconnect_gossip && self.runtime.whatami == WhatAmI::Router)
-        {
+        if !self.autoconnect.is_empty() {
             // Connect discovered peers
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
-                if (self.runtime.whatami == WhatAmI::Peer
-                    && (node.whatami == Some(WhatAmI::Peer)
-                        || node.whatami == Some(WhatAmI::Router)))
-                    || (self.runtime.whatami == WhatAmI::Router
-                        && node.whatami == Some(WhatAmI::Router))
-                {
-                    if let Some(locators) = &node.locators {
-                        let runtime = self.runtime.clone();
-                        let pid = node.pid;
-                        let locators = locators.clone();
-                        self.runtime.spawn(async move {
-                            // random backoff
-                            async_std::task::sleep(std::time::Duration::from_millis(
-                                rand::random::<u64>() % 100,
-                            ))
-                            .await;
-                            runtime.connect_peer(&pid, &locators).await;
-                        });
+                if let Some(whatami) = node.whatami {
+                    if self.autoconnect.matches(whatami) {
+                        if let Some(locators) = &node.locators {
+                            let runtime = self.runtime.clone();
+                            let pid = node.pid;
+                            let locators = locators.clone();
+                            self.runtime.spawn(async move {
+                                // random backoff
+                                async_std::task::sleep(std::time::Duration::from_millis(
+                                    rand::random::<u64>() % 100,
+                                ))
+                                .await;
+                                runtime.connect_peer(&pid, &locators).await;
+                            });
+                        }
                     }
                 }
             }

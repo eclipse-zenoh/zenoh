@@ -27,15 +27,48 @@
     ],
   },
 
+            ScoutingMulticastConf {
+                /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
+                enabled: Option<bool>,
+                /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7447` by default if none is provided.
+                address: Option<SocketAddr>,
+                /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
+                interface: Option<String>,
+                /// The multicast scouting behavior of routers.
+                pub router: #[derive(Default)]
+                ScoutingBehavior {
+                    /// Which type of Zenoh instances to automatically establish sessions with upon discovery.
+                    #[serde(deserialize_with = "treat_error_as_none")]
+                    autoconnect: Option<whatami::WhatAmIMatcher>,
+                    /// Whether or not to listen to scout messages and reply to them.
+                    listen: Option<bool>,
+                },
+                /// The multicast scouting behavior of peers.
+                pub peer: ScoutingBehavior,
+                /// The multicast scouting behavior of clients.
+                pub client: ScoutingBehavior,
+            },
+            /// The gossip scouting configuration.
+            pub gossip: #[derive(Default)]
+            GossipConf {
+                /// Whether gossip scouting is enabled or not.
+                enabled: Option<bool>,
+                /// The gossip scouting behavior of routers.
+                pub router: ScoutingBehavior,
+                /// The gossip scouting behavior of peers.
+                pub peer: ScoutingBehavior,
+                /// The gossip scouting behavior of clients.
+                pub client: ScoutingBehavior,
+            },
+        },
+
   /// Configure the scouting mechanisms and their behaviours
   scouting: {
     /// In client mode, the period dedicated to scouting for a router before failing
     timeout: 3000,
     /// In peer mode, the period dedicated to scouting remote peers before attempting other operations
     delay: 200,
-    /// If set to `false`, peers will never automatically establish sessions between each-other.
-    peers_autoconnect: false,
-    /// How multicast scouting should behave
+    /// The multicast scouting configuration.
     multicast: {
       /// Whether multicast scouting is enabled or not
       enabled: true,
@@ -43,15 +76,41 @@
       address: "224.0.0.224:7447",
       /// The network interface which should be used for multicast scouting
       interface: "", // empty string means auto
-      /// An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
-      /// If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
-      autoconnect: "peer|client",
+      /// The multicast scouting behavior of routers.
+      router: {
+        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
+        autoconnect: "",
+        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+        listen: true,
+      },
+      peer: {
+        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
+        autoconnect: "peer|router",
+        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+        listen: true,
+      },
     },
-    /// How gossip scouting should behave
+    /// The gossip scouting configuration.
     gossip: {
-      /// An autoconnection mask (accepted values are bit-or-like combinations of peer, router and client).
-      /// If the configured instance's mode intersects with this field, zenoh will automatically establish a connection with other nodes discovered through this method of scouting.
-      autoconnect: "",
+      /// Whether gossip scouting is enabled or not
+      enabled: true,
+      /// The gossip scouting behavior of routers.
+      router: {
+        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
+        autoconnect: "",
+        /// Whether or not to listen for scout messages on gossip and reply to them.
+        listen: true,
+      },
+      peer: {
+        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
+        autoconnect: "peer|router",
+        /// Whether or not to listen for scout messages on gossip and reply to them.
+        listen: true,
+      },
     },
   },
 

@@ -127,7 +127,7 @@ validated_struct::validator! {
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
-            /// How multicast should behave.
+            /// The multicast scouting configuration.
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
@@ -136,18 +136,28 @@ validated_struct::validator! {
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
-                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through multicast scouting.
-                #[serde(deserialize_with = "treat_error_as_none")]
-                autoconnect: Option<whatami::WhatAmIMatcher>,
+                /// The multicast scouting behavior of routers.
+                pub router: #[derive(Default)]
+                ScoutingBehavior {
+                    /// Which type of Zenoh instances to automatically establish sessions with upon discovery.
+                    #[serde(deserialize_with = "treat_error_as_none")]
+                    autoconnect: Option<whatami::WhatAmIMatcher>,
+                    /// Whether or not to listen for scout messages and reply to them.
+                    listen: Option<bool>,
+                },
+                /// The multicast scouting behavior of peers.
+                pub peer: ScoutingBehavior,
             },
+            /// The gossip scouting configuration.
             pub gossip: #[derive(Default)]
             GossipConf {
-                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
-                #[serde(deserialize_with = "treat_error_as_none")]
-                autoconnect: Option<whatami::WhatAmIMatcher>,
+                /// Whether gossip scouting is enabled or not.
+                enabled: Option<bool>,
+                /// The gossip scouting behavior of routers.
+                pub router: ScoutingBehavior,
+                /// The gossip scouting behavior of peers.
+                pub peer: ScoutingBehavior,
             },
-            /// If set to `false`, peers will never automatically establish sessions between each-other.
-            peers_autoconnect: Option<bool>,
         },
         /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
         add_timestamp: Option<bool>,

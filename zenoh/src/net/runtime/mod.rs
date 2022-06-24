@@ -33,7 +33,7 @@ use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport;
@@ -84,13 +84,34 @@ impl Runtime {
             None
         };
 
-        let peers_autoconnect = config.scouting().peers_autoconnect().unwrap_or(true);
-        let routers_autoconnect_gossip = config
-            .scouting()
-            .gossip()
-            .autoconnect()
-            .map(|f| f.matches(whatami))
-            .unwrap_or(false);
+        let autoconnect = match whatami {
+            WhatAmI::Router => {
+                if config.scouting().gossip().enabled().unwrap_or(true) {
+                    config
+                        .scouting()
+                        .gossip()
+                        .router()
+                        .autoconnect()
+                        .unwrap_or(WhatAmIMatcher::try_from(128).unwrap())
+                } else {
+                    WhatAmIMatcher::try_from(128).unwrap()
+                }
+            }
+            WhatAmI::Peer => {
+                if config.scouting().gossip().enabled().unwrap_or(true) {
+                    config
+                        .scouting()
+                        .gossip()
+                        .peer()
+                        .autoconnect()
+                        .unwrap_or(WhatAmIMatcher::try_from(131).unwrap())
+                } else {
+                    WhatAmIMatcher::try_from(128).unwrap()
+                }
+            }
+            _ => WhatAmIMatcher::try_from(128).unwrap(),
+        };
+
         let use_link_state = whatami != WhatAmI::Client; // TODO: support disabling link_state: && config.scouting().gossip().enabled().unwrap_or(true);
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
@@ -131,11 +152,8 @@ impl Runtime {
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
         if use_link_state {
-            get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
-                runtime.clone(),
-                peers_autoconnect,
-                routers_autoconnect_gossip,
-            );
+            get_mut_unchecked(&mut runtime.router.clone())
+                .init_link_state(runtime.clone(), autoconnect);
         }
 
         let receiver = config.subscribe();

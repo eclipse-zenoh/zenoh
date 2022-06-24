@@ -24,6 +24,7 @@ use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Link;
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_protocol_core::{WhatAmI, ZInt, ZenohId};
@@ -269,27 +270,20 @@ impl Router {
         }
     }
 
-    pub fn init_link_state(
-        &mut self,
-        runtime: Runtime,
-        peers_autoconnect: bool,
-        routers_autoconnect_gossip: bool,
-    ) {
+    pub fn init_link_state(&mut self, runtime: Runtime, autoconnect: WhatAmIMatcher) {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
             tables.pid,
             runtime.clone(),
-            peers_autoconnect,
-            routers_autoconnect_gossip,
+            autoconnect,
         ));
         if runtime.whatami == WhatAmI::Router {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
                 tables.pid,
                 runtime,
-                peers_autoconnect,
-                routers_autoconnect_gossip,
+                autoconnect,
             ));
             tables.shared_nodes = shared_nodes(
                 tables.routers_net.as_ref().unwrap(),
