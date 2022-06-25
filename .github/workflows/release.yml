@@ -380,7 +380,7 @@ jobs:
   docker:
     name: Docker build and push
     needs: [checks]
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
         with:
@@ -388,8 +388,8 @@ jobs:
       - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
         shell: bash
         run: git fetch --tags --force
-      - name: setup-docker
-        uses: docker-practice/actions-setup-docker@v1
+      # - name: setup-docker
+      #   uses: docker-practice/actions-setup-docker@v1
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
