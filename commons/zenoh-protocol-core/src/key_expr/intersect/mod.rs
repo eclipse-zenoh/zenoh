@@ -14,23 +14,6 @@
 
 use super::keyexpr;
 
-trait Utf {
-    fn utf(&self) -> &str;
-}
-impl Utf for [u8] {
-    fn utf(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self) }
-    }
-}
-/// This macro is generally useful when introducing new matchers to debug them.
-#[allow(unused_macros)]
-macro_rules! utfdbg {
-    ($x: expr) => {{
-        let x = $x;
-        println!("[{}:{}] {} = {}", file!(), line!(), stringify!($x), x.utf());
-        x
-    }};
-}
 mod classical;
 pub(crate) mod ltr;
 pub(crate) mod ltr_chunk;
@@ -68,7 +51,7 @@ pub(crate) mod restiction {
 enum MatchComplexity {
     NoWilds = 0,
     ChunkWildsOnly = 1,
-    SubChunkWilds = 2,
+    Dsl = 2,
 }
 trait KeyExprHelpers {
     fn match_complexity(&self) -> MatchComplexity;
@@ -76,17 +59,12 @@ trait KeyExprHelpers {
 impl KeyExprHelpers for keyexpr {
     fn match_complexity(&self) -> MatchComplexity {
         let mut has_wilds = false;
-        let mut previous_char = b'/';
-        for &char in self.as_bytes() {
-            if char == b'*' {
-                has_wilds = true;
-                if previous_char != b'*' || previous_char != b'/' {
-                    return MatchComplexity::SubChunkWilds;
-                }
-            } else if previous_char == b'*' && char != b'/' {
-                return MatchComplexity::SubChunkWilds;
+        for &c in self.as_bytes() {
+            match c {
+                b'*' => has_wilds = true,
+                b'$' => return MatchComplexity::Dsl,
+                _ => {}
             }
-            previous_char = char;
         }
         if has_wilds {
             MatchComplexity::ChunkWildsOnly
@@ -115,35 +93,3 @@ impl<
         }
     }
 }
-
-// impl<T: for<'a> Intersector<&'a [u8], &'a [u8]>> Intersector<&keyexpr, &keyexpr> for T {
-//     fn intersect(&self, left: &keyexpr, right: &keyexpr) -> bool {
-//         let left_bytes = left.as_bytes();
-//         let right_bytes = right.as_bytes();
-//         if left_bytes == right_bytes {
-//             return true;
-//         }
-//         if left.contains('*') || right.contains('*') {
-//             self.intersect(left_bytes, right_bytes)
-//         } else {
-//             false
-//         }
-//     }
-// }
-
-// impl<T: for<'a> Intersector<NoSubWilds<&'a [u8]>, NoSubWilds<&'a [u8]>>>
-//     Intersector<&keyexpr, &keyexpr> for T
-// {
-//     fn intersect(&self, left: &keyexpr, right: &keyexpr) -> bool {
-//         let left_bytes = left.as_bytes();
-//         let right_bytes = right.as_bytes();
-//         if left_bytes == right_bytes {
-//             return true;
-//         }
-//         if left.contains('*') || right.contains('*') {
-//             self.intersect(NoSubWilds(left_bytes), NoSubWilds(right_bytes))
-//         } else {
-//             false
-//         }
-//     }
-// }

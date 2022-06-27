@@ -14,14 +14,14 @@ fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
             0..=15 => ke.extend(b"/**"),
             16..=31 => ke.extend(b"/*"),
             32..=47 => {
-                if !ke.ends_with(b"*") || ke.is_empty() {
-                    ke.extend(b"*")
+                if !ke.is_empty() && !ke.ends_with(b"*") {
+                    ke.extend(b"$*")
                 } else {
                     continue;
                 }
             }
             48.. => {
-                if n >= 128 || ke.ends_with(b"**") {
+                if n >= 128 || ke.ends_with(b"**") || ke.ends_with(b"/*") {
                     ke.push(b'/')
                 }
                 ke.extend(random_chunk(rng))

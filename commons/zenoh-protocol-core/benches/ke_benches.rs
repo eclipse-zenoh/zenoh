@@ -89,19 +89,7 @@ fn is_wild(ke: &keyexpr) -> bool {
     ke.contains('*')
 }
 fn no_sub_wild(ke: &keyexpr) -> bool {
-    if !ke.contains('*') {
-        return false;
-    }
-    let mut previous_byte = b'/';
-    for byte in ke.bytes() {
-        match (previous_byte, byte) {
-            (b'*', b'*') | (b'/', b'*') | (b'*', b'/') => {}
-            (_, b'*') | (b'*', _) => return false,
-            _ => {}
-        }
-        previous_byte = byte;
-    }
-    true
+    ke.contains('*') && !ke.contains('$')
 }
 fn isnt_wild(ke: &keyexpr) -> bool {
     !ke.contains('*')
@@ -124,6 +112,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         }),
     ];
     for ke in KeyExprFuzzer(rand::rngs::StdRng::from_seed(RNG_SEED)) {
+        println!("{}", ke);
         ke_owner.push(ke);
         let ke =
             unsafe { std::mem::transmute::<&keyexpr, &keyexpr>(ke_owner.last().unwrap().deref()) };
@@ -152,38 +141,32 @@ fn criterion_benchmark(c: &mut Criterion) {
             set.name, non_wilds, restricted_wilds, wilds
         );
     }
-    use zenoh_protocol_core::key_expr::intersect::{
-        ClassicIntersector, LTRChunkIntersector, LeftToRightIntersector, MiddleOutIntersector,
-    };
+    use zenoh_protocol_core::key_expr::intersect::ClassicIntersector;
     for bench in &bench_sets {
-        bench_for!(
-            c,
-            bench,
-            ClassicIntersector,
-            LeftToRightIntersector(LTRChunkIntersector),
-            MiddleOutIntersector(LTRChunkIntersector)
-        );
+        bench_for!(c, bench, ClassicIntersector);
+        // LeftToRightIntersector(LTRChunkIntersector),
+        // MiddleOutIntersector(LTRChunkIntersector)
     }
 
-    for set in &bench_sets {
-        let (non_wilds, wilds, restricted_wilds) =
-            set.set
-                .iter()
-                .fold((0, 0, 0), |(non_wilds, wilds, restricted_wilds), ke| {
-                    (
-                        non_wilds + isnt_wild(ke) as usize,
-                        wilds + (is_wild(ke) && !no_sub_wild(ke)) as usize,
-                        restricted_wilds + no_sub_wild(ke) as usize,
-                    )
-                });
-        eprintln!(
-            "{} completed: {} non-wilds, {} restricted wilds, {} others",
-            set.name, non_wilds, restricted_wilds, wilds
-        );
-        for ke in set.set.iter() {
-            eprintln!("\t{}", ke);
-        }
-    }
+    // for set in &bench_sets {
+    //     let (non_wilds, wilds, restricted_wilds) =
+    //         set.set
+    //             .iter()
+    //             .fold((0, 0, 0), |(non_wilds, wilds, restricted_wilds), ke| {
+    //                 (
+    //                     non_wilds + isnt_wild(ke) as usize,
+    //                     wilds + (is_wild(ke) && !no_sub_wild(ke)) as usize,
+    //                     restricted_wilds + no_sub_wild(ke) as usize,
+    //                 )
+    //             });
+    //     eprintln!(
+    //         "{} completed: {} non-wilds, {} restricted wilds, {} others",
+    //         set.name, non_wilds, restricted_wilds, wilds
+    //     );
+    //     for ke in set.set.iter() {
+    //         eprintln!("\t{}", ke);
+    //     }
+    // }
     println!("DONE")
 }
 

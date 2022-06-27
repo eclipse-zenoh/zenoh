@@ -18,7 +18,6 @@ pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 pub type ZResult<T> = Result<T, Error>;
 
-#[derive(Debug)]
 pub struct ZError {
     error: AnyError,
     file: &'static str,
@@ -51,7 +50,11 @@ impl std::error::Error for ZError {
             .map(|r| unsafe { std::mem::transmute(r.as_ref()) })
     }
 }
-
+impl fmt::Debug for ZError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self, f)
+    }
+}
 impl fmt::Display for ZError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} at {}:{}.", self.error, self.file, self.line)?;

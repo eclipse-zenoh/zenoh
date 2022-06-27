@@ -34,7 +34,7 @@ impl Canonizable for &mut str {
             }
             if in_big_wild {
                 match chunk {
-                    [SINGLE_WILD] => {
+                    [SINGLE_WILD] | b"$*" => {
                         writer.write_byte(b'*');
                         break;
                     }
@@ -60,7 +60,7 @@ impl Canonizable for &mut str {
             }
             if in_big_wild {
                 match chunk {
-                    [SINGLE_WILD] => {
+                    [SINGLE_WILD] | b"$*" => {
                         writer.write(b"/*");
                     }
                     DOUBLE_WILD => {}
