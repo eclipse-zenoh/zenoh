@@ -66,12 +66,12 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
         )
         .arg(
             Arg::from_usage("-t, --target=[TARGET] 'The query timeout in milliseconds'")
-            .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
-            .default_value("ALL"),
+                .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
+                .default_value("ALL"),
         )
         .arg(
             Arg::from_usage("-o, --timeout=[TIME] 'The target queryables of the query'")
-            .default_value("10000"),
+                .default_value("10000"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
