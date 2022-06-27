@@ -13,6 +13,7 @@
 //
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability, SubMode};
@@ -37,6 +38,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
+    query_timeout: Duration,
 }
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
@@ -61,6 +63,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             query_value_selector: "".into(),
             query_target,
             query_consolidation,
+            query_timeout: Duration::from_secs(10),
         }
     }
 
@@ -182,6 +185,13 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
+    /// Change the timeout to be used for queries.
+    #[inline]
+    pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
+        self.query_timeout = query_timeout;
+        self
+    }
+
     fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
         QueryingSubscriberBuilder {
             session: self.session,
@@ -193,6 +203,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             query_value_selector: "".to_string(),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
+            query_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -331,6 +342,13 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
         self.builder = self.builder.query_consolidation(query_consolidation);
         self
     }
+
+    /// Change the timeout to be used for queries.
+    #[inline]
+    pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
+        self.builder = self.builder.query_timeout(query_timeout);
+        self
+    }
 }
 
 struct InnerState {
@@ -344,6 +362,7 @@ pub struct CallbackQueryingSubscriber<'a> {
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
+    query_timeout: Duration,
     _subscriber: CallbackSubscriber<'a>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
     state: Arc<Mutex<InnerState>>,
@@ -398,6 +417,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             query_value_selector: conf.query_value_selector,
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
+            query_timeout: conf.query_timeout,
             _subscriber: subscriber,
             callback,
             state,
@@ -425,6 +445,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             },
             self.query_target.clone(),
             self.query_consolidation.clone(),
+            self.query_timeout,
         )
     }
 
@@ -435,11 +456,12 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
     {
-        self.query_on_selector(selector.into(), target, consolidation)
+        self.query_on_selector(selector.into(), target, consolidation, timeout)
     }
 
     #[inline]
@@ -448,6 +470,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         selector: Selector<'c>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c {
         zlock!(self.state).pending_queries += 1;
         // pending queries will be decremented in RepliesHandler drop()
@@ -461,6 +484,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             .get(selector)
             .target(target)
             .consolidation(consolidation)
+            .timeout(timeout)
             .callback(move |r| {
                 let mut state = zlock!(handler.state);
                 match r.sample {
@@ -641,11 +665,13 @@ impl<'a, Receiver> HandlerQueryingSubscriber<'a, Receiver> {
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>> + 'c,
     {
-        self.subscriber.query_on(selector, target, consolidation)
+        self.subscriber
+            .query_on(selector, target, consolidation, timeout)
     }
 }
 
