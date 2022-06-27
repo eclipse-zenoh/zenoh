@@ -24,12 +24,24 @@
 #    docker run --init -net host eclipse/zenoh
 
 
-FROM alpine:latest AS builder
+FROM --platform=$BUILDPLATFORM alpine:latest AS builder
 
 RUN apk add --no-cache curl gcc musl-dev llvm-dev clang-dev git
 
+ARG TARGETPLATFORM
+RUN echo "Setting variables for ${TARGETPLATFORM:=linux/amd64}" && \
+    case "${TARGETPLATFORM}" in \
+    linux/amd64) \
+    echo "x86_64-unknown-linux-musl" > rust-target; \
+    break;; \
+    linux/arm64) \
+    echo "aarch64-unknown-linux-musl" > rust-target; \
+    break;; \
+    *) echo "unsupported platform ${TARGETPLATFORM}";; \
+    esac
+
 COPY rust-toolchain rust-toolchain
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host `uname -m`-unknown-linux-musl --default-toolchain `cat rust-toolchain`
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-host `cat rust-target` --default-toolchain `cat rust-toolchain`
 
 ENV PATH /root/.cargo/bin:$PATH
 
