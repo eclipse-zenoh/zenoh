@@ -14,11 +14,17 @@
 
 //! Query primitives.
 
+use crate::net::runtime::Runtime;
 use crate::prelude::*;
 use crate::Session;
+use crate::SessionState;
 use crate::API_REPLY_RECEPTION_CHANNEL_SIZE;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
+use zenoh_collections::Timed;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
@@ -114,6 +120,32 @@ pub struct Reply {
     pub replier_id: ZenohId,
 }
 
+#[derive(Clone)]
+pub(crate) struct QueryTimeout {
+    pub(crate) state: Arc<RwLock<SessionState>>,
+    pub(crate) runtime: Runtime,
+    pub(crate) qid: ZInt,
+}
+
+#[async_trait]
+impl Timed for QueryTimeout {
+    async fn run(&mut self) {
+        let mut state = zwrite!(self.state);
+        if let Some(query) = state.queries.remove(&self.qid) {
+            log::debug!("Timout on query {}! Send error and close.", self.qid);
+            if query.reception_mode == ConsolidationMode::Full {
+                for (_, reply) in query.replies.unwrap().into_iter() {
+                    let _ = (query.callback)(reply);
+                }
+            }
+            let _ = (query.callback)(Reply {
+                sample: Err("Timeout".into()),
+                replier_id: self.runtime.pid,
+            });
+        }
+    }
+}
+
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) reception_mode: ConsolidationMode,
@@ -151,6 +183,7 @@ pub struct GetBuilder<'a, 'b> {
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) local_routing: Option<bool>,
+    pub(crate) timeout: Duration,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b> {
@@ -266,6 +299,13 @@ impl<'a, 'b> GetBuilder<'a, 'b> {
         self.local_routing = Some(local_routing);
         self
     }
+
+    /// Set query timeout.
+    #[inline]
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
 }
 
 impl Resolvable for GetBuilder<'_, '_> {
@@ -340,6 +380,13 @@ where
         self.builder = self.builder.local_routing(local_routing);
         self
     }
+
+    /// Set query timeout.
+    #[inline]
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.builder = self.builder.timeout(timeout);
+        self
+    }
 }
 
 impl<Callback> Resolvable for CallbackGetBuilder<'_, '_, Callback>
@@ -359,6 +406,7 @@ where
             self.builder.target,
             self.builder.consolidation,
             self.builder.local_routing,
+            self.builder.timeout,
             Box::new(self.callback),
         )
     }
@@ -456,6 +504,7 @@ where
                 self.builder.target,
                 self.builder.consolidation,
                 self.builder.local_routing,
+                self.builder.timeout,
                 callback,
             )
             .map(|_| receiver)

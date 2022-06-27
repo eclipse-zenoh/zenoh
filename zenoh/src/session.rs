@@ -42,7 +42,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
+use std::time::Instant;
 use uhlc::HLC;
+use zenoh_collections::TimedEvent;
+use zenoh_collections::Timer;
 use zenoh_core::AsyncResolve;
 use zenoh_core::Resolve;
 use zenoh_core::SyncResolve;
@@ -82,6 +85,7 @@ pub(crate) struct SessionState {
     pub(crate) local_routing: bool,
     pub(crate) join_subscriptions: Vec<String>,
     pub(crate) join_publications: Vec<String>,
+    pub(crate) timer: Timer,
 }
 
 impl SessionState {
@@ -105,6 +109,7 @@ impl SessionState {
             local_routing,
             join_subscriptions,
             join_publications,
+            timer: Timer::new(true),
         }
     }
 }
@@ -1302,6 +1307,7 @@ impl Session {
         target: QueryTarget,
         consolidation: QueryConsolidation,
         local_routing: Option<bool>,
+        timeout: Duration,
         callback: Callback<Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1319,6 +1325,15 @@ impl Session {
         let local_routing = local_routing.unwrap_or(state.local_routing);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let nb_final = if local_routing { 2 } else { 1 };
+        let timeout = TimedEvent::once(
+            Instant::now() + timeout,
+            QueryTimeout {
+                state: self.state.clone(),
+                runtime: self.runtime.clone(),
+                qid,
+            },
+        );
+        state.timer.add(timeout);
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
@@ -1394,6 +1409,7 @@ impl Session {
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             local_routing: None,
+            timeout: Duration::from_secs(10),
         }
     }
 

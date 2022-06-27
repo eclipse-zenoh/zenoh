@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use std::convert::TryFrom;
+use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::query::*;
@@ -22,13 +23,19 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, selector, target) = parse_args();
+    let (config, selector, target, timeout) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let replies = session.get(&selector).target(target).res().await.unwrap();
+    let replies = session
+        .get(&selector)
+        .target(target)
+        .timeout(timeout)
+        .res()
+        .await
+        .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => println!(
@@ -41,7 +48,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, QueryTarget) {
+fn parse_args() -> (Config, String, QueryTarget, Duration) {
     let args = App::new("zenoh query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -58,9 +65,13 @@ fn parse_args() -> (Config, String, QueryTarget) {
                 .default_value("/demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
-                .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
-                .default_value("ALL"),
+            Arg::from_usage("-t, --target=[TARGET] 'The query timeout in milliseconds'")
+            .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
+            .default_value("ALL"),
+        )
+        .arg(
+            Arg::from_usage("-o, --timeout=[TIME] 'The target queryables of the query'")
+            .default_value("10000"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -103,5 +114,7 @@ fn parse_args() -> (Config, String, QueryTarget) {
         _ => QueryTarget::All,
     };
 
-    (config, selector, target)
+    let timeout = Duration::from_millis(args.value_of("timeout").unwrap().parse::<u64>().unwrap());
+
+    (config, selector, target, timeout)
 }
