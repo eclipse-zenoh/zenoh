@@ -162,15 +162,30 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
             }
         }
-        if let Some(forbidden) = value.find(FORBIDDEN_CHARS) {
+        for (index, forbidden) in value.bytes().enumerate().filter_map(|(i, c)| {
+            if FORBIDDEN_CHARS.contains(&c) {
+                Some((i, c))
+            } else {
+                None
+            }
+        }) {
             let bytes = value.as_bytes();
-            match (bytes[forbidden], bytes.get(forbidden + 1)) {
-                (b'$', Some(b'*')) => {}
-                (b'$', _) => bail!("Invalid Key Expr `{}`: `$` is only allowed in `$*`", value),
-                _ => bail!(
+            if forbidden == b'$' {
+                if let Some(b'*') = bytes.get(index + 1) {
+                    if let Some(b'$') = bytes.get(index + 2) {
+                        bail!(
+                            "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
+                            value
+                        )
+                    }
+                } else {
+                    bail!("Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
+                }
+            } else {
+                bail!(
                     "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
                     value
-                ),
+                )
             }
         }
         Ok(unsafe { keyexpr::from_str_unchecked(value) })

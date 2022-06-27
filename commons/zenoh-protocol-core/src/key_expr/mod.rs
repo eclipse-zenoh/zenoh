@@ -15,7 +15,7 @@
 pub(crate) const DELIMITER: u8 = b'/';
 pub(crate) const SINGLE_WILD: u8 = b'*';
 pub(crate) const DOUBLE_WILD: &[u8] = b"**";
-pub(crate) const FORBIDDEN_CHARS: [char; 3] = ['#', '?', '$'];
+pub(crate) const FORBIDDEN_CHARS: [u8; 3] = [b'#', b'?', b'$'];
 
 pub(crate) mod owned;
 pub use owned::OwnedKeyExpr;

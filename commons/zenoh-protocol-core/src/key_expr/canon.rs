@@ -19,12 +19,23 @@ use crate::key_expr::{
 pub trait Canonizable {
     fn canonize(&mut self);
 }
+const DOLLAR_STAR: &[u8; 2] = b"$*";
 impl Canonizable for &mut str {
     fn canonize(&mut self) {
         let mut writer = Writer {
             ptr: self.as_mut_ptr(),
             len: 0,
         };
+        if let Some(position) = self.find("$*$*") {
+            writer.len = position;
+            for between_dollarstar in self.as_bytes()[(position + 4)..].splitter(DOLLAR_STAR) {
+                if !between_dollarstar.is_empty() {
+                    writer.write(DOLLAR_STAR.as_ref());
+                    writer.write(between_dollarstar);
+                }
+            }
+        }
+        writer.len = 0;
         let mut ke = self.as_bytes().splitter(&b'/');
         let mut in_big_wild = false;
 

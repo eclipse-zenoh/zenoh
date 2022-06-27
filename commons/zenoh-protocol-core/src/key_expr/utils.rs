@@ -186,6 +186,42 @@ impl Split<[u8]> for [u8] {
         (None, self)
     }
 }
+impl<const N: usize> Split<[u8; N]> for [u8] {
+    fn split_once<'a>(&'a self, delimiter: &[u8; N]) -> (&'a Self, &'a Self) {
+        for i in 0..self.len() {
+            if self[i..].starts_with(delimiter) {
+                return (&self[..i], &self[(i + delimiter.len())..]);
+            }
+        }
+        (self, &[])
+    }
+    fn rsplit_once<'a>(&'a self, delimiter: &[u8; N]) -> (&'a Self, &'a Self) {
+        for i in (0..self.len()).rev() {
+            if self[..i].ends_with(delimiter) {
+                return (&self[..(i - delimiter.len())], &self[i..]);
+            }
+        }
+        (&[], self)
+    }
+
+    fn try_split_once<'a>(&'a self, delimiter: &[u8; N]) -> (&'a Self, Option<&'a Self>) {
+        for i in 0..self.len() {
+            if self[i..].starts_with(delimiter) {
+                return (&self[..i], Some(&self[(i + delimiter.len())..]));
+            }
+        }
+        (self, None)
+    }
+
+    fn try_rsplit_once<'a>(&'a self, delimiter: &[u8; N]) -> (Option<&'a Self>, &'a Self) {
+        for i in (delimiter.len()..(self.len() + 1)).rev() {
+            if self[..i].ends_with(delimiter) {
+                return (Some(&self[..(i - delimiter.len())]), &self[i..]);
+            }
+        }
+        (None, self)
+    }
+}
 
 pub(crate) trait Utf {
     fn utf(&self) -> &str;
