@@ -15,13 +15,16 @@
 use super::keyexpr;
 
 mod classical;
-pub(crate) mod ltr;
-pub(crate) mod ltr_chunk;
-pub(crate) mod middle_out;
 pub use classical::ClassicIntersector;
-pub use ltr::LeftToRightIntersector;
-pub use ltr_chunk::LTRChunkIntersector;
-pub use middle_out::MiddleOutIntersector;
+#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+pub(crate) mod ltr;
+#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+pub(crate) mod ltr_chunk;
+#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+pub(crate) mod middle_out;
+// pub use ltr::LeftToRightIntersector;
+// pub use ltr_chunk::LTRChunkIntersector;
+// pub use middle_out::MiddleOutIntersector;
 
 pub const DEFAULT_INTERSECTOR: ClassicIntersector = ClassicIntersector;
 

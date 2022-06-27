@@ -66,9 +66,6 @@ fn chunk_intersect<const STAR_DSL: bool>(c1: &[u8], c2: &[u8]) -> bool {
     if c1 == c2 {
         return true;
     }
-    if c1.is_empty() != c2.is_empty() {
-        return false;
-    }
     chunk_it_intersect::<STAR_DSL>(c1, c2)
 }
 
