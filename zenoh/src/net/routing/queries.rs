@@ -1084,7 +1084,11 @@ fn compute_query_route(
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        let complete = key_expr.includes(mres.expr().as_str().try_into().unwrap());
+        let complete = mres
+            .expr()
+            .as_str()
+            .try_into()
+            .map_or(false, |res| key_expr.includes(res));
         if tables.whatami == WhatAmI::Router {
             if master || source_type == WhatAmI::Router {
                 let net = tables.routers_net.as_ref().unwrap();

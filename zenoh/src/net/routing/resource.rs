@@ -453,7 +453,7 @@ impl Resource {
             from: &Arc<Resource>,
             matches: &mut Vec<Weak<Resource>>,
         ) {
-            if from.parent.is_none() {
+            if from.parent.is_none() || from.suffix == "/" {
                 for child in from.childs.values() {
                     get_matches_from(key_expr, child, matches);
                 }
@@ -526,28 +526,29 @@ impl Resource {
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         if res.context.is_some() {
-            let mut matches =
-                Resource::get_matches(tables, keyexpr::new(res.expr().as_str()).unwrap());
+            if let Ok(ke) = keyexpr::new(res.expr().as_str()) {
+                let mut matches = Resource::get_matches(tables, ke);
 
-            fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
-                for match_ in matches {
-                    if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
-                        return true;
+                fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
+                    for match_ in matches {
+                        if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
+                            return true;
+                        }
+                    }
+                    false
+                }
+
+                for match_ in &mut matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if !matches_contain(&match_.context().matches, res) {
+                        get_mut_unchecked(&mut match_)
+                            .context_mut()
+                            .matches
+                            .push(Arc::downgrade(res));
                     }
                 }
-                false
+                get_mut_unchecked(res).context_mut().matches = matches;
             }
-
-            for match_ in &mut matches {
-                let mut match_ = match_.upgrade().unwrap();
-                if !matches_contain(&match_.context().matches, res) {
-                    get_mut_unchecked(&mut match_)
-                        .context_mut()
-                        .matches
-                        .push(Arc::downgrade(res));
-                }
-            }
-            get_mut_unchecked(res).context_mut().matches = matches;
         } else {
             log::error!("Call match_resource() on context less res {}", res.expr());
         }
