@@ -115,185 +115,169 @@ jobs:
   #         command: doc
   #         args: --no-deps
 
-  # builds:
-  #   name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
-  #   needs: checks
-  #   runs-on: ${{ matrix.job.os }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       job:
-  #         - { target: x86_64-unknown-linux-gnu, arch: amd64, os: ubuntu-20.04 }
-  #         - {
-  #             target: x86_64-unknown-linux-musl,
-  #             arch: amd64,
-  #             os: ubuntu-20.04,
-  #             use-cross: true,
-  #           }
-  #         - {
-  #             target: arm-unknown-linux-gnueabi,
-  #             arch: armel,
-  #             os: ubuntu-20.04,
-  #             use-cross: true,
-  #           }
-  #         - {
-  #             target: arm-unknown-linux-gnueabihf,
-  #             arch: armhf,
-  #             os: ubuntu-20.04,
-  #             use-cross: true,
-  #           }
-  #         - {
-  #             target: armv7-unknown-linux-gnueabihf,
-  #             arch: armhf,
-  #             os: ubuntu-20.04,
-  #             use-cross: true,
-  #           }
-  #         - {
-  #             target: aarch64-unknown-linux-gnu,
-  #             arch: arm64,
-  #             os: ubuntu-20.04,
-  #             use-cross: true,
-  #           }
-  #         - { target: x86_64-apple-darwin, arch: darwin, os: macos-10.15 }
-  #         - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019 }
-  #         # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
-  #   steps:
-  #     - name: Checkout source code
-  #       uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
-  #     - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
-  #       shell: bash
-  #       run: git fetch --tags --force
-  #     - name: Install prerequisites
-  #       shell: bash
-  #       run: |
-  #         case ${{ matrix.job.target }} in
-  #           *-linux-gnu*) cargo install cargo-deb ;;
-  #         esac
+  builds:
+    name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
+    needs: checks
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: x86_64-unknown-linux-gnu, arch: amd64, os: ubuntu-20.04 }
+          - {
+              target: x86_64-unknown-linux-musl,
+              arch: amd64,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - {
+              target: arm-unknown-linux-gnueabi,
+              arch: armel,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - {
+              target: arm-unknown-linux-gnueabihf,
+              arch: armhf,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - {
+              target: armv7-unknown-linux-gnueabihf,
+              arch: armhf,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              arch: arm64,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - {
+              target: aarch64-unknown-linux-musl,
+              arch: arm64,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - { target: x86_64-apple-darwin, arch: darwin, os: macos-10.15 }
+          - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019 }
+          # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
+        shell: bash
+        run: git fetch --tags --force
+      - name: Install prerequisites
+        shell: bash
+        run: |
+          case ${{ matrix.job.target }} in
+            *-linux-gnu*) cargo install cargo-deb ;;
+          esac
 
-  #         case ${{ matrix.job.target }} in
-  #           arm-unknown-linux-gnueabi)
-  #             sudo apt-get -y update
-  #             sudo apt-get -y install gcc-arm-linux-gnueabi
-  #             ;;
-  #           arm*-unknown-linux-gnueabihf)
-  #             sudo apt-get -y update
-  #             sudo apt-get -y install gcc-arm-linux-gnueabihf
-  #             ;;
-  #           aarch64-unknown-linux-gnu)
-  #             sudo apt-get -y update
-  #             sudo apt-get -y install gcc-aarch64-linux-gnu
-  #             ;;
-  #         esac
+          case ${{ matrix.job.target }} in
+            arm-unknown-linux-gnueabi)
+              sudo apt-get -y update
+              sudo apt-get -y install gcc-arm-linux-gnueabi
+              ;;
+            arm*-unknown-linux-gnueabihf)
+              sudo apt-get -y update
+              sudo apt-get -y install gcc-arm-linux-gnueabihf
+              ;;
+            aarch64-unknown-linux-gnu)
+              sudo apt-get -y update
+              sudo apt-get -y install gcc-aarch64-linux-gnu
+              ;;
+          esac
 
-  #     - name: Install Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: stable
-  #         target: ${{ matrix.job.target }}
-  #         override: true
-  #         profile: minimal
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.job.target }}
+          override: true
+          profile: minimal
 
-  #     - name: Build
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         use-cross: ${{ matrix.job.use-cross }}
-  #         command: build
-  #         args: --release --bins --lib --examples --target=${{ matrix.job.target }}
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: ${{ matrix.job.use-cross }}
+          command: build
+          args: --release --bins --lib --target=${{ matrix.job.target }}
 
-  #     - name: Debian package - zenohd
-  #       if: contains(matrix.job.target, '-linux-gnu')
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: deb
-  #         args: --no-build --target=${{ matrix.job.target }} -p zenohd
+      - name: Debian package - zenohd
+        if: contains(matrix.job.target, '-linux-gnu')
+        uses: actions-rs/cargo@v1
+        with:
+          command: deb
+          args: --no-build --target=${{ matrix.job.target }} -p zenohd
 
-  #     - name: Debian package - zenoh-plugin-storage-manager
-  #       if: contains(matrix.job.target, '-linux-gnu')
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: deb
-  #         args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
+      - name: Debian package - zenoh-plugin-storage-manager
+        if: contains(matrix.job.target, '-linux-gnu')
+        uses: actions-rs/cargo@v1
+        with:
+          command: deb
+          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
 
-  #     - name: Debian package - zenoh-plugin-rest
-  #       if: contains(matrix.job.target, '-linux-gnu')
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: deb
-  #         args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+      - name: Debian package - zenoh-plugin-rest
+        if: contains(matrix.job.target, '-linux-gnu')
+        uses: actions-rs/cargo@v1
+        with:
+          command: deb
+          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
 
-  #     - name: Packaging
-  #       id: package
-  #       shell: bash
-  #       run: |
-  #         TARGET=${{ matrix.job.target }}
-  #         MAIN_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
-  #         EXPL_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-examples.zip"
-  #         DEBS_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
+      - name: Packaging
+        id: package
+        shell: bash
+        run: |
+          TARGET=${{ matrix.job.target }}
+          MAIN_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
+          DEBS_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
 
-  #         case ${TARGET} in
-  #           *linux*)
-  #             cd "target/${TARGET}/release/"
-  #             echo "Packaging ${MAIN_PKG_NAME}:"
-  #             zip ${MAIN_PKG_NAME} zenohd libzplugin_*.so
-  #             cd -
-  #             cd "target/${TARGET}/release/examples"
-  #             # remove temporary build files we don't want to package
-  #             rm -f *.* *-????????????????
-  #             echo "Packaging ${EXPL_PKG_NAME}:"
-  #             zip ${EXPL_PKG_NAME} *
-  #             cd -
-  #             echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-  #             echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
+          case ${TARGET} in
+            *linux*)
+              cd "target/${TARGET}/release/"
+              echo "Packaging ${MAIN_PKG_NAME}:"
+              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.so
+              cd -
+              echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
 
-  #             # check if debian packages has been created and packages them in a single tgz
-  #             if [[ -d target/${TARGET}/debian ]]; then
-  #               cd target/${TARGET}/debian
-  #               ${GITHUB_WORKSPACE}/gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
-  #               echo "Packaging ${DEBS_PKG_NAME}:"
-  #               zip ${DEBS_PKG_NAME} *.deb
-  #               cd -
-  #               echo ::set-output name=DEBS_PKG_NAME::"${DEBS_PKG_NAME}"
-  #             fi
-  #             ;;
-  #           *apple*)
-  #             cd "target/${TARGET}/release/"
-  #             echo "Packaging ${MAIN_PKG_NAME}:"
-  #             zip ${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
-  #             cd -
-  #             cd "target/${TARGET}/release/examples"
-  #             # remove temporary build files we don't want to package
-  #             rm -f *.* *-????????????????
-  #             echo "Packaging ${EXPL_PKG_NAME}:"
-  #             zip ${EXPL_PKG_NAME} *
-  #             cd -
-  #             echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-  #             echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
-  #             ;;
-  #           *windows*)
-  #             cd "target/${TARGET}/release/"
-  #             echo "Packaging ${MAIN_PKG_NAME}:"
-  #             7z -y a "${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
-  #             cd -
-  #             cd "target/${TARGET}/release/examples"
-  #             rm -f *-????????????????.exe
-  #             echo "Packaging ${EXPL_PKG_NAME}:"
-  #             7z -y a "${EXPL_PKG_NAME}" "*.exe"
-  #             cd -
-  #             echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-  #             echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
-  #             ;;
-  #         esac
+              # check if debian packages has been created and packages them in a single tgz
+              if [[ -d target/${TARGET}/debian ]]; then
+                cd target/${TARGET}/debian
+                ${GITHUB_WORKSPACE}/gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
+                echo "Packaging ${DEBS_PKG_NAME}:"
+                zip ${DEBS_PKG_NAME} *.deb
+                cd -
+                echo ::set-output name=DEBS_PKG_NAME::"${DEBS_PKG_NAME}"
+              fi
+              ;;
+            *apple*)
+              cd "target/${TARGET}/release/"
+              echo "Packaging ${MAIN_PKG_NAME}:"
+              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
+              cd -
+              echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
+              ;;
+            *windows*)
+              cd "target/${TARGET}/release/"
+              echo "Packaging ${MAIN_PKG_NAME}:"
+              7z -y a "${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
+              cd -
+              echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
+              ;;
+          esac
 
-  #     - name: "Upload packages"
-  #       uses: actions/upload-artifact@master
-  #       with:
-  #         name: ${{ matrix.job.target }}
-  #         path: |
-  #           ${{ steps.package.outputs.MAIN_PKG_NAME }}
-  #           ${{ steps.package.outputs.EXPL_PKG_NAME }}
-  #           ${{ steps.package.outputs.DEBS_PKG_NAME }}
+      - name: "Upload packages"
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.job.target }}
+          path: |
+            ${{ steps.package.outputs.MAIN_PKG_NAME }}
+            ${{ steps.package.outputs.DEBS_PKG_NAME }}
 
   # publication:
   #   name: Release publication
@@ -377,11 +361,27 @@ jobs:
   #       Therfore, Docker build+push is made in parallel of other publications. At least, builds and publications
   #       of other dependent repos can be kicked as soon as publication to crates.io is done, not waiting for this Docker job.
   #
+
   docker:
     name: Docker build and push
-    needs: [checks]
+    needs: [checks, builds]
     runs-on: ubuntu-latest
     steps:
+      - name: Download result of previous builds
+        uses: actions/download-artifact@v2
+        with:
+          path: ARTIFACTS
+      - name: check ARTIFACTS
+        run: |
+          ls -al ARTIFACTS
+          ls -al ARTIFACTS/*
+          ls -al ARTIFACTS/*/*
+          tree ARTIFACTS
+          mkdir -p target/x86_64-unknown-linux-musl/release
+          unzip ARTIFACTS/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d target/x86_64-unknown-linux-musl/release/
+          mkdir -p target/aarch64-unknown-linux-musl/release
+          unzip ARTIFACTS/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d target/aarch64-unknown-linux-musl/release/
+          tree ARTIFACTS
       - uses: actions/checkout@v2
         with:
           fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
@@ -390,8 +390,6 @@ jobs:
         run: git fetch --tags --force
       # - name: setup-docker
       #   uses: docker-practice/actions-setup-docker@v1
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Docker meta - set tags and labels
@@ -411,6 +409,16 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64, linux/arm64
+          platforms: linux/amd64
+          file: Dockerfile.amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      - name: Build and push
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          file: Dockerfile.arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
