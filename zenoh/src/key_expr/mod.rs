@@ -42,7 +42,9 @@ pub(crate) enum KeyExprInner<'a> {
 /// A possibly-owned, possibly pre-optimized version of [`keyexpr`].
 /// Check [`keyexpr`]'s documentation for detailed explainations.
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(from = "OwnedKeyExpr")]
+#[serde(into = "OwnedKeyExpr")]
 pub struct KeyExpr<'a>(pub(crate) KeyExprInner<'a>);
 impl std::ops::Deref for KeyExpr<'_> {
     type Target = keyexpr;
@@ -149,6 +151,11 @@ impl std::fmt::Display for KeyExpr<'_> {
 impl PartialEq for KeyExpr<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.as_keyexpr() == other.as_keyexpr()
+    }
+}
+impl<T: PartialEq<keyexpr>> PartialEq<T> for KeyExpr<'_> {
+    fn eq(&self, other: &T) -> bool {
+        other == self.as_keyexpr()
     }
 }
 impl Eq for KeyExpr<'_> {}
