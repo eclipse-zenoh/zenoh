@@ -50,8 +50,9 @@
       },
       peer: {
         /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "peer|router",
+        /// Accepts a single value or different values for router, peer and client.
+        /// Each value is bit-or-like combinations of "peer", "router" and "client".
+        autoconnect: { router: "", peer: "router|peer" },
         /// Whether or not to listen for scout messages on UDP multicast and reply to them.
         listen: true,
       },
@@ -60,21 +61,10 @@
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
-      /// The gossip scouting behavior of routers.
-      router: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "",
-        /// Whether or not to listen for scout messages on gossip and reply to them.
-        listen: true,
-      },
-      peer: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "peer|router",
-        /// Whether or not to listen for scout messages on gossip and reply to them.
-        listen: true,
-      },
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer" },
     },
   },
 

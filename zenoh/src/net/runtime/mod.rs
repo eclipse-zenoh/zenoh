@@ -17,7 +17,7 @@ pub mod orchestrator;
 use super::routing;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
-use crate::config::{Config, Notifier};
+use crate::config::{Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
@@ -90,9 +90,10 @@ impl Runtime {
                     config
                         .scouting()
                         .gossip()
-                        .router()
                         .autoconnect()
-                        .unwrap_or(WhatAmIMatcher::try_from(128).unwrap())
+                        .router()
+                        .cloned()
+                        .unwrap_or_else(|| WhatAmIMatcher::try_from(128).unwrap())
                 } else {
                     WhatAmIMatcher::try_from(128).unwrap()
                 }
@@ -102,9 +103,10 @@ impl Runtime {
                     config
                         .scouting()
                         .gossip()
-                        .peer()
                         .autoconnect()
-                        .unwrap_or(WhatAmIMatcher::try_from(131).unwrap())
+                        .peer()
+                        .cloned()
+                        .unwrap_or_else(|| WhatAmIMatcher::try_from(131).unwrap())
                 } else {
                     WhatAmIMatcher::try_from(128).unwrap()
                 }

@@ -145,27 +145,20 @@ validated_struct::validator! {
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
-                /// The multicast scouting behavior of routers.
-                pub router: #[derive(Default)]
-                ScoutingBehavior {
-                    /// Which type of Zenoh instances to automatically establish sessions with upon discovery.
-                    #[serde(deserialize_with = "treat_error_as_none")]
-                    autoconnect: Option<whatami::WhatAmIMatcher>,
-                    /// Whether or not to listen for scout messages and reply to them.
-                    listen: Option<bool>,
-                },
-                /// The multicast scouting behavior of peers.
-                pub peer: ScoutingBehavior,
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
+                #[serde(deserialize_with = "treat_error_as_none")]
+                autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+                listen: Option<ModeDependentValue<bool>>,
             },
             /// The gossip scouting configuration.
             pub gossip: #[derive(Default)]
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
-                /// The gossip scouting behavior of routers.
-                pub router: ScoutingBehavior,
-                /// The gossip scouting behavior of peers.
-                pub peer: ScoutingBehavior,
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
+                #[serde(deserialize_with = "treat_error_as_none")]
+                autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
         },
         /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
