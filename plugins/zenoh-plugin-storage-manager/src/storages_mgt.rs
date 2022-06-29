@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::sync::Arc;
-use log::debug;
+use log::trace;
 use zenoh::prelude::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::ReplicaConfig;
@@ -34,14 +34,16 @@ pub(crate) async fn start_storage(
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
-    // Ex: /@/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/memory needed????)
+    // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/memory needed????)
     let parts: Vec<&str> = admin_key.split('/').collect();
     let uuid = parts[2];
     let storage_name = parts[7];
     let name = format!("{}/{}", uuid, storage_name);
 
-    debug!("Start storage {} on {}", name, key_expr);
+    trace!("Start storage {} on {}", name, key_expr);
 
+    // If a configuration for replica is present, we initialize a replica, else only a storage service
+    // A replica contains a storage service and all metadata required for anti-entropy
     if config.is_some() {
         Replica::start(
             config.unwrap(),
