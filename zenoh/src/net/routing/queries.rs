@@ -16,6 +16,7 @@ use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 // use std::time::Instant;
@@ -26,9 +27,11 @@ use zenoh_sync::get_mut_unchecked;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    queryable, wire_expr, ConsolidationStrategy, QueryTAK, QueryTarget, QueryableInfo, WhatAmI,
-    WireExpr, ZInt, ZenohId,
+    queryable, ConsolidationStrategy, QueryTAK, QueryTarget, QueryableInfo, WhatAmI, WireExpr,
+    ZInt, ZenohId,
 };
+
+use crate::prelude::sync::KeyExpr;
 
 use super::face::FaceState;
 use super::network::Network;
@@ -1051,6 +1054,9 @@ fn insert_target_for_qabls(
     }
 }
 
+lazy_static::lazy_static! {
+    static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
+}
 fn compute_query_route(
     tables: &Tables,
     prefix: &Arc<Resource>,
@@ -1059,7 +1065,13 @@ fn compute_query_route(
     source_type: WhatAmI,
 ) -> Arc<QueryTargetQablSet> {
     let mut route = QueryTargetQablSet::new();
-    let key_expr = [&prefix.expr(), suffix].concat();
+    let key_expr = match KeyExpr::try_from(prefix.expr() + suffix) {
+        Ok(ke) => ke,
+        Err(e) => {
+            log::warn!("Invalid KE reached the system: {}", e);
+            return EMPTY_ROUTE.clone();
+        }
+    };
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
@@ -1072,7 +1084,7 @@ fn compute_query_route(
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        let complete = wire_expr::include(&mres.expr(), &key_expr);
+        let complete = key_expr.includes(mres.expr().as_str().try_into().unwrap());
         if tables.whatami == WhatAmI::Router {
             if master || source_type == WhatAmI::Router {
                 let net = tables.routers_net.as_ref().unwrap();

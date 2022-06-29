@@ -54,4 +54,3 @@ harness = false
 [[bench]]
 name = "ke_benches"
 harness = false
-test = true

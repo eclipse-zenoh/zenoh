@@ -303,7 +303,9 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: "router"
+            peer: {
+                autoconnect: "peer|router"
+            }
           }
         }
       }"#,

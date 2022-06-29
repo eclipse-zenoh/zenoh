@@ -191,6 +191,7 @@ use zenoh_core::zresult::Error;
 /// streams to zenoh.
 /// ```no_run
 /// # async_std::task::block_on(async {
+/// use zenoh_ext::HandlerSubscriberForward;
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///

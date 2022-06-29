@@ -105,7 +105,7 @@ fn includes<
     let left = l.try_into().unwrap();
     let right = r.try_into().unwrap();
     dbg!(left, right);
-    left.includes(right)
+    dbg!(left.includes(right))
 }
 
 #[test]
@@ -114,46 +114,46 @@ fn inclusions() {
     assert!(includes("a/b", "a/b"));
     assert!(includes("*", "abc"));
     assert!(includes("*", "xxx"));
-    assert!(includes("ab*", "abcd"));
-    assert!(includes("ab*d", "abcd"));
-    assert!(includes("ab*", "ab"));
+    assert!(includes("ab$*", "abcd"));
+    assert!(includes("ab$*d", "abcd"));
+    assert!(includes("ab$*", "ab"));
     assert!(!includes("ab/*", "ab"));
     assert!(includes("a/*/c/*/e", "a/b/c/d/e"));
-    assert!(includes("a/*b/c/*d/e", "a/xb/c/xd/e"));
+    assert!(includes("a/$*b/c/$*d/e", "a/xb/c/xd/e"));
     assert!(!includes("a/*/c/*/e", "a/c/e"));
     assert!(!includes("a/*/c/*/e", "a/b/c/d/x/e"));
-    assert!(!includes("ab*cd", "abxxcxxd"));
-    assert!(includes("ab*c*d", "abxxcxxd"));
-    assert!(includes("ab*cd", "abxxcxxcd"));
-    assert!(!includes("ab*cd", "abxxcxxcdx"));
+    assert!(!includes("ab$*cd", "abxxcxxd"));
+    assert!(includes("ab$*c$*d", "abxxcxxd"));
+    assert!(includes("ab$*cd", "abxxcxxcd"));
+    assert!(!includes("ab$*cd", "abxxcxxcdx"));
     assert!(includes("**", "abc"));
     assert!(includes("**", "a/b/c"));
     assert!(includes("ab/**", "ab"));
     assert!(includes("**/xyz", "a/b/xyz/d/e/f/xyz"));
-    assert!(!includes("**/xyz*xyz", "a/b/xyz/d/e/f/xyz"));
-    assert!(includes("**/xyz*xyz", "a/b/xyzdefxyz"));
+    assert!(!includes("**/xyz$*xyz", "a/b/xyz/d/e/f/xyz"));
+    assert!(includes("**/xyz$*xyz", "a/b/xyzdefxyz"));
     assert!(includes("a/**/c/**/e", "a/b/b/b/c/d/d/d/e"));
     assert!(includes("a/**/c/**/e", "a/c/e"));
     assert!(includes("a/**/c/*/e/*", "a/b/b/b/c/d/d/c/d/e/f"));
     assert!(!includes("a/**/c/*/e/*", "a/b/b/b/c/d/d/c/d/d/e/f"));
-    assert!(!includes("ab*cd", "abxxcxxcdx"));
+    assert!(!includes("ab$*cd", "abxxcxxcdx"));
     assert!(includes("x/abc", "x/abc"));
     assert!(!includes("x/abc", "abc"));
     assert!(includes("x/*", "x/abc"));
     assert!(!includes("x/*", "abc"));
     assert!(!includes("*", "x/abc"));
     assert!(includes("x/*", "x/abc*"));
-    assert!(!includes("x/*abc", "x/abc*"));
-    assert!(includes("x/a*", "x/abc*"));
-    assert!(!includes("x/abc*", "x/a*"));
-    assert!(includes("x/a*de", "x/abc*de"));
-    assert!(includes("x/a*e", "x/a*d*e"));
-    assert!(!includes("x/a*d*e", "x/a*e"));
-    assert!(!includes("x/a*d*e", "x/a*c*e"));
-    assert!(includes("x/a*d*e", "x/ade"));
-    assert!(!includes("x/c*", "x/abc*"));
-    assert!(includes("x/*c*", "x/abc*"));
-    assert!(!includes("x/*d", "x/*e"));
+    assert!(!includes("x/$*abc", "x/abc*"));
+    assert!(includes("x/a$*", "x/abc$*"));
+    assert!(!includes("x/abc$*", "x/a$*"));
+    assert!(includes("x/a$*de", "x/abc$*de"));
+    assert!(includes("x/a$*e", "x/a$*d$*e"));
+    assert!(!includes("x/a$*d$*e", "x/a$*e"));
+    assert!(!includes("x/a$*d$*e", "x/a$*c$*e"));
+    assert!(includes("x/a$*d$*e", "x/ade"));
+    assert!(!includes("x/c$*", "x/abc$*"));
+    assert!(includes("x/$*c$*", "x/abc$*"));
+    assert!(!includes("x/$*d", "x/$*e"));
 }
 
 #[test]

@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
+use zenoh_protocol_core::key_expr::keyexpr;
 use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
@@ -749,13 +750,18 @@ fn compute_data_route(
     source_type: WhatAmI,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
-    let key_expr = [&prefix.expr(), suffix].concat();
+    let key_expr = prefix.expr() + suffix;
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+        .unwrap_or_else(|| {
+            Cow::from(Resource::get_matches(
+                tables,
+                keyexpr::new(key_expr.as_str()).unwrap(),
+            ))
+        });
 
     let master = tables.whatami != WhatAmI::Router
         || *elect_router(&key_expr, &tables.shared_nodes) == tables.pid;
@@ -845,7 +851,7 @@ fn compute_matching_pulls(
         .unwrap_or_else(|| {
             Cow::from(Resource::get_matches(
                 tables,
-                &[&prefix.expr(), suffix].concat(),
+                keyexpr::new((prefix.expr() + suffix).as_str()).unwrap(),
             ))
         });
 

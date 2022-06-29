@@ -26,10 +26,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
+use zenoh_core::Result as ZResult;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::key_expr::OwnedKeyExpr;
 use zenoh_protocol_core::{
-    queryable::EVAL, wire_expr, Channel, CongestionControl, ConsolidationStrategy, Encoding,
-    KnownEncoding, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding, KnownEncoding,
+    QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -50,7 +52,7 @@ pub struct AdminSpace {
     pid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
-    handlers: HashMap<String, Arc<Handler>>,
+    handlers: HashMap<OwnedKeyExpr, Arc<Handler>>,
     context: Arc<AdminContext>,
 }
 
@@ -63,9 +65,9 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
         let pid_str = runtime.get_pid_str();
-        let root_key = format!("@/router/{}", pid_str);
+        let root_key: OwnedKeyExpr = format!("@/router/{}", pid_str).try_into().unwrap();
 
-        let mut handlers: HashMap<String, Arc<Handler>> = HashMap::new();
+        let mut handlers: HashMap<_, Arc<Handler>> = HashMap::new();
         handlers.insert(
             root_key.clone(),
             Arc::new(Box::new(|context, key, args| {
@@ -73,13 +75,16 @@ impl AdminSpace {
             })),
         );
         handlers.insert(
-            [&root_key, "/linkstate/routers"].concat(),
+            [&root_key, "/linkstate/routers"]
+                .concat()
+                .try_into()
+                .unwrap(),
             Arc::new(Box::new(|context, key, args| {
                 linkstate_routers_data(context, key, args).boxed()
             })),
         );
         handlers.insert(
-            [&root_key, "/linkstate/peers"].concat(),
+            [&root_key, "/linkstate/peers"].concat().try_into().unwrap(),
             Arc::new(Box::new(|context, key, args| {
                 linkstate_peers_data(context, key, args).boxed()
             })),
@@ -218,15 +223,19 @@ impl AdminSpace {
         );
     }
 
-    pub fn key_expr_to_string(&self, key_expr: &WireExpr) -> Option<String> {
+    pub fn key_expr_to_string<'a>(&self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
-            Some(key_expr.suffix.to_string())
+            key_expr.suffix.as_ref().try_into()
         } else if key_expr.suffix.is_empty() {
-            zlock!(self.mappings).get(&key_expr.scope).cloned()
+            match zlock!(self.mappings).get(&key_expr.scope) {
+                Some(prefix) => prefix.clone().try_into(),
+                None => bail!("Failed to resolve ExprId {}", key_expr.scope),
+            }
         } else {
-            zlock!(self.mappings)
-                .get(&key_expr.scope)
-                .map(|prefix| format!("{}{}", prefix, key_expr.suffix.as_ref()))
+            match zlock!(self.mappings).get(&key_expr.scope) {
+                Some(prefix) => format!("{}{}", prefix, key_expr.suffix.as_ref()).try_into(),
+                None => bail!("Failed to resolve ExprId {}", key_expr.scope),
+            }
         }
     }
 }
@@ -235,10 +244,10 @@ impl Primitives for AdminSpace {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
-            Some(s) => {
-                zlock!(self.mappings).insert(expr_id, s);
+            Ok(s) => {
+                zlock!(self.mappings).insert(expr_id, s.into());
             }
-            None => error!("Unknown expr_id {}!", expr_id),
+            Err(e) => error!("Unknown expr_id {}! ({})", expr_id, e),
         }
     }
 
@@ -369,22 +378,24 @@ impl Primitives for AdminSpace {
             _consolidation
         );
         let pid = self.pid;
-        let plugin_key = format!("@/router/{}/status/plugins/**", &pid);
+        let plugin_key: OwnedKeyExpr = format!("@/router/{}/status/plugins/**", &pid)
+            .try_into()
+            .unwrap();
         let mut ask_plugins = false;
         let context = self.context.clone();
         let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
-            Some(name) => {
-                ask_plugins = wire_expr::intersect(&name, &plugin_key);
+            Ok(name) => {
+                ask_plugins = plugin_key.intersects(&name);
                 for (key, handler) in &self.handlers {
-                    if wire_expr::intersect(&name, key) {
+                    if name.intersects(key) {
                         matching_handlers.push((key.clone(), handler.clone()));
                     }
                 }
             }
-            None => log::error!("Unknown KeyExpr!!"),
+            Err(e) => log::error!("Unknown KeyExpr!! ({})", e),
         };
 
         let key_expr = key_expr.to_owned();
@@ -403,7 +414,7 @@ impl Primitives for AdminSpace {
                         qid,
                         EVAL,
                         pid,
-                        key.into(),
+                        String::from(key).into(),
                         Some(data_info),
                         payload,
                     );

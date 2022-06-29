@@ -83,6 +83,15 @@ impl keyexpr {
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         std::mem::transmute(s)
     }
+
+    /// # Safety
+    /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
+    ///
+    /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
+    /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
+        std::mem::transmute(s)
+    }
     pub fn new<'a, T, E>(t: T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<T, Error = E>,
@@ -217,6 +226,18 @@ impl std::ops::Deref for keyexpr {
 impl AsRef<str> for keyexpr {
     fn as_ref(&self) -> &str {
         &*self
+    }
+}
+
+impl PartialEq<str> for keyexpr {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<keyexpr> for str {
+    fn eq(&self, other: &keyexpr) -> bool {
+        self == other.as_str()
     }
 }
 

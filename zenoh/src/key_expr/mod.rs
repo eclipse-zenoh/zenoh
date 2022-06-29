@@ -96,6 +96,16 @@ impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
         Self::from(val.as_keyexpr())
     }
 }
+impl<'a> From<KeyExpr<'a>> for String {
+    fn from(ke: KeyExpr) -> Self {
+        match ke.0 {
+            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
+                key_expr.as_str().to_owned()
+            }
+            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr.into(),
+        }
+    }
+}
 impl TryFrom<String> for KeyExpr<'static> {
     type Error = zenoh_core::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {

@@ -15,11 +15,12 @@ use super::face::FaceState;
 use super::router::Tables;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::wire_expr;
+use zenoh_protocol_core::key_expr::keyexpr;
 use zenoh_protocol_core::{QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId};
 use zenoh_sync::get_mut_unchecked;
 
@@ -128,7 +129,7 @@ impl Resource {
 
     pub fn expr(&self) -> String {
         match &self.parent {
-            Some(parent) => [&parent.expr() as &str, &self.suffix].concat(),
+            Some(parent) => parent.expr() + &self.suffix,
             None => String::from(""),
         }
     }
@@ -344,17 +345,19 @@ impl Resource {
         }
     }
 
-    fn fst_chunk(key_expr: &str) -> (&str, &str) {
-        if let Some(stripped_key_expr) = key_expr.strip_prefix('/') {
-            match stripped_key_expr.find('/') {
-                Some(idx) => (&key_expr[0..(idx + 1)], &key_expr[(idx + 1)..]),
-                None => (key_expr, ""),
+    fn fst_chunk(key_expr: &keyexpr) -> (&keyexpr, Option<&keyexpr>) {
+        match key_expr.as_bytes().iter().position(|c| *c == b'/') {
+            Some(pos) => {
+                let left = &key_expr.as_bytes()[..pos];
+                let right = &key_expr.as_bytes()[pos + 1..];
+                unsafe {
+                    (
+                        keyexpr::from_slice_unchecked(left),
+                        Some(keyexpr::from_slice_unchecked(right)),
+                    )
+                }
             }
-        } else {
-            match key_expr.find('/') {
-                Some(idx) => (&key_expr[0..(idx)], &key_expr[(idx)..]),
-                None => (key_expr, ""),
-            }
+            None => (key_expr, None),
         }
     }
 
@@ -408,7 +411,7 @@ impl Resource {
             checkchilds: bool,
         ) -> WireExpr<'a> {
             if checkchilds && !suffix.is_empty() {
-                let (chunk, rest) = Resource::fst_chunk(suffix);
+                let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
                 if let Some(child) = prefix.childs.get(chunk) {
                     return get_best_key_(child, rest, sid, true);
                 }
@@ -436,62 +439,95 @@ impl Resource {
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &str) -> Vec<Weak<Resource>> {
+    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+        fn recursive_push(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
+            if from.context.is_some() {
+                matches.push(Arc::downgrade(from));
+            }
+            for child in from.childs.values() {
+                recursive_push(child, matches)
+            }
+        }
         fn get_matches_from(
-            key_expr: &str,
-            is_admin: bool,
+            key_expr: &keyexpr,
             from: &Arc<Resource>,
-        ) -> Vec<Weak<Resource>> {
-            let mut matches = Vec::new();
+            matches: &mut Vec<Weak<Resource>>,
+        ) {
             if from.parent.is_none() {
                 for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(key_expr, is_admin, child));
+                    get_matches_from(key_expr, child, matches);
                 }
-                return matches;
+                return;
             }
-            if key_expr.is_empty() {
-                if from.suffix == "/**" || from.suffix == "/" {
-                    if from.context.is_some()
-                        && is_admin == from.expr().starts_with(wire_expr::ADMIN_PREFIX)
-                    {
-                        matches.push(Arc::downgrade(from));
-                    }
-                    for child in from.childs.values() {
-                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
-                    }
-                }
-                return matches;
-            }
+            let suffix: &keyexpr = from
+                .suffix
+                .strip_prefix('/')
+                .unwrap_or(&from.suffix)
+                .try_into()
+                .unwrap();
             let (chunk, rest) = Resource::fst_chunk(key_expr);
-            if wire_expr::intersect(chunk, &from.suffix) {
-                if rest.is_empty() || rest == "/" || rest == "/**" {
-                    if from.context.is_some()
-                        && is_admin == from.expr().starts_with(wire_expr::ADMIN_PREFIX)
-                    {
-                        matches.push(Arc::downgrade(from));
+            if chunk.intersects(suffix) {
+                match rest {
+                    None => {
+                        if chunk.as_bytes() == b"**" {
+                            recursive_push(from, matches)
+                        } else {
+                            if from.context.is_some() {
+                                matches.push(Arc::downgrade(from));
+                            }
+                            if suffix.as_bytes() == b"**" {
+                                for child in from.childs.values() {
+                                    get_matches_from(key_expr, child, matches)
+                                }
+                            }
+                            if let Some(child) =
+                                from.childs.get("/**").or_else(|| from.childs.get("**"))
+                            {
+                                if child.context.is_some() {
+                                    matches.push(Arc::downgrade(child))
+                                }
+                            }
+                        }
                     }
-                } else if chunk == "/**" || from.suffix == "/**" {
-                    matches.append(&mut get_matches_from(rest, is_admin, from));
-                }
-                for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(rest, is_admin, child));
-                    if chunk == "/**" || from.suffix == "/**" {
-                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
+                    Some(rest) if rest.as_bytes() == b"**" => recursive_push(from, matches),
+                    Some(rest) => {
+                        let recheck_keyexpr_one_level_lower =
+                            chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                        for child in from.childs.values() {
+                            get_matches_from(rest, child, matches);
+                            if recheck_keyexpr_one_level_lower {
+                                get_matches_from(key_expr, child, matches)
+                            }
+                        }
+                        if recheck_keyexpr_one_level_lower {
+                            get_matches_from(rest, from, matches)
+                        }
                     }
+                };
+            }
+        }
+        let mut matches = Vec::new();
+        get_matches_from(key_expr, &tables.root_res, &mut matches);
+        let mut i = 0;
+        while i < matches.len() {
+            let current = matches[i].as_ptr();
+            let mut j = i + 1;
+            while j < matches.len() {
+                if std::ptr::eq(current, matches[j].as_ptr()) {
+                    matches.swap_remove(j);
+                } else {
+                    j += 1
                 }
             }
-            matches
+            i += 1
         }
-        get_matches_from(
-            key_expr,
-            key_expr.starts_with(wire_expr::ADMIN_PREFIX),
-            &tables.root_res,
-        )
+        matches
     }
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         if res.context.is_some() {
-            let mut matches = Resource::get_matches(tables, &res.expr());
+            let mut matches =
+                Resource::get_matches(tables, keyexpr::new(res.expr().as_str()).unwrap());
 
             fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
                 for match_ in matches {

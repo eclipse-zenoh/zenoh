@@ -16,11 +16,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh::net::routing::router::*;
+use zenoh::prelude::keyexpr;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::wire_expr::intersect;
 use zenoh_protocol_core::{
     Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, Reliability,
     SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
@@ -41,13 +41,13 @@ fn base_test() {
         &mut tables,
         &mut face.upgrade().unwrap(),
         1,
-        &"/one/two/three".into(),
+        &"one/two/three".into(),
     );
     register_expr(
         &mut tables,
         &mut face.upgrade().unwrap(),
         2,
-        &"/one/deux/trois".into(),
+        &"one/deux/trois".into(),
     );
 
     let sub_info = SubInfo {
@@ -58,7 +58,7 @@ fn base_test() {
     declare_client_subscription(
         &mut tables,
         &mut face.upgrade().unwrap(),
-        &WireExpr::from(1).with_suffix("/four/five"),
+        &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
     );
 
@@ -68,59 +68,56 @@ fn base_test() {
 #[test]
 fn match_test() {
     let key_exprs = [
-        "/",
-        "/a",
-        "/a/",
-        "/a/b",
-        "/*",
-        "/abc",
-        "/abc/",
-        "/*/",
-        "xxx",
-        "/ab*",
-        "/abcd",
-        "/ab*d",
-        "/ab",
-        "/ab/*",
-        "/a/*/c/*/e",
-        "/a/b/c/d/e",
-        "/a/*b/c/*d/e",
-        "/a/xb/c/xd/e",
-        "/a/c/e",
-        "/a/b/c/d/x/e",
-        "/ab*cd",
-        "/abxxcxxd",
-        "/abxxcxxcd",
-        "/abxxcxxcdx",
-        "/**",
-        "/a/b/c",
-        "/a/b/c/",
-        "/**/",
-        "/ab/**",
-        "/**/xyz",
-        "/a/b/xyz/d/e/f/xyz",
-        "/**/xyz*xyz",
-        "/a/b/xyz/d/e/f/xyz",
-        "/a/**/c/**/e",
-        "/a/b/b/b/c/d/d/d/e",
-        "/a/**/c/*/e/*",
-        "/a/b/b/b/c/d/d/c/d/e/f",
-        "/a/**/c/*/e/*",
-        "/x/abc",
-        "/x/*",
-        "/x/abc*",
-        "/x/*abc",
-        "/x/a*",
-        "/x/a*de",
-        "/x/abc*de",
-        "/x/a*d*e",
-        "/x/a*e",
-        "/x/a*c*e",
-        "/x/ade",
-        "/x/c*",
-        "/x/*d",
-        "/x/*e",
-    ];
+        "**",
+        "a",
+        "a/b",
+        "*",
+        "a/*",
+        "a/b$*",
+        "abc",
+        "xx",
+        "ab$*",
+        "abcd",
+        "ab$*d",
+        "ab",
+        "ab/*",
+        "a/*/c/*/e",
+        "a/b/c/d/e",
+        "a/*b/c/*d/e",
+        "a/xb/c/xd/e",
+        "a/c/e",
+        "a/b/c/d/x/e",
+        "ab$*cd",
+        "abxxcxxd",
+        "abxxcxxcd",
+        "abxxcxxcdx",
+        "a/b/c",
+        "ab/**",
+        "**/xyz",
+        "a/b/xyz/d/e/f/xyz",
+        "**/xyz*xyz",
+        "a/b/xyz/d/e/f/xyz",
+        "a/**/c/**/e",
+        "a/b/b/b/c/d/d/d/e",
+        "a/**/c/*/e/*",
+        "a/b/b/b/c/d/d/c/d/e/f",
+        "a/**/c/*/e/*",
+        "x/abc",
+        "x/*",
+        "x/abc$*",
+        "x/$*abc",
+        "x/a$*",
+        "x/a$*de",
+        "x/abc$*de",
+        "x/a$*d$*e",
+        "x/a$*e",
+        "x/a$*c$*e",
+        "x/ade",
+        "x/c$*",
+        "x/$*d",
+        "x/$*e",
+    ]
+    .map(|s| keyexpr::new(s).unwrap());
 
     let mut tables = Tables::new(
         ZenohId::try_from([1]).unwrap(),
@@ -141,15 +138,16 @@ fn match_test() {
 
     for key_expr1 in key_exprs.iter() {
         let res_matches = Resource::get_matches(&tables, key_expr1);
+        dbg!(res_matches.len());
         for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
                 .map(|m| m.upgrade().unwrap().expr())
-                .any(|x| x == **key_expr2)
+                .any(|x| x.as_str() == key_expr2.as_str())
             {
-                assert!(intersect(key_expr1, key_expr2));
+                assert!(dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             } else {
-                assert!(!intersect(key_expr1, key_expr2));
+                assert!(!dbg!(dbg!(key_expr1).intersects(dbg!(key_expr2))));
             }
         }
     }
@@ -173,10 +171,10 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
-        &"/todrop1".into(),
+        &"todrop1".into(),
     );
     let optres1 =
-        Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -185,16 +183,16 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        &"/todrop1/todrop11".into(),
+        &"todrop1/todrop11".into(),
     );
-    let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
+    let optres2 = Resource::get_resource(tables._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, &"/**".into());
-    let optres3 = Resource::get_resource(tables._get_root(), "/**").map(|res| Arc::downgrade(&res));
+    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, &"**".into());
+    let optres3 = Resource::get_resource(tables._get_root(), "**").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
@@ -219,10 +217,10 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         1,
-        &"/todrop1".into(),
+        &"todrop1".into(),
     );
     let optres1 =
-        Resource::get_resource(tables._get_root(), "/todrop1").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -236,10 +234,10 @@ fn clean_test() {
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop1/todrop11".into(),
+        &"todrop1/todrop11".into(),
         &sub_info,
     );
-    let optres2 = Resource::get_resource(tables._get_root(), "/todrop1/todrop11")
+    let optres2 = Resource::get_resource(tables._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
@@ -251,7 +249,7 @@ fn clean_test() {
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
     );
-    let optres3 = Resource::get_resource(tables._get_root(), "/todrop1/todrop12")
+    let optres3 = Resource::get_resource(tables._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -269,7 +267,7 @@ fn clean_test() {
     forget_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop1/todrop11".into(),
+        &"todrop1/todrop11".into(),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -285,16 +283,16 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         2,
-        &"/todrop3".into(),
+        &"todrop3".into(),
     );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop3".into(),
+        &"todrop3".into(),
         &sub_info,
     );
     let optres1 =
-        Resource::get_resource(tables._get_root(), "/todrop3").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop3").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -302,7 +300,7 @@ fn clean_test() {
     forget_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop3".into(),
+        &"todrop3".into(),
     );
     assert!(res1.upgrade().is_some());
 
@@ -314,37 +312,37 @@ fn clean_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         3,
-        &"/todrop4".into(),
+        &"todrop4".into(),
     );
     register_expr(
         &mut tables,
         &mut face0.upgrade().unwrap(),
         4,
-        &"/todrop5".into(),
+        &"todrop5".into(),
     );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop5".into(),
+        &"todrop5".into(),
         &sub_info,
     );
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
-        &"/todrop6".into(),
+        &"todrop6".into(),
         &sub_info,
     );
 
     let optres1 =
-        Resource::get_resource(tables._get_root(), "/todrop4").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop4").map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     let optres2 =
-        Resource::get_resource(tables._get_root(), "/todrop5").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop5").map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     let optres3 =
-        Resource::get_resource(tables._get_root(), "/todrop6").map(|res| Arc::downgrade(&res));
+        Resource::get_resource(tables._get_root(), "todrop6").map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
 
@@ -519,9 +517,9 @@ fn client_test() {
         &mut tables,
         &mut face0.upgrade().unwrap(),
         11,
-        &"/test/client".into(),
+        &"test/client".into(),
     );
-    primitives0.decl_resource(11, &"/test/client".into());
+    primitives0.decl_resource(11, &"test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face0.upgrade().unwrap(),
@@ -546,9 +544,9 @@ fn client_test() {
         &mut tables,
         &mut face1.upgrade().unwrap(),
         21,
-        &"/test/client".into(),
+        &"test/client".into(),
     );
-    primitives1.decl_resource(21, &"/test/client".into());
+    primitives1.decl_resource(21, &"test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face1.upgrade().unwrap(),
@@ -573,9 +571,9 @@ fn client_test() {
         &mut tables,
         &mut face2.upgrade().unwrap(),
         31,
-        &"/test/client".into(),
+        &"test/client".into(),
     );
-    primitives2.decl_resource(31, &"/test/client".into());
+    primitives2.decl_resource(31, &"test/client".into());
     declare_client_subscription(
         &mut tables,
         &mut face2.upgrade().unwrap(),
@@ -589,7 +587,7 @@ fn client_test() {
     route_data(
         &tables,
         &face0.upgrade().unwrap(),
-        &"/test/client/z1_wr1".into(),
+        &"test/client/z1_wr1".into(),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -599,13 +597,13 @@ fn client_test() {
 
     // functionnal check
     assert!(primitives1.get_last_name().is_some());
-    assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_wr1");
+    assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
-    assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_wr1");
+    assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr1");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_wr1".to_string()));
 
@@ -625,13 +623,13 @@ fn client_test() {
 
     // functionnal check
     assert!(primitives1.get_last_name().is_some());
-    assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_wr2");
+    assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_wr2".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
-    assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_wr2");
+    assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_wr2");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_wr2".to_string()));
 
@@ -641,7 +639,7 @@ fn client_test() {
     route_data(
         &tables,
         &face1.upgrade().unwrap(),
-        &"/test/client/**".into(),
+        &"test/client/**".into(),
         Channel::default(),
         CongestionControl::default(),
         None,
@@ -651,13 +649,13 @@ fn client_test() {
 
     // functionnal check
     assert!(primitives0.get_last_name().is_some());
-    assert_eq!(primitives0.get_last_name().unwrap(), "/test/client/**");
+    assert_eq!(primitives0.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/**".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
-    assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/**");
+    assert_eq!(primitives2.get_last_name().unwrap(), "test/client/**");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/**".to_string()));
 
@@ -677,13 +675,13 @@ fn client_test() {
 
     // functionnal check
     assert!(primitives1.get_last_name().is_some());
-    assert_eq!(primitives1.get_last_name().unwrap(), "/test/client/z1_pub1");
+    assert_eq!(primitives1.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(21, "/z1_pub1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
-    assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z1_pub1");
+    assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z1_pub1");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z1_pub1".to_string()));
 
@@ -703,13 +701,13 @@ fn client_test() {
 
     // functionnal check
     assert!(primitives0.get_last_name().is_some());
-    assert_eq!(primitives0.get_last_name().unwrap(), "/test/client/z2_pub1");
+    assert_eq!(primitives0.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives1.get_last_key().unwrap(), KeyExpr::IdWithSuffix(11, "/z2_pub1".to_string()));
 
     // functionnal check
     assert!(primitives2.get_last_name().is_some());
-    assert_eq!(primitives2.get_last_name().unwrap(), "/test/client/z2_pub1");
+    assert_eq!(primitives2.get_last_name().unwrap(), "test/client/z2_pub1");
     // mapping strategy check
     // assert_eq!(primitives2.get_last_key().unwrap(), KeyExpr::IdWithSuffix(31, "/z2_pub1".to_string()));
 }
