@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use async_std::prelude::FutureExt;
 use futures::StreamExt;
 use http_types::Method;
 use std::convert::TryFrom;
@@ -288,28 +289,33 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
-                        let send = async {
-                            if let Err(e) = sender
-                                .send(&sample.kind.to_string(), sample_to_json(sample), None)
-                                .await
-                            {
-                                log::warn!("Error sending data from the SSE stream: {}", e);
+                        match sender
+                            .send(&sample.kind.to_string(), sample_to_json(sample), None)
+                            .timeout(std::time::Duration::new(10, 0))
+                            .await
+                        {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(e)) => {
+                                log::debug!(
+                                    "SSE error ({})! Unsubscribe and terminate (task {})",
+                                    e,
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
                             }
-                            true
-                        };
-                        let wait = async {
-                            async_std::task::sleep(std::time::Duration::new(10, 0)).await;
-                            false
-                        };
-                        if !async_std::prelude::FutureExt::race(send, wait).await {
-                            log::debug!(
-                                "SSE timeout! Unsubscribe and terminate (task {})",
-                                async_std::task::current().id()
-                            );
-                            if let Err(e) = sub.undeclare().res_async().await {
-                                log::error!("Error undeclaring subscriber: {}", e);
+                            Err(_) => {
+                                log::debug!(
+                                    "SSE timeout! Unsubscribe and terminate (task {})",
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
                 });

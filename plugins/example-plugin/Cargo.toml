@@ -23,11 +23,14 @@ authors = [
 ]
 edition = "2018"
 
-# NOTE: as this library name doesn't start with 'zplugin_' prefix
-#       it won't be loaded automatically by zenod.
-#       To make zenohd load it, use the "-P <path_to_lib>" option. 
 [lib]
-name = "plugin_example"
+# When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zplugin_example"
+# `zenohd` will expect the file to be named according to OS conventions:
+#   - libzplugin_example.so on linux
+#   - libzplugin_example.dylib on macOS
+#   - zplugin_example.dll on Windows
+name = "zplugin_example"
+# This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
 
