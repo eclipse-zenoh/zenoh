@@ -14,10 +14,11 @@
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
-use zenoh_protocol_core::key_expr::keyexpr;
+use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
@@ -750,18 +751,17 @@ fn compute_data_route(
     source_type: WhatAmI,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
-    let key_expr = prefix.expr() + suffix;
+    let key_expr = if let Ok(ke) = OwnedKeyExpr::try_from(prefix.expr() + suffix) {
+        ke
+    } else {
+        return Arc::new(route);
+    };
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| {
-            Cow::from(Resource::get_matches(
-                tables,
-                keyexpr::new(key_expr.as_str()).unwrap(),
-            ))
-        });
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
     let master = tables.whatami != WhatAmI::Router
         || *elect_router(&key_expr, &tables.shared_nodes) == tables.pid;
@@ -843,17 +843,17 @@ fn compute_matching_pulls(
     suffix: &str,
 ) -> Arc<PullCaches> {
     let mut pull_caches = vec![];
+    let ke = if let Ok(ke) = OwnedKeyExpr::try_from(prefix.expr() + suffix) {
+        ke
+    } else {
+        return Arc::new(pull_caches);
+    };
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
         .as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| {
-            Cow::from(Resource::get_matches(
-                tables,
-                keyexpr::new((prefix.expr() + suffix).as_str()).unwrap(),
-            ))
-        });
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
@@ -1114,10 +1114,9 @@ macro_rules! cache_data {
         $info:expr
     ) => {
         for context in $matching_pulls.iter() {
-            get_mut_unchecked(&mut context.clone()).last_values.insert(
-                [&$prefix.expr(), $suffix].concat(),
-                ($info.clone(), $payload.clone()),
-            );
+            get_mut_unchecked(&mut context.clone())
+                .last_values
+                .insert($prefix.expr() + $suffix, ($info.clone(), $payload.clone()));
         }
     };
 }
@@ -1278,14 +1277,14 @@ pub fn pull_data(
                         None => {
                             log::error!(
                                 "Pull data for unknown subscription {} (no info)!",
-                                [&prefix.expr(), expr.suffix.as_ref()].concat()
+                                prefix.expr() + expr.suffix.as_ref()
                             );
                         }
                     },
                     None => {
                         log::error!(
                             "Pull data for unknown subscription {} (no context)!",
-                            [&prefix.expr(), expr.suffix.as_ref()].concat()
+                            prefix.expr() + expr.suffix.as_ref()
                         );
                     }
                 }
@@ -1293,7 +1292,7 @@ pub fn pull_data(
             None => {
                 log::error!(
                     "Pull data for unknown subscription {} (no resource)!",
-                    [&prefix.expr(), expr.suffix.as_ref()].concat()
+                    prefix.expr() + expr.suffix.as_ref()
                 );
             }
         },
