@@ -15,11 +15,17 @@
 //! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
 //! and associated constants.
 mod defaults;
+use serde::{
+    de::{self, MapAccess, Visitor},
+    Deserialize, Serialize,
+};
 use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
+    fmt,
     io::Read,
+    marker::PhantomData,
     net::SocketAddr,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
@@ -28,7 +34,10 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-use zenoh_protocol_core::key_expr::OwnedKeyExpr;
+use zenoh_protocol_core::{
+    key_expr::OwnedKeyExpr,
+    whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
+};
 pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_util::LibLoader;
 
@@ -910,5 +919,172 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             }
         }
         Ok(serde_json::to_string(value).unwrap())
+    }
+}
+
+pub trait ModeDependent<T> {
+    fn router(&self) -> Option<&T>;
+    fn peer(&self) -> Option<&T>;
+    fn client(&self) -> Option<&T>;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModeValues<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    router: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peer: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client: Option<T>,
+}
+
+impl<T> ModeDependent<T> for ModeValues<T> {
+    fn router(&self) -> Option<&T> {
+        self.router.as_ref()
+    }
+
+    fn peer(&self) -> Option<&T> {
+        self.peer.as_ref()
+    }
+
+    fn client(&self) -> Option<&T> {
+        self.client.as_ref()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ModeDependentValue<T> {
+    Unique(T),
+    Dependent(ModeValues<T>),
+}
+
+impl<T> ModeDependent<T> for ModeDependentValue<T> {
+    fn router(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.router(),
+        }
+    }
+
+    fn peer(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.peer(),
+        }
+    }
+
+    fn client(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.client(),
+        }
+    }
+}
+
+impl<T> serde::Serialize for ModeDependentValue<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ModeDependentValue::Unique(value) => value.serialize(serializer),
+            ModeDependentValue::Dependent(options) => options.serialize(serializer),
+        }
+    }
+}
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<bool> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<bool>> {
+            type Value = ModeDependentValue<bool>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("bool or mode dependent bool")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ModeDependentValue::Unique(value))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<WhatAmIMatcher>> {
+            type Value = ModeDependentValue<WhatAmIMatcher>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                WhatAmIMatcherVisitor {}
+                    .visit_str(value)
+                    .map(ModeDependentValue::Unique)
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
+    fn router(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.router(),
+            None => None,
+        }
+    }
+
+    fn peer(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.peer(),
+            None => None,
+        }
+    }
+
+    fn client(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.client(),
+            None => None,
+        }
     }
 }

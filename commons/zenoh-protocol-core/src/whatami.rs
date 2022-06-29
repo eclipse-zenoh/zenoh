@@ -167,7 +167,7 @@ impl serde::Serialize for WhatAmIMatcher {
         serializer.serialize_str(self.to_str())
     }
 }
-struct WhatAmIMatcherVisitor;
+pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
