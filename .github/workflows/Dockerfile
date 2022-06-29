@@ -11,16 +11,21 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 
 ###
-### Dockerfile building the Eclipse zenoh router (zenohd)
+### Dockerfile creating the eclipse/zenoh image from cross-compiled binaries.
+### It assumes that zenohd and it's plugins libraries are installed in docker/$TARGETPLATFORM/
+### where $TARGETPLATFORM is set by buildx to a Docker supported platform such as linux/amd64 or linux/arm64
+### (see https://docs.docker.com/buildx/working-with-buildx/#build-multi-platform-images)
 ###
 
 
-FROM --platform=linux/arm64 alpine:latest
+FROM alpine:latest
+
+ARG TARGETPLATFORM
 
 RUN apk add --no-cache libgcc libstdc++
 
-COPY docker/linux/arm64/zenohd /
-COPY docker/linux/arm64/*.so /
+COPY docker/$TARGETPLATFORM/zenohd /
+COPY docker/$TARGETPLATFORM/*.so /
 
 RUN echo '#!/bin/ash' > /entrypoint.sh
 RUN echo 'echo " * Starting: /zenohd $*"' >> /entrypoint.sh

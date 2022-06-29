@@ -351,17 +351,6 @@ jobs:
   #       if: failure()
   #       uses: andymckay/cancel-action@0.2
 
-  #
-  # Note: Docker build is quite long (1h40) because of arm64 build via QEMU.
-  #       I didn't found a solution to have the docker build in parallel of other builds,
-  #       and the push in another job (only if all parallel builds succeed)...
-  #       It would require upload/download of the image via a file,
-  #       but "docker" output type doesn't support multi-platforms image
-  #       (see https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md#docker)
-  #       Therfore, Docker build+push is made in parallel of other publications. At least, builds and publications
-  #       of other dependent repos can be kicked as soon as publication to crates.io is done, not waiting for this Docker job.
-  #
-
   docker:
     name: Docker build and push
     needs: [checks, builds]
@@ -373,21 +362,18 @@ jobs:
       - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
         shell: bash
         run: git fetch --tags --force
-      - name: Download result of previous builds
+      - name: Download packages from previous job
         uses: actions/download-artifact@v2
         with:
-          path: ARTIFACTS
-      - name: check ARTIFACTS
+          path: PACKAGES
+      - name: Unzip PACKAGES
         run: |
-          pwd
-          ls -al
-          ls -al .github/workflows
-          tree ARTIFACTS
+          ls PACKAGES
           mkdir -p docker/linux/amd
-          unzip ARTIFACTS/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d docker/linux/amd64/
+          unzip PACKAGES/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d docker/linux/amd64/
           rm docker/linux/amd64/libzplugin_example.so
           mkdir -p docker/linux/arm64
-          unzip ARTIFACTS/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
+          unzip PACKAGES/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
           rm docker/linux/arm64/libzplugin_example.so
           tree docker
       - name: Set up Docker Buildx
@@ -409,16 +395,7 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64
-          file: .github/workflows/Dockerfile.amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-      - name: Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          push: true
-          platforms: linux/arm64
-          file: .github/workflows/Dockerfile.arm64
+          platforms: linux/amd64, linux/arm64
+          file: .github/workflows/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
