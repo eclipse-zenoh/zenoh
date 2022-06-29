@@ -19,8 +19,8 @@ FROM --platform=linux/arm64 alpine:latest
 
 RUN apk add --no-cache libgcc libstdc++
 
-COPY target/aarch64-unknown-linux-musl/release/zenohd /
-COPY target/aarch64-unknown-linux-musl/release/*.so /
+COPY docker/linux/arm64/zenohd /
+COPY docker/linux/arm64/*.so /
 
 RUN echo '#!/bin/ash' > /entrypoint.sh
 RUN echo 'echo " * Starting: /zenohd $*"' >> /entrypoint.sh
