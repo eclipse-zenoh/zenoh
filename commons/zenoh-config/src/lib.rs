@@ -161,8 +161,19 @@ validated_struct::validator! {
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
         },
-        /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
-        add_timestamp: Option<bool>,
+
+        /// Configuration of data messages timestamps management.
+        pub timestamping: #[derive(Default)]
+        TimestampingConf {
+            /// Whether data messages should be timestamped if not already.
+            enabled: Option<ModeDependentValue<bool>>,
+            /// Whether data messages with timestamps in the future should be dropped or not.
+            /// If set to false (default), messages with timestamps in the future are retimestamped.
+            /// Timestamps are ignored if timestamping is disabled.
+            drop_future_timestamp: Option<bool>,
+        },
+
+        /// Whether or not to drop live data with timestamps in the future. When set to false, the router
         /// Whether local writes/queries should reach local subscribers/queryables.
         local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.

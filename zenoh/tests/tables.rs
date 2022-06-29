@@ -33,6 +33,7 @@ fn base_test() {
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -123,6 +124,7 @@ fn match_test() {
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -159,6 +161,7 @@ fn clean_test() {
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
@@ -499,6 +502,7 @@ fn client_test() {
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
+        false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let sub_info = SubInfo {

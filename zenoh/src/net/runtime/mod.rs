@@ -76,13 +76,31 @@ impl Runtime {
         log::info!("Using PID: {}", pid);
 
         let whatami = config.mode().unwrap_or(crate::config::WhatAmI::Peer);
-        let hlc = if config.add_timestamp().unwrap_or(false) {
-            Some(Arc::new(
-                HLCBuilder::new().with_id(uhlc::ID::from(&pid)).build(),
-            ))
-        } else {
-            None
-        };
+        let hlc = match whatami {
+            WhatAmI::Router => config
+                .timestamping()
+                .enabled()
+                .router()
+                .cloned()
+                .unwrap_or(true),
+            WhatAmI::Peer => config
+                .timestamping()
+                .enabled()
+                .peer()
+                .cloned()
+                .unwrap_or(false),
+            WhatAmI::Client => config
+                .timestamping()
+                .enabled()
+                .client()
+                .cloned()
+                .unwrap_or(false),
+        }
+        .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&pid)).build()));
+        let drop_future_timestamp = config
+            .timestamping()
+            .drop_future_timestamp()
+            .unwrap_or(false);
 
         let autoconnect = match whatami {
             WhatAmI::Router => {
@@ -125,6 +143,7 @@ impl Runtime {
             pid,
             whatami,
             hlc.clone(),
+            drop_future_timestamp,
             Duration::from_millis(queries_default_timeout),
         ));
 

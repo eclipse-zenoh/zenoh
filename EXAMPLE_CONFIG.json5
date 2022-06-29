@@ -66,8 +66,17 @@
     declare_publications: ["demo/pubs/**"],
   },
 
-  /// Whether data messages should be timestamped
-  add_timestamp: true,
+  /// Configuration of data messages timestamps management.
+  timestamping: {
+    /// Whether data messages should be timestamped if not already.
+    /// Accepts a single boolean value or different values for router, peer and client.
+    enabled: { router: true, peer: false, client: false },
+    /// Whether data messages with timestamps in the future should be dropped or not.
+    /// If set to false (default), messages with timestamps in the future are retimestamped.
+    /// Timestamps are ignored if timestamping is disabled.
+    drop_future_timestamp: false,
+  },
+
   /// Whether local writes/queries should reach local subscribers/queryables
   local_routing: true,
 

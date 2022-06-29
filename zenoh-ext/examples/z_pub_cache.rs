@@ -14,7 +14,7 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::config::Config;
+use zenoh::config::{Config, ModeDependentValue};
 use zenoh_core::AsyncResolve;
 use zenoh_ext::*;
 
@@ -103,7 +103,10 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
     }
 
     // Timestamping of publications is required for publication cache
-    config.set_add_timestamp(Some(true)).unwrap();
+    config
+        .timestamping
+        .set_enabled(Some(ModeDependentValue::Unique(true)))
+        .unwrap();
 
     let key_expr = args.value_of("key").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();
