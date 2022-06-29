@@ -40,22 +40,12 @@
       address: "224.0.0.224:7447",
       /// The network interface which should be used for multicast scouting
       interface: "", // empty string means auto
-      /// The multicast scouting behavior of routers.
-      router: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "",
-        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-        listen: true,
-      },
-      peer: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-        /// Accepts a single value or different values for router, peer and client.
-        /// Each value is bit-or-like combinations of "peer", "router" and "client".
-        autoconnect: { router: "", peer: "router|peer" },
-        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-        listen: true,
-      },
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer" },
+      /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+      listen: true,
     },
     /// The gossip scouting configuration.
     gossip: {
