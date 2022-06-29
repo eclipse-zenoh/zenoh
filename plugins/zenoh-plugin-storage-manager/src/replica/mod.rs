@@ -16,7 +16,7 @@ use async_std::sync::RwLock;
 use async_std::task::sleep;
 use flume::Sender;
 use futures::join;
-use log::{debug, info};
+use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use std::time::SystemTime;
@@ -47,15 +47,27 @@ const SUBINTERVALS: &str = "subintervals";
 const CONTENTS: &str = "contents";
 pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
 
+// A replica consists of a storage service and services required for anti-entropy
+// To perform anti-entropy, we need a `Digest` that contains the state of the datastore
+// `Snapshotter` computes the `Digest` and maintains all related information
+// `DigestPublisher` reads the latest `Digest` from the `Snapshotter` and publishes to the network
+// `DigestSubscriber` subscribes to `Digest`s from other replicas having the same key_expr
+// If the incoming digest is valid, the `DigestSubscriber` forwards it to the `Aligner`
+// The `Aligner` identifies mismatches in the contents of the storage with respect to the other storage
+// `Aligner` generates a list of missing updates that is then send to the `StorageService`
+//
+
 pub struct Replica {
-    name: String, // name of replica  -- UUID(zenoh)-<storage_name>((-<storage_type>??))
-    session: Arc<Session>, // zenoh session used by the replica
-    key_expr: String, // key expression of the storage to be functioning as a replica
-    replica_config: ReplicaConfig, // replica configuration - if some, replica, if none, normal storage
+    // TODO: Discuss if we need to add -<storage_type> for uniqueness
+    name: String, // name of replica  -- UUID(zenoh)-<storage_name>
+    session: Arc<Session>,
+    key_expr: String,
+    replica_config: ReplicaConfig,
     digests_published: RwLock<HashSet<u64>>, // checksum of all digests generated and published by this replica
 }
 
 impl Replica {
+    // This function starts the replica by initializing all the components
     pub async fn start(
         config: ReplicaConfig,
         session: Arc<Session>,
@@ -65,7 +77,7 @@ impl Replica {
         key_expr: &str,
         name: &str,
     ) -> ZResult<Sender<crate::StorageMessage>> {
-        info!("[REPLICA]Opening session...");
+        trace!("[REPLICA]Opening session...");
         let startup_entries = storage.get_all_entries().await?;
 
         let replica = Replica {
@@ -76,18 +88,20 @@ impl Replica {
             digests_published: RwLock::new(HashSet::new()),
         };
 
+        // Create channels for communication between components
         // channel to queue digests to be aligned
         let (tx_digest, rx_digest) = flume::unbounded();
-        // channel for aaligner to send missing samples to storage
+        // channel for aligner to send missing samples to storage
         let (tx_sample, rx_sample) = flume::unbounded();
-        // channel for storage to send loggin information back
+        // channel for storage to send logging information back
         let (tx_log, rx_log) = flume::unbounded();
+
         let config = replica.replica_config.clone();
         // snapshotter
         let snapshotter = Arc::new(Snapshotter::new(rx_log, startup_entries, config.clone()).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest);
-        // eval for align
+        // queryable for alignment
         let digest_key = Replica::get_digest_key(key_expr.to_string(), config.align_prefix);
         let align_queryable = AlignQueryable::start_align_queryable(
             replica.session.clone(),
@@ -136,6 +150,8 @@ impl Replica {
         result.5
     }
 
+    // Create a subscriber to get digests of remote replicas
+    // Subscribe on <align_prefix>/<encoded_key_expr>/**
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
@@ -148,8 +164,8 @@ impl Replica {
         );
 
         debug!(
-            "[DIGEST_SUB]Creating Subscriber named {} on '{}'... repeating .. '{}'....",
-            self.name, digest_key, digest_key
+            "[DIGEST_SUB] Creating Subscriber named {} on '{}'",
+            self.name, digest_key
         );
         let subscriber = self
             .session
@@ -165,8 +181,8 @@ impl Replica {
                 self.replica_config.align_prefix.to_string(),
             )
             .len()..];
-            debug!(
-                "[DIGEST_SUB]>> [Digest Subscriber] From {} Received {} ('{}': '{}')",
+            trace!(
+                "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
                 sample.kind,
                 sample.key_expr.as_str(),
@@ -175,16 +191,24 @@ impl Replica {
             let digest: Digest = serde_json::from_str(&format!("{}", sample.value)).unwrap();
             let ts = digest.timestamp;
             let to_be_processed = self
-                .processing_needed(from, digest.timestamp, digest.checksum, received.clone())
+                .processing_needed(
+                    from,
+                    digest.timestamp,
+                    digest.checksum,
+                    received.clone(),
+                    digest.config.clone(),
+                )
                 .await;
             if to_be_processed {
-                debug!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
+                trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
                 tx.send_async((from.to_string(), digest)).await.unwrap();
             };
             received.insert(from.to_string(), ts);
         }
     }
 
+    // Create a publisher to periodically publish digests from the snapshotter
+    // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
         let digest_key = format!(
             "{}/{}",
@@ -195,17 +219,14 @@ impl Replica {
             self.name
         );
 
-        debug!(
-            "[DIGEST_PUB]Declaring digest on key expression '{}'...",
-            digest_key
-        );
         // let expr_id = self.session.declare_keyexpr(&digest_key).res().await.unwrap();
         // debug!("[DIGEST_PUB] => ExprId {}", expr_id);
 
-        debug!("[DIGEST_PUB]Declaring publication on '{}'...", digest_key);
+        debug!("[DIGEST_PUB] Declaring publication on '{}'...", digest_key);
         let publisher = self
             .session
             .declare_publisher(digest_key)
+            .local_routing(false)
             .res_async()
             .await
             .unwrap();
@@ -221,7 +242,7 @@ impl Replica {
             drop(digests_published);
             drop(digest);
 
-            debug!("[DIGEST_PUB]Putting Digest : {} ...", digest_json);
+            trace!("[DIGEST_PUB] Putting Digest : {} ...", digest_json);
             publisher.put(digest_json).res_async().await.unwrap();
         }
     }
@@ -232,22 +253,27 @@ impl Replica {
         ts: Timestamp,
         checksum: u64,
         received: HashMap<String, Timestamp>,
+        config: DigestConfig,
     ) -> bool {
-        if *from == self.name {
-            debug!("[DIGEST_SUB]Dropping own digest with checksum {}", checksum);
+        if checksum == 0 {
+            // no values to align
             return false;
         }
         // TODO: test this part
         if received.contains_key(from) && *received.get(from).unwrap() > ts {
             // not the latest from that replica
-            debug!("[DIGEST_SUB]Dropping older digest at {} from {}", ts, from);
+            trace!("[DIGEST_SUB] Dropping older digest at {} from {}", ts, from);
             return false;
         }
-        //
-        if checksum == 0 {
+        // TODO: test this part
+        if config.delta != self.replica_config.delta
+            || config.sub_intervals != self.replica_config.subintervals
+            || config.hot != self.replica_config.hot
+            || config.warm != self.replica_config.warm
+        {
+            error!("[DIGEST_SUB] mismatching digest configs, cannot be aligned");
             return false;
         }
-
         true
     }
 
