@@ -20,6 +20,7 @@ use log::{debug, info};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use std::time::SystemTime;
+use urlencoding::encode;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::Sample;
 use zenoh::prelude::*;
@@ -251,13 +252,7 @@ impl Replica {
     }
 
     fn get_digest_key(key_expr: String, align_prefix: String) -> String {
-        let mut key_expr = key_expr;
-        if key_expr.ends_with("**") {
-            key_expr = key_expr.strip_suffix("**").unwrap().to_string();
-        }
-        if key_expr.ends_with('/') {
-            key_expr = key_expr.strip_suffix('/').unwrap().to_string();
-        }
+        let key_expr = encode(&key_expr).to_string();
         format!("{}/{}", align_prefix, key_expr)
     }
 }
