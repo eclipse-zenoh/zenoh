@@ -18,7 +18,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
-use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol_core::key_expr::OwnedKeyExpr;
 use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
