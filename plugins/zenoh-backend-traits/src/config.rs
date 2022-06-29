@@ -14,6 +14,7 @@
 use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
+use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
 use zenoh_core::{bail, zerror, Error};
 
@@ -45,23 +46,52 @@ pub struct StorageConfig {
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
+    // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
+    pub replica_config: Option<ReplicaConfig>,
     // #[as_ref]
     // #[as_mut]
     // pub rest: Map<String, Value>,
-    // If replica_config is present, start a replica, else a normal storage
-    // TODO: need to distinguish between time-series and key-value
-    pub replica_config: Option<ReplicaConfig>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicaConfig {
     pub align_prefix: String,
-    pub publication_interval: std::time::Duration,
-    pub propagation_delay: std::time::Duration,
-    pub delta: std::time::Duration,
+    pub publication_interval: Duration,
+    pub propagation_delay: Duration,
+    pub delta: Duration,
     pub subintervals: usize,
     pub hot: usize,
     pub warm: usize,
 }
+
+impl Default for ReplicaConfig {
+    fn default() -> Self {
+        Self {
+            // This is the prefix that is used by the alignment protocol
+            // TODO: discuss if this needs to be configurable
+            align_prefix: String::from("@-digest"),
+            // Publication interval indicates the frequency of digest publications
+            // This will determine the time upto which replicas might be diverged
+            publication_interval: Duration::from_secs(5),
+            // This indicates the uncertainity due to the network
+            // The messages might still be in transit in the network
+            propagation_delay: Duration::from_millis(200),
+            // This is the chunk that you would like your data to be divide into in time.
+            // Higher the frequency of updates, lower the delta should be chosen
+            delta: Duration::from_millis(1000),
+            // The number of chunks an interval is divided into
+            // Ideally this number should be such that the numbr of entries in the chunk is less than 10000
+            subintervals: 10,
+            // This is number of intervals that are known not to have been yet considerd for alignment
+            // Result of publication_interval/delta
+            // TODO: Discuss if we need to expose this. Can be computed
+            hot: 5,
+            // This is the number of intervals that might have been aligned in the previous round, but a temporarily disconnected replica might have missed
+            // TODO: Discuss if it follows the same principle as hot
+            warm: 10,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigDiff {
     DeleteVolume(VolumeConfig),
@@ -359,87 +389,82 @@ impl StorageConfig {
         };
         let replica_config = match config.get("replica_config") {
             Some(s) => {
-                // TODO: figure out how to parse json automatically with default values
-                let align_prefix = match s.get("align_prefix") {
-                    Some(Value::String(p)) => p.clone(),
-                    None => String::from("@-digest"),
+                let mut replica_config = ReplicaConfig::default();
+                // TODO: Discuss what to do in case of wrong configuration - exit or use default
+                match s.get("align_prefix") {
+                    Some(Value::String(p)) => {
+                        replica_config.align_prefix = p.to_string()
+                    },
+                    None => (),
                     _ => bail!("Invalid type for field `align_prefix` in `replica_config` of storage `{}`. Only string is accepted.", storage_name)
                 };
-                let publication_interval = match s.get("publication_interval") {
+                match s.get("publication_interval") {
                     Some(p) => {
                         let p = p.to_string().parse::<u64>();
                         if let Ok(p) = p {
-                            p
+                            replica_config.publication_interval = Duration::from_secs(p)
                         } else {
                             bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 5,
+                    None => (),
                 };
-                let propagation_delay = match s.get("propagation_delay") {
+                match s.get("propagation_delay") {
                     Some(p) => {
                         let p = p.to_string().parse::<u64>();
                         if let Ok(p) = p {
-                            p
+                            replica_config.propagation_delay = Duration::from_millis(p)
                         } else {
                             bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 200,
+                    None => (),
                 };
-                let delta = match s.get("delta") {
+                match s.get("delta") {
                     Some(d) => {
                         let d = d.to_string().parse::<u64>();
                         if let Ok(d) = d {
-                            d
+                            replica_config.delta = Duration::from_millis(d)
                         } else {
                             bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 500,
+                    None => (),
                 };
-                let subintervals = match s.get("subintervals") {
+                match s.get("subintervals") {
                     Some(i) => {
                         let i = i.to_string().parse::<usize>();
                         if let Ok(i) = i {
-                            i
+                            replica_config.subintervals = i
                         } else {
                             bail!("Invalid type for field `subintervals` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 10,
+                    None => (),
                 };
-                let hot = match s.get("hot") {
+                match s.get("hot") {
                     Some(h) => {
                         let h = h.to_string().parse::<usize>();
                         if let Ok(h) = h {
-                            h
+                            replica_config.hot = h
                         } else {
                             bail!("Invalid type for field `hot` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 2,
+                    None => (),
                 };
-                let warm = match s.get("warm") {
+                match s.get("warm") {
                     Some(w) => {
                         let w = w.to_string().parse::<usize>();
                         if let Ok(w) = w {
-                            w
+                            replica_config.warm = w
                         } else {
                             bail!("Invalid type for field `warm` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
-                    None => 5,
+                    None => (),
                 };
-                Some(ReplicaConfig {
-                    align_prefix,
-                    publication_interval: std::time::Duration::from_secs(publication_interval),
-                    propagation_delay: std::time::Duration::from_millis(propagation_delay),
-                    delta: std::time::Duration::from_millis(delta),
-                    subintervals,
-                    hot,
-                    warm,
-                })
+                Some(replica_config)
             }
             None => None,
         };
