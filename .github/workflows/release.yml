@@ -371,6 +371,12 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           path: ARTIFACTS
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
+        shell: bash
+        run: git fetch --tags --force
       - name: check ARTIFACTS
         run: |
           pwd
@@ -382,14 +388,6 @@ jobs:
           mkdir -p docker/linux/arm64
           unzip ARTIFACTS/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
           tree docker
-      - uses: actions/checkout@v2
-        with:
-          fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
-      - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
-        shell: bash
-        run: git fetch --tags --force
-      # - name: setup-docker
-      #   uses: docker-practice/actions-setup-docker@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Docker meta - set tags and labels
