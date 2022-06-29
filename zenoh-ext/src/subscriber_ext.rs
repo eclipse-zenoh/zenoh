@@ -2,6 +2,7 @@ use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use zenoh::{prelude::Sample, subscriber::HandlerSubscriber};
 
+/// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
 pub trait HandlerSubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;

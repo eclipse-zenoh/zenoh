@@ -191,14 +191,14 @@ use zenoh_core::zresult::Error;
 /// streams to zenoh.
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh_ext::HandlerSubscriberForward;
+/// use futures::StreamExt;
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
 /// let mut subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").res().await.unwrap();
-/// subscriber.forward(publisher).await.unwrap();
+/// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # })
 /// ```
 #[derive(Debug, Clone)]
