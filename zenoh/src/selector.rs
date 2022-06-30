@@ -7,14 +7,43 @@ use std::{
     convert::{TryFrom, TryInto},
 };
 
-/// A selector is the
-#[derive(Clone, Debug, PartialEq)]
+/// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
+/// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
+/// with a few uses:
+/// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
+/// - filtering by value,
+/// - filtering by metadata, such as the timestamp of a value,
+///
+/// When in string form, selectors look a lot like a URI, with similar semantics:
+/// - the `key_expr` before the first `?` must be a valid key expression.
+/// - the `selector` after the first `?` should be encoded like the query section of a URL:
+///     - key-value pairs are separated by `&`,
+///     - the key and value are separated by the first `=`,
+///     - in the absence of `=`, the value is considered to be the empty string,
+///     - both key and value should use percent-encoding to escape characters,
+///     - defining a value for the same key twice is considered undefined behavior.
+///
+/// Zenoh intends to standardize the usage of a set of keys. To avoid conflicting with RPC parameters,
+/// the Zenoh team has settled on reserving the set of keys that start with non-alphanumeric characters.
+///
+/// This document will summarize the standardized keys for which Zenoh provides helpers to facilitate
+/// coherent behavior for some operations.
+///
+/// Queryable implementers are encouraged to prefer these standardized keys when implementing their
+/// associated features, and to prefix their own keys to avoid having conflicting keys with other
+/// queryables.
+///
+/// Here are the currently standardized keys for Zenoh:
+/// - `_time`: used to express interest in only values dated within a certain time range, values for
+///   this key must be readable by the Zenoh Time DSL for the value to be considered valid.
+/// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
+///   this key to be treated as a predicate that the value should fulfill before being returned.
+///   A DSL will be designed by the Zenoh team to express these predicates.
+#[derive(Clone, PartialEq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
-    /// I.e. all characters before `?`.
     pub key_expr: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
-    /// I.e. all characters starting from `?`.
     pub(crate) value_selector: Cow<'a, str>,
 }
 
@@ -49,7 +78,7 @@ impl<'a> Selector<'a> {
         self
     }
 
-    /// Gets the value selector as a borrowed string.
+    /// Gets the value selector as a raw string.
     pub fn value_selector(&self) -> &str {
         &self.value_selector
     }
@@ -92,9 +121,15 @@ impl<'a> ValueSelector<'a> for str {
     }
 }
 
+impl std::fmt::Debug for Selector<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "sel\"{}\"", self)
+    }
+}
+
 impl std::fmt::Display for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}{}", self.key_expr, self.value_selector)
+        write!(f, "{}?{}", self.key_expr, self.value_selector)
     }
 }
 
