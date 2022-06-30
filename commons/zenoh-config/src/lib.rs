@@ -325,9 +325,18 @@ fn config_deser() {
     )
     .unwrap();
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
-    assert_eq!(config.scouting().multicast().autoconnect().router(), Some(&WhatAmIMatcher::try_from(131).unwrap()));
-    assert_eq!(config.scouting().multicast().autoconnect().peer(), Some(&WhatAmIMatcher::try_from(131).unwrap()));
-    assert_eq!(config.scouting().multicast().autoconnect().client(), Some(&WhatAmIMatcher::try_from(131).unwrap()));
+    assert_eq!(
+        config.scouting().multicast().autoconnect().router(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().peer(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().client(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
     let config = Config::from_deserializer(
         &mut json5::Deserializer::from_str(
             r#"{
@@ -343,8 +352,14 @@ fn config_deser() {
     )
     .unwrap();
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
-    assert_eq!(config.scouting().multicast().autoconnect().router(), Some(&WhatAmIMatcher::try_from(128).unwrap()));
-    assert_eq!(config.scouting().multicast().autoconnect().peer(), Some(&WhatAmIMatcher::try_from(131).unwrap()));
+    assert_eq!(
+        config.scouting().multicast().autoconnect().router(),
+        Some(&WhatAmIMatcher::try_from(128).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().peer(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
     assert_eq!(config.scouting().multicast().autoconnect().client(), None);
     let config = Config::from_deserializer(
         &mut json5::Deserializer::from_str(
