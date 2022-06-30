@@ -28,7 +28,7 @@ use zenoh::Session;
 
 pub struct Aligner {
     session: Arc<Session>,
-    digest_key: String,
+    digest_key: KeyExpr<'static>,
     // replica_name: String,
     snapshotter: Arc<Snapshotter>,
     rx_digest: Receiver<(String, super::Digest)>,
@@ -39,7 +39,7 @@ pub struct Aligner {
 impl Aligner {
     pub async fn start_aligner(
         session: Arc<Session>,
-        digest_key: &str,
+        digest_key: KeyExpr<'static>,
         // replica_name: &str,
         rx_digest: Receiver<(String, super::Digest)>,
         tx_sample: Sender<Sample>,
@@ -47,7 +47,7 @@ impl Aligner {
     ) {
         let aligner = Aligner {
             session,
-            digest_key: digest_key.to_string(),
+            digest_key,
             // replica_name: replica_name.to_string(),
             snapshotter,
             rx_digest,

@@ -22,6 +22,7 @@ use futures::join;
 use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
+use std::str::FromStr;
 use std::time::SystemTime;
 use urlencoding::encode;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -64,7 +65,7 @@ pub struct Replica {
     // TODO: Discuss if we need to add -<storage_type> for uniqueness
     name: String, // name of replica  -- UUID(zenoh)-<storage_name>
     session: Arc<Session>,
-    key_expr: String,
+    key_expr: KeyExpr<'static>,
     replica_config: ReplicaConfig,
     digests_published: RwLock<HashSet<u64>>, // checksum of all digests generated and published by this replica
 }
@@ -77,16 +78,18 @@ impl Replica {
         storage: Box<dyn zenoh_backend_traits::Storage>,
         in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
         out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-        key_expr: &str,
+        key_expr: KeyExpr<'static>,
         name: &str,
     ) -> ZResult<Sender<crate::StorageMessage>> {
         trace!("[REPLICA]Opening session...");
         let startup_entries = storage.get_all_entries().await?;
 
+        // TODO: if no startup_entries, it means it is a new storage. Query zenoh to populate the storage. This is cheaper then normal alignment
+
         let replica = Replica {
             name: name.to_string(),
             session,
-            key_expr: key_expr.to_string(),
+            key_expr,
             replica_config: config,
             digests_published: RwLock::new(HashSet::new()),
         };
@@ -105,17 +108,17 @@ impl Replica {
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest);
         // queryable for alignment
-        let digest_key = Replica::get_digest_key(key_expr.to_string(), config.align_prefix);
+        let digest_key = Replica::get_digest_key(replica.key_expr.clone(), config.align_prefix);
         let align_queryable = AlignQueryable::start_align_queryable(
             replica.session.clone(),
-            &digest_key,
+            digest_key.clone(),
             &replica.name,
             snapshotter.clone(),
         );
         // aligner
         let aligner = Aligner::start_aligner(
             replica.session.clone(),
-            &digest_key,
+            digest_key,
             rx_digest,
             tx_sample,
             snapshotter.clone(),
@@ -133,7 +136,7 @@ impl Replica {
         };
         let storage_task = StorageService::start(
             replica.session.clone(),
-            &replica.key_expr,
+            replica.key_expr.clone(),
             &replica.name,
             storage,
             in_interceptor,
@@ -161,7 +164,7 @@ impl Replica {
         let digest_key = format!(
             "{}/**",
             Replica::get_digest_key(
-                self.key_expr.to_string(),
+                self.key_expr.clone(),
                 self.replica_config.align_prefix.to_string()
             )
         );
@@ -180,7 +183,7 @@ impl Replica {
             let sample = subscriber.recv_async().await;
             let sample = sample.unwrap();
             let from = &sample.key_expr.as_str()[Replica::get_digest_key(
-                self.key_expr.to_string(),
+                self.key_expr.clone(),
                 self.replica_config.align_prefix.to_string(),
             )
             .len()..];
@@ -216,7 +219,7 @@ impl Replica {
         let digest_key = format!(
             "{}/{}",
             Replica::get_digest_key(
-                self.key_expr.to_string(),
+                self.key_expr.clone(),
                 self.replica_config.align_prefix.to_string()
             ),
             self.name
@@ -280,8 +283,8 @@ impl Replica {
         true
     }
 
-    fn get_digest_key(key_expr: String, align_prefix: String) -> String {
+    fn get_digest_key(key_expr: KeyExpr<'static>, align_prefix: String) -> KeyExpr<'static> {
         let key_expr = encode(&key_expr).to_string();
-        format!("{}/{}", align_prefix, key_expr)
+        KeyExpr::from_str(&format!("{}/{}", align_prefix, key_expr)).unwrap()
     }
 }

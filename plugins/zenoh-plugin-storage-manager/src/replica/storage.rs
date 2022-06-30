@@ -34,7 +34,7 @@ pub struct ReplicationService {
 
 pub struct StorageService {
     session: Arc<Session>,
-    key_expr: String,
+    key_expr: KeyExpr<'static>,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
@@ -45,7 +45,7 @@ pub struct StorageService {
 impl StorageService {
     pub async fn start(
         session: Arc<Session>,
-        key_expr: &str,
+        key_expr: KeyExpr<'static>,
         name: &str,
         storage: Box<dyn zenoh_backend_traits::Storage>,
         in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
@@ -54,7 +54,7 @@ impl StorageService {
     ) -> ZResult<Sender<StorageMessage>> {
         let storage_service = StorageService {
             session,
-            key_expr: key_expr.to_string(),
+            key_expr,
             name: name.to_string(),
             storage: Mutex::new(storage),
             in_interceptor,
@@ -204,7 +204,10 @@ impl StorageService {
         let query = Query::new(q, self.out_interceptor.clone());
         let mut storage = self.storage.lock().await;
         if let Err(e) = storage.on_query(query).await {
-            warn!("Storage {} raised an error receiving a query: {}", self.name, e);
+            warn!(
+                "Storage {} raised an error receiving a query: {}",
+                self.name, e
+            );
         }
         drop(storage);
     }

@@ -51,14 +51,14 @@ pub(crate) async fn start_storage(
             storage,
             in_interceptor,
             out_interceptor,
-            &key_expr,
+            key_expr,
             &name,
         )
         .await
     } else {
         StorageService::start(
             zenoh.clone(),
-            &key_expr,
+            key_expr,
             &name,
             storage,
             in_interceptor,
