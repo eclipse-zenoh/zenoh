@@ -2,10 +2,7 @@ use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 
 use crate::{prelude::KeyExpr, queryable::Query};
 
-use std::{
-    borrow::Cow,
-    convert::{TryFrom, TryInto},
-};
+use std::{borrow::Cow, convert::TryFrom};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
@@ -141,26 +138,28 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
 
 impl TryFrom<String> for Selector<'_> {
     type Error = zenoh_core::Error;
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        let (key_selector, value_selector) = s
-            .find(|c| c == '?')
-            .map_or((s.as_str(), ""), |i| s.split_at(i));
-        Ok(Selector {
-            key_expr: key_selector.to_string().try_into()?,
-            value_selector: value_selector.to_string().into(),
-        })
+    fn try_from(mut s: String) -> Result<Self, Self::Error> {
+        match s.find('?') {
+            Some(qmark_position) => {
+                let value_selector = s[qmark_position + 1..].to_owned();
+                s.truncate(qmark_position);
+                Ok(KeyExpr::try_from(s)?.with_owned_value_selector(value_selector))
+            }
+            None => Ok(KeyExpr::try_from(s)?.into()),
+        }
     }
 }
 
 impl<'a> TryFrom<&'a str> for Selector<'a> {
     type Error = zenoh_core::Error;
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        let (key_selector, value_selector) =
-            s.find(|c| c == '?').map_or((s, ""), |i| s.split_at(i));
-        Ok(Selector {
-            key_expr: key_selector.try_into()?,
-            value_selector: value_selector.into(),
-        })
+        match s.find('?') {
+            Some(qmark_position) => {
+                let value_selector = &s[qmark_position + 1..];
+                Ok(KeyExpr::try_from(&s[..qmark_position])?.with_value_selector(value_selector))
+            }
+            None => Ok(KeyExpr::try_from(s)?.into()),
+        }
     }
 }
 
