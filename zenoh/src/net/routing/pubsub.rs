@@ -938,7 +938,7 @@ pub(crate) fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Res
 }
 
 macro_rules! treat_timestamp {
-    ($hlc:expr, $info:expr) => {
+    ($hlc:expr, $info:expr, $drop:expr) => {
         // if an HLC was configured (via Config.add_timestamp),
         // check DataInfo and add a timestamp if there isn't
         match $hlc {
@@ -949,11 +949,20 @@ macro_rules! treat_timestamp {
                         match hlc.update_with_timestamp(ts) {
                             Ok(()) => Some(data_info),
                             Err(e) => {
-                                log::error!(
-                                    "Error treating timestamp for received Data ({}): drop it!",
-                                    e
-                                );
-                                return;
+                                if $drop {
+                                    log::error!(
+                                        "Error treating timestamp for received Data ({}). Drop it!",
+                                        e
+                                    );
+                                    return;
+                                } else {
+                                    data_info.timestamp = Some(hlc.new_timestamp());
+                                    log::error!(
+                                        "Error treating timestamp for received Data ({}). Replace timestamp: {:?}",
+                                        e,
+                                        data_info.timestamp);
+                                    Some(data_info)
+                                }
                             }
                         }
                     } else {
@@ -1153,7 +1162,7 @@ pub fn route_data(
             let matching_pulls = get_matching_pulls(tables, &res, &prefix, expr.suffix.as_ref());
 
             if !(route.is_empty() && matching_pulls.is_empty()) {
-                let data_info = treat_timestamp!(&tables.hlc, info);
+                let data_info = treat_timestamp!(&tables.hlc, info, tables.drop_future_timestamp);
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
                     send_to_first!(route, face, payload, channel, congestion_control, data_info);
@@ -1212,7 +1221,7 @@ pub fn full_reentrant_route_data(
             let matching_pulls = get_matching_pulls(&tables, &res, &prefix, expr.suffix.as_ref());
 
             if !(route.is_empty() && matching_pulls.is_empty()) {
-                let data_info = treat_timestamp!(&tables.hlc, info);
+                let data_info = treat_timestamp!(&tables.hlc, info, tables.drop_future_timestamp);
 
                 if route.len() == 1 && matching_pulls.len() == 0 {
                     drop(tables);

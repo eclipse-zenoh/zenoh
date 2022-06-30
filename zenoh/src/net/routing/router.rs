@@ -44,6 +44,7 @@ pub struct Tables {
     face_counter: usize,
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
+    pub(crate) drop_future_timestamp: bool,
     // pub(crate) timer: Timer,
     // pub(crate) queries_default_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
@@ -65,6 +66,7 @@ impl Tables {
         pid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
+        drop_future_timestamp: bool,
         _queries_default_timeout: Duration,
     ) -> Self {
         Tables {
@@ -72,6 +74,7 @@ impl Tables {
             whatami,
             face_counter: 0,
             hlc,
+            drop_future_timestamp,
             // timer: Timer::new(true),
             // queries_default_timeout,
             root_res: Resource::root(),
@@ -257,6 +260,7 @@ impl Router {
         pid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
+        drop_future_timestamp: bool,
         queries_default_timeout: Duration,
     ) -> Self {
         Router {
@@ -265,6 +269,7 @@ impl Router {
                 pid,
                 whatami,
                 hlc,
+                drop_future_timestamp,
                 queries_default_timeout,
             ))),
         }

@@ -33,6 +33,7 @@ fn tables_bench(c: &mut Criterion) {
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Router,
         None,
+        false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives {});

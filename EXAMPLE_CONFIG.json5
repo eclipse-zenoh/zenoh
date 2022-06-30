@@ -40,41 +40,21 @@
       address: "224.0.0.224:7447",
       /// The network interface which should be used for multicast scouting
       interface: "", // empty string means auto
-      /// The multicast scouting behavior of routers.
-      router: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "",
-        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-        listen: true,
-      },
-      peer: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "peer|router",
-        /// Whether or not to listen for scout messages on UDP multicast and reply to them.
-        listen: true,
-      },
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer" },
+      /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+      listen: true,
     },
     /// The gossip scouting configuration.
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
-      /// The gossip scouting behavior of routers.
-      router: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "",
-        /// Whether or not to listen for scout messages on gossip and reply to them.
-        listen: true,
-      },
-      peer: {
-        /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
-        /// (accepted values are bit-or-like combinations of "peer", "router" and "client").
-        autoconnect: "peer|router",
-        /// Whether or not to listen for scout messages on gossip and reply to them.
-        listen: true,
-      },
+      /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
+      /// Accepts a single value or different values for router, peer and client.
+      /// Each value is bit-or-like combinations of "peer", "router" and "client".
+      autoconnect: { router: "", peer: "router|peer" },
     },
   },
 
@@ -86,8 +66,17 @@
     declare_publications: ["demo/pubs/**"],
   },
 
-  /// Whether data messages should be timestamped
-  add_timestamp: true,
+  /// Configuration of data messages timestamps management.
+  timestamping: {
+    /// Whether data messages should be timestamped if not already.
+    /// Accepts a single boolean value or different values for router, peer and client.
+    enabled: { router: true, peer: false, client: false },
+    /// Whether data messages with timestamps in the future should be dropped or not.
+    /// If set to false (default), messages with timestamps in the future are retimestamped.
+    /// Timestamps are ignored if timestamping is disabled.
+    drop_future_timestamp: false,
+  },
+
   /// Whether local writes/queries should reach local subscribers/queryables
   local_routing: true,
 

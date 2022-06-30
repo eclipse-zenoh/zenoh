@@ -20,7 +20,7 @@ use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
-use zenoh_config::EndPoint;
+use zenoh_config::{EndPoint, ModeDependent};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
@@ -127,13 +127,20 @@ impl Runtime {
                 listeners,
                 peers,
                 guard.scouting().multicast().enabled().unwrap_or(true),
-                guard.scouting().multicast().peer().listen().unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()
+                    .listen()
                     .peer()
+                    .cloned()
+                    .unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
                     .autoconnect()
-                    .unwrap_or(WhatAmIMatcher::try_from(131).unwrap()),
+                    .peer()
+                    .cloned()
+                    .unwrap_or_else(|| WhatAmIMatcher::try_from(131).unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -181,15 +188,17 @@ impl Runtime {
                 guard
                     .scouting()
                     .multicast()
-                    .router()
                     .listen()
+                    .peer()
+                    .cloned()
                     .unwrap_or(true),
                 guard
                     .scouting()
                     .multicast()
-                    .router()
                     .autoconnect()
-                    .unwrap_or(WhatAmIMatcher::try_from(128).unwrap()),
+                    .peer()
+                    .cloned()
+                    .unwrap_or_else(|| WhatAmIMatcher::try_from(128).unwrap()),
                 guard
                     .scouting()
                     .multicast()

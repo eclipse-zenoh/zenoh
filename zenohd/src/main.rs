@@ -15,7 +15,7 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
-use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
+use zenoh::config::{Config, EndPoint, ModeDependentValue, PluginLoad, ValidatedMap};
 use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
 
@@ -217,17 +217,11 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .endpoints
             .push(DEFAULT_LISTENER.parse().unwrap())
     }
-    match (
-        config.add_timestamp().is_none(),
-        args.is_present("no-timestamp"),
-    ) {
-        (_, true) => {
-            config.set_add_timestamp(Some(false)).unwrap();
-        }
-        (true, false) => {
-            config.set_add_timestamp(Some(true)).unwrap();
-        }
-        (false, false) => {}
+    if args.is_present("no-timestamp") {
+        config
+            .timestamping
+            .set_enabled(Some(ModeDependentValue::Unique(false)))
+            .unwrap();
     };
     match (
         config.scouting.multicast.enabled().is_none(),
