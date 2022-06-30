@@ -95,7 +95,7 @@ pub fn get_sub_key_selectors<'a>(
         } {
             let sub_part = keyexpr::new(&key_selector[..i]).unwrap();
             if sub_part.intersects(prefix) {
-                // if sub_part ends with "**" or "**/", keep those in remaining part
+                // if sub_part ends with "**", keep those in remaining part
                 let remaining = if sub_part.ends_with("**") {
                     &key_selector[i - 2..]
                 } else {

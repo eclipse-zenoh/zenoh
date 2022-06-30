@@ -119,7 +119,7 @@ fn tables_bench(c: &mut Criterion) {
                 route_data(
                     &tables,
                     &face0,
-                    &"bench/tables/A*".into(),
+                    &"bench/tables/A$*".into(),
                     Channel::default(),
                     CongestionControl::default(),
                     None,

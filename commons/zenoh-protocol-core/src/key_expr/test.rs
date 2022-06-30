@@ -83,7 +83,7 @@ fn intersections() {
     assert!(intersect("x/*", "x/abc"));
     assert!(!intersect("x/*", "abc"));
     assert!(!intersect("*", "x/abc"));
-    assert!(intersect("x/*", "x/abc*"));
+    assert!(intersect("x/*", "x/abc$*"));
     assert!(intersect("x/$*abc", "x/abc$*"));
     assert!(intersect("x/a$*", "x/abc$*"));
     assert!(intersect("x/a$*de", "x/abc$*de"));
@@ -142,8 +142,8 @@ fn inclusions() {
     assert!(includes("x/*", "x/abc"));
     assert!(!includes("x/*", "abc"));
     assert!(!includes("*", "x/abc"));
-    assert!(includes("x/*", "x/abc*"));
-    assert!(!includes("x/$*abc", "x/abc*"));
+    assert!(includes("x/*", "x/abc$*"));
+    assert!(!includes("x/$*abc", "x/abc$*"));
     assert!(includes("x/a$*", "x/abc$*"));
     assert!(!includes("x/abc$*", "x/a$*"));
     assert!(includes("x/a$*de", "x/abc$*de"));
