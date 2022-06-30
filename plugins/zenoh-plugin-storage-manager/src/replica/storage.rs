@@ -67,8 +67,6 @@ impl StorageService {
     async fn start_storage_queryable_subscriber(&self) -> ZResult<Sender<StorageMessage>> {
         let (tx, rx) = flume::bounded(1);
 
-        // TODO:do we need a task here? if yes, why?
-        // task::spawn(async move {
         // subscribe on key_expr
         let storage_sub = match self
             .session
@@ -92,7 +90,6 @@ impl StorageService {
             }
         };
 
-        // TODO: refactor
         if self.replication.is_some() {
             let aligner_updates = &self.replication.as_ref().unwrap().aligner_updates;
             loop {
@@ -103,15 +100,17 @@ impl StorageService {
                     },
                     // on query on key_expr
                     query = storage_queryable.recv_async() => {
-                        let q = query.unwrap();
-                        // wrap zenoh::Query in zenoh_backend_traits::Query
-                        // with outgoing interceptor
-                        let query = Query::new(q, self.out_interceptor.clone());
-                        let mut storage = self.storage.lock().await;
-                        if let Err(e) = storage.on_query(query).await {
-                            warn!("Storage {} raised an error receiving a query: {}", self.name, e);
+                        self.reply_query(query).await;
+                    },
+                    // on aligner update
+                    update = aligner_updates.recv_async() => {
+                        match update {
+                            Ok(sample) => self.process_sample(sample).await,
+                            Err(e) => {
+                                error!("Error in receiving aligner update: {}", e);
+                                return Err(e.into());
+                            }
                         }
-                        drop(storage);
                     },
                     // on storage handle drop
                     message = rx.recv_async() => {
@@ -130,17 +129,6 @@ impl StorageService {
                                 return Err(e.into());
                             },
                         };
-                    },
-                    // on aligner update
-                    update = aligner_updates.recv_async() => {
-                        match update {
-                            Ok(sample) => self.process_sample(sample).await,
-                            Err(e) => {
-                                error!("Error in receiving aligner update: {}", e);
-                                return Err(e.into());
-                            }
-                        }
-
                     }
                 );
             }
@@ -153,15 +141,7 @@ impl StorageService {
                     },
                     // on query on key_expr
                     query = storage_queryable.recv_async() => {
-                        let q = query.unwrap();
-                        // wrap zenoh::Query in zenoh_backend_traits::Query
-                        // with outgoing interceptor
-                        let query = Query::new(q, self.out_interceptor.clone());
-                        let mut storage = self.storage.lock().await;
-                        if let Err(e) = storage.on_query(query).await {
-                            warn!("Storage {} raised an error receiving a query: {}", self.name, e);
-                        }
-                        drop(storage);
+                        self.reply_query(query).await;
                     },
                     // on storage handle drop
                     message = rx.recv_async() => {
@@ -213,6 +193,18 @@ impl StorageService {
                     error!("Error in sending the sample to the log: {}", e);
                 }
             }
+        }
+        drop(storage);
+    }
+
+    async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
+        let q = query.unwrap();
+        // wrap zenoh::Query in zenoh_backend_traits::Query
+        // with outgoing interceptor
+        let query = Query::new(q, self.out_interceptor.clone());
+        let mut storage = self.storage.lock().await;
+        if let Err(e) = storage.on_query(query).await {
+            warn!("Storage {} raised an error receiving a query: {}", self.name, e);
         }
         drop(storage);
     }
