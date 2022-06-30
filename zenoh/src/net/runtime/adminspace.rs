@@ -15,7 +15,7 @@ use super::Runtime;
 use crate::key_expr::keyexpr;
 use crate::plugins::PluginsManager;
 use crate::prelude::sync::SampleKind;
-use crate::prelude::{KeyExpr, Selector};
+use crate::prelude::KeyExpr;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -539,11 +539,8 @@ pub async fn router_data(
         });
         #[cfg(feature = "stats")]
         {
-            use std::convert::TryFrom;
-            let stats = crate::prelude::ValueSelector::try_from(selector)
-                .ok()
-                .and_then(|s| s.properties.get("stats").map(|v| v == "true"))
-                .unwrap_or(false);
+            let stats = crate::prelude::ValueSelector::decode(selector)
+                .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
                     "stats".to_string(),
@@ -620,10 +617,7 @@ pub async fn plugins_status(
     key: &KeyExpr<'_>,
     args: &str,
 ) -> Vec<crate::plugins::Response> {
-    let selector = Selector {
-        key_expr: key.clone(),
-        value_selector: args.into(),
-    };
+    let selector = key.borrowing_clone().with_value_selector(args);
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.pid_str);
     let mut responses = Vec::new();

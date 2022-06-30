@@ -3460,6 +3460,7 @@ dependencies = [
  "env_logger",
  "event-listener",
  "flume",
+ "form_urlencoded",
  "futures",
  "git-version",
  "hex",

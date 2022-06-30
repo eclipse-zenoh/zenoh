@@ -1462,7 +1462,10 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation {
             QueryConsolidation::Auto => {
-                if selector.has_time_range() {
+                if selector
+                    .decode_value_selector()
+                    .any(|(k, _)| k.as_ref() == "_time")
+                {
                     ConsolidationStrategy::none()
                 } else {
                     ConsolidationStrategy::default()
@@ -1493,7 +1496,7 @@ impl Session {
         drop(state);
         primitives.send_query(
             &selector.key_expr.to_wire(self),
-            selector.value_selector.as_ref(),
+            selector.value_selector(),
             qid,
             zenoh_protocol_core::QueryTAK {
                 kind: zenoh_protocol_core::queryable::ALL_KINDS,
@@ -1506,7 +1509,7 @@ impl Session {
             self.handle_query(
                 true,
                 &selector.key_expr.to_wire(self),
-                selector.value_selector.as_ref(),
+                selector.value_selector(),
                 qid,
                 zenoh_protocol_core::QueryTAK {
                     kind: zenoh_protocol_core::queryable::ALL_KINDS,

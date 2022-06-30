@@ -94,10 +94,10 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 mod session;
 pub use session::*;
 
+pub mod key_expr;
 #[doc(hidden)]
 pub mod net;
-
-pub mod key_expr;
+pub(crate) mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod info;

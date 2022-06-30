@@ -334,13 +334,16 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                 ))
             }
         };
-        let query_part = url.query().map(|q| format!("?{}", q));
-        let selector = if let Some(q) = &query_part {
+        let query_part = url.query();
+        let selector = if let Some(q) = query_part {
             Selector::from(key_expr).with_value_selector(q)
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.has_time_range() {
+        let consolidation = if selector
+            .decode_value_selector()
+            .any(|(k, _)| k.as_ref() == "_time")
+        {
             QueryConsolidation::none()
         } else {
             QueryConsolidation::default()

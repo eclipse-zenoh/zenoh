@@ -19,7 +19,7 @@ use std::{
 use zenoh_core::Result as ZResult;
 pub use zenoh_protocol_core::key_expr::*;
 
-use crate::Session;
+use crate::{prelude::sync::Selector, Session};
 
 #[derive(Clone)]
 pub(crate) enum KeyExprInner<'a> {
@@ -322,6 +322,20 @@ impl<'a> KeyExpr<'a> {
             }))
         } else {
             Ok(r.into())
+        }
+    }
+
+    pub fn with_value_selector(self, selector: &'a str) -> Selector<'a> {
+        Selector {
+            key_expr: self,
+            value_selector: selector.into(),
+        }
+    }
+
+    pub fn with_owned_value_selector(self, selector: String) -> Selector<'a> {
+        Selector {
+            key_expr: self,
+            value_selector: selector.into(),
         }
     }
 }

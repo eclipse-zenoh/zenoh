@@ -163,7 +163,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
             period: self.period,
-            query_selector: self.query_selector.map(|s| s.map(|s| s.to_owned())),
+            query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
         }
@@ -325,17 +325,12 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         let key_expr = conf.key_expr?;
-        let Selector {
-            key_expr: key_selector,
-            value_selector,
-        } = match conf.query_selector {
+        let (key_selector, value_selector) = match conf.query_selector {
             Some(Ok(s)) => s,
             Some(Err(e)) => return Err(e),
-            None => Selector {
-                key_expr: key_expr.clone(),
-                value_selector: std::borrow::Cow::Borrowed(""),
-            },
-        };
+            None => key_expr.clone().with_value_selector(""),
+        }
+        .split();
 
         // declare subscriber at first
         let subscriber = match conf.session.clone() {
@@ -380,10 +375,9 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     #[inline]
     pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
         self.query_on_selector(
-            Selector {
-                key_expr: self.query_key_expr.clone(),
-                value_selector: self.query_value_selector.clone().into(),
-            },
+            self.query_key_expr
+                .clone()
+                .with_owned_value_selector(self.query_value_selector.to_owned()),
             self.query_target,
             self.query_consolidation,
         )
