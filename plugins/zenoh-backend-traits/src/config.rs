@@ -52,6 +52,7 @@ pub struct StorageConfig {
     // #[as_mut]
     // pub rest: Map<String, Value>,
 }
+// Note: All parameters should be same for replicas, else will result on huge overhead
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicaConfig {
     pub align_prefix: String,
@@ -71,12 +72,14 @@ impl Default for ReplicaConfig {
             align_prefix: String::from("@-digest"),
             // Publication interval indicates the frequency of digest publications
             // This will determine the time upto which replicas might be diverged
+            // This can be different for each replica if not used to compute hot and warm
             publication_interval: Duration::from_secs(5),
             // This indicates the uncertainity due to the network
             // The messages might still be in transit in the network
             propagation_delay: Duration::from_millis(200),
             // This is the chunk that you would like your data to be divide into in time.
             // Higher the frequency of updates, lower the delta should be chosen
+            // To be efficient, delta should be greater than twice the propagation delay
             delta: Duration::from_millis(1000),
             // The number of chunks an interval is divided into
             // Ideally this number should be such that the numbr of entries in the chunk is less than 10000

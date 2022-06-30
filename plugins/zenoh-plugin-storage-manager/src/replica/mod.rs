@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+// This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
+
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
@@ -55,7 +58,7 @@ pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
 // If the incoming digest is valid, the `DigestSubscriber` forwards it to the `Aligner`
 // The `Aligner` identifies mismatches in the contents of the storage with respect to the other storage
 // `Aligner` generates a list of missing updates that is then send to the `StorageService`
-//
+// When a `StorageService` receives an update, it sends a log to the `Snapshotter`
 
 pub struct Replica {
     // TODO: Discuss if we need to add -<storage_type> for uniqueness
