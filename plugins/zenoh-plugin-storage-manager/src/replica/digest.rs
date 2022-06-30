@@ -30,7 +30,6 @@ pub struct DigestConfig {
     pub warm: usize,
 }
 
-// TODO: split this such that only minimal information is sent through wire. Maybe a new CompressedDigest struct would also work
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct Digest {
     pub timestamp: zenoh::time::Timestamp,
@@ -73,7 +72,7 @@ impl FromStr for EraType {
             "cold" => Ok(EraType::Cold),
             "warm" => Ok(EraType::Warm),
             "hot" => Ok(EraType::Hot),
-            _ => Ok(EraType::Cold), //TODO: fix this later
+            _ => Ok(EraType::Cold), //TODO: fix this later with proper error message
         }
     }
 }
@@ -111,12 +110,14 @@ impl Checksum for u64 {
 
 //functions for digest creation and update
 impl Digest {
+    // Creates a digest from scratch when initializing the replica
     pub fn create_digest(
         timestamp: zenoh::time::Timestamp,
         config: DigestConfig,
         raw_log: Vec<Timestamp>,
         latest_interval: u64,
     ) -> Digest {
+        // Get the subintervals, intervals and eras with their content
         let subinterval_content = Digest::get_subintervals(raw_log, &config);
         let interval_content = Digest::get_intervals(
             subinterval_content.keys().cloned().collect(),
@@ -128,6 +129,7 @@ impl Digest {
             latest_interval,
         );
 
+        // Compute hashes for subintervals, intervals and eras
         let mut subinterval_hash = HashMap::new();
         for (sub, content) in subinterval_content {
             let subinterval = SubInterval {
@@ -136,7 +138,6 @@ impl Digest {
             };
             subinterval_hash.insert(sub, subinterval);
         }
-
         let mut interval_hash = HashMap::new();
         for (int, content) in interval_content {
             let interval = Interval {
@@ -145,7 +146,6 @@ impl Digest {
             };
             interval_hash.insert(int, interval);
         }
-
         let mut era_hash = HashMap::new();
         for (e, content) in era_content {
             let era = Interval {
@@ -165,167 +165,21 @@ impl Digest {
         }
     }
 
-    fn get_content_hash<T: Checksum>(content: &[T]) -> u64 {
-        let crc64 = Crc::<u64>::new(&CRC_64_ECMA_182);
-        let mut hasher = crc64.digest();
-        for s_cont in content {
-            let formatted = s_cont.format_content();
-            hasher.update(formatted.as_bytes());
-        }
-        hasher.finalize()
-    }
-
-    fn get_subinterval_checksum(content: &[Timestamp]) -> u64 {
-        Digest::get_content_hash(content)
-    }
-
-    fn get_interval_checksum(content: &[u64], info: &HashMap<u64, SubInterval>) -> u64 {
-        let mut hashable_content = Vec::new();
-        for i in content {
-            let i_cont = info.get(i).unwrap().checksum;
-            hashable_content.push(i_cont);
-        }
-        Digest::get_content_hash(&hashable_content)
-    }
-
-    fn get_era_checksum(content: &[u64], info: &HashMap<u64, Interval>) -> u64 {
-        let mut hashable_content = Vec::new();
-        for i in content {
-            let i_cont = info.get(i).unwrap().checksum;
-            hashable_content.push(i_cont);
-        }
-        Digest::get_content_hash(&hashable_content)
-    }
-
-    fn get_digest_checksum(content: &HashMap<EraType, Interval>) -> u64 {
-        let mut hashable_content = Vec::new();
-        for i_cont in content.values() {
-            hashable_content.push(i_cont.checksum);
-        }
-        Digest::get_content_hash(&hashable_content)
-    }
-
-    fn get_subintervals(
-        log: Vec<Timestamp>,
-        config: &DigestConfig,
-    ) -> HashMap<u64, Vec<Timestamp>> {
-        let mut subinterval_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
-        for ts in log {
-            let sub = Digest::get_subinterval(config.delta, ts, config.sub_intervals);
-            subinterval_content
-                .entry(sub)
-                .and_modify(|e| e.push(ts))
-                .or_insert_with(|| vec![ts]);
-        }
-        for content in subinterval_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        subinterval_content
-    }
-
-    fn get_intervals(
-        subinterval_list: HashSet<u64>,
-        subintervals: usize,
-    ) -> HashMap<u64, Vec<u64>> {
-        let mut interval_content: HashMap<u64, Vec<u64>> = HashMap::new();
-        for sub in subinterval_list {
-            let interval = Digest::get_interval(sub, subintervals);
-            interval_content
-                .entry(interval)
-                .and_modify(|e| e.push(sub))
-                .or_insert_with(|| vec![sub]);
-        }
-        for content in interval_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        interval_content
-    }
-
-    fn get_eras(
-        interval_list: HashSet<u64>,
-        config: &DigestConfig,
-        latest_interval: u64,
-    ) -> HashMap<EraType, Vec<u64>> {
-        let mut era_content: HashMap<EraType, Vec<u64>> = HashMap::new();
-        for int in interval_list {
-            let era = Digest::get_era(config, latest_interval, int);
-            era_content
-                .entry(era)
-                .and_modify(|e| e.push(int))
-                .or_insert_with(|| vec![int]);
-        }
-        for content in era_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        era_content
-    }
-
-    // fn populate_content(
-    //     processed_log: Vec<Timestamp>,
-    // ) -> (
-    //     HashMap<u64, Vec<Timestamp>>,
-    //     HashMap<u64, Vec<u64>>,
-    //     HashMap<EraType, Vec<u64>>,
-    // ) {
-    //     let mut subinterval_content = HashMap::new();
-    //     let mut interval_content = HashMap::new();
-    //     let mut era_content = HashMap::new();
-    //     for log_entry in processed_log {
-    //         subinterval_content
-    //             .entry(log_entry.subinterval)
-    //             .or_insert_with(Vec::new);
-    //         subinterval_content
-    //             .get_mut(&log_entry.subinterval)
-    //             .unwrap()
-    //             .push(log_entry.content);
-    //         interval_content
-    //             .entry(log_entry.interval)
-    //             .or_insert_with(Vec::new);
-    //         interval_content
-    //             .get_mut(&log_entry.interval)
-    //             .unwrap()
-    //             .push(log_entry.subinterval);
-    //         if !era_content.contains_key(&log_entry.era) {
-    //             era_content.insert(log_entry.era.clone(), Vec::new());
-    //         }
-    //         era_content
-    //             .get_mut(&log_entry.era)
-    //             .unwrap()
-    //             .push(log_entry.interval);
-    //     }
-
-    //     for content in subinterval_content.values_mut() {
-    //         content.sort_unstable();
-    //         content.dedup();
-    //     }
-    //     for content in interval_content.values_mut() {
-    //         content.sort_unstable();
-    //         content.dedup();
-    //     }
-    //     for content in era_content.values_mut() {
-    //         content.sort_unstable();
-    //         content.dedup();
-    //     }
-    //     (subinterval_content, interval_content, era_content)
-    // }
-
+    // Updates an existing digest with new entries, also replaces removed entries
     pub async fn update_digest(
         mut current: Digest,
         latest_interval: u64,
         last_snapshot_time: Timestamp,
-        content: HashSet<Timestamp>,
-        redundant_content: HashSet<Timestamp>,
+        new_content: HashSet<Timestamp>,
+        deleted_content: HashSet<Timestamp>,
     ) -> Digest {
         // push content in correct places
         let (mut current, mut subintervals_to_update, mut intervals_to_update, mut eras_to_update) =
-            Digest::update_content(&mut current, content, latest_interval);
+            Digest::update_new_content(&mut current, new_content, latest_interval);
 
-        // remove redundant content from proper places
+        // remove deleted content from proper places
         let (mut current, further_subintervals, further_intervals, further_eras) =
-            Digest::remove_redundant_content(&mut current, redundant_content, latest_interval);
+            Digest::remove_deleted_content(&mut current, deleted_content, latest_interval);
 
         // move intervals into eras if changed -- iterate through hot and move them to warm/cold if needed, iterate through warm and move them to cold if needed
         let (current, realigned_eras) =
@@ -340,7 +194,7 @@ impl Digest {
         let mut intervals = current.intervals.clone();
         let mut eras = current.eras.clone();
 
-        // reconstruct updates parts
+        // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
             // order the content, hash them
             subintervals.get_mut(&sub).unwrap().content.sort_unstable();
@@ -381,7 +235,114 @@ impl Digest {
         }
     }
 
-    fn update_content(
+    // compute the checksum of the given content
+    fn get_content_hash<T: Checksum>(content: &[T]) -> u64 {
+        let crc64 = Crc::<u64>::new(&CRC_64_ECMA_182);
+        let mut hasher = crc64.digest();
+        for s_cont in content {
+            let formatted = s_cont.format_content();
+            hasher.update(formatted.as_bytes());
+        }
+        hasher.finalize()
+    }
+
+    // compute the checksum of a subinterval
+    fn get_subinterval_checksum(content: &[Timestamp]) -> u64 {
+        Digest::get_content_hash(content)
+    }
+
+    // compute the checksum of an interval
+    fn get_interval_checksum(content: &[u64], info: &HashMap<u64, SubInterval>) -> u64 {
+        let mut hashable_content = Vec::new();
+        for i in content {
+            let i_cont = info.get(i).unwrap().checksum;
+            hashable_content.push(i_cont);
+        }
+        Digest::get_content_hash(&hashable_content)
+    }
+
+    // compute the checksum of an era
+    fn get_era_checksum(content: &[u64], info: &HashMap<u64, Interval>) -> u64 {
+        let mut hashable_content = Vec::new();
+        for i in content {
+            let i_cont = info.get(i).unwrap().checksum;
+            hashable_content.push(i_cont);
+        }
+        Digest::get_content_hash(&hashable_content)
+    }
+
+    // compute the checksum of the digest
+    fn get_digest_checksum(content: &HashMap<EraType, Interval>) -> u64 {
+        let mut hashable_content = Vec::new();
+        for i_cont in content.values() {
+            hashable_content.push(i_cont.checksum);
+        }
+        Digest::get_content_hash(&hashable_content)
+    }
+
+    // compute the list of subintervals from a log of timestamps
+    fn get_subintervals(
+        log: Vec<Timestamp>,
+        config: &DigestConfig,
+    ) -> HashMap<u64, Vec<Timestamp>> {
+        let mut subinterval_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
+        for ts in log {
+            let sub = Digest::get_subinterval(config.delta, ts, config.sub_intervals);
+            subinterval_content
+                .entry(sub)
+                .and_modify(|e| e.push(ts))
+                .or_insert_with(|| vec![ts]);
+        }
+        for content in subinterval_content.values_mut() {
+            content.sort_unstable();
+            content.dedup();
+        }
+        subinterval_content
+    }
+
+    // compute the list of intervals from a list of subintervals
+    fn get_intervals(
+        subinterval_list: HashSet<u64>,
+        subintervals: usize,
+    ) -> HashMap<u64, Vec<u64>> {
+        let mut interval_content: HashMap<u64, Vec<u64>> = HashMap::new();
+        for sub in subinterval_list {
+            let interval = Digest::get_interval(sub, subintervals);
+            interval_content
+                .entry(interval)
+                .and_modify(|e| e.push(sub))
+                .or_insert_with(|| vec![sub]);
+        }
+        for content in interval_content.values_mut() {
+            content.sort_unstable();
+            content.dedup();
+        }
+        interval_content
+    }
+
+    // compute the list of eras from a list of intervals
+    fn get_eras(
+        interval_list: HashSet<u64>,
+        config: &DigestConfig,
+        latest_interval: u64,
+    ) -> HashMap<EraType, Vec<u64>> {
+        let mut era_content: HashMap<EraType, Vec<u64>> = HashMap::new();
+        for int in interval_list {
+            let era = Digest::get_era(config, latest_interval, int);
+            era_content
+                .entry(era)
+                .and_modify(|e| e.push(int))
+                .or_insert_with(|| vec![int]);
+        }
+        for content in era_content.values_mut() {
+            content.sort_unstable();
+            content.dedup();
+        }
+        era_content
+    }
+
+    // update the digest with new content
+    fn update_new_content(
         current: &mut Digest,
         content: HashSet<Timestamp>,
         latest_interval: u64,
@@ -433,16 +394,17 @@ impl Digest {
         )
     }
 
-    fn remove_redundant_content(
+    // remove deleted content from the digest
+    fn remove_deleted_content(
         current: &mut Digest,
-        redundant_content: HashSet<Timestamp>,
+        deleted_content: HashSet<Timestamp>,
         latest_interval: u64,
     ) -> (Digest, HashSet<u64>, HashSet<u64>, HashSet<EraType>) {
         let mut eras_to_update = HashSet::new();
         let mut intervals_to_update = HashSet::new();
         let mut subintervals_to_update = HashSet::new();
 
-        for entry in redundant_content {
+        for entry in deleted_content {
             let subinterval =
                 Digest::get_subinterval(current.config.delta, entry, current.config.sub_intervals);
             subintervals_to_update.insert(subinterval);
@@ -500,6 +462,7 @@ impl Digest {
         )
     }
 
+    // re-assign intervals into eras as time moves on
     fn recalculate_era_content(
         current: &mut Digest,
         latest_interval: u64,
@@ -538,6 +501,7 @@ impl Digest {
         (current.clone(), eras_to_update)
     }
 
+    // compute the subinterval for a given timestamp
     fn get_subinterval(delta: Duration, ts: Timestamp, subintervals: usize) -> u64 {
         let ts = u64::try_from(
             ts.get_time()
@@ -551,11 +515,13 @@ impl Digest {
         ts / (delta / u64::try_from(subintervals).unwrap())
     }
 
+    // compute the interval for a given subinterval
     fn get_interval(subinterval: u64, subintervals: usize) -> u64 {
         let subintervals = u64::try_from(subintervals).unwrap();
         subinterval / subintervals
     }
 
+    // compute era for a given interval
     fn get_era(config: &DigestConfig, latest_interval: u64, interval: u64) -> EraType {
         let hot_min = latest_interval - u64::try_from(config.hot).unwrap() + 1;
         let warm_min = latest_interval
@@ -575,6 +541,7 @@ impl Digest {
 
 //functions for digest compression
 impl Digest {
+    // Compress the digest to transport on the wire
     pub fn compress(&self) -> Digest {
         let mut compressed_intervals = HashMap::new();
         let mut compressed_subintervals = HashMap::new();
@@ -625,6 +592,7 @@ impl Digest {
         }
     }
 
+    // get the intervals of a given era
     pub fn get_era_content(&self, era: EraType) -> HashMap<u64, u64> {
         let mut result = HashMap::new();
         for int in self.eras.get(&era).unwrap().content.clone() {
@@ -633,6 +601,7 @@ impl Digest {
         result
     }
 
+    // get the subintervals of a given interval
     pub fn get_interval_content(&self, intervals: HashSet<u64>) -> HashMap<u64, u64> {
         //return (subintervalid, checksum) for the set of intervals
         let mut result = HashMap::new();
@@ -644,6 +613,7 @@ impl Digest {
         result
     }
 
+    // get the list of timestamps of a given subinterval
     pub fn get_subinterval_content(
         &self,
         subintervals: HashSet<u64>,
@@ -656,9 +626,9 @@ impl Digest {
     }
 }
 
-//functions for alignment
+// functions for alignment
 impl Digest {
-    //return mismatching eras
+    // return mismatching eras
     pub fn get_era_diff(&self, other: HashMap<EraType, Interval>) -> HashSet<EraType> {
         let mut result = HashSet::new();
         for era in vec![EraType::Hot, EraType::Warm, EraType::Cold] {
@@ -675,7 +645,7 @@ impl Digest {
         result
     }
 
-    //return mismatching intervals in an era
+    // return mismatching intervals in an era
     pub fn get_interval_diff(&self, other_intervals: HashMap<u64, u64>) -> HashSet<u64> {
         let mut mis_int = HashSet::new();
         for int in other_intervals.keys() {
@@ -690,7 +660,7 @@ impl Digest {
         mis_int
     }
 
-    //return mismatching subintervals in an interval
+    // return mismatching subintervals in an interval
     pub fn get_subinterval_diff(&self, other_subintervals: HashMap<u64, u64>) -> HashSet<u64> {
         let mut mis_sub = HashSet::new();
         for sub in other_subintervals.keys() {
@@ -707,6 +677,7 @@ impl Digest {
         mis_sub
     }
 
+    // get missing content from a given list of subintervals
     pub fn get_full_content_diff(
         &self,
         other_subintervals: HashMap<u64, Vec<zenoh::time::Timestamp>>,
