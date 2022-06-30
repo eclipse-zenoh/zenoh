@@ -11,11 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! Tools to access informations about the current zenoh [`Session`](crate::Session).
+
 use crate::utils::ClosureResolve;
 use crate::SessionRef;
 use zenoh_config::{WhatAmI, ZenohId};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
+/// A builder retuned by [`SessionInfos::zid()`](SessionInfos::zid) that allows
+/// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let zid = session.info().zid().res().await;
+/// # })
+/// ```
 pub struct ZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -36,7 +52,8 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
 }
 
 macro_rules! closure_builder {
-    ($name:ident) => {
+    ($(#[$attr:meta])* $name:ident) => {
+        $(#[$attr])*
         pub struct $name<'a, T>(ClosureResolve<Box<dyn FnOnce() -> T + 'a>>);
         impl<'a, T> Resolvable for $name<'a, T> {
             type Output = T;
@@ -62,20 +79,95 @@ macro_rules! closure_builder {
     };
 }
 
-closure_builder!(RoutersZidBuilder);
-closure_builder!(PeersZidBuilder);
+closure_builder! {
+    /// A builder retuned by [`SessionInfos::routers_zid()`](SessionInfos::routers_zid) that allows
+    /// to access the [`ZenohId`] of the zenoh routers this process is currently connected to
+    /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut routers_zid = session.info().routers_zid().res().await;
+    /// while let Some(router_zid) = routers_zid.next() {}
+    /// # })
+    /// ```
+    RoutersZidBuilder
+}
 
+closure_builder! {
+    /// A builder retuned by [`SessionInfos::peers_zid()`](SessionInfos::peers_zid) that allows
+    /// to access the [`ZenohId`] of the zenoh peers this process is currently connected to.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let zid = session.info().zid().res().await;
+    /// let mut peers_zid = session.info().peers_zid().res().await;
+    /// while let Some(peer_zid) = peers_zid.next() {}
+    /// # })
+    /// ```
+    PeersZidBuilder
+}
+
+/// Struct returned by [`Session::info()`](crate::Session::info) which allows
+/// to access informations about the current zenoh [`Session`](crate::Session).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let info = session.info();
+/// let zid = info.zid().res().await;
+/// # })
+/// ```
 pub struct SessionInfos<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
 impl SessionInfos<'_> {
+    /// Return the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let zid = session.info().zid().res().await;
+    /// # })
+    /// ```
     pub fn zid(&self) -> ZidBuilder {
         ZidBuilder {
             session: self.session.clone(),
         }
     }
 
+    /// Return the [`ZenohId`] of the zenoh routers this process is currently connected to
+    /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut routers_zid = session.info().routers_zid().res().await;
+    /// while let Some(router_zid) = routers_zid.next() {}
+    /// # })
+    /// ```
     pub fn routers_zid(&self) -> RoutersZidBuilder<impl Iterator<Item = ZenohId>> {
         RoutersZidBuilder(ClosureResolve(Box::new(move || {
             self.session
@@ -92,6 +184,19 @@ impl SessionInfos<'_> {
         })))
     }
 
+    /// Return the [`ZenohId`] of the zenoh peers this process is currently connected to.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut peers_zid = session.info().peers_zid().res().await;
+    /// while let Some(peer_zid) = peers_zid.next() {}
+    /// # })
+    /// ```
     pub fn peers_zid(&self) -> PeersZidBuilder<impl Iterator<Item = ZenohId>> {
         PeersZidBuilder(ClosureResolve(Box::new(move || {
             self.session
