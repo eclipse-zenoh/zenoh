@@ -17,7 +17,7 @@ use async_std::sync::RwLock;
 use async_std::task::sleep;
 use flume::Receiver;
 use futures::join;
-use log::debug;
+use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::time::Duration;
@@ -281,8 +281,8 @@ impl Snapshotter {
         let volatile = replica_data.volatile_log.read().await;
         // let l = serde_json::to_string(&(*log)).unwrap();
         // log_file.write_all(l.as_bytes()).unwrap();
-        debug!("Stable log updated:: {:?}", stable);
-        debug!("Volatile log updated:: {:?}", volatile);
+        trace!("Stable log updated:: {:?}", stable);
+        trace!("Volatile log updated:: {:?}", volatile);
         // drop(log);
     }
 

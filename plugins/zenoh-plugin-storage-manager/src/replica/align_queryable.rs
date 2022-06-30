@@ -14,7 +14,7 @@
 use super::digest::*;
 use super::Snapshotter;
 use async_std::sync::Arc;
-use log::{debug, error};
+use log::{debug, error, trace};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -79,19 +79,15 @@ impl AlignQueryable {
         loop {
             let query = queryable.recv_async().await;
             let query = query.unwrap();
-            debug!(
-                "[align_queryable]>> [Queryable ] Received Query '{}'",
-                query.selector()
-            );
+            trace!("[align_queryable] Received Query '{}'", query.selector());
             let diff_required = self.parse_selector(query.selector());
-            debug!(
+            trace!(
                 "[align_queryable] Parsed selector diff_required:{:?}",
                 diff_required
             );
             if diff_required.is_some() {
                 let values = self.get_value(diff_required.unwrap()).await;
-                debug!("[align_queryable] value for the query is {:?}", values);
-                //TODO: reply according to AlignData, a stream of responses
+                trace!("[align_queryable] value for the query is {:?}", values);
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {
@@ -128,7 +124,7 @@ impl AlignQueryable {
     }
 
     async fn get_value(&self, diff_required: AlignComponent) -> Vec<AlignData> {
-        // TODO: timestamp is useless????
+        // TODO: Discuss if having timestamp is useful
         match diff_required {
             AlignComponent::Era(era) => {
                 let intervals = self.get_intervals(era).await;
@@ -180,10 +176,7 @@ impl AlignQueryable {
 
     fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
         let properties = selector.parameters_stringmap().unwrap(); // note: this is a hashmap
-        debug!(
-            "[ALIGN QUERYABLE] Properties are ************** : {:?}",
-            properties
-        );
+        trace!("[ALIGN QUERYABLE] Properties are : {:?}", properties);
         if properties.get(super::ERA).is_some() {
             Some(AlignComponent::Era(
                 EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),
@@ -234,8 +227,8 @@ impl AlignQueryable {
             if let Ok(reply) = replies.recv_async().await {
                 match reply.sample {
                     Ok(sample) => {
-                        debug!(
-                            "[ALIGN QUERYABLE]>> Received ('{}': '{}')",
+                        trace!(
+                            "[ALIGN QUERYABLE] Received ('{}': '{}')",
                             sample.key_expr.as_str(),
                             sample.value
                         );

@@ -16,7 +16,7 @@ use super::Snapshotter;
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use flume::{Receiver, Sender};
-use log::{debug, error};
+use log::{error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -59,12 +59,13 @@ impl Aligner {
 
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
-            debug!(
+            trace!(
                 "[ALIGNER]Processing digest: {:?} from {}",
-                incoming_digest, from
+                incoming_digest,
+                from
             );
             if self.in_processed(incoming_digest.checksum).await {
-                debug!("[ALIGNER]Skipping already processed digest");
+                trace!("[ALIGNER]Skipping already processed digest");
                 continue;
             } else {
                 // process this digest
@@ -79,7 +80,7 @@ impl Aligner {
         let processed = processed_set.contains(&checksum);
         drop(processed_set);
         if processed {
-            debug!("[ALIGNER]Dropping {} since already processed", checksum);
+            trace!("[ALIGNER]Dropping {} since already processed", checksum);
             true
         } else {
             false
@@ -91,18 +92,18 @@ impl Aligner {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
         let missing_content = self.get_missing_content(other, from).await;
-        debug!("[REPLICA] Missing content is {:?}", missing_content);
+        trace!("[REPLICA] Missing content is {:?}", missing_content);
 
         if !missing_content.is_empty() {
             let missing_data = self
                 .get_missing_data(&missing_content, timestamp, from)
                 .await;
 
-            debug!("[REPLICA] Missing data is {:?}", missing_data);
+            trace!("[REPLICA] Missing data is {:?}", missing_data);
 
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
-                debug!("[REPLICA] Adding sample {:?}", sample);
+                trace!("[REPLICA] Adding sample {:?} to storage", sample);
                 // TODO: change this to a storage pipeline
                 // self.process_sample(sample).await;
                 self.tx_sample.send_async(sample).await.unwrap();
@@ -230,7 +231,7 @@ impl Aligner {
             }
             // get intervals diff
             let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-            debug!(
+            trace!(
                 "[ALIGNER] The subintervals that need alignment are : {:?}",
                 diff_subintervals
             );
@@ -253,7 +254,7 @@ impl Aligner {
                 }
                 // get subintervals diff
                 let result = this.get_full_content_diff(other_content);
-                debug!("[ALIGNER] The missing content is {:?}", result);
+                trace!("[ALIGNER] The missing content is {:?}", result);
                 return result;
             }
         }
@@ -262,7 +263,7 @@ impl Aligner {
 
     async fn perform_query(&self, from: String, properties: String) -> Vec<Sample> {
         let selector = format!("{}{}?({})", self.digest_key, from, properties);
-        debug!("[ALIGNER]Sending Query '{}'...", selector);
+        trace!("[ALIGNER]Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self
             .session
@@ -274,8 +275,8 @@ impl Aligner {
         while let Ok(reply) = replies.recv_async().await {
             match reply.sample {
                 Ok(sample) => {
-                    debug!(
-                        "[ALIGNER]>> Received ('{}': '{}')",
+                    trace!(
+                        "[ALIGNER] Received ('{}': '{}')",
                         sample.key_expr.as_str(),
                         sample.value
                     );

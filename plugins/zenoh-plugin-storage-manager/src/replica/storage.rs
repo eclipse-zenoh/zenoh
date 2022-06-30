@@ -16,7 +16,7 @@ use async_std::sync::Arc;
 use async_std::sync::Mutex;
 use flume::{Receiver, Sender};
 use futures::select;
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -187,7 +187,7 @@ impl StorageService {
     }
 
     async fn process_sample(&self, sample: Sample) {
-        debug!("[STORAGE] Processing sample: {}", sample);
+        trace!("[STORAGE] Processing sample: {}", sample);
         // Call incoming data interceptor (if any)
         let mut sample = if let Some(ref interceptor) = self.in_interceptor {
             interceptor(sample)
