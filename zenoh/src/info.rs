@@ -11,42 +11,100 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::utils::ClosureResolve;
+use crate::SessionRef;
+use zenoh_config::{WhatAmI, ZenohId};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
-//! Properties returned by the [`info`](super::Session::info) function and associated constants.
-use zenoh_cfg_properties::{IntKeyProperties, KeyTranscoder};
-
-// Properties returned by info()
-pub const ZN_INFO_PID_KEY: u64 = 0x00;
-pub const ZN_INFO_PEER_PID_KEY: u64 = 0x01;
-pub const ZN_INFO_ROUTER_PID_KEY: u64 = 0x02;
-
-/// A transcoder for [`InfoProperties`](InfoProperties)
-/// able to convert string keys to int keys and reverse.
-pub struct InfoTranscoder();
-impl KeyTranscoder for InfoTranscoder {
-    fn encode(key: &str) -> Option<u64> {
-        match key {
-            "info_pid" => Some(ZN_INFO_PID_KEY),
-            "info_peer_pid" => Some(ZN_INFO_PEER_PID_KEY),
-            "info_router_pid" => Some(ZN_INFO_ROUTER_PID_KEY),
-            _ => None,
-        }
+pub struct ZidBuilder<'a> {
+    pub(crate) session: SessionRef<'a>,
+}
+impl<'a> Resolvable for ZidBuilder<'a> {
+    type Output = ZenohId;
+}
+impl<'a> SyncResolve for ZidBuilder<'a> {
+    #[inline]
+    fn res_sync(self) -> Self::Output {
+        self.session.runtime.pid
     }
-
-    fn decode(key: u64) -> Option<String> {
-        match key {
-            0x00 => Some("info_pid".to_string()),
-            0x01 => Some("info_peer_pid".to_string()),
-            0x02 => Some("info_router_pid".to_string()),
-            key => Some(key.to_string()),
-        }
+}
+impl<'a> AsyncResolve for ZidBuilder<'a> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
-/// A set of Key/Value (`u64`/`String`) pairs returned by [`info`](super::Session::info).
-///
-/// Multiple values are coma separated.
-///
-/// The [`IntKeyProperties`](IntKeyProperties) can be converted to (`String`/`String`)
-/// [`Properties`](crate::properties::Properties) and reverse.
-pub type InfoProperties = IntKeyProperties<InfoTranscoder>;
+macro_rules! closure_builder {
+    ($name:ident) => {
+        pub struct $name<'a, T>(ClosureResolve<Box<dyn FnOnce() -> T + 'a>>);
+        impl<'a, T> Resolvable for $name<'a, T> {
+            type Output = T;
+        }
+        impl<'a, T> SyncResolve for $name<'a, T>
+        where
+            T: Send,
+        {
+            #[inline]
+            fn res_sync(self) -> Self::Output {
+                self.0.res_sync()
+            }
+        }
+        impl<'a, T> AsyncResolve for $name<'a, T>
+        where
+            T: Send,
+        {
+            type Future = futures::future::Ready<Self::Output>;
+            fn res_async(self) -> Self::Future {
+                self.0.res_async()
+            }
+        }
+    };
+}
+
+closure_builder!(RoutersZidBuilder);
+closure_builder!(PeersZidBuilder);
+
+pub struct SessionInfos<'a> {
+    pub(crate) session: SessionRef<'a>,
+}
+
+impl SessionInfos<'_> {
+    pub fn zid(&self) -> ZidBuilder {
+        ZidBuilder {
+            session: self.session.clone(),
+        }
+    }
+
+    pub fn routers_zid(&self) -> RoutersZidBuilder<impl Iterator<Item = ZenohId>> {
+        RoutersZidBuilder(ClosureResolve(Box::new(move || {
+            self.session
+                .runtime
+                .manager()
+                .get_transports()
+                .into_iter()
+                .filter_map(|s| {
+                    s.get_whatami()
+                        .ok()
+                        .and_then(|what| (what == WhatAmI::Router).then(|| ()))
+                        .and_then(|_| s.get_pid().ok())
+                })
+        })))
+    }
+
+    pub fn peers_zid(&self) -> PeersZidBuilder<impl Iterator<Item = ZenohId>> {
+        PeersZidBuilder(ClosureResolve(Box::new(move || {
+            self.session
+                .runtime
+                .manager()
+                .get_transports()
+                .into_iter()
+                .filter_map(|s| {
+                    s.get_whatami()
+                        .ok()
+                        .and_then(|what| (what == WhatAmI::Peer).then(|| ()))
+                        .and_then(|_| s.get_pid().ok())
+                })
+        })))
+    }
+}

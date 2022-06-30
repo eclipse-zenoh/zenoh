@@ -60,7 +60,6 @@ use zenoh_protocol::{
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
 };
-use zenoh_protocol_core::WhatAmI;
 use zenoh_protocol_core::ZenohId;
 use zenoh_protocol_core::EMPTY_EXPR_ID;
 
@@ -547,54 +546,10 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> impl Resolve<InfoProperties> + '_ {
-        ClosureResolve(move || {
-            trace!("info()");
-            let sessions = self.runtime.manager().get_transports();
-            let peer_pids = sessions
-                .iter()
-                .filter(|s| {
-                    s.get_whatami()
-                        .ok()
-                        .map(|what| what == WhatAmI::Peer)
-                        .unwrap_or(false)
-                })
-                .filter_map(|s| {
-                    s.get_pid()
-                        .ok()
-                        .map(|pid| hex::encode_upper(pid.as_slice()))
-                })
-                .collect::<Vec<String>>();
-            let mut router_pids = vec![];
-            if self.runtime.whatami == WhatAmI::Router {
-                router_pids.push(hex::encode_upper(self.runtime.pid.as_slice()));
-            }
-            router_pids.extend(
-                sessions
-                    .iter()
-                    .filter(|s| {
-                        s.get_whatami()
-                            .ok()
-                            .map(|what| what == WhatAmI::Router)
-                            .unwrap_or(false)
-                    })
-                    .filter_map(|s| {
-                        s.get_pid()
-                            .ok()
-                            .map(|pid| hex::encode_upper(pid.as_slice()))
-                    })
-                    .collect::<Vec<String>>(),
-            );
-
-            let mut info = InfoProperties::default();
-            info.insert(ZN_INFO_PEER_PID_KEY, peer_pids.join(","));
-            info.insert(ZN_INFO_ROUTER_PID_KEY, router_pids.join(","));
-            info.insert(
-                ZN_INFO_PID_KEY,
-                hex::encode_upper(self.runtime.pid.as_slice()),
-            );
-            info
-        })
+    pub fn info(&self) -> SessionInfos {
+        SessionInfos {
+            session: SessionRef::Borrow(self),
+        }
     }
 
     /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
