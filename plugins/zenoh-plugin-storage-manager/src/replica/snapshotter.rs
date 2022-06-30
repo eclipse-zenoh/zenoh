@@ -25,27 +25,31 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::ReplicaConfig;
 
-pub struct ReplicationInfo {
-    stable_log: Arc<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>, // log entries until the snapshot time
-    volatile_log: RwLock<HashMap<OwnedKeyExpr, Timestamp>>, // log entries after the snapshot time
-    last_snapshot_time: RwLock<Timestamp>,                  // the latest snapshot time
-    last_interval: RwLock<u64>,                             // the latest interval
-    digest: Arc<RwLock<Digest>>,                            // the current stable digest
-}
-
 pub struct Snapshotter {
+    // channel to get updates from the storage
     storage_update: Receiver<(OwnedKeyExpr, Timestamp)>,
+    // configuration parameters of the replica
     replica_config: ReplicaConfig,
+    // metadata for replication
     content: ReplicationInfo,
 }
 
-impl Snapshotter {
-    // this class takes care of managing logs, digests and keeps snapshot time and interval updated
-    // two roles:
-    // 1. receives logs from storage, updates the log
-    // 2. when asked by snapshot_timer, update the stable and volatile part of logs  -- , rx_snapshot: Receiver<(Timestamp, u64)>
-    // a queue each to listen to storage and snapshotter
+pub struct ReplicationInfo {
+    // log entries until the snapshot time
+    stable_log: Arc<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
+    // log entries after the snapshot time
+    volatile_log: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
+    // the latest snapshot time
+    last_snapshot_time: RwLock<Timestamp>,
+    // the latest interval
+    last_interval: RwLock<u64>,
+    // the current stable digest
+    digest: Arc<RwLock<Digest>>,
+}
 
+// this class takes care of managing logs, digests and keeps snapshot time and interval updated
+impl Snapshotter {
+    // Initialize the snapshot parameters, logs and digest
     pub async fn new(
         rx_sample: Receiver<(OwnedKeyExpr, Timestamp)>,
         initial_entries: Vec<(OwnedKeyExpr, Timestamp)>,
@@ -84,6 +88,7 @@ impl Snapshotter {
         snapshotter
     }
 
+    // start tasks that listens to storage and periodically updates snapshot parameters
     pub async fn start(&self) {
         // create a periodical task to compute snapshot time and interval
         let task = self.task_update_snapshot_params();
@@ -93,12 +98,14 @@ impl Snapshotter {
         join!(task, listener);
     }
 
+    // Listen to storage updates
     async fn listener_log(&self) {
         while let Ok((key, ts)) = self.storage_update.recv_async().await {
             self.update_log(key, ts).await;
         }
     }
 
+    // Periodically update parameters for snapshot
     async fn task_update_snapshot_params(&self) {
         sleep(Duration::from_secs(2)).await;
         loop {
@@ -117,6 +124,7 @@ impl Snapshotter {
         }
     }
 
+    // Compute latest snapshot time and latest interval with respect to the current time
     pub fn compute_snapshot_params(
         propagation_delay: Duration,
         delta: Duration,
@@ -142,6 +150,7 @@ impl Snapshotter {
         )
     }
 
+    // initialize the log from the storage entries at startup
     async fn initialize_log(&self, log: Vec<(OwnedKeyExpr, Timestamp)>) {
         let replica_data = &self.content;
         let last_snapshot_time = replica_data.last_snapshot_time.read().await;
@@ -175,6 +184,7 @@ impl Snapshotter {
         self.flush().await;
     }
 
+    // Create digest from the stable log at startup
     async fn initialize_digest(&self) {
         let now = zenoh::time::new_reception_timestamp();
         let replica_data = &self.content;
@@ -200,11 +210,12 @@ impl Snapshotter {
         drop(digest_lock);
     }
 
+    // update log with new entry
     async fn update_log(&self, key: OwnedKeyExpr, ts: Timestamp) {
         let replica_data = &self.content;
         let last_snapshot_time = replica_data.last_snapshot_time.read().await;
         let last_interval = replica_data.last_interval.read().await;
-        let mut redundant_content = HashSet::new();
+        let mut deleted_content = HashSet::new();
         let mut new_stable_content = HashSet::new();
         if ts > *last_snapshot_time {
             let mut log = replica_data.volatile_log.write().await;
@@ -212,9 +223,9 @@ impl Snapshotter {
             drop(log);
         } else {
             let mut log = replica_data.stable_log.write().await;
-            let redundant = (*log).insert(key, ts);
-            if redundant.is_some() {
-                redundant_content.insert(redundant.unwrap());
+            let deleted = (*log).insert(key, ts);
+            if deleted.is_some() {
+                deleted_content.insert(deleted.unwrap());
             }
             drop(log);
             new_stable_content.insert(ts);
@@ -225,28 +236,29 @@ impl Snapshotter {
             *last_interval,
             *last_snapshot_time,
             new_stable_content,
-            redundant_content,
+            deleted_content,
         )
         .await;
         *digest = updated_digest;
     }
 
+    // Update stable log based on the snapshot parameters
     async fn update_stable_log(&self) {
         let replica_data = &self.content;
         let last_snapshot_time = replica_data.last_snapshot_time.read().await;
         let last_interval = replica_data.last_interval.read().await;
         let volatile = replica_data.volatile_log.read().await;
         let mut stable = replica_data.stable_log.write().await;
-        let mut still_volatile = HashMap::new();
+        let mut remains_volatile = HashMap::new();
         let mut new_stable = HashSet::new();
-        let mut redundant_stable = HashSet::new();
+        let mut deleted_stable = HashSet::new();
         for (k, ts) in volatile.clone() {
             if ts > *last_snapshot_time {
-                still_volatile.insert(k, ts);
+                remains_volatile.insert(k, ts);
             } else {
-                let redundant = stable.insert(k, ts);
-                if redundant.is_some() {
-                    redundant_stable.insert(redundant.unwrap());
+                let deleted = stable.insert(k, ts);
+                if deleted.is_some() {
+                    deleted_stable.insert(deleted.unwrap());
                 }
                 new_stable.insert(ts);
             }
@@ -255,7 +267,7 @@ impl Snapshotter {
         drop(volatile);
 
         let mut volatile = replica_data.volatile_log.write().await;
-        *volatile = still_volatile;
+        *volatile = remains_volatile;
         drop(volatile);
 
         let mut digest = replica_data.digest.write().await;
@@ -264,7 +276,7 @@ impl Snapshotter {
             *last_interval,
             *last_snapshot_time,
             new_stable,
-            redundant_stable,
+            deleted_stable,
         )
         .await;
         *digest = updated_digest;
@@ -272,24 +284,21 @@ impl Snapshotter {
         self.flush().await;
     }
 
+    // Placeholder to save log, currently just dumps into a trace, can be made to save to disk
     async fn flush(&self) {
-        // let log_filename = format!("{}_log.json", self.name.replace('/', "-"));
-        // let mut log_file = fs::File::create(log_filename).unwrap();
-
         let replica_data = &self.content;
         let stable = replica_data.stable_log.read().await;
         let volatile = replica_data.volatile_log.read().await;
-        // let l = serde_json::to_string(&(*log)).unwrap();
-        // log_file.write_all(l.as_bytes()).unwrap();
         trace!("Stable log updated:: {:?}", stable);
         trace!("Volatile log updated:: {:?}", volatile);
-        // drop(log);
     }
 
+    // Expose content of stable log
     pub async fn get_stable_log(&self) -> HashMap<OwnedKeyExpr, Timestamp> {
         self.content.stable_log.read().await.clone()
     }
 
+    // Expose digest
     pub async fn get_digest(&self) -> Digest {
         self.content.digest.read().await.clone()
     }
