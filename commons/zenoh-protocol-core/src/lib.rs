@@ -62,13 +62,13 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-/// The kind of a [`Sample`].
+/// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SampleKind {
-    /// if the [`Sample`] was caused by a `put` operation.
+    /// if the `Sample` was issued by a `put` operation.
     Put = 0,
-    /// if the [`Sample`] was caused by a `delete` operation.
+    /// if the `Sample` was issued by a `delete` operation.
     Delete = 1,
 }
 

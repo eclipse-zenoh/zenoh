@@ -165,11 +165,9 @@ impl fmt::Debug for QueryableState {
 /// An entity able to reply to queries through a callback.
 ///
 /// CallbackQueryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`queryable`](crate::Session::subscribe) function
+/// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`callback`](QueryableBuilder::callback) function
 /// of the resulting builder.
-///
-
 ///
 /// Queryables are automatically undeclared when dropped.
 ///
@@ -196,7 +194,7 @@ pub struct CallbackQueryable<'a> {
 }
 
 impl<'a> CallbackQueryable<'a> {
-    /// Close a [`CallbackQueryable`](CallbackQueryable) previously created with [`queryable`](crate::Session::queryable).
+    /// Close a [`CallbackQueryable`](CallbackQueryable) previously created with [`declare_queryable`](crate::Session::declare_queryable).
     ///
     /// Queryables are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Queryable asynchronously.
@@ -490,7 +488,7 @@ where
 /// A queryable that provides data through a [`Handler`](crate::prelude::Handler).
 ///
 /// HandlerQueryables can be created from a zenoh [`Session`](crate::Session)
-/// with the [`queryable`](crate::Session::queryable) function
+/// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
 ///

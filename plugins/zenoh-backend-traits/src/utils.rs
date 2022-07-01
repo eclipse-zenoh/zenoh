@@ -45,7 +45,7 @@ pub fn get_keys_prefix(key_selector: &str) -> &str {
 /// the given key selector.
 ///
 /// Use this operation in [`Storage::on_query()`](crate::Storage::on_query()) implementation to transform the received
-/// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_selector`](zenoh::prelude::Selector::key_selector) in a list of key selectors
+/// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_expr`](zenoh::prelude::Selector::key_expr) in a list of key selectors
 /// that will match all the relevant stored keys (that correspond to keys stripped from the prefix).
 ///
 /// # See also

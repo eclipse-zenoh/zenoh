@@ -48,7 +48,7 @@ impl fmt::Debug for SubscriberState {
 /// A subscriber that provides data through a callback.
 ///
 /// CallbackSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`subscribe`](crate::Session::subscribe) function
+/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
 /// and the [`callback`](SubscriberBuilder::callback) function
 /// of the resulting builder.
 ///
@@ -762,7 +762,7 @@ where
 /// A subscriber that provides data through a [`Handler`](crate::prelude::Handler).
 ///
 /// HandlerSubscribers can be created from a zenoh [`Session`](crate::Session)
-/// with the [`subscribe`](crate::Session::subscribe) function
+/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
 ///

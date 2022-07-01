@@ -33,7 +33,7 @@ use super::{OwnedKeyExpr, FORBIDDEN_CHARS};
 ///
 /// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of intersection between such sets:
 /// * Trivially, two sets can have no elements in common: `a/**` and `b/**` for example define two disjoint sets of keys.
-/// * Two sets [`keyexpr::intersect()`] if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
+/// * Two sets [`keyexpr::intersect()`](crate::key_expr::intersect) if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
 /// * One set A includes the other set B if all of B's elements are in A: `a/*/**` includes `a/b/**`
 /// * Two sets A and B are equal if all A includes B and B includes A. The Key Expression language is designed so that string equality is equivalent to set equality.
 #[allow(non_camel_case_types)]
