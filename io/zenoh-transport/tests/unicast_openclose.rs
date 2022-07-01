@@ -171,6 +171,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [1f2]: {:?}", res);
 
@@ -211,6 +212,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [2d2]: {:?}", res);
 
@@ -243,6 +245,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [3d2]: {:?}", res);
 
@@ -270,6 +273,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [4c2]: {:?}", res);
 
@@ -305,6 +309,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [5d2]: {:?}", res);
 
@@ -332,6 +337,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [6c2]: {:?}", res);
 
@@ -356,6 +362,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [7c2]: {:?}", res);
 
@@ -395,6 +402,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [8d2]: {:?}", res);
 
@@ -419,6 +427,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
+        Ok(()) as ZResult<()>
     });
     println!("Transport Open Close [9c2]: {:?}", res);
 

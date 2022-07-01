@@ -100,7 +100,7 @@ impl TransportUnicastInner {
             best_effort: config.initial_sn_tx,
         };
         for c in conduit_tx.iter() {
-            let _ = c.sync(initial_sn)?;
+            c.sync(initial_sn)?;
         }
 
         let t = TransportUnicastInner {
@@ -146,7 +146,7 @@ impl TransportUnicastInner {
             best_effort: initial_sn_rx,
         };
         for c in self.conduit_rx.iter() {
-            let _ = c.sync(csn)?;
+            c.sync(csn)?;
         }
 
         Ok(())

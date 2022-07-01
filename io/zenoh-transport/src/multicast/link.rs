@@ -231,7 +231,7 @@ async fn tx_task(
             Action::Pull((batch, priority)) => {
                 // Send the buffer on the link
                 let bytes = batch.as_bytes();
-                let _ = link.write_all(bytes).await?;
+                link.write_all(bytes).await?;
                 // Keep track of next SNs
                 if let Some(sn) = batch.sn.reliable {
                     next_sns[priority].reliable = sn.next;
@@ -293,8 +293,7 @@ async fn tx_task(
                 // Drain the transmission pipeline and write remaining bytes on the wire
                 let mut batches = pipeline.drain();
                 for (b, _) in batches.drain(..) {
-                    let _ = link
-                        .write_all(b.as_bytes())
+                    link.write_all(b.as_bytes())
                         .timeout(config.join_interval)
                         .await
                         .map_err(|_| {

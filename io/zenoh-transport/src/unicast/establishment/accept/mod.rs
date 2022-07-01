@@ -92,7 +92,7 @@ pub(crate) async fn accept_link(
     }
 
     // Add the link to the transport
-    let _ = step!(step!(transport
+    step!(step!(transport
         .get_inner()
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
     .add_link(link.clone(), LinkUnicastDirection::Inbound)
@@ -117,13 +117,13 @@ pub(crate) async fn accept_link(
         attachment: output.open_ack_attachment,
     };
     let lease = output.lease;
-    let _output = step!(open_ack::send(link, manager, auth_link, input).await);
+    step!(open_ack::send(link, manager, auth_link, input).await);
 
     let input = InputFinalize {
         transport: transport.clone(),
         lease,
     };
-    let _ = step!(transport_finalize(link, manager, input)
+    step!(transport_finalize(link, manager, input)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID))));
 

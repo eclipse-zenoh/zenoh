@@ -308,10 +308,10 @@ mod tests {
 
         // Close the transports
         println!("Transport SHM [5a]");
-        let _ = ztimeout!(peer_shm02_transport.close()).unwrap();
+        ztimeout!(peer_shm02_transport.close()).unwrap();
 
         println!("Transport SHM [5b]");
-        let _ = ztimeout!(peer_net01_transport.close()).unwrap();
+        ztimeout!(peer_net01_transport.close()).unwrap();
 
         ztimeout!(async {
             while !peer_shm01_manager.get_transports().is_empty() {
@@ -321,7 +321,7 @@ mod tests {
 
         // Delete the listener
         println!("Transport SHM [6a]");
-        let _ = ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
+        ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
 
         // Wait a little bit
         ztimeout!(async {

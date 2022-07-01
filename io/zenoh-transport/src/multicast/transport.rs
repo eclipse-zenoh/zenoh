@@ -109,13 +109,13 @@ impl TransportMulticastInner {
         match config.initial_sns {
             ConduitSnList::Plain(sn) => {
                 let tct = TransportConduitTx::make(config.manager.config.sn_resolution)?;
-                let _ = tct.sync(sn)?;
+                tct.sync(sn)?;
                 conduit_tx.push(tct);
             }
             ConduitSnList::QoS(sns) => {
                 for (_, sn) in sns.iter().enumerate() {
                     let tct = TransportConduitTx::make(config.manager.config.sn_resolution)?;
-                    let _ = tct.sync(*sn)?;
+                    tct.sync(*sn)?;
                     conduit_tx.push(tct);
                 }
             }

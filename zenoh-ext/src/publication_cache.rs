@@ -67,7 +67,7 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Resolvable for PublicationCacheBuilder<'a, '_> {
+impl<'a> Resolvable for PublicationCacheBuilder<'a, '_> {
     type Output = ZResult<PublicationCache<'a>>;
 }
 impl AsyncResolve for PublicationCacheBuilder<'_, '_> {

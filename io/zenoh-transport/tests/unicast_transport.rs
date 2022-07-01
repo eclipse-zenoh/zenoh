@@ -15,6 +15,7 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
 use std::convert::TryFrom;
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -212,10 +213,10 @@ async fn close_transport(
     // Close the client transport
     let mut ee = "".to_string();
     for e in endpoints.iter() {
-        ee.push_str(&format!("{} ", e));
+        let _ = write!(ee, "{} ", e);
     }
     println!("Closing transport with {}", ee);
-    let _ = ztimeout!(client_transport.close()).unwrap();
+    ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
@@ -226,7 +227,7 @@ async fn close_transport(
     // Stop the locators on the manager
     for e in endpoints.iter() {
         println!("Del locator: {}", e);
-        let _ = ztimeout!(router_manager.del_listener(e)).unwrap();
+        ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
     ztimeout!(async {
