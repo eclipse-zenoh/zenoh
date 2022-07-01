@@ -585,13 +585,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap_lex"
-version = "0.2.4"
+name = "cobs"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
-dependencies = [
- "os_str_bytes",
-]
+checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
 name = "concurrent-queue"
@@ -3562,8 +3559,9 @@ dependencies = [
 [[package]]
 name = "z-serial"
 version = "0.1.0"
-source = "git+https://github.com/ZettaScaleLabs/z-serial?branch=master#7e4954bbfa46383b36f31ff54dbbc9ffc7e63980"
+source = "git+https://github.com/ZettaScaleLabs/z-serial?branch=feat/cobs#0f1f2b1817acace7b6bb2ada5619a5eba4a40ea4"
 dependencies = [
+ "cobs",
  "futures",
  "tokio",
  "tokio-serial",
