@@ -15,6 +15,7 @@ use async_std::pin::Pin;
 use async_std::task::{Context, Poll};
 use futures::stream::Stream;
 use futures::StreamExt;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -24,7 +25,7 @@ use zenoh::queryable::STORAGE;
 use zenoh::subscriber::{Reliability, SampleReceiver, SubMode, Subscriber};
 use zenoh::sync::channel::{RecvError, RecvTimeoutError, TryRecvError};
 use zenoh::sync::zready;
-use zenoh::time::Period;
+use zenoh::time::{Period, Timestamp};
 use zenoh::Result as ZResult;
 use zenoh_core::{zread, zwrite};
 
@@ -32,7 +33,6 @@ use crate::session_ext::SessionRef;
 
 use super::PublicationCache;
 
-const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 const REPLIES_RECV_QUEUE_INITIAL_CAPCITY: usize = 3;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
@@ -344,7 +344,7 @@ impl QueryingSubscriberReceiver {
             state: Arc::new(RwLock::new(InnerState {
                 subscriber_recv,
                 replies_recv_queue: Vec::with_capacity(REPLIES_RECV_QUEUE_INITIAL_CAPCITY),
-                merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
+                merge_queue: MergeQueue::new(),
             })),
         }
     }
@@ -397,10 +397,39 @@ impl Receiver<Sample> for QueryingSubscriberReceiver {
     }
 }
 
+struct MergeQueue(BTreeMap<Timestamp, Sample>);
+
+impl MergeQueue {
+    fn new() -> Self {
+        MergeQueue(BTreeMap::new())
+    }
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    fn push(&mut self, sample: Sample) {
+        let mut sample = sample;
+        let timestamp = sample.ensure_timestamp();
+        if !self.0.contains_key(&timestamp) {
+            self.0.insert(timestamp, sample);
+        }
+    }
+    fn pop(&mut self) -> Option<Sample> {
+        // replace to pop_first() when it become stable
+        if self.0.is_empty() {
+            return None;
+        }
+        let min_timestamp = *self.0.iter().next().unwrap().0;
+        self.0.remove(&min_timestamp)
+    }
+}
+
 struct InnerState {
     subscriber_recv: SampleReceiver,
     replies_recv_queue: Vec<ReplyReceiver>,
-    merge_queue: Vec<Sample>,
+    merge_queue: MergeQueue,
 }
 
 impl Stream for InnerState {
@@ -416,9 +445,8 @@ impl Stream for InnerState {
             while i < mself.replies_recv_queue.len() {
                 loop {
                     match mself.replies_recv_queue[i].poll_next_unpin(cx) {
-                        Poll::Ready(Some(mut reply)) => {
+                        Poll::Ready(Some(reply)) => {
                             log::trace!("Reply received: {}", reply.sample.key_expr);
-                            reply.sample.ensure_timestamp();
                             mself.merge_queue.push(reply.sample);
                         }
                         Poll::Ready(None) => {
@@ -442,20 +470,10 @@ impl Stream for InnerState {
             );
 
             // get all publications received during the queries and add them to merge_queue
-            while let Poll::Ready(Some(mut sample)) = mself.subscriber_recv.poll_next_unpin(cx) {
+            while let Poll::Ready(Some(sample)) = mself.subscriber_recv.poll_next_unpin(cx) {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
-                sample.ensure_timestamp();
                 mself.merge_queue.push(sample);
             }
-
-            // sort and remove duplicates from merge_queue
-            mself
-                .merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            mself
-                .merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-            mself.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
                 mself.merge_queue.len()
@@ -490,9 +508,8 @@ impl InnerState {
         if !self.replies_recv_queue.is_empty() {
             // get all replies and add them to merge_queue
             for recv in self.replies_recv_queue.drain(..) {
-                while let Ok(mut reply) = recv.recv() {
+                while let Ok(reply) = recv.recv() {
                     log::trace!("Reply received: {}", reply.sample.key_expr);
-                    reply.sample.ensure_timestamp();
                     self.merge_queue.push(reply.sample);
                 }
             }
@@ -502,18 +519,10 @@ impl InnerState {
             );
 
             // get all publications received during the query and add them to merge_queue
-            while let Ok(mut sample) = self.subscriber_recv.try_recv() {
+            while let Ok(sample) = self.subscriber_recv.try_recv() {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
-                sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
-
-            // sort and remove duplicates from merge_queue
-            self.merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
                 self.merge_queue.len()
@@ -542,9 +551,8 @@ impl InnerState {
             while i < self.replies_recv_queue.len() {
                 loop {
                     match self.replies_recv_queue[i].try_recv() {
-                        Ok(mut reply) => {
+                        Ok(reply) => {
                             log::trace!("Reply received: {}", reply.sample.key_expr);
-                            reply.sample.ensure_timestamp();
                             self.merge_queue.push(reply.sample);
                         }
                         Err(TryRecvError::Disconnected) => {
@@ -568,18 +576,11 @@ impl InnerState {
             );
 
             // get all publications received during the query and add them to merge_queue
-            while let Ok(mut sample) = self.subscriber_recv.try_recv() {
+            while let Ok(sample) = self.subscriber_recv.try_recv() {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
-                sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
 
-            // sort and remove duplicates from merge_queue
-            self.merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
                 self.merge_queue.len()
@@ -613,9 +614,8 @@ impl InnerState {
             while i < self.replies_recv_queue.len() {
                 loop {
                     match self.replies_recv_queue[i].recv_deadline(deadline) {
-                        Ok(mut reply) => {
+                        Ok(reply) => {
                             log::trace!("Reply received: {}", reply.sample.key_expr);
-                            reply.sample.ensure_timestamp();
                             self.merge_queue.push(reply.sample);
                         }
                         Err(RecvTimeoutError::Disconnected) => {
@@ -639,18 +639,11 @@ impl InnerState {
             );
 
             // get all publications received during the query and add them to merge_queue
-            while let Ok(mut sample) = self.subscriber_recv.try_recv() {
+            while let Ok(sample) = self.subscriber_recv.try_recv() {
                 log::trace!("Pub received in parallel of query: {}", sample.key_expr);
-                sample.ensure_timestamp();
                 self.merge_queue.push(sample);
             }
 
-            // sort and remove duplicates from merge_queue
-            self.merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
-            self.merge_queue.reverse();
             log::debug!(
                 "Merged received publications - {} samples to propagate",
                 self.merge_queue.len()
