@@ -68,7 +68,6 @@ pub(crate) mod common {
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol_core::ZenohId;
 
-    /// A zenoh integer.
     pub use zenoh_protocol_core::ZInt;
 
     /// A zenoh Value.
@@ -561,6 +560,7 @@ pub(crate) mod common {
         }
     }
 
+    /// The Priority of zenoh messages.
     #[derive(Debug, Copy, Clone, PartialEq)]
     #[repr(u8)]
     pub enum Priority {
@@ -773,8 +773,11 @@ pub(crate) mod common {
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
     }
 
+    /// An alias for `Box<T>`.
     pub type Dyn<T> = std::boxed::Box<T>;
+    /// An immutable callback function.
     pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
+    /// A mutable callback function.
     pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
 
     /// A Handler is the combination of:

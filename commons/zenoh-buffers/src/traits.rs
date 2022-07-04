@@ -50,16 +50,26 @@ pub mod writer {
     }
 }
 
+/// A trait for buffers that can be composed of multiple non contiguous slices.
 pub trait SplitBuffer<'a> {
     type Slices: Iterator<Item = &'a [u8]> + ExactSizeIterator;
+
+    /// Gets all the slices of this buffer.
     fn slices(&'a self) -> Self::Slices;
 
+    /// Returns `true` if the buffer has a length of 0.
     fn is_empty(&'a self) -> bool {
         self.slices().all(|s| s.is_empty())
     }
+
+    /// Returns the number of bytes in the buffer.
     fn len(&'a self) -> usize {
         self.slices().fold(0, |acc, it| acc + it.len())
     }
+
+    /// Returns all the bytes of this buffer in a conitguous slice.
+    /// This may require allocation and copy if the original buffer
+    /// is not contiguous.
     fn contiguous(&'a self) -> Cow<'a, [u8]> {
         let mut slices = self.slices();
         match slices.len() {

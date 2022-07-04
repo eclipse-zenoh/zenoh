@@ -40,7 +40,7 @@ pub type WhatAmI = whatami::WhatAmI;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 
-/// A numerical Id mapped to a key expression with `zenoh::Session::declare_keyexpr()`.
+/// A numerical Id mapped to a key expression.
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;

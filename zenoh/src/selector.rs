@@ -107,8 +107,12 @@ impl<'a> Selector<'a> {
         encoder.extend_pairs(it).finish();
     }
 }
+
+/// A trait to help decode zenoh value selectors as properties.
 pub trait ValueSelector<'a> {
     type Decoder: Iterator<Item = (Cow<'a, str>, Cow<'a, str>)> + Clone + 'a;
+
+    /// Returns this value selector as properties.
     fn decode(&'a self) -> Self::Decoder;
 }
 impl<'a> ValueSelector<'a> for str {

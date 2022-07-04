@@ -17,6 +17,9 @@ use crate::WireExpr;
 use super::{canon::Canonizable, keyexpr};
 use std::{convert::TryFrom, str::FromStr};
 
+/// A [`Box<str>`] newtype that is statically known to be a valid key expression.
+///
+/// See [`keyexpr`](super::borrowed::keyexpr).
 #[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String")]
 #[serde(into = "Box<str>")]
