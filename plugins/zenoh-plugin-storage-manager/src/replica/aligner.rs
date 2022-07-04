@@ -262,7 +262,7 @@ impl Aligner {
     }
 
     async fn perform_query(&self, from: String, properties: String) -> Vec<Sample> {
-        let selector = format!("{}{}?({})", self.digest_key, from, properties);
+        let selector = format!("{}?({})", self.digest_key.join(&from).unwrap(), properties);
         trace!("[ALIGNER]Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self

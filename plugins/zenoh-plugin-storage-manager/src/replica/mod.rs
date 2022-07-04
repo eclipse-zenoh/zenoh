@@ -161,13 +161,10 @@ impl Replica {
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
-        let digest_key = format!(
-            "{}/**",
-            Replica::get_digest_key(
-                self.key_expr.clone(),
-                self.replica_config.align_prefix.to_string()
-            )
-        );
+        let digest_key = Replica::get_digest_key(
+            self.key_expr.clone(),
+            self.replica_config.align_prefix.to_string()
+        ).join("**").unwrap();
 
         debug!(
             "[DIGEST_SUB] Creating Subscriber named {} on '{}'",
@@ -216,14 +213,10 @@ impl Replica {
     // Create a publisher to periodically publish digests from the snapshotter
     // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
-        let digest_key = format!(
-            "{}/{}",
-            Replica::get_digest_key(
+        let digest_key = Replica::get_digest_key(
                 self.key_expr.clone(),
                 self.replica_config.align_prefix.to_string()
-            ),
-            self.name
-        );
+            ).join(&self.name).unwrap();
 
         // let expr_id = self.session.declare_keyexpr(&digest_key).res().await.unwrap();
         // debug!("[DIGEST_PUB] => ExprId {}", expr_id);

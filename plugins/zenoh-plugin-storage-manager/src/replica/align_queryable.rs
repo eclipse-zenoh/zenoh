@@ -53,11 +53,11 @@ impl AlignQueryable {
         replica_name: &str,
         snapshotter: Arc<Snapshotter>,
     ) -> Self {
-        let digest_key = format!("{}/{}/**", digest_key, replica_name);
+        let digest_key = digest_key.join(replica_name).unwrap().join("**").unwrap(); 
 
         let align_queryable = AlignQueryable {
             session,
-            digest_key: KeyExpr::from_str(&digest_key).unwrap(),
+            digest_key,
             snapshotter,
         };
 
