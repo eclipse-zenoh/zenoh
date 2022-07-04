@@ -66,7 +66,7 @@ impl AlignQueryable {
 
     async fn start(&self) -> Self {
         debug!(
-            "[align_queryable] Creating Eval on '{}'...",
+            "[ALIGN QUERYABLE] Creating Eval on '{}'...",
             self.digest_key
         );
         let queryable = self
@@ -79,15 +79,15 @@ impl AlignQueryable {
         loop {
             let query = queryable.recv_async().await;
             let query = query.unwrap();
-            trace!("[align_queryable] Received Query '{}'", query.selector());
+            trace!("[ALIGN QUERYABLE] Received Query '{}'", query.selector());
             let diff_required = self.parse_selector(query.selector());
             trace!(
-                "[align_queryable] Parsed selector diff_required:{:?}",
+                "[ALIGN QUERYABLE] Parsed selector diff_required:{:?}",
                 diff_required
             );
             if diff_required.is_some() {
                 let values = self.get_value(diff_required.unwrap()).await;
-                trace!("[align_queryable] value for the query is {:?}", values);
+                trace!("[ALIGN QUERYABLE] value for the query is {:?}", values);
                 for value in values {
                     match value {
                         AlignData::Interval(i, c) => {

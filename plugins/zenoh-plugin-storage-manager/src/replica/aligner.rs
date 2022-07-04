@@ -29,7 +29,6 @@ use zenoh::Session;
 pub struct Aligner {
     session: Arc<Session>,
     digest_key: KeyExpr<'static>,
-    // replica_name: String,
     snapshotter: Arc<Snapshotter>,
     rx_digest: Receiver<(String, super::Digest)>,
     tx_sample: Sender<Sample>,
@@ -40,7 +39,6 @@ impl Aligner {
     pub async fn start_aligner(
         session: Arc<Session>,
         digest_key: KeyExpr<'static>,
-        // replica_name: &str,
         rx_digest: Receiver<(String, super::Digest)>,
         tx_sample: Sender<Sample>,
         snapshotter: Arc<Snapshotter>,
@@ -48,7 +46,6 @@ impl Aligner {
         let aligner = Aligner {
             session,
             digest_key,
-            // replica_name: replica_name.to_string(),
             snapshotter,
             rx_digest,
             tx_sample,
@@ -75,7 +72,6 @@ impl Aligner {
     }
 
     async fn in_processed(&self, checksum: u64) -> bool {
-        // let replica_data = self.replica_data.as_ref().unwrap();
         let processed_set = self.digests_processed.read().await;
         let processed = processed_set.contains(&checksum);
         drop(processed_set);
@@ -87,7 +83,7 @@ impl Aligner {
         }
     }
 
-    //identify alignment requirements -> {hot => [subintervals], warm => [intervals], cold => []}
+    //identify alignment requirements
     async fn process_incoming_digest(&self, other: super::Digest, from: &str) {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
@@ -104,14 +100,9 @@ impl Aligner {
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
                 trace!("[REPLICA] Adding sample {:?} to storage", sample);
-                // TODO: change this to a storage pipeline
-                // self.process_sample(sample).await;
                 self.tx_sample.send_async(sample).await.unwrap();
             }
 
-            // TODO: if missing content is not identified, should we still consider it as processed?
-
-            // let replica_data = self.replica_data.as_ref().unwrap();
             let mut processed = self.digests_processed.write().await;
             (*processed).insert(checksum);
             drop(processed);
@@ -134,14 +125,6 @@ impl Aligner {
         let replies = self
             .perform_query(from.to_string(), properties.clone())
             .await;
-        // debug!(
-        //     "[ALIGNER] << Reply for missing data with property {} is {:?}",
-        //     properties, reply
-        // );
-        // Note: reply is an Option<String>
-        // reply.unwrap() gives json string
-        // serde_json::from_str(reply.unwrap()) gives HashMap<key(string), (value (json string), timestamp)>
-        // for each entry in this, convert it into result required structure and return
 
         for sample in replies {
             result.insert(sample.key_expr, (sample.timestamp.unwrap(), sample.value));
@@ -151,7 +134,6 @@ impl Aligner {
 
     async fn get_missing_content(&self, other: super::Digest, from: &str) -> Vec<Timestamp> {
         // get my digest
-        // let replica_data = self.replica_data.as_ref().unwrap();
         let this = &self.snapshotter.get_digest().await;
 
         // get first level diff of digest wrt other - subintervals, of HOT, intervals of WARM and COLD if misaligned
@@ -163,10 +145,6 @@ impl Aligner {
                 .perform_cold_alignment(this, from.to_string(), other.timestamp)
                 .await;
             missing_content.append(&mut cold_data);
-            // debug!(
-            //     "************** the missing content after cold alignment is {:?}",
-            //     missing_content
-            // );
         }
         if mis_eras.contains(&super::EraType::Warm) {
             // perform warm alignment
@@ -174,10 +152,6 @@ impl Aligner {
                 .perform_warm_alignment(this, from.to_string(), other.clone())
                 .await;
             missing_content.append(&mut warm_data);
-            // debug!(
-            //     "************** the missing content after warm alignment is {:?}",
-            //     missing_content
-            // );
         }
         if mis_eras.contains(&super::EraType::Hot) {
             // perform hot alignment
@@ -185,10 +159,6 @@ impl Aligner {
                 .perform_hot_alignment(this, from.to_string(), other)
                 .await;
             missing_content.append(&mut hot_data);
-            // debug!(
-            //     "************** the missing content after hot alignment is {:?}",
-            //     missing_content
-            // );
         }
         missing_content.into_iter().collect()
     }
@@ -204,7 +174,8 @@ impl Aligner {
         timestamp: Timestamp,
     ) -> Vec<Timestamp> {
         let properties = format!("timestamp={};{}=cold", timestamp, super::ERA);
-        let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of intervals with their checksum
+        // expecting sample.value to be a vec of intervals with their checksum
+        let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
         let mut other_intervals: HashMap<u64, u64> = HashMap::new();
         for each in reply_content {
             let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap();
@@ -223,7 +194,8 @@ impl Aligner {
                 super::INTERVALS,
                 diff_string.join(",")
             );
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of subintervals with their checksum
+            // expecting sample.value to be a vec of subintervals with their checksum
+            let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
             let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
             for each in reply_content {
                 let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
@@ -246,7 +218,8 @@ impl Aligner {
                     super::SUBINTERVALS,
                     diff_string.join(",")
                 );
-                let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of timestamps with their checksum
+                // expecting sample.value to be a vec of timestamps with their checksum
+                let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
                 let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
                 for each in reply_content {
                     let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
@@ -281,7 +254,6 @@ impl Aligner {
                         sample.value
                     );
                     return_val.push(sample);
-                    // return Some(format!("{:?}", sample.value));
                 }
                 Err(err) => error!("Query failed on selector '{}' ::{}", selector, err),
             }
@@ -315,7 +287,8 @@ impl Aligner {
                 super::INTERVALS,
                 diff_string.join(",")
             );
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of subintervals with their checksum
+            // expecting sample.value to be a vec of subintervals with their checksum
+            let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
             let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
             for each in reply_content {
                 let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
@@ -335,7 +308,8 @@ impl Aligner {
                     super::SUBINTERVALS,
                     diff_string.join(",")
                 );
-                let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of timestamps with their checksum
+                // expecting sample.value to be a vec of timestamps with their checksum
+                let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
                 let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
                 for each in reply_content {
                     let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
@@ -378,7 +352,8 @@ impl Aligner {
                 super::SUBINTERVALS,
                 diff_string.join(",")
             );
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await; // expecting sample.value to be a vec of timestamps with their checksum
+            // expecting sample.value to be a vec of timestamps with their checksum
+            let reply_content = self.perform_query(other_rep.to_string(), properties).await; 
             let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
             for each in reply_content {
                 let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
