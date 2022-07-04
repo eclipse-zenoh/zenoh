@@ -16,10 +16,11 @@ use std::{
     convert::{TryFrom, TryInto},
     str::FromStr,
 };
-use zenoh_core::Result as ZResult;
+use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
 pub use zenoh_protocol_core::key_expr::*;
+use zenoh_transport::Primitives;
 
-use crate::{prelude::sync::Selector, Session};
+use crate::{prelude::sync::Selector, Session, Undeclarable};
 
 #[derive(Clone)]
 pub(crate) enum KeyExprInner<'a> {
@@ -380,6 +381,53 @@ impl<'a> KeyExpr<'a> {
                 }
             }
         }
+    }
+}
+
+impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = KeyExprUndeclaration<'a>;
+    fn undeclare(self, session: &'a Session) -> Self::Undeclaration {
+        KeyExprUndeclaration {
+            session,
+            expr: self,
+        }
+    }
+}
+pub struct KeyExprUndeclaration<'a> {
+    session: &'a Session,
+    expr: KeyExpr<'a>,
+}
+impl Resolvable for KeyExprUndeclaration<'_> {
+    type Output = ZResult<()>;
+}
+impl AsyncResolve for KeyExprUndeclaration<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+impl SyncResolve for KeyExprUndeclaration<'_> {
+    fn res_sync(self) -> Self::Output {
+        let KeyExprUndeclaration { session, expr } = self;
+        let expr_id = match &expr.0 {
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id
+            } if *prefix_len as usize == key_expr.len() => if *session_id == session.id {*expr_id as u64} else {return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())},
+            _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
+        };
+        log::trace!("undeclare_keyexpr({:?})", expr_id);
+        let mut state = zwrite!(session.state);
+        state.local_resources.remove(&expr_id);
+
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+        primitives.forget_resource(expr_id);
+
+        Ok(())
     }
 }
 
