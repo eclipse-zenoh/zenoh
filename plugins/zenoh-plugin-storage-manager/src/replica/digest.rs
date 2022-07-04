@@ -114,54 +114,136 @@ impl Digest {
     pub fn create_digest(
         timestamp: zenoh::time::Timestamp,
         config: DigestConfig,
-        raw_log: Vec<Timestamp>,
+        mut raw_log: Vec<Timestamp>,
         latest_interval: u64,
     ) -> Digest {
-        // Get the subintervals, intervals and eras with their content
-        let subinterval_content = Digest::get_subintervals(raw_log, &config);
-        let interval_content = Digest::get_intervals(
-            subinterval_content.keys().cloned().collect(),
-            config.sub_intervals,
-        );
-        let era_content = Digest::get_eras(
-            interval_content.keys().cloned().collect(),
-            &config,
-            latest_interval,
-        );
+        // sort log
+        // traverse through log
+        // keep track of current subinterval, interval, era
+        // when sub interval changes, compute the hash until then, save it for interval hash and move forward
+        // when interval changes, compute the hash until then, save it for era hash and move forward
+        // when era changes, compute the era hash, save it for digest hash and move forward
 
-        // Compute hashes for subintervals, intervals and eras
-        let mut subinterval_hash = HashMap::new();
-        for (sub, content) in subinterval_content {
-            let subinterval = SubInterval {
-                checksum: Digest::get_subinterval_checksum(&content),
-                content,
-            };
-            subinterval_hash.insert(sub, subinterval);
+        raw_log.sort();
+        let (mut eras, mut intervals, mut subintervals) =
+            (HashMap::new(), HashMap::new(), HashMap::new());
+        let (mut curr_sub, mut curr_int, mut curr_era) = (0, 0, EraType::Cold);
+        let (
+            mut sub_content,
+            mut int_content,
+            mut int_hash,
+            mut era_content,
+            mut era_hash,
+            mut digest_hash,
+        ) = (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            HashMap::new(),
+        );
+        for entry in raw_log {
+            let sub = Digest::get_subinterval(config.delta, entry, config.sub_intervals);
+            let interval = Digest::get_interval(sub, config.sub_intervals);
+            let era = Digest::get_era(&config, latest_interval, interval);
+
+            if sub == curr_sub {
+                sub_content.push(entry);
+            } else {
+                if !sub_content.is_empty() {
+                    // compute checksum, store it for interval
+                    let checksum = Digest::get_content_hash(&sub_content);
+                    let s = SubInterval {
+                        checksum,
+                        content: sub_content,
+                    };
+                    subintervals.insert(curr_sub, s);
+                    // update interval
+                    int_content.push(curr_sub);
+                    int_hash.push(checksum);
+                } // else, no action needed
+                curr_sub = sub;
+                sub_content = vec![entry];
+                if interval != curr_int {
+                    if !int_content.is_empty() {
+                        let checksum = Digest::get_content_hash(&int_hash);
+                        let i = Interval {
+                            checksum,
+                            content: int_content,
+                        };
+                        intervals.insert(curr_int, i);
+                        // update era
+                        era_content.push(curr_int);
+                        era_hash.push(checksum);
+                    }
+                    curr_int = interval;
+                    int_content = Vec::new();
+                    int_hash = Vec::new();
+                    if era != curr_era {
+                        if !era_content.is_empty() {
+                            let checksum = Digest::get_content_hash(&era_hash);
+                            let e = Interval {
+                                checksum,
+                                content: era_content,
+                            };
+                            eras.insert(curr_era.clone(), e);
+                            // update digest
+                            digest_hash.insert(curr_era, checksum);
+                        }
+                        curr_era = era;
+                        era_content = Vec::new();
+                        era_hash = Vec::new();
+                    }
+                }
+            }
         }
-        let mut interval_hash = HashMap::new();
-        for (int, content) in interval_content {
-            let interval = Interval {
-                checksum: Digest::get_interval_checksum(&content, &subinterval_hash),
-                content,
-            };
-            interval_hash.insert(int, interval);
+        // close subinterval
+        let checksum = Digest::get_content_hash(&sub_content);
+        let s = SubInterval {
+            checksum,
+            content: sub_content,
+        };
+        subintervals.insert(curr_sub, s);
+        // update interval
+        int_content.push(curr_sub);
+        int_hash.push(checksum);
+        let checksum = Digest::get_content_hash(&int_hash);
+        let i = Interval {
+            checksum,
+            content: int_content,
+        };
+        intervals.insert(curr_int, i);
+        // update era
+        era_content.push(curr_int);
+        era_hash.push(checksum);
+        let checksum = Digest::get_content_hash(&era_hash);
+        let e = Interval {
+            checksum,
+            content: era_content,
+        };
+        eras.insert(curr_era.clone(), e);
+        // update and compute digest
+        digest_hash.insert(curr_era, checksum);
+        let mut digest_content = Vec::new();
+        if digest_hash.contains_key(&EraType::Cold) {
+            digest_content.push(digest_hash[&EraType::Cold]);
         }
-        let mut era_hash = HashMap::new();
-        for (e, content) in era_content {
-            let era = Interval {
-                checksum: Digest::get_era_checksum(&content, &interval_hash),
-                content,
-            };
-            era_hash.insert(e, era);
+        if digest_hash.contains_key(&EraType::Warm) {
+            digest_content.push(digest_hash[&EraType::Warm]);
         }
+        if digest_hash.contains_key(&EraType::Hot) {
+            digest_content.push(digest_hash[&EraType::Hot]);
+        }
+        let checksum = Digest::get_content_hash(&digest_content);
 
         Digest {
             timestamp,
             config,
-            checksum: Digest::get_digest_checksum(&era_hash),
-            eras: era_hash,
-            intervals: interval_hash,
-            subintervals: subinterval_hash,
+            checksum,
+            eras,
+            intervals,
+            subintervals,
         }
     }
 
@@ -278,67 +360,6 @@ impl Digest {
             hashable_content.push(i_cont.checksum);
         }
         Digest::get_content_hash(&hashable_content)
-    }
-
-    // compute the list of subintervals from a log of timestamps
-    fn get_subintervals(
-        log: Vec<Timestamp>,
-        config: &DigestConfig,
-    ) -> HashMap<u64, Vec<Timestamp>> {
-        let mut subinterval_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
-        for ts in log {
-            let sub = Digest::get_subinterval(config.delta, ts, config.sub_intervals);
-            subinterval_content
-                .entry(sub)
-                .and_modify(|e| e.push(ts))
-                .or_insert_with(|| vec![ts]);
-        }
-        for content in subinterval_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        subinterval_content
-    }
-
-    // compute the list of intervals from a list of subintervals
-    fn get_intervals(
-        subinterval_list: HashSet<u64>,
-        subintervals: usize,
-    ) -> HashMap<u64, Vec<u64>> {
-        let mut interval_content: HashMap<u64, Vec<u64>> = HashMap::new();
-        for sub in subinterval_list {
-            let interval = Digest::get_interval(sub, subintervals);
-            interval_content
-                .entry(interval)
-                .and_modify(|e| e.push(sub))
-                .or_insert_with(|| vec![sub]);
-        }
-        for content in interval_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        interval_content
-    }
-
-    // compute the list of eras from a list of intervals
-    fn get_eras(
-        interval_list: HashSet<u64>,
-        config: &DigestConfig,
-        latest_interval: u64,
-    ) -> HashMap<EraType, Vec<u64>> {
-        let mut era_content: HashMap<EraType, Vec<u64>> = HashMap::new();
-        for int in interval_list {
-            let era = Digest::get_era(config, latest_interval, int);
-            era_content
-                .entry(era)
-                .and_modify(|e| e.push(int))
-                .or_insert_with(|| vec![int]);
-        }
-        for content in era_content.values_mut() {
-            content.sort_unstable();
-            content.dedup();
-        }
-        era_content
     }
 
     // update the digest with new content
