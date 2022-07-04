@@ -50,9 +50,7 @@ pub(crate) mod common {
     pub use zenoh_buffers::SplitBuffer;
     use zenoh_core::bail;
     use zenoh_core::zresult::ZError;
-    pub use zenoh_protocol::io::{WBufCodec, ZBufCodec};
     use zenoh_protocol::proto::DataInfo;
-    pub use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
     pub(crate) type Id = usize;
 
@@ -69,12 +67,6 @@ pub(crate) mod common {
 
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol_core::ZenohId;
-
-    /// A numerical Id mapped to a key expression with [`declare_keyexpr`](crate::Session::declare_keyexpr).
-    pub use zenoh_protocol_core::ExprId;
-
-    /// A key expression.
-    pub use zenoh_protocol_core::WireExpr;
 
     /// A zenoh integer.
     pub use zenoh_protocol_core::ZInt;
