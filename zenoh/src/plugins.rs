@@ -27,11 +27,20 @@ pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlug
 pub type StartArgs = Runtime;
 /// A zenoh plugin, when started, must return this type.
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
+
+#[non_exhaustive]
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct Response {
     pub key: String,
     pub value: serde_json::Value,
 }
+
+impl Response {
+    pub fn new(key: String, value: serde_json::Value) -> Self {
+        Self { key, value }
+    }
+}
+
 pub trait RunningPluginTrait: Send + Sync + std::any::Any {
     fn config_checker(&self) -> ValidationFunction;
     fn adminspace_getter<'a>(

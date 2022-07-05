@@ -106,6 +106,7 @@ impl Default for QueryConsolidation {
 }
 
 /// Structs returned by a [`get`](Session::get).
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
     /// The result of this Reply.

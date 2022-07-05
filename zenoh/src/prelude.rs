@@ -80,11 +80,11 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::ZInt;
 
     /// A zenoh Value.
+    #[non_exhaustive]
     #[derive(Clone)]
     pub struct Value {
         /// The payload of this Value.
         pub payload: ZBuf,
-
         /// An encoding description indicating how the associated payload is encoded.
         pub encoding: Encoding,
     }
@@ -438,6 +438,7 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::SampleKind;
 
     /// A zenoh sample.
+    #[non_exhaustive]
     #[derive(Clone, Debug)]
     pub struct Sample {
         /// The key expression on which this Sample was published.

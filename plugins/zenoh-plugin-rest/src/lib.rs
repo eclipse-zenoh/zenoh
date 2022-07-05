@@ -210,10 +210,10 @@ impl RunningPluginTrait for RunningPlugin {
                 .unwrap()
                 .intersects(&selector.key_expr)
             {
-                responses.push(zenoh::plugins::Response {
-                    key: key.clone(),
-                    value: GIT_VERSION.into(),
-                })
+                responses.push(zenoh::plugins::Response::new(
+                    key.clone(),
+                    GIT_VERSION.into(),
+                ))
             }
         });
         with_extended_string(&mut key, &["/port"], |port_key| {
@@ -221,10 +221,10 @@ impl RunningPluginTrait for RunningPlugin {
                 .unwrap()
                 .intersects(&selector.key_expr)
             {
-                responses.push(zenoh::plugins::Response {
-                    key: port_key.clone(),
-                    value: (&self.0).into(),
-                })
+                responses.push(zenoh::plugins::Response::new(
+                    port_key.clone(),
+                    (&self.0).into(),
+                ))
             }
         });
         Ok(responses)

@@ -25,6 +25,7 @@ pub trait KeyTranscoder {
 }
 
 /// A set of Key/Value (`u64`/`String`) pairs.
+#[non_exhaustive]
 #[derive(PartialEq)]
 pub struct IntKeyProperties<T>(pub HashMap<u64, String>, PhantomData<T>)
 where
@@ -152,6 +153,7 @@ const COMMENT_PREFIX: char = '#';
 ///
 /// It can be parsed from a String, using `;` or `<newline>` as separator between each properties
 /// and `=` as separator between a key and its value. Keys and values are trimed.
+#[non_exhaustive]
 #[derive(Clone, PartialEq, Default)]
 pub struct Properties(pub HashMap<String, String>);
 
@@ -334,7 +336,9 @@ mod tests {
     }
 }
 
-pub struct DummyTranscoder();
+#[non_exhaustive]
+pub struct DummyTranscoder;
+
 impl KeyTranscoder for DummyTranscoder {
     fn encode(_key: &str) -> Option<u64> {
         None
