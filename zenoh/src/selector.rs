@@ -36,6 +36,7 @@ use std::{borrow::Cow, convert::TryFrom};
 /// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
 ///   this key to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
+#[non_exhaustive]
 #[derive(Clone, PartialEq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.

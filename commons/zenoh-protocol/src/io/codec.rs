@@ -36,9 +36,13 @@ pub trait Decoder<T: Sized, R> {
     fn read(&self, reader: &mut R) -> Result<T, Self::Err>;
 }
 
+#[non_exhaustive]
 pub struct ZenohCodec;
+
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct InsufficientDataErr;
+
 impl std::fmt::Display for InsufficientDataErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
@@ -453,6 +457,8 @@ pub trait Encoder<W, T> {
     type Err;
     fn write(&self, writer: &mut W, value: T) -> Result<usize, Self::Err>;
 }
+
+#[non_exhaustive]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct WriteRefusedErr<W>(std::marker::PhantomData<W>);
 impl<W> Default for WriteRefusedErr<W> {
@@ -553,6 +559,8 @@ impl<W: CopyBuffer> Encoder<W, &Timestamp> for ZenohCodec {
             + self.write(writer, value.get_id().as_slice())?)
     }
 }
+
+#[non_exhaustive]
 pub struct Slice<'a, T>(pub &'a [T]);
 impl<'a, T, W> Encoder<W, Slice<'a, T>> for ZenohCodec
 where
@@ -560,6 +568,7 @@ where
         Encoder<W, &'a T, Err = WriteRefusedErr<W>> + Encoder<W, usize, Err = WriteRefusedErr<W>>,
 {
     type Err = WriteRefusedErr<W>;
+
     fn write(&self, writer: &mut W, value: Slice<'a, T>) -> Result<usize, Self::Err> {
         let write_len = <Self as Encoder<W, usize>>::write(self, writer, value.0.len())?;
         value.0.iter().try_fold(write_len, |acc, t| {

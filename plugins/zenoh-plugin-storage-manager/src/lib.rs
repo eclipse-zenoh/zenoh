@@ -316,10 +316,10 @@ impl RunningPluginTrait for StorageRuntime {
                 .unwrap()
                 .intersects(&selector.key_expr)
             {
-                responses.push(zenoh::plugins::Response {
-                    key: key.clone(),
-                    value: GIT_VERSION.into(),
-                })
+                responses.push(zenoh::plugins::Response::new(
+                    key.clone(),
+                    GIT_VERSION.into(),
+                ))
             }
         });
         let guard = self.0.lock().unwrap();
@@ -331,20 +331,20 @@ impl RunningPluginTrait for StorageRuntime {
                             .unwrap()
                             .intersects(&selector.key_expr)
                         {
-                            responses.push(zenoh::plugins::Response {
-                                key: key.clone(),
-                                value: volume.lib_path.clone().into(),
-                            })
+                            responses.push(zenoh::plugins::Response::new(
+                                key.clone(),
+                                volume.lib_path.clone().into(),
+                            ))
                         }
                     });
                     if keyexpr::new(key.as_str())
                         .unwrap()
                         .intersects(&selector.key_expr)
                     {
-                        responses.push(zenoh::plugins::Response {
-                            key: key.clone(),
-                            value: volume.backend.get_admin_status(),
-                        })
+                        responses.push(zenoh::plugins::Response::new(
+                            key.clone(),
+                            volume.backend.get_admin_status(),
+                        ))
                     }
                 });
             }
@@ -362,10 +362,7 @@ impl RunningPluginTrait for StorageRuntime {
                                 let _ = handle.send(StorageMessage::GetStatus(tx)).await;
                                 rx.recv().await
                             }) {
-                                responses.push(zenoh::plugins::Response {
-                                    key: key.clone(),
-                                    value,
-                                })
+                                responses.push(zenoh::plugins::Response::new(key.clone(), value))
                             }
                         }
                     })

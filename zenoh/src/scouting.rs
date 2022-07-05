@@ -243,6 +243,7 @@ where
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct HandlerScout<Receiver> {
     pub scout: Scout,

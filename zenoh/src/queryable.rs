@@ -119,6 +119,7 @@ impl SyncResolve for ReplyBuilder<'_> {
 pub struct ReplyFuture<'a>(
     Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
 );
+
 impl std::future::Future for ReplyFuture<'_> {
     type Output = zenoh_core::Result<()>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -130,6 +131,7 @@ impl std::future::Future for ReplyFuture<'_> {
         }
     }
 }
+
 impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
     fn res_async(self) -> Self::Future {
@@ -226,9 +228,11 @@ impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
 pub struct QueryableUndeclare<'a> {
     queryable: CallbackQueryable<'a>,
 }
+
 impl<'a> Resolvable for QueryableUndeclare<'a> {
     type Output = ZResult<()>;
 }
+
 impl SyncResolve for QueryableUndeclare<'_> {
     fn res_sync(mut self) -> Self::Output {
         self.queryable.alive = false;
@@ -237,6 +241,7 @@ impl SyncResolve for QueryableUndeclare<'_> {
             .close_queryable(self.queryable.state.id)
     }
 }
+
 impl AsyncResolve for QueryableUndeclare<'_> {
     type Future = futures::future::Ready<Self::Output>;
 
@@ -514,6 +519,7 @@ where
 /// }
 /// # })
 /// ```
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct HandlerQueryable<'a, Receiver> {
     pub queryable: CallbackQueryable<'a>,

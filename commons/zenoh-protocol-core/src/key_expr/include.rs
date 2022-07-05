@@ -47,6 +47,7 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
         }
     }
 }
+
 impl LTRIncluder {
     fn non_double_wild_chunk_includes(&self, lchunk: &[u8], rchunk: &[u8]) -> bool {
         if lchunk == b"*" || lchunk == rchunk {

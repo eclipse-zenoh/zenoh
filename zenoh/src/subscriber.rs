@@ -75,9 +75,11 @@ pub struct CallbackSubscriber<'a> {
     pub(crate) state: Arc<SubscriberState>,
     pub(crate) alive: bool,
 }
+
 pub struct CallbackPullSubscriber<'a> {
     inner: CallbackSubscriber<'a>,
 }
+
 impl<'a> CallbackPullSubscriber<'a> {
     /// Pull available data for a pull-mode [`CallbackSubscriber`].
     ///
@@ -167,12 +169,15 @@ impl<'a> Undeclarable<()> for CallbackSubscriber<'a> {
         SubscriberUndeclaration { subscriber: self }
     }
 }
+
 pub struct SubscriberUndeclaration<'a> {
     subscriber: CallbackSubscriber<'a>,
 }
+
 impl Resolvable for SubscriberUndeclaration<'_> {
     type Output = ZResult<()>;
 }
+
 impl SyncResolve for SubscriberUndeclaration<'_> {
     fn res_sync(mut self) -> Self::Output {
         self.subscriber.alive = false;
@@ -181,6 +186,7 @@ impl SyncResolve for SubscriberUndeclaration<'_> {
             .unsubscribe(self.subscriber.state.id)
     }
 }
+
 impl AsyncResolve for SubscriberUndeclaration<'_> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
@@ -196,15 +202,19 @@ impl Drop for CallbackSubscriber<'_> {
     }
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PullMode;
+
 impl From<PullMode> for SubMode {
     fn from(_: PullMode) -> Self {
         SubMode::Pull
     }
 }
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PushMode;
+
 impl From<PushMode> for SubMode {
     fn from(_: PushMode) -> Self {
         SubMode::Push
@@ -786,26 +796,32 @@ where
 /// }
 /// # })
 /// ```
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct HandlerSubscriber<'a, Receiver> {
     pub subscriber: CallbackSubscriber<'a>,
     pub receiver: Receiver,
 }
+
+#[non_exhaustive]
 pub struct HandlerPullSubscriber<'a, Receiver> {
     pub subscriber: CallbackPullSubscriber<'a>,
     pub receiver: Receiver,
 }
+
 impl<'a, Receiver> Deref for HandlerPullSubscriber<'a, Receiver> {
     type Target = Receiver;
     fn deref(&self) -> &Self::Target {
         &self.receiver
     }
 }
+
 impl<'a, Receiver> DerefMut for HandlerPullSubscriber<'a, Receiver> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.receiver
     }
 }
+
 impl<'a, Receiver> HandlerPullSubscriber<'a, Receiver> {
     /// Pull available data for a pull-mode [`HandlerSubscriber`].
     ///
