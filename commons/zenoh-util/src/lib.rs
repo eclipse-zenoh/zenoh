@@ -26,6 +26,7 @@ pub use zenoh_crypto as crypto;
 pub mod ffi;
 mod lib_loader;
 pub mod net;
+pub mod time_range;
 pub use lib_loader::*;
 #[cfg(features = "zenoh-cfg-properties")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_cfg_properties` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
