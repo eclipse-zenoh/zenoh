@@ -14,8 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
-use std::convert::TryFrom;
-use std::fmt::Write as _;
+use std::fmt::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -213,7 +212,7 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        let _ = write!(ee, "{} ", e);
+        write!(ee, "{} ", e).unwrap();
     }
     println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
