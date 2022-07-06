@@ -15,7 +15,7 @@
 use crc::{Crc, CRC_64_ECMA_182};
 use derive_new::new;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::string::ParseError;
@@ -45,7 +45,7 @@ pub struct Interval {
     #[new(default)]
     pub checksum: u64,
     #[new(default)]
-    pub content: Vec<u64>,
+    pub content: BTreeSet<u64>,
 }
 
 #[derive(new, Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
@@ -53,7 +53,7 @@ pub struct SubInterval {
     #[new(default)]
     pub checksum: u64,
     #[new(default)]
-    pub content: Vec<zenoh::time::Timestamp>,
+    pub content: BTreeSet<zenoh::time::Timestamp>,
 }
 
 #[derive(PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Clone, Deserialize, Serialize)]
@@ -128,19 +128,10 @@ impl Digest {
         let (mut eras, mut intervals, mut subintervals) =
             (HashMap::new(), HashMap::new(), HashMap::new());
         let (mut curr_sub, mut curr_int, mut curr_era) = (0, 0, EraType::Cold);
-        let (
-            mut sub_content,
-            mut int_content,
-            mut int_hash,
-            mut era_content,
-            mut era_hash,
-            mut digest_hash,
-        ) = (
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+        let (mut sub_content, mut int_content, mut era_content, mut digest_hash) = (
+            BTreeSet::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
             HashMap::new(),
         );
         for entry in raw_log {
@@ -149,78 +140,80 @@ impl Digest {
             let era = Digest::get_era(&config, latest_interval, interval);
 
             if sub == curr_sub {
-                sub_content.push(entry);
+                sub_content.insert(entry);
             } else {
                 if !sub_content.is_empty() {
                     // compute checksum, store it for interval
-                    let checksum = Digest::get_content_hash(&sub_content);
+                    let checksum = Digest::get_content_hash(
+                        &sub_content.iter().copied().collect::<Vec<Timestamp>>(),
+                    );
                     let s = SubInterval {
                         checksum,
                         content: sub_content,
                     };
                     subintervals.insert(curr_sub, s);
                     // update interval
-                    int_content.push(curr_sub);
-                    int_hash.push(checksum);
+                    int_content.insert(curr_sub, checksum);
                 } // else, no action needed
                 curr_sub = sub;
-                sub_content = vec![entry];
+                sub_content = BTreeSet::new();
+                sub_content.insert(entry);
                 if interval != curr_int {
                     if !int_content.is_empty() {
+                        let int_hash: Vec<u64> = int_content.values().copied().collect();
                         let checksum = Digest::get_content_hash(&int_hash);
                         let i = Interval {
                             checksum,
-                            content: int_content,
+                            content: int_content.keys().copied().collect(),
                         };
                         intervals.insert(curr_int, i);
                         // update era
-                        era_content.push(curr_int);
-                        era_hash.push(checksum);
+                        era_content.insert(curr_int, checksum);
                     }
                     curr_int = interval;
-                    int_content = Vec::new();
-                    int_hash = Vec::new();
+                    int_content = BTreeMap::new();
                     if era != curr_era {
                         if !era_content.is_empty() {
+                            let era_hash: Vec<u64> = era_content.values().copied().collect();
                             let checksum = Digest::get_content_hash(&era_hash);
                             let e = Interval {
                                 checksum,
-                                content: era_content,
+                                content: era_content.keys().copied().collect(),
                             };
                             eras.insert(curr_era.clone(), e);
                             // update digest
                             digest_hash.insert(curr_era, checksum);
                         }
                         curr_era = era;
-                        era_content = Vec::new();
-                        era_hash = Vec::new();
+                        era_content = BTreeMap::new();
                     }
                 }
             }
         }
         // close subinterval
-        let checksum = Digest::get_content_hash(&sub_content);
+        let checksum =
+            Digest::get_content_hash(&sub_content.iter().copied().collect::<Vec<Timestamp>>());
         let s = SubInterval {
             checksum,
             content: sub_content,
         };
         subintervals.insert(curr_sub, s);
         // update interval
-        int_content.push(curr_sub);
-        int_hash.push(checksum);
+        int_content.insert(curr_sub, checksum);
+        let int_hash: Vec<u64> = int_content.values().copied().collect();
         let checksum = Digest::get_content_hash(&int_hash);
         let i = Interval {
             checksum,
-            content: int_content,
+            content: int_content.keys().copied().collect(),
         };
         intervals.insert(curr_int, i);
         // update era
-        era_content.push(curr_int);
-        era_hash.push(checksum);
+        era_content.insert(curr_int, checksum);
+        let era_hash: Vec<u64> = era_content.values().copied().collect();
         let checksum = Digest::get_content_hash(&era_hash);
         let e = Interval {
             checksum,
-            content: era_content,
+            content: era_content.keys().copied().collect(),
         };
         eras.insert(curr_era.clone(), e);
         // update and compute digest
@@ -279,29 +272,47 @@ impl Digest {
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
             // order the content, hash them
-            subintervals.get_mut(&sub).unwrap().content.sort_unstable();
-            subintervals.get_mut(&sub).unwrap().content.dedup();
-            let checksum =
-                Digest::get_subinterval_checksum(&subintervals.get(&sub).unwrap().content);
+            let checksum = Digest::get_subinterval_checksum(
+                &subintervals
+                    .get(&sub)
+                    .unwrap()
+                    .content
+                    .iter()
+                    .copied()
+                    .collect::<Vec<Timestamp>>(),
+            );
 
             subintervals.get_mut(&sub).unwrap().checksum = checksum;
         }
 
         for int in intervals_to_update {
             // order the content, hash them
-            intervals.get_mut(&int).unwrap().content.sort_unstable();
-            intervals.get_mut(&int).unwrap().content.dedup();
-            let checksum =
-                Digest::get_interval_checksum(&intervals.get(&int).unwrap().content, &subintervals);
+            let checksum = Digest::get_interval_checksum(
+                &intervals
+                    .get(&int)
+                    .unwrap()
+                    .content
+                    .iter()
+                    .copied()
+                    .collect::<Vec<u64>>(),
+                &subintervals,
+            );
 
             intervals.get_mut(&int).unwrap().checksum = checksum;
         }
 
         for era in eras_to_update {
             // order the content, hash them
-            eras.get_mut(&era).unwrap().content.sort_unstable();
-            eras.get_mut(&era).unwrap().content.dedup();
-            let checksum = Digest::get_era_checksum(&eras.get(&era).unwrap().content, &intervals);
+            let checksum = Digest::get_era_checksum(
+                &eras
+                    .get(&era)
+                    .unwrap()
+                    .content
+                    .iter()
+                    .copied()
+                    .collect::<Vec<u64>>(),
+                &intervals,
+            );
 
             eras.get_mut(&era).unwrap().checksum = checksum;
         }
@@ -384,26 +395,32 @@ impl Digest {
             current
                 .subintervals
                 .entry(subinterval)
-                .and_modify(|e| e.content.push(ts))
+                .and_modify(|e| {
+                    e.content.insert(ts);
+                })
                 .or_insert(SubInterval {
                     checksum: 0,
-                    content: vec![ts],
+                    content: [ts].iter().cloned().collect(),
                 });
             current
                 .intervals
                 .entry(interval)
-                .and_modify(|e| e.content.push(subinterval))
+                .and_modify(|e| {
+                    e.content.insert(subinterval);
+                })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: vec![subinterval],
+                    content: [subinterval].iter().cloned().collect(),
                 });
             current
                 .eras
                 .entry(era)
-                .and_modify(|e| e.content.push(interval))
+                .and_modify(|e| {
+                    e.content.insert(interval);
+                })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: vec![interval],
+                    content: [interval].iter().cloned().collect(),
                 });
         }
 
@@ -440,12 +457,6 @@ impl Digest {
                     .get_mut(&subinterval)
                     .unwrap()
                     .content
-                    .dedup();
-                current
-                    .subintervals
-                    .get_mut(&subinterval)
-                    .unwrap()
-                    .content
                     .retain(|&x| x.get_time() != entry.get_time() && x.get_id() != entry.get_id());
                 subintervals_to_update.insert(subinterval);
             }
@@ -455,17 +466,10 @@ impl Digest {
                     .get_mut(&interval)
                     .unwrap()
                     .content
-                    .dedup();
-                current
-                    .intervals
-                    .get_mut(&interval)
-                    .unwrap()
-                    .content
                     .retain(|&x| x != subinterval);
                 intervals_to_update.insert(interval);
             }
             if current.eras.contains_key(&era) {
-                current.eras.get_mut(&era).unwrap().content.dedup();
                 current
                     .eras
                     .get_mut(&era)
@@ -507,15 +511,16 @@ impl Digest {
             current
                 .eras
                 .entry(prev_era)
-                .and_modify(|e| e.content.dedup())
                 .and_modify(|e| e.content.retain(|&x| x != interval));
             current
                 .eras
                 .entry(new_era)
-                .and_modify(|e| e.content.push(interval))
+                .and_modify(|e| {
+                    e.content.insert(interval);
+                })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: vec![interval],
+                    content: [interval].iter().cloned().collect(),
                 });
         }
 
@@ -573,7 +578,7 @@ impl Digest {
                     let subinterval = self.subintervals.get(sub).unwrap().clone();
                     let comp_sub = SubInterval {
                         checksum: subinterval.checksum,
-                        content: Vec::new(),
+                        content: BTreeSet::new(),
                     };
                     compressed_subintervals.insert(*sub, comp_sub);
                 }
@@ -584,7 +589,7 @@ impl Digest {
                 let interval = self.intervals.get(int).unwrap().clone();
                 let comp_int = Interval {
                     checksum: interval.checksum,
-                    content: Vec::new(),
+                    content: BTreeSet::new(),
                 };
                 compressed_intervals.insert(*int, comp_int);
             }
@@ -596,7 +601,7 @@ impl Digest {
                     EraType::Cold,
                     Interval {
                         checksum: self.eras.get(era).unwrap().checksum,
-                        content: Vec::new(),
+                        content: BTreeSet::new(),
                     },
                 );
             } else {
@@ -638,7 +643,7 @@ impl Digest {
     pub fn get_subinterval_content(
         &self,
         subintervals: HashSet<u64>,
-    ) -> HashMap<u64, Vec<zenoh::time::Timestamp>> {
+    ) -> HashMap<u64, BTreeSet<zenoh::time::Timestamp>> {
         let mut result = HashMap::new();
         for each in subintervals {
             result.insert(each, self.subintervals.get(&each).unwrap().content.clone());

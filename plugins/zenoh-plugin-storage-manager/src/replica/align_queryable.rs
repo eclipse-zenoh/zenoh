@@ -16,7 +16,7 @@ use super::Snapshotter;
 use async_std::sync::Arc;
 use log::{debug, error, trace};
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -42,7 +42,7 @@ enum AlignComponent {
 enum AlignData {
     Interval(u64, u64),
     Subinterval(u64, u64),
-    Content(u64, Vec<Timestamp>),
+    Content(u64, BTreeSet<Timestamp>),
     Data(String, (Value, Timestamp)),
 }
 
@@ -53,7 +53,7 @@ impl AlignQueryable {
         replica_name: &str,
         snapshotter: Arc<Snapshotter>,
     ) -> Self {
-        let digest_key = digest_key.join(replica_name).unwrap().join("**").unwrap(); 
+        let digest_key = digest_key.join(replica_name).unwrap().join("**").unwrap();
 
         let align_queryable = AlignQueryable {
             session,
@@ -270,7 +270,10 @@ impl AlignQueryable {
         digest.get_interval_content(intervals)
     }
 
-    async fn get_content(&self, subinterval: u64) -> HashMap<u64, Vec<zenoh::time::Timestamp>> {
+    async fn get_content(
+        &self,
+        subinterval: u64,
+    ) -> HashMap<u64, BTreeSet<zenoh::time::Timestamp>> {
         let digest = self.snapshotter.get_digest().await;
         let mut subintervals = HashSet::new();
         subintervals.insert(subinterval);
