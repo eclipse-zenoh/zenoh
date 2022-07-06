@@ -245,11 +245,11 @@ impl TransportManager {
         let mut pa_guard = zasyncwrite!(self.state.unicast.peer_authenticator);
 
         for la in la_guard.drain() {
-            let _ = la.close().await;
+            la.close().await;
         }
 
         for pa in pa_guard.drain() {
-            let _ = pa.close().await;
+            pa.close().await;
         }
 
         let mut pl_guard = zlock!(self.state.unicast.protocols)

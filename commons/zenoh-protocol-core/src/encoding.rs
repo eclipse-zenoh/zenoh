@@ -208,7 +208,7 @@ impl From<&'static str> for Encoding {
     }
 }
 
-impl<'a> From<String> for Encoding {
+impl From<String> for Encoding {
     fn from(mut s: String) -> Self {
         for (i, v) in consts::MIMES.iter().enumerate().skip(1) {
             if s.starts_with(v) {
