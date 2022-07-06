@@ -41,7 +41,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("bench_foo u8", |b| {
         b.iter(|| {
-            let _ = bench_foo(black_box((rs3[0], &mut buf)));
+            bench_foo(black_box((rs3[0], &mut buf)));
             buf.clear();
         })
     });
