@@ -45,7 +45,7 @@ where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
 {
-    type Output = ZResult<HandlerScout<flume::Receiver<Hello>>>;
+    type Output = ZResult<FlumeScout>;
 }
 
 impl<IntoWhatAmI, TryIntoConfig> ScoutBuilder<IntoWhatAmI, TryIntoConfig>
@@ -279,6 +279,8 @@ impl crate::prelude::IntoHandler<Hello, flume::Receiver<Hello>>
         )
     }
 }
+
+pub type FlumeScout = HandlerScout<flume::Receiver<Hello>>;
 
 fn scout<IntoWhatAmI, TryIntoConfig>(
     what: IntoWhatAmI,
