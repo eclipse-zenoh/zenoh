@@ -157,7 +157,7 @@ pub mod scouting;
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+/// Drop the returned [`HandlerScout`](crate::scouting::HandlerScout) to stop the scouting task.
 ///
 /// # Arguments
 ///

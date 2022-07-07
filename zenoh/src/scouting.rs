@@ -141,7 +141,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     Callback: Fn(Hello) + Send + Sync + 'static,
 {
-    type Output = ZResult<Scout>;
+    type Output = ZResult<CallbackScout>;
 }
 
 impl<IntoWhatAmI, TryIntoConfig, Callback> AsyncResolve
@@ -174,20 +174,20 @@ where
     }
 }
 
-pub struct Scout {
+pub struct CallbackScout {
     #[allow(dead_code)]
     pub(crate) stop_sender: flume::Sender<()>,
 }
 
-impl Scout {
+impl CallbackScout {
     pub fn stop(self) {
         // drop
     }
 }
 
-impl fmt::Debug for Scout {
+impl fmt::Debug for CallbackScout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Scout").finish()
+        f.debug_struct("CallbackScout").finish()
     }
 }
 
@@ -246,7 +246,7 @@ where
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct HandlerScout<Receiver> {
-    pub scout: Scout,
+    pub scout: CallbackScout,
     pub receiver: Receiver,
 }
 
@@ -284,7 +284,7 @@ fn scout<IntoWhatAmI, TryIntoConfig>(
     what: IntoWhatAmI,
     config: TryIntoConfig,
     callback: Callback<Hello>,
-) -> ZResult<Scout>
+) -> ZResult<CallbackScout>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -344,5 +344,5 @@ where
         }
     }
 
-    Ok(Scout { stop_sender })
+    Ok(CallbackScout { stop_sender })
 }
