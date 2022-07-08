@@ -103,7 +103,7 @@ pub(crate) async fn open_link(
 
     // Finalize the transport
     // Add the link to the transport
-    let _ = step!(step!(transport
+    step!(step!(transport
         .get_inner()
         .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
     .add_link(link.clone(), LinkUnicastDirection::Outbound)

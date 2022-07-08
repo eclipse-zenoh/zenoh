@@ -106,7 +106,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Stop the locators on the manager
     println!("Del locator: {}", endpoint);
-    let _ = ztimeout!(router_manager.del_listener(endpoint)).unwrap();
+    ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
     ztimeout!(async {

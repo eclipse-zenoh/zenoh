@@ -62,7 +62,7 @@ impl TransportChannelRx {
             sn - 1
         };
 
-        let _ = self.sn.set(sn)?;
+        self.sn.set(sn)?;
         self.defrag.sync(sn)
     }
 }
@@ -85,7 +85,7 @@ impl TransportConduitTx {
     }
 
     pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
-        let _ = zlock!(self.reliable).sync(sn.reliable)?;
+        zlock!(self.reliable).sync(sn.reliable)?;
         zlock!(self.best_effort).sync(sn.best_effort)
     }
 }
@@ -112,7 +112,7 @@ impl TransportConduitRx {
     }
 
     pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
-        let _ = zlock!(self.reliable).sync(sn.reliable)?;
+        zlock!(self.reliable).sync(sn.reliable)?;
         zlock!(self.best_effort).sync(sn.best_effort)
     }
 }

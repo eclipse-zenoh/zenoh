@@ -89,7 +89,6 @@ struct RunningPluginInner {
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl RunningPluginTrait for RunningPlugin {
-
     // Operation returning a ValidationFunction(path, old, new)-> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
     // this function will be called each time the plugin's config is changed via the zenohd admin space
     fn config_checker(&self) -> ValidationFunction {
