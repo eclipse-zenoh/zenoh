@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,18 +11,19 @@ use std::convert::TryInto;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::{btree_map, BTreeMap};
+use std::convert::TryInto;
+use std::mem::swap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability};
-use zenoh::time::Period;
+use zenoh::time::{Period, Timestamp};
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
-
-const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 pub struct QueryingSubscriberBuilder<'a, 'b> {
@@ -283,9 +283,43 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     }
 }
 
+// Collects samples in their Timestamp order, ignores repeating samples
+// with duplicated timestamps
+struct MergeQueue(BTreeMap<Timestamp, Sample>);
+
+impl MergeQueue {
+    fn new() -> Self {
+        MergeQueue(BTreeMap::new())
+    }
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+    fn push(&mut self, sample: Sample) {
+        let mut sample = sample;
+        let timestamp = sample.ensure_timestamp();
+        if !self.0.contains_key(&timestamp) {
+            self.0.insert(timestamp, sample);
+        }
+    }
+    fn drain(&mut self) -> MergeQueueValues {
+        let mut queue = BTreeMap::new();
+        swap(&mut self.0, &mut queue);
+        MergeQueueValues(queue.into_values())
+    }
+}
+
+struct MergeQueueValues(btree_map::IntoValues<Timestamp, Sample>);
+
+impl Iterator for MergeQueueValues {
+    type Item = Sample;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
 struct InnerState {
     pending_queries: u64,
-    merge_queue: Vec<Sample>,
+    merge_queue: MergeQueue,
 }
 
 pub struct CallbackQueryingSubscriber<'a> {
@@ -306,7 +340,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
         let state = Arc::new(Mutex::new(InnerState {
             pending_queries: 0,
-            merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
+            merge_queue: MergeQueue::new(),
         }));
         let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
 
@@ -443,17 +477,11 @@ impl Drop for RepliesHandler {
             state.pending_queries
         );
         if state.pending_queries == 0 {
-            state
-                .merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            state
-                .merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             log::debug!(
                 "All queries done. Replies and live publications merged - {} samples to propagate",
                 state.merge_queue.len()
             );
-            for s in state.merge_queue.drain(..) {
+            for s in state.merge_queue.drain() {
                 (self.callback)(s);
             }
         }
