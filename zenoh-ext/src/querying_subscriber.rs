@@ -297,9 +297,7 @@ impl MergeQueue {
     fn push(&mut self, sample: Sample) {
         let mut sample = sample;
         let timestamp = sample.ensure_timestamp();
-        if !self.0.contains_key(&timestamp) {
-            self.0.insert(timestamp, sample);
-        }
+        self.0.entry(timestamp).or_insert(sample);
     }
     fn drain(&mut self) -> MergeQueueValues {
         let mut queue = BTreeMap::new();
