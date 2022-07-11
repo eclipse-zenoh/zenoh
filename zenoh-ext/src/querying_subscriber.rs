@@ -368,12 +368,15 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
-            move |s| {
+            move |mut s| {
                 let state = &mut zlock!(state);
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
                     log::trace!("Sample received while query in progress: push it to merge_queue");
+                    // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
+                    // after any timestamped Sample possibly coming from a query reply.
+                    s.ensure_timestamp();
                     state.merge_queue.push(s);
                 }
             }
