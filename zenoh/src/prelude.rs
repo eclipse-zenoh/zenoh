@@ -531,9 +531,14 @@ pub(crate) mod common {
         #[inline]
         /// Ensure that an associated Timestamp is present in this Sample.
         /// If not, a new one is created with the current system time and 0x00 as id.
-        pub fn ensure_timestamp(&mut self) {
-            if self.timestamp.is_none() {
-                self.timestamp = Some(new_reception_timestamp());
+        /// Get the timestamp of this sample (either existing one or newly created)
+        pub fn ensure_timestamp(&mut self) -> Timestamp {
+            if let Some(timestamp) = self.timestamp {
+                timestamp
+            } else {
+                let timestamp = new_reception_timestamp();
+                self.timestamp = Some(timestamp);
+                timestamp
             }
         }
     }
