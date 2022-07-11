@@ -311,9 +311,9 @@ impl<'a> Publisher<'a> {
 }
 impl<'a> Undeclarable<()> for Publisher<'a> {
     type Output = ZResult<()>;
-    type Undeclaration = PublisherUndeclare<'a>;
+    type Undeclaration = PublisherUndeclaration<'a>;
     fn undeclare(self, _: ()) -> Self::Undeclaration {
-        PublisherUndeclare { publisher: self }
+        PublisherUndeclaration { publisher: self }
     }
 }
 
@@ -330,13 +330,13 @@ impl<'a> Undeclarable<()> for Publisher<'a> {
 /// publisher.undeclare().res().await.unwrap();
 /// # })
 /// ```
-pub struct PublisherUndeclare<'a> {
+pub struct PublisherUndeclaration<'a> {
     publisher: Publisher<'a>,
 }
-impl Resolvable for PublisherUndeclare<'_> {
+impl Resolvable for PublisherUndeclaration<'_> {
     type Output = ZResult<()>;
 }
-impl SyncResolve for PublisherUndeclare<'_> {
+impl SyncResolve for PublisherUndeclaration<'_> {
     fn res_sync(mut self) -> Self::Output {
         let Publisher {
             session, key_expr, ..
@@ -346,7 +346,7 @@ impl SyncResolve for PublisherUndeclare<'_> {
         Ok(())
     }
 }
-impl AsyncResolve for PublisherUndeclare<'_> {
+impl AsyncResolve for PublisherUndeclaration<'_> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())

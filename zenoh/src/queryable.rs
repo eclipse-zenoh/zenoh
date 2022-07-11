@@ -222,9 +222,9 @@ impl<'a> CallbackQueryable<'a> {
 }
 impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
     type Output = ZResult<()>;
-    type Undeclaration = QueryableUndeclare<'a>;
+    type Undeclaration = QueryableUndeclaration<'a>;
     fn undeclare(self, _: ()) -> Self::Undeclaration {
-        QueryableUndeclare { queryable: self }
+        QueryableUndeclaration { queryable: self }
     }
 }
 
@@ -241,15 +241,15 @@ impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
 /// queryable.undeclare().res().await.unwrap();
 /// # })
 /// ```
-pub struct QueryableUndeclare<'a> {
+pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
 
-impl<'a> Resolvable for QueryableUndeclare<'a> {
+impl<'a> Resolvable for QueryableUndeclaration<'a> {
     type Output = ZResult<()>;
 }
 
-impl SyncResolve for QueryableUndeclare<'_> {
+impl SyncResolve for QueryableUndeclaration<'_> {
     fn res_sync(mut self) -> Self::Output {
         self.queryable.alive = false;
         self.queryable
@@ -258,7 +258,7 @@ impl SyncResolve for QueryableUndeclare<'_> {
     }
 }
 
-impl AsyncResolve for QueryableUndeclare<'_> {
+impl AsyncResolve for QueryableUndeclaration<'_> {
     type Future = futures::future::Ready<Self::Output>;
 
     fn res_async(self) -> Self::Future {
