@@ -291,7 +291,20 @@ impl<'a> Publisher<'a> {
     pub fn delete(&self) -> Publication {
         self.write(SampleKind::Delete, Value::empty())
     }
+
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.undeclare().res().await.unwrap();
+    /// # })
+    /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare(self, ())
     }
@@ -305,6 +318,18 @@ impl<'a> Undeclarable<()> for Publisher<'a> {
 }
 
 /// A [`Resolvable`] returned when undeclaring a publisher.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.undeclare().res().await.unwrap();
+/// # })
+/// ```
 pub struct PublisherUndeclare<'a> {
     publisher: Publisher<'a>,
 }
@@ -524,7 +549,9 @@ impl SyncResolve for PublisherBuilder<'_> {
                 }
             }
         }
-        self.session.declare_publication_intent(&key_expr);
+        self.session
+            .declare_publication_intent(&key_expr)
+            .res_sync()?;
         let publisher = Publisher {
             session: self.session,
             key_expr,
