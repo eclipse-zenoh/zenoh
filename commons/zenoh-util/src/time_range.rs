@@ -64,6 +64,8 @@ impl TimeRange<TimeExpr> {
     /// Returns `true` if the provided `instant` belongs to `self`.
     ///
     /// This method performs resolution with [`SystemTime::now`] if the bounds contain an "offset" time expression.
+    /// If you intend on performing this check multiple times, it may be wiser to resolve `self` first, and use
+    /// [`TimeRange::<SystemTime>::contains`] instead.
     pub fn contains(&self, instant: SystemTime) -> bool {
         let now = SystemTime::now();
         match &self.0 {
