@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::convert::TryInto;
 use std::mem::swap;
 use std::ops::Deref;
@@ -283,35 +283,58 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     }
 }
 
-// Collects samples in their Timestamp order, ignores repeating samples
-// with duplicated timestamps
-struct MergeQueue(BTreeMap<Timestamp, Sample>);
+// Collects samples in their Timestamp order, if any,
+// and ignores repeating samples with duplicate timestamps.
+// Samples without Timestamps are kept in a separate Vector,
+// and are considered as older than any sample with Timestamp.
+struct MergeQueue {
+    untimestamped: VecDeque<Sample>,
+    timstamped: BTreeMap<Timestamp, Sample>,
+}
 
 impl MergeQueue {
     fn new() -> Self {
-        MergeQueue(BTreeMap::new())
+        MergeQueue {
+            untimestamped: VecDeque::new(),
+            timstamped: BTreeMap::new(),
+        }
     }
+
     fn len(&self) -> usize {
-        self.0.len()
+        self.untimestamped.len() + self.timstamped.len()
     }
+
     fn push(&mut self, sample: Sample) {
-        let mut sample = sample;
-        let timestamp = sample.ensure_timestamp();
-        self.0.entry(timestamp).or_insert(sample);
+        if let Some(ts) = sample.timestamp {
+            self.timstamped.entry(ts).or_insert(sample);
+        } else {
+            self.untimestamped.push_back(sample);
+        }
     }
+
     fn drain(&mut self) -> MergeQueueValues {
+        let mut vec = VecDeque::new();
         let mut queue = BTreeMap::new();
-        swap(&mut self.0, &mut queue);
-        MergeQueueValues(queue.into_values())
+        swap(&mut self.untimestamped, &mut vec);
+        swap(&mut self.timstamped, &mut queue);
+        MergeQueueValues {
+            untimestamped: vec,
+            timstamped: queue.into_values(),
+        }
     }
 }
 
-struct MergeQueueValues(btree_map::IntoValues<Timestamp, Sample>);
+struct MergeQueueValues {
+    untimestamped: VecDeque<Sample>,
+    timstamped: btree_map::IntoValues<Timestamp, Sample>,
+}
 
 impl Iterator for MergeQueueValues {
     type Item = Sample;
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+        self.untimestamped
+            .pop_front()
+            .or_else(|| self.timstamped.next())
     }
 }
 
