@@ -28,9 +28,72 @@ const H_TO_SECS: f64 = M_TO_SECS * 60.0;
 const D_TO_SECS: f64 = H_TO_SECS * 24.0;
 const W_TO_SECS: f64 = D_TO_SECS * 7.0;
 
+/// The structural representation of the Zenoh Time DSL, which may adopt one of two syntax:
+/// - the "range" syntax: `<ldel: '[' | ']'><start: TimeExpr?>..<end: TimeExpr?><rdel: '[' | ']'>`
+/// - the "duration" syntax: `<ldel: '[' | ']'><start: TimeExpr>;<duration: Duration><rdel: '[' | ']'>`, which is
+///   equivalent to `<ldel><start>..<start+duration><rdel>`
+///
+/// Durations follow the `<duration: float><unit: "u", "ms", "s", "m", "h", "d", "w">` syntax.
+///
+/// Where [`TimeExpr`] itself may adopt one of two syntaxes:
+/// - the "instant" syntax, which must be a UTC [RFC3339](https://datatracker.ietf.org/doc/html/rfc3339) formatted timestamp.
+/// - the "offset" syntax, which is written `now(<sign: '-'?><offset: Duration?>)`, and allows to specify a target instant as
+///   an offset applied to an instant of evaluation. These offset are resolved at the evaluation site.
+///
+/// In range syntax, omiting `<start>` and/or `<end>` implies that the range is unbounded in that direction.
+///
+/// Exclusive bounds are represented by their respective delimiters pointing towards the exterior.
+/// Interior bounds are represented by the opposite.
+///
+/// The comparison step for instants is the nanosecond, which makes exclusive and inclusive bounds extremely close.
+/// The `[<start>..<end>[` pattern may however be useful to guarantee that a same timestamp never appears twice when
+/// iteratively getting values for `[t0..t1[`, `[t1..t2[`, `[t2..t3[`...
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct TimeRange(pub TimeBound, pub TimeBound);
-impl Display for TimeRange {
+pub struct TimeRange<T = TimeExpr>(pub TimeBound<T>, pub TimeBound<T>);
+impl TimeRange<TimeExpr> {
+    /// Resolves the offset bounds in the range using `now` as reference.
+    pub fn resolve_at(self, now: SystemTime) -> TimeRange<SystemTime> {
+        TimeRange(self.0.resolve_at(now), self.1.resolve_at(now))
+    }
+
+    /// Resolves the offset bounds in the range using [`SystemTime::now`] as reference.
+    pub fn resolve(self) -> TimeRange<SystemTime> {
+        self.resolve_at(SystemTime::now())
+    }
+
+    /// Returns `true` if the provided `instant` belongs to `self`.
+    ///
+    /// This method performs resolution with [`SystemTime::now`] if the bounds contain an "offset" time expression.
+    pub fn contains(&self, instant: SystemTime) -> bool {
+        let now = SystemTime::now();
+        match &self.0 {
+            TimeBound::Inclusive(t) if t.resolve_at(now) > instant => return false,
+            TimeBound::Exclusive(t) if t.resolve_at(now) >= instant => return false,
+            _ => {}
+        }
+        match &self.1 {
+            TimeBound::Inclusive(t) => t.resolve_at(now) >= instant,
+            TimeBound::Exclusive(t) => t.resolve_at(now) > instant,
+            _ => true,
+        }
+    }
+}
+impl TimeRange<SystemTime> {
+    /// Returns `true` if the provided `instant` belongs to `self`.
+    pub fn contains(&self, instant: SystemTime) -> bool {
+        match &self.0 {
+            TimeBound::Inclusive(t) if *t > instant => return false,
+            TimeBound::Exclusive(t) if *t >= instant => return false,
+            _ => {}
+        }
+        match &self.1 {
+            TimeBound::Inclusive(t) => *t >= instant,
+            TimeBound::Exclusive(t) => *t > instant,
+            _ => true,
+        }
+    }
+}
+impl Display for TimeRange<TimeExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             TimeBound::Inclusive(t) => write!(f, "[{}..", t)?,
@@ -44,8 +107,22 @@ impl Display for TimeRange {
         }
     }
 }
+impl Display for TimeRange<SystemTime> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            TimeBound::Inclusive(t) => write!(f, "[{}..", TimeExpr::Fixed(*t))?,
+            TimeBound::Exclusive(t) => write!(f, "]{}..", TimeExpr::Fixed(*t))?,
+            TimeBound::Unbounded => f.write_str("[..")?,
+        }
+        match &self.1 {
+            TimeBound::Inclusive(t) => write!(f, "{}]", TimeExpr::Fixed(*t)),
+            TimeBound::Exclusive(t) => write!(f, "{}[", TimeExpr::Fixed(*t)),
+            TimeBound::Unbounded => f.write_str("]"),
+        }
+    }
+}
 
-impl FromStr for TimeRange {
+impl FromStr for TimeRange<TimeExpr> {
     type Err = ZError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // minimum str size is 4: "[..]"
@@ -99,16 +176,34 @@ impl FromStr for TimeRange {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum TimeBound {
-    Inclusive(TimeExpr),
-    Exclusive(TimeExpr),
+pub enum TimeBound<T> {
+    Inclusive(T),
+    Exclusive(T),
     Unbounded,
+}
+impl TimeBound<TimeExpr> {
+    pub fn resolve_at(self, now: SystemTime) -> TimeBound<SystemTime> {
+        match self {
+            TimeBound::Inclusive(t) => TimeBound::Inclusive(t.resolve_at(now)),
+            TimeBound::Exclusive(t) => TimeBound::Exclusive(t.resolve_at(now)),
+            TimeBound::Unbounded => TimeBound::Unbounded,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TimeExpr {
     Fixed(SystemTime),
     Now { offset_secs: f64 },
+}
+impl TimeExpr {
+    /// Resolves `self` into a [`SystemTime`], using `now` as a reference for offset expressions.
+    pub fn resolve_at(&self, now: SystemTime) -> SystemTime {
+        match self {
+            TimeExpr::Fixed(t) => *t,
+            TimeExpr::Now { offset_secs } => now + std::time::Duration::from_secs_f64(*offset_secs),
+        }
+    }
 }
 impl Display for TimeExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -173,7 +268,7 @@ impl<'a> Add<f64> for &'a TimeExpr {
     }
 }
 
-fn parse_time_bound(s: &str, inclusive: bool) -> Result<TimeBound, ZError> {
+fn parse_time_bound(s: &str, inclusive: bool) -> Result<TimeBound<TimeExpr>, ZError> {
     if s.is_empty() {
         Ok(TimeBound::Unbounded)
     } else if inclusive {
@@ -185,7 +280,7 @@ fn parse_time_bound(s: &str, inclusive: bool) -> Result<TimeBound, ZError> {
 
 /// Parses a &str as a Duration.
 /// Expected format is a f64 in seconds, or "<f64><unit>" where <unit> is:
-///  - 'u' or 'µ' => microseconds
+///  - 'u'  => microseconds
 ///  - "ms" => milliseconds
 ///  - 's' => seconds
 ///  - 'm' => minutes
@@ -198,17 +293,17 @@ fn parse_duration(s: &str) -> Result<f64, ZError> {
             r#"Invalid duration: "" (expected format: <f64> (in seconds) or <f64><unit>. Accepted units: u, ms, s, m, h, d or w.)"#
         );
     }
-    let mut it = s.char_indices().rev();
+    let mut it = s.bytes().enumerate().rev();
     match it.next().unwrap() {
-        (i, 'u' | 'µ') => s[..i].parse::<f64>().map(|u| U_TO_SECS * u as f64),
-        (_, 's') => match it.next().unwrap() {
-            (i, 'm') => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms as f64),
+        (i, b'u') => s[..i].parse::<f64>().map(|u| U_TO_SECS * u as f64),
+        (_, b's') => match it.next().unwrap() {
+            (i, b'm') => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms as f64),
             (i, _) => s[..i + 1].parse::<f64>().map(|sec| sec as f64),
         },
-        (i, 'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m as f64),
-        (i, 'h') => s[..i].parse::<f64>().map(|h| H_TO_SECS * h as f64),
-        (i, 'd') => s[..i].parse::<f64>().map(|d| D_TO_SECS * d as f64),
-        (i, 'w') => s[..i].parse::<f64>().map(|w| W_TO_SECS * w as f64),
+        (i, b'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m as f64),
+        (i, b'h') => s[..i].parse::<f64>().map(|h| H_TO_SECS * h as f64),
+        (i, b'd') => s[..i].parse::<f64>().map(|d| D_TO_SECS * d as f64),
+        (i, b'w') => s[..i].parse::<f64>().map(|w| W_TO_SECS * w as f64),
         _ => s.parse::<f64>(),
     }
     .map_err(|e| zerror!(r#"Invalid duration "{}" ({})"#, s, e))
@@ -284,7 +379,7 @@ mod tests {
         assert_eq!(parse_duration("0").unwrap(), 0.0);
         assert_eq!(parse_duration("1.2").unwrap(), 1.2);
         assert_eq!(parse_duration("1u").unwrap(), 0.000001);
-        assert_eq!(parse_duration("2µ").unwrap(), 0.000002);
+        assert_eq!(parse_duration("2u").unwrap(), 0.000002);
         assert_eq!(parse_duration("1.5ms").unwrap(), 0.0015);
         assert_eq!(parse_duration("100ms").unwrap(), 0.1);
         assert_eq!(parse_duration("10s").unwrap(), 10.0);

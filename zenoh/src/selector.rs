@@ -33,7 +33,7 @@ use std::{borrow::Cow, convert::TryFrom};
 ///
 /// Here are the currently standardized keys for Zenoh:
 /// - `_time`: used to express interest in only values dated within a certain time range, values for
-///   this key must be readable by the Zenoh Time DSL for the value to be considered valid.
+///   this key must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
 ///   this key to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
@@ -48,7 +48,15 @@ pub struct Selector<'a> {
 
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
-    fn value_selector_mut(&mut self) -> &mut String {
+    /// Gets the value selector as a raw string.
+    pub fn value_selector(&self) -> &str {
+        &self.value_selector
+    }
+    /// Gets a mutable reference to the value_selector as a String.
+    ///
+    /// Note that calling this function may cause an allocation and copy if the value selector wasn't
+    /// already owned by `self`. `self` owns its value selector as soon as this function returns.
+    pub fn value_selector_mut(&mut self) -> &mut String {
         if let Cow::Borrowed(s) = self.value_selector {
             self.value_selector = Cow::Owned(s.to_owned())
         }
@@ -86,11 +94,6 @@ impl<'a> Selector<'a> {
     pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
         self.value_selector = value_selector.into();
         self
-    }
-
-    /// Gets the value selector as a raw string.
-    pub fn value_selector(&self) -> &str {
-        &self.value_selector
     }
 
     pub fn extend<'b, I, K, V>(&'b mut self, key_value_pairs: I)
