@@ -235,6 +235,18 @@ impl<'a> Publisher<'a> {
         self
     }
 
+    /// Send data with [`kind`](SampleKind) (Put or Delete).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value".into()).res().await.unwrap();
+    /// # })
+    /// ```
     pub fn write(&self, kind: SampleKind, value: Value) -> Publication {
         Publication {
             publisher: self,
@@ -242,7 +254,8 @@ impl<'a> Publisher<'a> {
             kind,
         }
     }
-    /// Send a value.
+
+    /// Put data.
     ///
     /// # Examples
     /// ```
@@ -261,6 +274,20 @@ impl<'a> Publisher<'a> {
     {
         self.write(SampleKind::Put, value.into())
     }
+
+    /// Delete data.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.delete().res().await.unwrap();
+    /// # })
+    /// ```
     pub fn delete(&self) -> Publication {
         self.write(SampleKind::Delete, Value::empty())
     }
@@ -276,6 +303,8 @@ impl<'a> Undeclarable<()> for Publisher<'a> {
         PublisherUndeclare { publisher: self }
     }
 }
+
+/// A [`Resolvable`] returned when undeclaring a publisher.
 pub struct PublisherUndeclare<'a> {
     publisher: Publisher<'a>,
 }
@@ -309,6 +338,8 @@ impl Drop for Publisher<'_> {
     }
 }
 
+/// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
+/// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,

@@ -167,7 +167,6 @@ pub mod scouting;
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -222,6 +221,16 @@ where
     OpenBuilder { config }
 }
 
+/// A builder returned by [`open`] used to open a zenoh [`Session`].
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// # })
+/// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
@@ -279,6 +288,8 @@ pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder { runtime }
 }
 
+/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[doc(hidden)]
 pub struct InitBuilder {
     runtime: Runtime,
 }

@@ -298,6 +298,7 @@ impl fmt::Debug for SessionRef<'_> {
     }
 }
 
+/// A trait implemented by types that can be undeclared.
 pub trait Undeclarable<T> {
     type Output;
     type Undeclaration: Resolve<Self::Output>;
