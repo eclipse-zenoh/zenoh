@@ -21,6 +21,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
+use crate::prelude::sync::ValueSelector;
 use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
 use crate::publication::*;
 use crate::query::*;
@@ -1369,10 +1370,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation {
             QueryConsolidation::Auto => {
-                if selector
-                    .decode_value_selector()
-                    .any(|(k, _)| k.as_ref() == "_time")
-                {
+                if selector.decode().any(|(k, _)| k.as_ref() == "_time") {
                     ConsolidationStrategy::none()
                 } else {
                     ConsolidationStrategy::default()

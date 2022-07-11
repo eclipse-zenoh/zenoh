@@ -61,8 +61,8 @@ impl FromStr for TimeRange {
             _ => bail!("Invalid TimeRange (must start with '[' or ']'): {}", s),
         };
         let inclusive_end = match chars.last().unwrap() {
-            '[' => true,
-            ']' => false,
+            ']' => true,
+            '[' => false,
             _ => bail!("Invalid TimeRange (must end with '[' or ']'): {}", s),
         };
 
