@@ -58,6 +58,7 @@ pub trait Resolvable {
 }
 
 /// A convenience trait to ease notation on functions that return `impl Resolvable<Output = Output> + SyncResolve + AsyncResolve + Send`
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub trait Resolve<Output>: Resolvable<Output = Output> + SyncResolve + AsyncResolve + Send {}
 //noinspection ALL
 impl<T, Output> Resolve<Output> for T where
