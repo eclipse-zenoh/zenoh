@@ -14,6 +14,7 @@
 
 use humantime::{format_rfc3339, parse_rfc3339_weak};
 use std::{
+    convert::{TryFrom, TryInto},
     fmt::Display,
     ops::Add,
     str::FromStr,
@@ -93,6 +94,17 @@ impl TimeRange<SystemTime> {
             TimeBound::Exclusive(t) => *t > instant,
             _ => true,
         }
+    }
+}
+impl From<TimeRange<SystemTime>> for TimeRange<TimeExpr> {
+    fn from(value: TimeRange<SystemTime>) -> Self {
+        TimeRange(value.0.into(), value.1.into())
+    }
+}
+impl TryFrom<TimeRange<TimeExpr>> for TimeRange<SystemTime> {
+    type Error = ();
+    fn try_from(value: TimeRange<TimeExpr>) -> Result<Self, Self::Error> {
+        Ok(TimeRange(value.0.try_into()?, value.1.try_into()?))
     }
 }
 impl Display for TimeRange<TimeExpr> {
@@ -183,6 +195,25 @@ pub enum TimeBound<T> {
     Exclusive(T),
     Unbounded,
 }
+impl From<TimeBound<SystemTime>> for TimeBound<TimeExpr> {
+    fn from(value: TimeBound<SystemTime>) -> Self {
+        match value {
+            TimeBound::Inclusive(t) => TimeBound::Inclusive(t.into()),
+            TimeBound::Exclusive(t) => TimeBound::Exclusive(t.into()),
+            TimeBound::Unbounded => TimeBound::Unbounded,
+        }
+    }
+}
+impl TryFrom<TimeBound<TimeExpr>> for TimeBound<SystemTime> {
+    type Error = ();
+    fn try_from(value: TimeBound<TimeExpr>) -> Result<Self, Self::Error> {
+        Ok(match value {
+            TimeBound::Inclusive(t) => TimeBound::Inclusive(t.try_into()?),
+            TimeBound::Exclusive(t) => TimeBound::Exclusive(t.try_into()?),
+            TimeBound::Unbounded => TimeBound::Unbounded,
+        })
+    }
+}
 impl TimeBound<TimeExpr> {
     pub fn resolve_at(self, now: SystemTime) -> TimeBound<SystemTime> {
         match self {
@@ -197,6 +228,20 @@ impl TimeBound<TimeExpr> {
 pub enum TimeExpr {
     Fixed(SystemTime),
     Now { offset_secs: f64 },
+}
+impl From<SystemTime> for TimeExpr {
+    fn from(t: SystemTime) -> Self {
+        Self::Fixed(t)
+    }
+}
+impl TryFrom<TimeExpr> for SystemTime {
+    type Error = ();
+    fn try_from(value: TimeExpr) -> Result<Self, Self::Error> {
+        match value {
+            TimeExpr::Fixed(t) => Ok(t),
+            TimeExpr::Now { .. } => Err(()),
+        }
+    }
 }
 impl TimeExpr {
     /// Resolves `self` into a [`SystemTime`], using `now` as a reference for offset expressions.
