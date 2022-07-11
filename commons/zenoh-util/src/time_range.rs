@@ -175,7 +175,7 @@ impl FromStr for TimeRange<TimeExpr> {
                     }
                 }
                 TimeBound::Unbounded => bail!(
-                    r#"Invalid TimeRange (';' must separate a time and a duration)"): {}"#,
+                    r#"Invalid TimeRange (';' must contain a time and a duration)"): {}"#,
                     s
                 ),
             };

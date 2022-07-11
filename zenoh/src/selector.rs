@@ -3,7 +3,12 @@ use zenoh_util::time_range::TimeRange;
 
 use crate::{prelude::KeyExpr, queryable::Query};
 
-use std::{borrow::Cow, convert::TryFrom};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashMap,
+    convert::TryFrom,
+    hash::Hash,
+};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
@@ -157,20 +162,54 @@ fn selector_accessors() {
         selector.with_time_range(time_range);
         assert_eq!(selector.time_range().unwrap(), time_range);
         assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
+        let map_selector = selector.decode().collect::<HashMap<_, _>>();
+        assert_eq!(selector.time_range(), map_selector.time_range());
     }
 }
-
+pub trait ValueSelectorProperty {
+    fn key(&self) -> &str;
+    fn value(&self) -> &str;
+}
+impl ValueSelectorProperty for (&str, &str) {
+    fn key(&self) -> &str {
+        self.0
+    }
+    fn value(&self) -> &str {
+        self.1
+    }
+}
+impl ValueSelectorProperty for (Cow<'_, str>, Cow<'_, str>) {
+    fn key(&self) -> &str {
+        self.0.borrow()
+    }
+    fn value(&self) -> &str {
+        self.1.borrow()
+    }
+}
+impl ValueSelectorProperty for (&Cow<'_, str>, &Cow<'_, str>) {
+    fn key(&self) -> &str {
+        self.0.borrow()
+    }
+    fn value(&self) -> &str {
+        self.1.borrow()
+    }
+}
 /// A trait to help decode zenoh value selectors as properties.
 pub trait ValueSelector<'a> {
-    type Decoder: Iterator<Item = (Cow<'a, str>, Cow<'a, str>)> + Clone + 'a;
+    type Decoder: Iterator + 'a;
 
     /// Returns this value selector as properties.
-    fn decode(&'a self) -> Self::Decoder;
+    fn decode(&'a self) -> Self::Decoder
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty;
     ///
-    fn time_range(&'a self) -> Option<TimeRange> {
-        self.decode().find_map(|(k, v)| {
-            if k == TIME_RANGE_KEY {
-                v.parse().ok()
+    fn time_range(&'a self) -> Option<TimeRange>
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+    {
+        self.decode().find_map(|prop| {
+            if prop.key() == TIME_RANGE_KEY {
+                prop.value().parse().ok()
             } else {
                 None
             }
@@ -187,6 +226,20 @@ impl<'a> ValueSelector<'a> for str {
     type Decoder = form_urlencoded::Parse<'a>;
     fn decode(&'a self) -> Self::Decoder {
         form_urlencoded::parse(self.as_bytes())
+    }
+}
+
+impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a> for HashMap<K, V> {
+    type Decoder = std::collections::hash_map::Iter<'a, K, V>;
+    fn decode(&'a self) -> Self::Decoder {
+        self.iter()
+    }
+    fn time_range(&'a self) -> Option<TimeRange>
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+    {
+        self.get::<str>(TIME_RANGE_KEY)
+            .and_then(|v| v.borrow().parse().ok())
     }
 }
 
