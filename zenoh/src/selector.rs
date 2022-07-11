@@ -57,6 +57,9 @@ impl<'a> Selector<'a> {
     pub fn value_selector(&self) -> &str {
         &self.value_selector
     }
+    pub fn value_selector_map(&'a self) -> HashMap<Cow<'a, str>, Cow<'a, str>> {
+        self.decode().collect()
+    }
     /// Gets a mutable reference to the value_selector as a String.
     ///
     /// Note that calling this function may cause an allocation and copy if the value selector wasn't
@@ -162,7 +165,7 @@ fn selector_accessors() {
         selector.with_time_range(time_range);
         assert_eq!(selector.time_range().unwrap(), time_range);
         assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
-        let map_selector = selector.decode().collect::<HashMap<_, _>>();
+        let map_selector = selector.value_selector_map();
         assert_eq!(selector.time_range(), map_selector.time_range());
     }
 }
