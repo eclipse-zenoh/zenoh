@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Key expression types and utils.
+
 use std::{
     convert::{TryFrom, TryInto},
     str::FromStr,

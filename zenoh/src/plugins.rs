@@ -11,11 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! Zenoh router plugins.
+
+use crate::net::runtime::Runtime;
 use crate::prelude::Selector;
 use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
-use crate::net::runtime::Runtime;
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
 }

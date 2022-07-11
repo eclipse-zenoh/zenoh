@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,18 +11,19 @@ use std::convert::TryInto;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::collections::{btree_map, BTreeMap, VecDeque};
+use std::convert::TryInto;
+use std::mem::swap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability};
-use zenoh::time::Period;
+use zenoh::time::{Period, Timestamp};
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
-
-const MERGE_QUEUE_INITIAL_CAPCITY: usize = 32;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 pub struct QueryingSubscriberBuilder<'a, 'b> {
@@ -283,9 +283,64 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     }
 }
 
+// Collects samples in their Timestamp order, if any,
+// and ignores repeating samples with duplicate timestamps.
+// Samples without Timestamps are kept in a separate Vector,
+// and are considered as older than any sample with Timestamp.
+struct MergeQueue {
+    untimestamped: VecDeque<Sample>,
+    timstamped: BTreeMap<Timestamp, Sample>,
+}
+
+impl MergeQueue {
+    fn new() -> Self {
+        MergeQueue {
+            untimestamped: VecDeque::new(),
+            timstamped: BTreeMap::new(),
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.untimestamped.len() + self.timstamped.len()
+    }
+
+    fn push(&mut self, sample: Sample) {
+        if let Some(ts) = sample.timestamp {
+            self.timstamped.entry(ts).or_insert(sample);
+        } else {
+            self.untimestamped.push_back(sample);
+        }
+    }
+
+    fn drain(&mut self) -> MergeQueueValues {
+        let mut vec = VecDeque::new();
+        let mut queue = BTreeMap::new();
+        swap(&mut self.untimestamped, &mut vec);
+        swap(&mut self.timstamped, &mut queue);
+        MergeQueueValues {
+            untimestamped: vec,
+            timstamped: queue.into_values(),
+        }
+    }
+}
+
+struct MergeQueueValues {
+    untimestamped: VecDeque<Sample>,
+    timstamped: btree_map::IntoValues<Timestamp, Sample>,
+}
+
+impl Iterator for MergeQueueValues {
+    type Item = Sample;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.untimestamped
+            .pop_front()
+            .or_else(|| self.timstamped.next())
+    }
+}
+
 struct InnerState {
     pending_queries: u64,
-    merge_queue: Vec<Sample>,
+    merge_queue: MergeQueue,
 }
 
 pub struct CallbackQueryingSubscriber<'a> {
@@ -306,19 +361,22 @@ impl<'a> CallbackQueryingSubscriber<'a> {
     ) -> ZResult<CallbackQueryingSubscriber<'a>> {
         let state = Arc::new(Mutex::new(InnerState {
             pending_queries: 0,
-            merge_queue: Vec::with_capacity(MERGE_QUEUE_INITIAL_CAPCITY),
+            merge_queue: MergeQueue::new(),
         }));
         let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
 
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
-            move |s| {
+            move |mut s| {
                 let state = &mut zlock!(state);
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
                     log::trace!("Sample received while query in progress: push it to merge_queue");
+                    // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
+                    // after any timestamped Sample possibly coming from a query reply.
+                    s.ensure_timestamp();
                     state.merge_queue.push(s);
                 }
             }
@@ -443,17 +501,11 @@ impl Drop for RepliesHandler {
             state.pending_queries
         );
         if state.pending_queries == 0 {
-            state
-                .merge_queue
-                .sort_by_key(|sample| *sample.get_timestamp().unwrap());
-            state
-                .merge_queue
-                .dedup_by_key(|sample| *sample.get_timestamp().unwrap());
             log::debug!(
                 "All queries done. Replies and live publications merged - {} samples to propagate",
                 state.merge_queue.len()
             );
-            for s in state.merge_queue.drain(..) {
+            for s in state.merge_queue.drain() {
                 (self.callback)(s);
             }
         }

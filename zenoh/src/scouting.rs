@@ -29,6 +29,20 @@ pub use zenoh_protocol_core::WhatAmI;
 /// A zenoh Hello message.
 pub use zenoh_protocol::proto::Hello;
 
+/// A builder for initializing a [`FlumeScout`].
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).res().await.unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
+///     println!("{}", hello);
+/// }
+/// # })
+/// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct ScoutBuilder<IntoWhatAmI, TryIntoConfig>
@@ -45,7 +59,7 @@ where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
 {
-    type Output = ZResult<HandlerScout<flume::Receiver<Hello>>>;
+    type Output = ZResult<FlumeScout>;
 }
 
 impl<IntoWhatAmI, TryIntoConfig> ScoutBuilder<IntoWhatAmI, TryIntoConfig>
@@ -54,6 +68,20 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
 {
     /// Receive the [`Hello`] messages from this scout with a callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::scouting::WhatAmI;
+    ///
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    ///     .callback(|hello| { println!("{}", hello); })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -71,7 +99,22 @@ where
     /// Receive the [`Hello`] messages from this scout with a mutable callback.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](ScoutBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](ScoutBuilder::callback) method, we suggest you use it instead of `callback_mut`.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::scouting::WhatAmI;
+    ///
+    /// let mut n = 0;
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    ///     .callback_mut(move |_hello| { n += 1; })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -84,6 +127,23 @@ where
     }
 
     /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::Handler).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::scouting::WhatAmI;
+    ///
+    /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(hello) = receiver.recv_async().await {
+    ///     println!("{}", hello);
+    /// }
+    /// # })
+    /// ```
     #[inline]
     pub fn with<IntoHandler, Receiver>(
         self,
@@ -123,6 +183,21 @@ where
     }
 }
 
+/// A builder for initializing a [`CallbackScout`].
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .callback(|hello| { println!("{}", hello); })
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct CallbackScoutBuilder<IntoWhatAmI, TryIntoConfig, Callback>
@@ -141,7 +216,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     Callback: Fn(Hello) + Send + Sync + 'static,
 {
-    type Output = ZResult<Scout>;
+    type Output = ZResult<CallbackScout>;
 }
 
 impl<IntoWhatAmI, TryIntoConfig, Callback> AsyncResolve
@@ -174,23 +249,55 @@ where
     }
 }
 
-pub struct Scout {
+/// A scout that returns [`Hello`] messages through a callback.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .callback(|hello| { println!("{}", hello); })
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+pub struct CallbackScout {
     #[allow(dead_code)]
     pub(crate) stop_sender: flume::Sender<()>,
 }
 
-impl Scout {
+impl CallbackScout {
+    /// Stop scouting.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::scouting::WhatAmI;
+    ///
+    /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+    ///     .callback(|hello| { println!("{}", hello); })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// scout.stop();
+    /// # })
+    /// ```
     pub fn stop(self) {
         // drop
     }
 }
 
-impl fmt::Debug for Scout {
+impl fmt::Debug for CallbackScout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Scout").finish()
+        f.debug_struct("CallbackScout").finish()
     }
 }
 
+/// A builder for initializing a [`HandlerScout`].
 #[derive(Debug, Clone)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct HandlerScoutBuilder<IntoWhatAmI, TryIntoConfig, IntoHandler, Receiver>
@@ -243,10 +350,28 @@ where
     }
 }
 
+/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::Handler).
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::scouting::WhatAmI;
+///
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .with(flume::bounded(32))
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
+///     println!("{}", hello);
+/// }
+/// # })
+/// ```
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct HandlerScout<Receiver> {
-    pub scout: Scout,
+    pub scout: CallbackScout,
     pub receiver: Receiver,
 }
 
@@ -259,6 +384,23 @@ impl<Receiver> Deref for HandlerScout<Receiver> {
 }
 
 impl<Receiver> HandlerScout<Receiver> {
+    /// Stop scouting.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::scouting::WhatAmI;
+    ///
+    /// let scout = zenoh::scout(WhatAmI::Router, config::default())
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let _router = scout.recv_async().await;
+    /// scout.stop();
+    /// # })
+    /// ```
     pub fn stop(self) {
         self.scout.stop()
     }
@@ -280,11 +422,14 @@ impl crate::prelude::IntoHandler<Hello, flume::Receiver<Hello>>
     }
 }
 
+/// A [`HandlerScout`] that provides [`Hello`] messages through a `flume` channel.
+pub type FlumeScout = HandlerScout<flume::Receiver<Hello>>;
+
 fn scout<IntoWhatAmI, TryIntoConfig>(
     what: IntoWhatAmI,
     config: TryIntoConfig,
     callback: Callback<Hello>,
-) -> ZResult<Scout>
+) -> ZResult<CallbackScout>
 where
     IntoWhatAmI: Into<WhatAmIMatcher>,
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -344,5 +489,5 @@ where
         }
     }
 
-    Ok(Scout { stop_sender })
+    Ok(CallbackScout { stop_sender })
 }
