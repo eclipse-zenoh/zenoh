@@ -618,6 +618,16 @@ impl Session {
     ///
     /// The returned `KeyExpr`'s internal structure may differ from what you would have obtained through a simple
     /// `key_expr.try_into()`, to save time on detecting the optimizations that have been associated with it.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
+    /// # })
+    /// ```
     pub fn declare_keyexpr<'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
