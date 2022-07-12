@@ -1,3 +1,4 @@
+use zenoh_core::Result as ZResult;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
@@ -163,10 +164,13 @@ fn selector_accessors() {
     ] {
         let mut selector = Selector::try_from(selector).unwrap();
         selector.with_time_range(time_range);
-        assert_eq!(selector.time_range().unwrap(), time_range);
+        assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
         assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
         let map_selector = selector.value_selector_map();
-        assert_eq!(selector.time_range(), map_selector.time_range());
+        assert_eq!(
+            selector.time_range().unwrap(),
+            map_selector.time_range().unwrap()
+        );
     }
 }
 pub trait ValueSelectorProperty {
@@ -206,17 +210,16 @@ pub trait ValueSelector<'a> {
     where
         <Self::Decoder as Iterator>::Item: ValueSelectorProperty;
     ///
-    fn time_range(&'a self) -> Option<TimeRange>
+    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
     {
-        self.decode().find_map(|prop| {
+        for prop in self.decode() {
             if prop.key() == TIME_RANGE_KEY {
-                prop.value().parse().ok()
-            } else {
-                None
+                return Ok(Some(prop.value().parse()?));
             }
-        })
+        }
+        Ok(None)
     }
 }
 impl<'a> ValueSelector<'a> for Selector<'a> {
@@ -237,12 +240,14 @@ impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a>
     fn decode(&'a self) -> Self::Decoder {
         self.iter()
     }
-    fn time_range(&'a self) -> Option<TimeRange>
+    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
     {
-        self.get::<str>(TIME_RANGE_KEY)
-            .and_then(|v| v.borrow().parse().ok())
+        match self.get::<str>(TIME_RANGE_KEY) {
+            Some(s) => Ok(Some(s.borrow().parse()?)),
+            None => Ok(None),
+        }
     }
 }
 
