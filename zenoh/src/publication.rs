@@ -244,13 +244,16 @@ impl<'a> Publisher<'a> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.write(SampleKind::Put, "value".into()).res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
     /// # })
     /// ```
-    pub fn write(&self, kind: SampleKind, value: Value) -> Publication {
+    pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
+    where
+        IntoValue: Into<Value>,
+    {
         Publication {
             publisher: self,
-            value,
+            value: value.into(),
             kind,
         }
     }
