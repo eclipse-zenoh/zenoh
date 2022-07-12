@@ -141,7 +141,7 @@ impl Timed for QueryTimeout {
             }
             let _ = (query.callback)(Reply {
                 sample: Err("Timeout".into()),
-                replier_id: self.runtime.pid,
+                replier_id: self.runtime.zid,
             });
         }
     }
