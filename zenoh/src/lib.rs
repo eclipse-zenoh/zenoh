@@ -97,7 +97,7 @@ pub use session::*;
 pub mod key_expr;
 #[doc(hidden)]
 pub mod net;
-pub(crate) mod selector;
+pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod info;
@@ -157,7 +157,7 @@ pub mod scouting;
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
+/// Drop the returned [`HandlerScout`](crate::scouting::HandlerScout) to stop the scouting task.
 ///
 /// # Arguments
 ///
@@ -167,7 +167,6 @@ pub mod scouting;
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -222,6 +221,16 @@ where
     OpenBuilder { config }
 }
 
+/// A builder returned by [`open`] used to open a zenoh [`Session`].
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// # })
+/// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
@@ -279,6 +288,8 @@ pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder { runtime }
 }
 
+/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[doc(hidden)]
 pub struct InitBuilder {
     runtime: Runtime,
 }

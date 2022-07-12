@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::convert::TryInto;
 use std::mem::swap;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability};
@@ -34,6 +35,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
+    query_timeout: Duration,
 }
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
@@ -56,6 +58,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             query_selector: None,
             query_target,
             query_consolidation,
+            query_timeout: Duration::from_secs(10),
         }
     }
 
@@ -157,6 +160,13 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
+    /// Change the timeout to be used for queries.
+    #[inline]
+    pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
+        self.query_timeout = query_timeout;
+        self
+    }
+
     fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
         QueryingSubscriberBuilder {
             session: self.session,
@@ -166,6 +176,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
+            query_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -281,37 +292,67 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
         self.builder = self.builder.query_consolidation(query_consolidation);
         self
     }
+
+    /// Change the timeout to be used for queries.
+    #[inline]
+    pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
+        self.builder = self.builder.query_timeout(query_timeout);
+        self
+    }
 }
 
-// Collects samples in their Timestamp order, ignores repeating samples
-// with duplicated timestamps
-struct MergeQueue(BTreeMap<Timestamp, Sample>);
+// Collects samples in their Timestamp order, if any,
+// and ignores repeating samples with duplicate timestamps.
+// Samples without Timestamps are kept in a separate Vector,
+// and are considered as older than any sample with Timestamp.
+struct MergeQueue {
+    untimestamped: VecDeque<Sample>,
+    timstamped: BTreeMap<Timestamp, Sample>,
+}
 
 impl MergeQueue {
     fn new() -> Self {
-        MergeQueue(BTreeMap::new())
+        MergeQueue {
+            untimestamped: VecDeque::new(),
+            timstamped: BTreeMap::new(),
+        }
     }
+
     fn len(&self) -> usize {
-        self.0.len()
+        self.untimestamped.len() + self.timstamped.len()
     }
+
     fn push(&mut self, sample: Sample) {
-        let mut sample = sample;
-        let timestamp = sample.ensure_timestamp();
-        self.0.entry(timestamp).or_insert(sample);
+        if let Some(ts) = sample.timestamp {
+            self.timstamped.entry(ts).or_insert(sample);
+        } else {
+            self.untimestamped.push_back(sample);
+        }
     }
+
     fn drain(&mut self) -> MergeQueueValues {
+        let mut vec = VecDeque::new();
         let mut queue = BTreeMap::new();
-        swap(&mut self.0, &mut queue);
-        MergeQueueValues(queue.into_values())
+        swap(&mut self.untimestamped, &mut vec);
+        swap(&mut self.timstamped, &mut queue);
+        MergeQueueValues {
+            untimestamped: vec,
+            timstamped: queue.into_values(),
+        }
     }
 }
 
-struct MergeQueueValues(btree_map::IntoValues<Timestamp, Sample>);
+struct MergeQueueValues {
+    untimestamped: VecDeque<Sample>,
+    timstamped: btree_map::IntoValues<Timestamp, Sample>,
+}
 
 impl Iterator for MergeQueueValues {
     type Item = Sample;
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+        self.untimestamped
+            .pop_front()
+            .or_else(|| self.timstamped.next())
     }
 }
 
@@ -326,6 +367,7 @@ pub struct CallbackQueryingSubscriber<'a> {
     query_value_selector: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
+    query_timeout: Duration,
     _subscriber: CallbackSubscriber<'a>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
     state: Arc<Mutex<InnerState>>,
@@ -345,12 +387,15 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         let sub_callback = {
             let state = state.clone();
             let callback = callback.clone();
-            move |s| {
+            move |mut s| {
                 let state = &mut zlock!(state);
                 if state.pending_queries == 0 {
                     callback(s);
                 } else {
                     log::trace!("Sample received while query in progress: push it to merge_queue");
+                    // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
+                    // after any timestamped Sample possibly coming from a query reply.
+                    s.ensure_timestamp();
                     state.merge_queue.push(s);
                 }
             }
@@ -386,6 +431,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             query_value_selector: value_selector.into_owned(),
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
+            query_timeout: conf.query_timeout,
             _subscriber: subscriber,
             callback,
             state,
@@ -412,6 +458,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 .with_owned_value_selector(self.query_value_selector.to_owned()),
             self.query_target,
             self.query_consolidation,
+            self.query_timeout,
         )
     }
 
@@ -422,11 +469,12 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
     {
-        self.query_on_selector(selector.into(), target, consolidation)
+        self.query_on_selector(selector.into(), target, consolidation, timeout)
     }
 
     #[inline]
@@ -435,6 +483,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         selector: Selector<'c>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c {
         zlock!(self.state).pending_queries += 1;
         // pending queries will be decremented in RepliesHandler drop()
@@ -448,6 +497,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
             .get(selector)
             .target(target)
             .consolidation(consolidation)
+            .timeout(timeout)
             .callback(move |r| {
                 let mut state = zlock!(handler.state);
                 match r.sample {
@@ -601,11 +651,13 @@ impl<'a, Receiver> HandlerQueryingSubscriber<'a, Receiver> {
         selector: IntoSelector,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>> + 'c,
     {
-        self.subscriber.query_on(selector, target, consolidation)
+        self.subscriber
+            .query_on(selector, target, consolidation, timeout)
     }
 }
 

@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Key expression types and utils.
+
 use std::{
     convert::{TryFrom, TryInto},
     str::FromStr,
@@ -22,7 +24,7 @@ use zenoh_transport::Primitives;
 
 use crate::{prelude::sync::Selector, Session, Undeclarable};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
     BorrowedWire {
@@ -394,6 +396,19 @@ impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
         }
     }
 }
+
+/// A [`Resolvable`] returned when undeclaring a [`KeyExpr`].
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
+/// session.undeclare(key_expr).res().await.unwrap();
+/// # })
+/// ```
 pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
     expr: KeyExpr<'a>,
@@ -416,7 +431,25 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 expr_id,
                 prefix_len,
                 session_id
-            } if *prefix_len as usize == key_expr.len() => if *session_id == session.id {*expr_id as u64} else {return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())},
+            } if *prefix_len as usize == key_expr.len() => {
+                if *session_id == session.id {
+                    *expr_id as u64
+                } else {
+                    return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
+                }
+            }
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id
+            } if *prefix_len as usize == key_expr.len() => {
+                if *session_id == session.id {
+                    *expr_id as u64
+                } else {
+                    return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
+                }
+            }
             _ => return Err(zerror!("Failed to undeclare {}, make sure you use the result of `Session::declare_keyexpr` to call `Session::undeclare`", expr).into()),
         };
         log::trace!("undeclare_keyexpr({:?})", expr_id);

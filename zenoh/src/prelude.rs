@@ -56,7 +56,7 @@ pub(crate) mod common {
 
     pub use crate::config;
     pub use crate::properties::Properties;
-    pub use crate::selector::*;
+    pub use crate::selector::{Selector, ValueSelector, ValueSelectorProperty};
     pub use zenoh_config::ValidatedMap;
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
@@ -532,13 +532,13 @@ pub(crate) mod common {
         /// Ensure that an associated Timestamp is present in this Sample.
         /// If not, a new one is created with the current system time and 0x00 as id.
         /// Get the timestamp of this sample (either existing one or newly created)
-        pub fn ensure_timestamp(&mut self) -> Timestamp {
-            if let Some(timestamp) = self.timestamp {
+        pub fn ensure_timestamp(&mut self) -> &Timestamp {
+            if let Some(ref timestamp) = self.timestamp {
                 timestamp
             } else {
                 let timestamp = new_reception_timestamp();
                 self.timestamp = Some(timestamp);
-                timestamp
+                self.timestamp.as_ref().unwrap()
             }
         }
     }

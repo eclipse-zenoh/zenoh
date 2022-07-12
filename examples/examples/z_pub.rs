@@ -27,7 +27,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    print!("Declaring a publisher for '{}'...", key_expr);
+    println!("Declaring a publisher for '{}'...", key_expr);
     let publisher = session.declare_publisher(&key_expr).res().await.unwrap();
 
     for idx in 0..u32::MAX {

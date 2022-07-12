@@ -93,6 +93,7 @@ impl fmt::Display for Query {
     }
 }
 
+/// A builder returned by [`Query::reply()`](Query::reply).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
@@ -115,6 +116,7 @@ impl SyncResolve for ReplyBuilder<'_> {
     }
 }
 
+/// The future returned by a [`ReplyBuilder`] when using async.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct ReplyFuture<'a>(
     Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
@@ -220,20 +222,34 @@ impl<'a> CallbackQueryable<'a> {
 }
 impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
     type Output = ZResult<()>;
-    type Undeclaration = QueryableUndeclare<'a>;
+    type Undeclaration = QueryableUndeclaration<'a>;
     fn undeclare(self, _: ()) -> Self::Undeclaration {
-        QueryableUndeclare { queryable: self }
+        QueryableUndeclaration { queryable: self }
     }
 }
-pub struct QueryableUndeclare<'a> {
+
+/// A [`Resolvable`] returned when undeclaring a queryable.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+/// queryable.undeclare().res().await.unwrap();
+/// # })
+/// ```
+pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
 
-impl<'a> Resolvable for QueryableUndeclare<'a> {
+impl<'a> Resolvable for QueryableUndeclaration<'a> {
     type Output = ZResult<()>;
 }
 
-impl SyncResolve for QueryableUndeclare<'_> {
+impl SyncResolve for QueryableUndeclaration<'_> {
     fn res_sync(mut self) -> Self::Output {
         self.queryable.alive = false;
         self.queryable
@@ -242,7 +258,7 @@ impl SyncResolve for QueryableUndeclare<'_> {
     }
 }
 
-impl AsyncResolve for QueryableUndeclare<'_> {
+impl AsyncResolve for QueryableUndeclaration<'_> {
     type Future = futures::future::Ready<Self::Output>;
 
     fn res_async(self) -> Self::Future {
@@ -649,4 +665,5 @@ impl crate::prelude::IntoHandler<Query, flume::Receiver<Query>>
     }
 }
 
+/// A [`HandlerQueryable`] that provides queries through a `flume` channel.
 pub type FlumeQueryable<'a> = HandlerQueryable<'a, flume::Receiver<Query>>;

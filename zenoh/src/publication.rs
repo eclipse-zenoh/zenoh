@@ -235,14 +235,30 @@ impl<'a> Publisher<'a> {
         self
     }
 
-    pub fn write(&self, kind: SampleKind, value: Value) -> Publication {
+    /// Send data with [`kind`](SampleKind) (Put or Delete).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
+    /// # })
+    /// ```
+    pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
+    where
+        IntoValue: Into<Value>,
+    {
         Publication {
             publisher: self,
-            value,
+            value: value.into(),
             kind,
         }
     }
-    /// Send a value.
+
+    /// Put data.
     ///
     /// # Examples
     /// ```
@@ -261,28 +277,69 @@ impl<'a> Publisher<'a> {
     {
         self.write(SampleKind::Put, value.into())
     }
+
+    /// Delete data.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.delete().res().await.unwrap();
+    /// # })
+    /// ```
     pub fn delete(&self) -> Publication {
         self.write(SampleKind::Delete, Value::empty())
     }
+
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.undeclare().res().await.unwrap();
+    /// # })
+    /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare(self, ())
     }
 }
 impl<'a> Undeclarable<()> for Publisher<'a> {
     type Output = ZResult<()>;
-    type Undeclaration = PublisherUndeclare<'a>;
+    type Undeclaration = PublisherUndeclaration<'a>;
     fn undeclare(self, _: ()) -> Self::Undeclaration {
-        PublisherUndeclare { publisher: self }
+        PublisherUndeclaration { publisher: self }
     }
 }
-pub struct PublisherUndeclare<'a> {
+
+/// A [`Resolvable`] returned when undeclaring a publisher.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.undeclare().res().await.unwrap();
+/// # })
+/// ```
+pub struct PublisherUndeclaration<'a> {
     publisher: Publisher<'a>,
 }
-impl Resolvable for PublisherUndeclare<'_> {
+impl Resolvable for PublisherUndeclaration<'_> {
     type Output = ZResult<()>;
 }
-impl SyncResolve for PublisherUndeclare<'_> {
+impl SyncResolve for PublisherUndeclaration<'_> {
     fn res_sync(mut self) -> Self::Output {
         let Publisher {
             session, key_expr, ..
@@ -292,7 +349,7 @@ impl SyncResolve for PublisherUndeclare<'_> {
         Ok(())
     }
 }
-impl AsyncResolve for PublisherUndeclare<'_> {
+impl AsyncResolve for PublisherUndeclaration<'_> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
@@ -309,6 +366,8 @@ impl Drop for Publisher<'_> {
     }
 }
 
+/// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
+/// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,
@@ -493,7 +552,9 @@ impl SyncResolve for PublisherBuilder<'_> {
                 }
             }
         }
-        self.session.declare_publication_intent(&key_expr);
+        self.session
+            .declare_publication_intent(&key_expr)
+            .res_sync()?;
         let publisher = Publisher {
             session: self.session,
             key_expr,

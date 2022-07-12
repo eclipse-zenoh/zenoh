@@ -76,12 +76,41 @@ pub struct CallbackSubscriber<'a> {
     pub(crate) alive: bool,
 }
 
+/// A [`PullMode`] subscriber that provides data through a callback.
+///
+/// CallbackPullSubscribers only provide data when explicitely pulled by the
+/// application with the [`pull`](CallbackPullSubscriber::pull) function.
+/// CallbackPullSubscribers can be created from a zenoh [`Session`](crate::Session)
+/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// the [`callback`](SubscriberBuilder::callback) function
+/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
+/// of the resulting builder.
+///
+/// Subscribers are automatically undeclared when dropped.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let subscriber = session
+///     .declare_subscriber("key/expression")
+///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .pull_mode()
+///     .res()
+///     .await
+///     .unwrap();
+/// subscriber.pull();
+/// # })
+/// ```
 pub struct CallbackPullSubscriber<'a> {
     inner: CallbackSubscriber<'a>,
 }
 
 impl<'a> CallbackPullSubscriber<'a> {
-    /// Pull available data for a pull-mode [`CallbackSubscriber`].
+    /// Pull available data for a [`CallbackPullSubscriber`].
     ///
     /// # Examples
     /// ```
@@ -105,10 +134,10 @@ impl<'a> CallbackPullSubscriber<'a> {
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.inner.session.pull(&self.inner.state.key_expr)
     }
-    /// Close a [`CallbackSubscriber`](CallbackSubscriber).
+    /// Close a [`CallbackPullSubscriber`](CallbackPullSubscriber).
     ///
-    /// `CallbackSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the `CallbackSubscriber` asynchronously.
+    /// `CallbackPullSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
+    /// close the `CallbackPullSubscriber` asynchronously.
     ///
     /// # Examples
     /// ```
@@ -121,6 +150,7 @@ impl<'a> CallbackPullSubscriber<'a> {
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
+    ///     .pull_mode()
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -170,6 +200,23 @@ impl<'a> Undeclarable<()> for CallbackSubscriber<'a> {
     }
 }
 
+/// A [`Resolvable`] returned when undeclaring a subscriber.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let subscriber = session
+///     .declare_subscriber("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// subscriber.undeclare().res().await.unwrap();
+/// # })
+/// ```
 pub struct SubscriberUndeclaration<'a> {
     subscriber: CallbackSubscriber<'a>,
 }
@@ -202,6 +249,7 @@ impl Drop for CallbackSubscriber<'_> {
     }
 }
 
+/// The mode for pull subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PullMode;
@@ -211,6 +259,8 @@ impl From<PullMode> for SubMode {
         SubMode::Pull
     }
 }
+
+/// The mode for push subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct PushMode;
@@ -297,7 +347,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode> {
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback_mut(move |sample| { n += 1; })
+    ///     .callback_mut(move |_sample| { n += 1; })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -803,6 +853,35 @@ pub struct HandlerSubscriber<'a, Receiver> {
     pub receiver: Receiver,
 }
 
+/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::Handler).
+///
+/// HandlerPullSubscribers only provide data when explicitely pulled by the
+/// application with the [`pull`](HandlerPullSubscriber::pull) function.
+/// HandlerPullSubscribers can be created from a zenoh [`Session`](crate::Session)
+/// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
+/// the [`with`](SubscriberBuilder::with) function
+/// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
+/// of the resulting builder.
+///
+/// Subscribers are automatically undeclared when dropped.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let subscriber = session
+///     .declare_subscriber("key/expression")
+///     .with(flume::bounded(32))
+///     .pull_mode()
+///     .res()
+///     .await
+///     .unwrap();
+/// subscriber.pull();
+/// # })
+/// ```
 #[non_exhaustive]
 pub struct HandlerPullSubscriber<'a, Receiver> {
     pub subscriber: CallbackPullSubscriber<'a>,
@@ -823,7 +902,7 @@ impl<'a, Receiver> DerefMut for HandlerPullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> HandlerPullSubscriber<'a, Receiver> {
-    /// Pull available data for a pull-mode [`HandlerSubscriber`].
+    /// Pull available data for a [`HandlerPullSubscriber`].
     ///
     /// # Examples
     /// ```
@@ -847,7 +926,7 @@ impl<'a, Receiver> HandlerPullSubscriber<'a, Receiver> {
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
-    /// Close a [`HandlerSubscriber`].
+    /// Close a [`HandlerPullSubscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Subscriber asynchronously.
@@ -859,7 +938,7 @@ impl<'a, Receiver> HandlerPullSubscriber<'a, Receiver> {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").pull_mode().res().await.unwrap();
     /// subscriber.undeclare().res().await.unwrap();
     /// # })
     /// ```
@@ -998,4 +1077,5 @@ impl crate::prelude::IntoHandler<Sample, flume::Receiver<Sample>>
     }
 }
 
+/// A [`HandlerSubscriber`] that provides data through a `flume` channel.
 pub type FlumeSubscriber<'a> = HandlerSubscriber<'a, flume::Receiver<Sample>>;
