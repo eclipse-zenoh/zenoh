@@ -1,5 +1,5 @@
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
-use zenoh_util::time_range::TimeRange;
+pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
 use crate::{prelude::KeyExpr, queryable::Query};
 

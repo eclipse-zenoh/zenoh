@@ -97,7 +97,7 @@ pub use session::*;
 pub mod key_expr;
 #[doc(hidden)]
 pub mod net;
-pub(crate) mod selector;
+pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
 pub mod info;

@@ -56,7 +56,7 @@ pub(crate) mod common {
 
     pub use crate::config;
     pub use crate::properties::Properties;
-    pub use crate::selector::*;
+    pub use crate::selector::{Selector, ValueSelector, ValueSelectorProperty};
     pub use zenoh_config::ValidatedMap;
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
