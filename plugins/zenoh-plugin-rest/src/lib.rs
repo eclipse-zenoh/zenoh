@@ -340,10 +340,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         } else {
             key_expr.into()
         };
-        let consolidation = if selector
-            .decode_value_selector()
-            .any(|(k, _)| k.as_ref() == "_time")
-        {
+        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == "_time") {
             QueryConsolidation::none()
         } else {
             QueryConsolidation::default()

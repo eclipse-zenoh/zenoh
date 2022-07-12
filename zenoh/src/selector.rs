@@ -1,8 +1,14 @@
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_util::time_range::TimeRange;
 
 use crate::{prelude::KeyExpr, queryable::Query};
 
-use std::{borrow::Cow, convert::TryFrom};
+use std::{
+    borrow::{Borrow, Cow},
+    collections::HashMap,
+    convert::TryFrom,
+    hash::Hash,
+};
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
 /// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
@@ -13,7 +19,7 @@ use std::{borrow::Cow, convert::TryFrom};
 ///
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
-/// - the `selector` after the first `?` should be encoded like the query section of a URL:
+/// - the `value_selector` after the first `?` should be encoded like the query section of a URL:
 ///     - key-value pairs are separated by `&`,
 ///     - the key and value are separated by the first `=`,
 ///     - in the absence of `=`, the value is considered to be the empty string,
@@ -32,7 +38,7 @@ use std::{borrow::Cow, convert::TryFrom};
 ///
 /// Here are the currently standardized keys for Zenoh:
 /// - `_time`: used to express interest in only values dated within a certain time range, values for
-///   this key must be readable by the Zenoh Time DSL for the value to be considered valid.
+///   this key must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
 ///   this key to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
@@ -45,7 +51,29 @@ pub struct Selector<'a> {
     pub(crate) value_selector: Cow<'a, str>,
 }
 
+pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
+    /// Gets the value selector as a raw string.
+    pub fn value_selector(&self) -> &str {
+        &self.value_selector
+    }
+    pub fn value_selector_map(&'a self) -> HashMap<Cow<'a, str>, Cow<'a, str>> {
+        self.decode().collect()
+    }
+    /// Gets a mutable reference to the value_selector as a String.
+    ///
+    /// Note that calling this function may cause an allocation and copy if the value selector wasn't
+    /// already owned by `self`. `self` owns its value selector as soon as this function returns.
+    pub fn value_selector_mut(&mut self) -> &mut String {
+        if let Cow::Borrowed(s) = self.value_selector {
+            self.value_selector = Cow::Owned(s.to_owned())
+        }
+        if let Cow::Owned(s) = &mut self.value_selector {
+            s
+        } else {
+            unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
+        }
+    }
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
             key_expr: self.key_expr.borrowing_clone(),
@@ -76,18 +104,6 @@ impl<'a> Selector<'a> {
         self
     }
 
-    /// Gets the value selector as a raw string.
-    pub fn value_selector(&self) -> &str {
-        &self.value_selector
-    }
-
-    /// Returns the value selector as an iterator of key-value pairs, where any urlencoding has been decoded.
-    pub fn decode_value_selector(
-        &'a self,
-    ) -> impl Iterator<Item = (Cow<'a, str>, Cow<'a, str>)> + Clone + 'a {
-        self.value_selector().decode()
-    }
-
     pub fn extend<'b, I, K, V>(&'b mut self, key_value_pairs: I)
     where
         I: IntoIterator,
@@ -96,30 +112,137 @@ impl<'a> Selector<'a> {
         V: AsRef<str> + 'b,
     {
         let it = key_value_pairs.into_iter();
-        if let Cow::Borrowed(s) = self.value_selector {
-            self.value_selector = Cow::Owned(s.to_owned())
-        }
-        let selector = if let Cow::Owned(s) = &mut self.value_selector {
-            s
-        } else {
-            unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
-        };
+        let selector = self.value_selector_mut();
         let mut encoder = form_urlencoded::Serializer::new(selector);
         encoder.extend_pairs(it).finish();
     }
+
+    /// Sets the time range targeted by the selector.
+    pub fn with_time_range(&mut self, time_range: TimeRange) {
+        self.remove_time_range();
+        let selector = self.value_selector_mut();
+        if !selector.is_empty() {
+            selector.push('&')
+        }
+        use std::fmt::Write;
+        write!(selector, "{}={}", TIME_RANGE_KEY, time_range).unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
+    }
+
+    pub fn remove_time_range(&mut self) {
+        let selector = self.value_selector_mut();
+
+        let mut splice_start = 0;
+        let mut splice_end = 0;
+        for argument in selector.split('&') {
+            if argument.starts_with(TIME_RANGE_KEY)
+                && matches!(
+                    argument.as_bytes().get(TIME_RANGE_KEY.len()),
+                    None | Some(b'=')
+                )
+            {
+                splice_end = splice_start + argument.len();
+                break;
+            }
+            splice_start += argument.len() + 1
+        }
+        if splice_end > 0 {
+            selector.drain(splice_start..(splice_end + (splice_end != selector.len()) as usize));
+        }
+    }
 }
 
+#[test]
+fn selector_accessors() {
+    let time_range = "[now(-2s)..now(2s)]".parse().unwrap();
+    for selector in [
+        "hello/there?_timetrick",
+        "hello/there?_timetrick&_time",
+        "hello/there?_timetrick&_time&_filter",
+        "hello/there?_timetrick&_time=[..]",
+        "hello/there?_timetrick&_time=[..]&_filter",
+    ] {
+        let mut selector = Selector::try_from(selector).unwrap();
+        selector.with_time_range(time_range);
+        assert_eq!(selector.time_range().unwrap(), time_range);
+        assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
+        let map_selector = selector.value_selector_map();
+        assert_eq!(selector.time_range(), map_selector.time_range());
+    }
+}
+pub trait ValueSelectorProperty {
+    fn key(&self) -> &str;
+    fn value(&self) -> &str;
+}
+impl ValueSelectorProperty for (&str, &str) {
+    fn key(&self) -> &str {
+        self.0
+    }
+    fn value(&self) -> &str {
+        self.1
+    }
+}
+impl ValueSelectorProperty for (Cow<'_, str>, Cow<'_, str>) {
+    fn key(&self) -> &str {
+        self.0.borrow()
+    }
+    fn value(&self) -> &str {
+        self.1.borrow()
+    }
+}
+impl ValueSelectorProperty for (&Cow<'_, str>, &Cow<'_, str>) {
+    fn key(&self) -> &str {
+        self.0.borrow()
+    }
+    fn value(&self) -> &str {
+        self.1.borrow()
+    }
+}
 /// A trait to help decode zenoh value selectors as properties.
 pub trait ValueSelector<'a> {
-    type Decoder: Iterator<Item = (Cow<'a, str>, Cow<'a, str>)> + Clone + 'a;
+    type Decoder: Iterator + 'a;
 
     /// Returns this value selector as properties.
-    fn decode(&'a self) -> Self::Decoder;
+    fn decode(&'a self) -> Self::Decoder
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty;
+    ///
+    fn time_range(&'a self) -> Option<TimeRange>
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+    {
+        self.decode().find_map(|prop| {
+            if prop.key() == TIME_RANGE_KEY {
+                prop.value().parse().ok()
+            } else {
+                None
+            }
+        })
+    }
+}
+impl<'a> ValueSelector<'a> for Selector<'a> {
+    type Decoder = <str as ValueSelector<'a>>::Decoder;
+    fn decode(&'a self) -> Self::Decoder {
+        self.value_selector().decode()
+    }
 }
 impl<'a> ValueSelector<'a> for str {
     type Decoder = form_urlencoded::Parse<'a>;
     fn decode(&'a self) -> Self::Decoder {
         form_urlencoded::parse(self.as_bytes())
+    }
+}
+
+impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a> for HashMap<K, V> {
+    type Decoder = std::collections::hash_map::Iter<'a, K, V>;
+    fn decode(&'a self) -> Self::Decoder {
+        self.iter()
+    }
+    fn time_range(&'a self) -> Option<TimeRange>
+    where
+        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+    {
+        self.get::<str>(TIME_RANGE_KEY)
+            .and_then(|v| v.borrow().parse().ok())
     }
 }
 

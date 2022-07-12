@@ -50,7 +50,7 @@ pub(crate) async fn start_storage(
         };
 
         // align with other storages, querying them on key_expr,
-        // with starttime to get historical data (in case of time-series)
+        // with `_time=[..]` to get historical data (in case of time-series)
         let replies = match zenoh
             .get(key_expr.borrowing_clone().with_value_selector("_time=[..]"))
             .target(QueryTarget::All)
