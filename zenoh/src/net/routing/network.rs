@@ -478,7 +478,7 @@ impl Network {
                 edges.push(edge);
             }
             for (eidx, idx2) in edges {
-                if !links.contains(&self.graph[idx2].zid) {
+                if !links.contains(&self.graph[idx2].pid) {
                     log::trace!(
                         "{} Remove edge (state) {} {}",
                         self.name,
