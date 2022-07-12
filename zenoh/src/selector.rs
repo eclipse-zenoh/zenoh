@@ -19,7 +19,7 @@ use std::{
 ///
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
-/// - the `selector` after the first `?` should be encoded like the query section of a URL:
+/// - the `value_selector` after the first `?` should be encoded like the query section of a URL:
 ///     - key-value pairs are separated by `&`,
 ///     - the key and value are separated by the first `=`,
 ///     - in the absence of `=`, the value is considered to be the empty string,
