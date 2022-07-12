@@ -341,7 +341,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
         // Check PID validity
         let mut guard = zasynclock!(self.authenticated);
-        match guard.get_mut(&cookie.pid) {
+        match guard.get_mut(&cookie.zid) {
             Some(auth) => {
                 if open_syn_property.user != auth.credentials.user
                     || password != auth.credentials.password
@@ -358,7 +358,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
                 let mut links = HashSet::new();
                 links.insert((link.src.clone(), link.dst.clone()));
                 let auth = Authenticated { credentials, links };
-                guard.insert(cookie.pid, auth);
+                guard.insert(cookie.zid, auth);
             }
         }
 

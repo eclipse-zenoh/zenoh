@@ -167,7 +167,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]));
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
@@ -219,7 +219,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]));
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client01_id)
+        .zid(client01_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -272,7 +272,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]));
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client02_id)
+        .zid(client02_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -326,7 +326,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01_spoof.into()]));
     let client01_spoof_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client01_spoof_id)
+        .zid(client01_spoof_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -557,7 +557,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]));
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
@@ -572,7 +572,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]));
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client01_id)
+        .zid(client01_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -587,7 +587,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]));
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client02_id)
+        .zid(client02_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -602,7 +602,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client03.into()]));
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client03_id)
+        .zid(client03_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();
@@ -725,7 +725,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.into()]));
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .unicast(unicast)
         .build(router_handler.clone())
         .unwrap();
@@ -736,7 +736,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client.into()]));
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(client_id)
+        .zid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClientAuthenticator::default()))
         .unwrap();

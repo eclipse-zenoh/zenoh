@@ -38,7 +38,7 @@ use zenoh_transport::{Primitives, TransportUnicast};
 pub struct AdminContext {
     runtime: Runtime,
     plugins_mgr: Mutex<PluginsManager>,
-    pid_str: String,
+    zid_str: String,
     version: String,
 }
 
@@ -49,7 +49,7 @@ type Handler = Box<
 >;
 
 pub struct AdminSpace {
-    pid: ZenohId,
+    zid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ZInt, String>>,
     handlers: HashMap<OwnedKeyExpr, Arc<Handler>>,
@@ -64,8 +64,8 @@ enum PluginDiff {
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
-        let pid_str = runtime.get_pid_str();
-        let root_key: OwnedKeyExpr = format!("@/router/{}", pid_str).try_into().unwrap();
+        let zid_str = runtime.get_zid_str();
+        let root_key: OwnedKeyExpr = format!("@/router/{}", zid_str).try_into().unwrap();
 
         let mut handlers: HashMap<_, Arc<Handler>> = HashMap::new();
         handlers.insert(
@@ -99,11 +99,11 @@ impl AdminSpace {
         let context = Arc::new(AdminContext {
             runtime: runtime.clone(),
             plugins_mgr: Mutex::new(plugins_mgr),
-            pid_str,
+            zid_str,
             version,
         });
         let admin = Arc::new(AdminSpace {
-            pid: runtime.pid,
+            zid: runtime.zid,
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -315,7 +315,7 @@ impl Primitives for AdminSpace {
 
         if let Some(key) = key_expr
             .as_str()
-            .strip_prefix(&format!("@/router/{}/config/", &self.context.pid_str))
+            .strip_prefix(&format!("@/router/{}/config/", &self.context.zid_str))
         {
             if let Some(DataInfo {
                 kind: SampleKind::Delete,
@@ -324,7 +324,7 @@ impl Primitives for AdminSpace {
             {
                 log::trace!(
                     "Deleting conf value /@/router/{}/config/{}",
-                    &self.context.pid_str,
+                    &self.context.zid_str,
                     key
                 );
                 if let Err(e) = self.context.runtime.config.remove(key) {
@@ -335,7 +335,7 @@ impl Primitives for AdminSpace {
                     Ok(json) => {
                         log::trace!(
                             "Insert conf value /@/router/{}/config/{}:{}",
-                            &self.context.pid_str,
+                            &self.context.zid_str,
                             key,
                             json
                         );
@@ -348,13 +348,13 @@ impl Primitives for AdminSpace {
                         {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{}:{} - {}",
-                                &self.context.pid_str, key, json, e
+                                &self.context.zid_str, key, json, e
                             );
                         }
                     }
                     Err(e) => error!(
                         "Received non utf8 conf value on /@/router/{}/config/{} : {}",
-                        &self.context.pid_str, key, e
+                        &self.context.zid_str, key, e
                     ),
                 }
             }
@@ -377,8 +377,8 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
-        let pid = self.pid;
-        let plugin_key: OwnedKeyExpr = format!("@/router/{}/status/plugins/**", &pid)
+        let zid = self.zid;
+        let plugin_key: OwnedKeyExpr = format!("@/router/{}/status/plugins/**", &zid)
             .try_into()
             .unwrap();
         let mut ask_plugins = false;
@@ -413,7 +413,7 @@ impl Primitives for AdminSpace {
                     primitives.send_reply_data(
                         qid,
                         EVAL,
-                        pid,
+                        zid,
                         String::from(key).into(),
                         Some(data_info),
                         payload,
@@ -438,7 +438,7 @@ impl Primitives for AdminSpace {
                         primitives.send_reply_data(
                             qid,
                             EVAL,
-                            pid,
+                            zid,
                             key.into(),
                             Some(data_info),
                             payload.into(),
@@ -530,7 +530,7 @@ pub async fn router_data(
     let transport_to_json = |transport: &TransportUnicast| {
         #[allow(unused_mut)]
         let mut json = json!({
-            "peer": transport.get_pid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
+            "peer": transport.get_zid().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "whatami": transport.get_whatami().map_or_else(|_| "unknown".to_string(), |p| p.to_string()),
             "links": transport.get_links().map_or_else(
                 |_| Vec::new(),
@@ -559,7 +559,7 @@ pub async fn router_data(
         .collect();
 
     let json = json!({
-        "pid": context.pid_str,
+        "zid": context.zid_str,
         "version": context.version,
         "locators": locators,
         "sessions": transports,
@@ -619,7 +619,7 @@ pub async fn plugins_status(
 ) -> Vec<crate::plugins::Response> {
     let selector = key.borrowing_clone().with_value_selector(args);
     let guard = zlock!(context.plugins_mgr);
-    let mut root_key = format!("@/router/{}/status/plugins/", &context.pid_str);
+    let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
     let mut responses = Vec::new();
     for (name, (path, plugin)) in guard.running_plugins() {
         with_extended_string(&mut root_key, &[name], |plugin_key| {

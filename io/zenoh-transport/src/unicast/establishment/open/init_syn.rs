@@ -33,7 +33,7 @@ pub(super) async fn send(
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
         let mut att = pa
-            .get_init_syn_properties(auth_link, &manager.config.pid)
+            .get_init_syn_properties(auth_link, &manager.config.zid)
             .await
             .map_err(|e| (e, None))?;
         if let Some(att) = att.take() {
@@ -50,7 +50,7 @@ pub(super) async fn send(
     let mut message = TransportMessage::make_init_syn(
         manager.config.version,
         manager.config.whatami,
-        manager.config.pid,
+        manager.config.zid,
         manager.config.sn_resolution,
         manager.config.unicast.is_qos,
         attachment_from_properties(&ps_attachment).ok(),

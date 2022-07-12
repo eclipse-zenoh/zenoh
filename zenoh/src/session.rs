@@ -414,7 +414,7 @@ impl Session {
 
     /// Returns the identifier for this session.
     pub fn id(&self) -> String {
-        self.runtime.get_pid_str()
+        self.runtime.get_zid_str()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -1479,7 +1479,7 @@ impl Session {
         let value_selector = value_selector.to_string();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
-        let pid = self.runtime.pid; // @TODO build/use prebuilt specific pid
+        let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
 
         for (kind, req_sender) in kinds_and_senders {
             req_sender(Query {
@@ -1501,7 +1501,7 @@ impl Session {
                     this.send_reply_data(
                         qid,
                         replier_kind,
-                        pid,
+                        zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
                         payload,
@@ -1517,7 +1517,7 @@ impl Session {
                     primitives.send_reply_data(
                         qid,
                         replier_kind,
-                        pid,
+                        zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
                         payload,

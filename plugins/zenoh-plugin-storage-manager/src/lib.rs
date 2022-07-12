@@ -73,7 +73,7 @@ impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
             "@/router/{}/status/plugins/{}",
-            &self.runtime.pid, &self.name
+            &self.runtime.zid, &self.name
         )
     }
     fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {

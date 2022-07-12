@@ -39,7 +39,7 @@ zconfigurable! {
 }
 
 pub struct Tables {
-    pub(crate) pid: ZenohId,
+    pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     face_counter: usize,
     #[allow(dead_code)]
@@ -63,14 +63,14 @@ pub struct Tables {
 
 impl Tables {
     pub fn new(
-        pid: ZenohId,
+        zid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         drop_future_timestamp: bool,
         _queries_default_timeout: Duration,
     ) -> Self {
         Tables {
-            pid,
+            zid,
             whatami,
             face_counter: 0,
             hlc,
@@ -124,13 +124,13 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_face(&self, pid: &ZenohId) -> Option<&Arc<FaceState>> {
-        self.faces.values().find(|face| face.pid == *pid)
+    pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
+        self.faces.values().find(|face| face.zid == *zid)
     }
 
     fn open_net_face(
         &mut self,
-        pid: ZenohId,
+        zid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
@@ -140,7 +140,7 @@ impl Tables {
         let mut newface = self
             .faces
             .entry(fid)
-            .or_insert_with(|| FaceState::new(fid, pid, whatami, primitives.clone(), link_id))
+            .or_insert_with(|| FaceState::new(fid, zid, whatami, primitives.clone(), link_id))
             .clone();
         log::debug!("New {}", newface);
 
@@ -152,11 +152,11 @@ impl Tables {
 
     pub fn open_face(
         &mut self,
-        pid: ZenohId,
+        zid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
-        self.open_net_face(pid, whatami, primitives, 0)
+        self.open_net_face(zid, whatami, primitives, 0)
     }
 
     pub fn close_face(&mut self, face: &Weak<FaceState>) {
@@ -257,7 +257,7 @@ pub struct Router {
 
 impl Router {
     pub fn new(
-        pid: ZenohId,
+        zid: ZenohId,
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         drop_future_timestamp: bool,
@@ -266,7 +266,7 @@ impl Router {
         Router {
             whatami,
             tables: Arc::new(RwLock::new(Tables::new(
-                pid,
+                zid,
                 whatami,
                 hlc,
                 drop_future_timestamp,
@@ -279,14 +279,14 @@ impl Router {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
-            tables.pid,
+            tables.zid,
             runtime.clone(),
             autoconnect,
         ));
         if runtime.whatami == WhatAmI::Router {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
-                tables.pid,
+                tables.zid,
                 runtime,
                 autoconnect,
             ));
@@ -302,9 +302,9 @@ impl Router {
             tables: self.tables.clone(),
             state: {
                 let mut tables = zwrite!(self.tables);
-                let pid = tables.pid;
+                let zid = tables.zid;
                 tables
-                    .open_face(pid, WhatAmI::Client, primitives)
+                    .open_face(zid, WhatAmI::Client, primitives)
                     .upgrade()
                     .unwrap()
             },
@@ -348,7 +348,7 @@ impl Router {
                 tables: self.tables.clone(),
                 state: tables
                     .open_net_face(
-                        transport.get_pid().unwrap(),
+                        transport.get_zid().unwrap(),
                         whatami,
                         Arc::new(Mux::new(transport)),
                         link_id,
@@ -396,7 +396,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         log::trace!("Recv {:?}", msg);
         match msg.body {
             ZenohBody::LinkStateList(list) => {
-                if let Ok(pid) = self.transport.get_pid() {
+                if let Ok(zid) = self.transport.get_zid() {
                     let mut tables = zwrite!(self.tables);
                     let whatami = self.transport.get_whatami()?;
                     match (tables.whatami, whatami) {
@@ -405,12 +405,12 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                 .routers_net
                                 .as_mut()
                                 .unwrap()
-                                .link_states(list.link_states, pid)
+                                .link_states(list.link_states, zid)
                             {
-                                pubsub_remove_node(&mut tables, &removed_node.pid, WhatAmI::Router);
+                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
                                 queries_remove_node(
                                     &mut tables,
-                                    &removed_node.pid,
+                                    &removed_node.zid,
                                     WhatAmI::Router,
                                 );
                             }
@@ -429,10 +429,10 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                 .peers_net
                                 .as_mut()
                                 .unwrap()
-                                .link_states(list.link_states, pid)
+                                .link_states(list.link_states, zid)
                             {
-                                pubsub_remove_node(&mut tables, &removed_node.pid, WhatAmI::Peer);
-                                queries_remove_node(&mut tables, &removed_node.pid, WhatAmI::Peer);
+                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
+                                queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
                             }
 
                             if tables.whatami == WhatAmI::Router {
@@ -461,16 +461,16 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
     fn closing(&self) {
         self.demux.closing();
         let tables_ref = self.tables.clone();
-        match (self.transport.get_pid(), self.transport.get_whatami()) {
-            (Ok(pid), Ok(whatami)) => {
+        match (self.transport.get_zid(), self.transport.get_whatami()) {
+            (Ok(zid), Ok(whatami)) => {
                 let mut tables = zwrite!(tables_ref);
                 match (tables.whatami, whatami) {
                     (WhatAmI::Router, WhatAmI::Router) => {
                         for (_, removed_node) in
-                            tables.routers_net.as_mut().unwrap().remove_link(&pid)
+                            tables.routers_net.as_mut().unwrap().remove_link(&zid)
                         {
-                            pubsub_remove_node(&mut tables, &removed_node.pid, WhatAmI::Router);
-                            queries_remove_node(&mut tables, &removed_node.pid, WhatAmI::Router);
+                            pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
+                            queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
                         }
 
                         tables.shared_nodes = shared_nodes(
@@ -484,10 +484,10 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                     | (WhatAmI::Peer, WhatAmI::Router)
                     | (WhatAmI::Peer, WhatAmI::Peer) => {
                         for (_, removed_node) in
-                            tables.peers_net.as_mut().unwrap().remove_link(&pid)
+                            tables.peers_net.as_mut().unwrap().remove_link(&zid)
                         {
-                            pubsub_remove_node(&mut tables, &removed_node.pid, WhatAmI::Peer);
-                            queries_remove_node(&mut tables, &removed_node.pid, WhatAmI::Peer);
+                            pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
+                            queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
                         }
 
                         if tables.whatami == WhatAmI::Router {

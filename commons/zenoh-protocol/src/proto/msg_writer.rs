@@ -92,7 +92,7 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_zint(reply_context.qid));
         if let Some(replier) = reply_context.replier.as_ref() {
             zcheck!(self.write_zint(replier.kind));
-            zcheck!(self.write_peeexpr_id(&replier.id));
+            zcheck!(self.write_zid(&replier.id));
         }
         true
     }
@@ -168,8 +168,8 @@ impl MessageWriter for WBuf {
 
     fn write_hello(&mut self, hello: &Hello) -> bool {
         zcheck!(self.write_byte(hello.header()).is_some());
-        if let Some(pid) = hello.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+        if let Some(zid) = hello.zid.as_ref() {
+            zcheck!(self.write_zid(zid));
         }
         if let Some(w) = hello.whatami {
             if w != WhatAmI::Router {
@@ -190,7 +190,7 @@ impl MessageWriter for WBuf {
         }
         zcheck!(self.write_byte(init_syn.version).is_some());
         zcheck!(self.write_zint(init_syn.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_syn.pid));
+        zcheck!(self.write_zid(&init_syn.zid));
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
         }
@@ -203,7 +203,7 @@ impl MessageWriter for WBuf {
             zcheck!(self.write_zint(init_ack.options()));
         }
         zcheck!(self.write_zint(init_ack.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_ack.pid));
+        zcheck!(self.write_zid(&init_ack.zid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
         }
@@ -241,7 +241,7 @@ impl MessageWriter for WBuf {
         }
         zcheck!(self.write_byte(join.version).is_some());
         zcheck!(self.write_zint(join.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&join.pid));
+        zcheck!(self.write_zid(&join.zid));
         if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
         } else {
@@ -267,8 +267,8 @@ impl MessageWriter for WBuf {
 
     fn write_close(&mut self, close: &Close) -> bool {
         zcheck!(self.write_byte(close.header()).is_some());
-        if let Some(p) = close.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+        if let Some(p) = close.zid.as_ref() {
+            zcheck!(self.write_zid(p));
         }
         self.write_byte(close.reason).is_some()
     }
@@ -293,8 +293,8 @@ impl MessageWriter for WBuf {
 
     fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
         zcheck!(self.write_byte(keep_alive.header()).is_some());
-        if let Some(p) = keep_alive.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+        if let Some(p) = keep_alive.zid.as_ref() {
+            zcheck!(self.write_zid(p));
         }
         true
     }
@@ -547,8 +547,8 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_zint(link_state.options()));
         zcheck!(self.write_zint(link_state.psid));
         zcheck!(self.write_zint(link_state.sn));
-        if let Some(pid) = link_state.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+        if let Some(zid) = link_state.zid.as_ref() {
+            zcheck!(self.write_zid(zid));
         }
         if let Some(&whatami) = link_state.whatami.as_ref() {
             zcheck!(self.write_zint(whatami.into()));

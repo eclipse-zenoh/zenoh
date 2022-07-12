@@ -431,12 +431,12 @@ pub async fn run(runtime: Runtime, conf: Config) {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let pid = runtime.get_pid_str();
+    let zid = runtime.get_zid_str();
     let session = Session::init(runtime, true, vec![], vec![])
         .res_async()
         .await;
 
-    let mut app = Server::with_state((Arc::new(session), pid));
+    let mut app = Server::with_state((Arc::new(session), zid));
     app.with(
         tide::security::CorsMiddleware::new()
             .allow_methods(
@@ -456,12 +456,12 @@ pub async fn run(runtime: Runtime, conf: Config) {
     }
 }
 
-fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> ZResult<KeyExpr<'a>> {
+fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
     let path = path.strip_prefix('/').unwrap_or(path);
     if path == "@/router/local" {
-        KeyExpr::try_from(format!("@/router/{}", pid))
+        KeyExpr::try_from(format!("@/router/{}", zid))
     } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
-        KeyExpr::try_from(format!("@/router/{}/{}", pid, suffix))
+        KeyExpr::try_from(format!("@/router/{}/{}", zid, suffix))
     } else {
         KeyExpr::try_from(path)
     }

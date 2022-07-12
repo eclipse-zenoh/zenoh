@@ -43,7 +43,7 @@ use zenoh_transport::{
 };
 
 pub struct RuntimeState {
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
@@ -71,9 +71,9 @@ impl Runtime {
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
 
-        let pid = *config.id();
+        let zid = *config.id();
 
-        log::info!("Using PID: {}", pid);
+        log::info!("Using PID: {}", zid);
 
         let whatami = config.mode().unwrap_or(crate::config::WhatAmI::Peer);
         let hlc = match whatami {
@@ -96,7 +96,7 @@ impl Runtime {
                 .cloned()
                 .unwrap_or(false),
         }
-        .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&pid)).build()));
+        .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
         let drop_future_timestamp = config
             .timestamping()
             .drop_future_timestamp()
@@ -140,7 +140,7 @@ impl Runtime {
         });
 
         let router = Arc::new(Router::new(
-            pid,
+            zid,
             whatami,
             hlc.clone(),
             drop_future_timestamp,
@@ -155,14 +155,14 @@ impl Runtime {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .pid(pid)
+            .zid(zid)
             .build(handler.clone())?;
 
         let config = Notifier::new(config);
 
         let mut runtime = Runtime {
             state: Arc::new(RuntimeState {
-                pid,
+                zid,
                 whatami,
                 router,
                 config: config.clone(),
@@ -210,8 +210,8 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn get_pid_str(&self) -> String {
-        self.pid.to_string()
+    pub fn get_zid_str(&self) -> String {
+        self.zid.to_string()
     }
 
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {

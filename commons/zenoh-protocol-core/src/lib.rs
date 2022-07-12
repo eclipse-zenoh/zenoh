@@ -214,8 +214,8 @@ impl fmt::Display for ZenohId {
 
 // A PeerID can be converted into a Timestamp's ID
 impl From<&ZenohId> for uhlc::ID {
-    fn from(pid: &ZenohId) -> Self {
-        pid.0
+    fn from(zid: &ZenohId) -> Self {
+        zid.0
     }
 }
 

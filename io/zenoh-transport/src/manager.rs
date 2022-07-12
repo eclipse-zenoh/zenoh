@@ -81,7 +81,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 ///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let manager = TransportManager::builder()
-///         .pid(ZenohId::rand())
+///         .zid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
 ///         .sn_resolution(128)             // Use a sequence number resolution of 128
@@ -92,7 +92,7 @@ use zenoh_protocol_core::{EndPoint, Locator, Priority};
 
 pub struct TransportManagerConfig {
     pub version: u8,
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub sn_resolution: ZInt,
     pub batch_size: u16,
@@ -119,7 +119,7 @@ pub struct TransportManagerParams {
 
 pub struct TransportManagerBuilder {
     version: u8,
-    pid: ZenohId,
+    zid: ZenohId,
     whatami: WhatAmI,
     sn_resolution: ZInt,
     batch_size: u16,
@@ -134,8 +134,8 @@ pub struct TransportManagerBuilder {
 }
 
 impl TransportManagerBuilder {
-    pub fn pid(mut self, pid: ZenohId) -> Self {
-        self.pid = pid;
+    pub fn zid(mut self, zid: ZenohId) -> Self {
+        self.zid = zid;
         self
     }
 
@@ -195,7 +195,7 @@ impl TransportManagerBuilder {
     }
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        self = self.pid(*config.id());
+        self = self.zid(*config.id());
         if let Some(v) = config.mode() {
             self = self.whatami(*v);
         }
@@ -256,7 +256,7 @@ impl TransportManagerBuilder {
 
         let config = TransportManagerConfig {
             version: self.version,
-            pid: self.pid,
+            zid: self.zid,
             whatami: self.whatami,
             sn_resolution: self.sn_resolution,
             batch_size: self.batch_size,
@@ -288,7 +288,7 @@ impl Default for TransportManagerBuilder {
         let backoff = queue.backoff().unwrap();
         Self {
             version: VERSION,
-            pid: ZenohId::rand(),
+            zid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
             sn_resolution: SEQ_NUM_RES,
             batch_size: BATCH_SIZE,
@@ -388,8 +388,8 @@ impl TransportManager {
         TransportManagerBuilder::default()
     }
 
-    pub fn pid(&self) -> ZenohId {
-        self.config.pid
+    pub fn zid(&self) -> ZenohId {
+        self.config.zid
     }
 
     pub async fn close(&self) {

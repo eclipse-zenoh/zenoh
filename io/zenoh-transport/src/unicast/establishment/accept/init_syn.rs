@@ -26,7 +26,7 @@ use zenoh_protocol::proto::{tmsg, TransportBody};
 // Read and eventually accept an InitSyn
 pub(super) struct Output {
     pub(super) whatami: WhatAmI,
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
     pub(super) init_syn_properties: EstablishmentProperties,
@@ -62,18 +62,18 @@ pub(super) async fn recv(
 
     // Check the peer id associate to the authenticated link
     match auth_link.peer_id {
-        Some(pid) => {
-            if pid != init_syn.pid {
+        Some(zid) => {
+            if zid != init_syn.zid {
                 let e = zerror!(
                     "Inconsistent ZenohId in InitSyn on {}: {:?} {:?}",
                     link,
-                    pid,
-                    init_syn.pid
+                    zid,
+                    init_syn.zid
                 );
                 return Err((e.into(), Some(tmsg::close_reason::INVALID)));
             }
         }
-        None => auth_link.peer_id = Some(init_syn.pid),
+        None => auth_link.peer_id = Some(init_syn.zid),
     }
 
     // Check if the version is supported
@@ -81,7 +81,7 @@ pub(super) async fn recv(
         let e = zerror!(
             "Rejecting InitSyn on {} because of unsupported Zenoh version from peer: {}",
             link,
-            init_syn.pid
+            init_syn.zid
         );
         return Err((e.into(), Some(tmsg::close_reason::INVALID)));
     }
@@ -96,7 +96,7 @@ pub(super) async fn recv(
 
     let output = Output {
         whatami: init_syn.whatami,
-        pid: init_syn.pid,
+        zid: init_syn.zid,
         sn_resolution: init_syn.sn_resolution,
         is_qos: init_syn.is_qos,
         init_syn_properties,

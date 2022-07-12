@@ -421,9 +421,9 @@ mod tests {
                 // Insert a transport message every 3 ZenohMessage
                 if zmsgs_in.len() % 3 == 0 {
                     // Create a TransportMessage
-                    let pid = None;
+                    let zid = None;
                     let attachment = None;
-                    let mut msg = TransportMessage::make_keep_alive(pid, attachment);
+                    let mut msg = TransportMessage::make_keep_alive(zid, attachment);
 
                     // Serialize the TransportMessage
                     let res = batch.serialize_transport_message(&mut msg);

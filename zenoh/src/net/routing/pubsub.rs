@@ -45,7 +45,7 @@ fn send_sourced_subscription_to_net_childs(
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
-            match tables.get_face(&net.graph[*child].pid).cloned() {
+            match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
@@ -57,7 +57,7 @@ fn send_sourced_subscription_to_net_childs(
                             .decl_subscriber(&key_expr, sub_info, routing_context);
                     }
                 }
-                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
+                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -152,7 +152,7 @@ fn register_router_subscription(
     }
     // Propagate subscription to peers
     if face.whatami != WhatAmI::Peer {
-        register_peer_subscription(tables, face, res, sub_info, tables.pid)
+        register_peer_subscription(tables, face, res, sub_info, tables.zid)
     }
 
     // Propagate subscription to clients
@@ -217,7 +217,7 @@ pub fn declare_peer_subscription(
             if tables.whatami == WhatAmI::Router {
                 let mut propa_sub_info = sub_info.clone();
                 propa_sub_info.mode = SubMode::Push;
-                register_router_subscription(tables, face, &mut res, &propa_sub_info, tables.pid);
+                register_router_subscription(tables, face, &mut res, &propa_sub_info, tables.zid);
             }
 
             compute_matches_data_routes(tables, &mut res);
@@ -291,13 +291,13 @@ pub fn declare_client_subscription(
                         face,
                         &mut res,
                         &propa_sub_info,
-                        tables.pid,
+                        tables.zid,
                     );
                 }
                 WhatAmI::Peer => {
                     let mut propa_sub_info = sub_info.clone();
                     propa_sub_info.mode = SubMode::Push;
-                    register_peer_subscription(tables, face, &mut res, &propa_sub_info, tables.pid);
+                    register_peer_subscription(tables, face, &mut res, &propa_sub_info, tables.zid);
                 }
                 _ => {
                     propagate_simple_subscription(tables, &res, sub_info, face);
@@ -317,7 +317,7 @@ fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
             .context()
             .router_subs
             .iter()
-            .any(|peer| peer != &tables.pid)
+            .any(|peer| peer != &tables.zid)
 }
 
 #[inline]
@@ -327,7 +327,7 @@ fn remote_peer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
             .context()
             .peer_subs
             .iter()
-            .any(|peer| peer != &tables.pid)
+            .any(|peer| peer != &tables.zid)
 }
 
 #[inline]
@@ -355,7 +355,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
-            match tables.get_face(&net.graph[*child].pid).cloned() {
+            match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
@@ -367,7 +367,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                             .forget_subscriber(&key_expr, routing_context);
                     }
                 }
-                None => log::trace!("Unable to find face for pid {}", net.graph[*child].pid),
+                None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
             }
         }
     }
@@ -434,7 +434,7 @@ fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, 
     if res.context().router_subs.is_empty() {
         tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
-        undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
+        undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
         propagate_forget_simple_subscription(tables, res);
     }
 }
@@ -514,7 +514,7 @@ pub fn forget_peer_subscription(
                     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
                     let peer_subs = remote_peer_subs(tables, &res);
                     if !client_subs && !peer_subs {
-                        undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                        undeclare_router_subscription(tables, None, &mut res, &tables.zid.clone());
                     }
                 }
 
@@ -544,12 +544,12 @@ pub(crate) fn undeclare_client_subscription(
     match tables.whatami {
         WhatAmI::Router => {
             if client_subs.is_empty() && !peer_subs {
-                undeclare_router_subscription(tables, None, res, &tables.pid.clone());
+                undeclare_router_subscription(tables, None, res, &tables.zid.clone());
             }
         }
         WhatAmI::Peer => {
             if client_subs.is_empty() {
-                undeclare_peer_subscription(tables, None, res, &tables.pid.clone());
+                undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
             }
         }
         _ => {
@@ -641,7 +641,7 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                     let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
                     let peer_subs = remote_peer_subs(tables, &res);
                     if !client_subs && !peer_subs {
-                        undeclare_router_subscription(tables, None, &mut res, &tables.pid.clone());
+                        undeclare_router_subscription(tables, None, &mut res, &tables.zid.clone());
                     }
                 }
 
@@ -664,7 +664,7 @@ pub(crate) fn pubsub_tree_change(
             let net = tables.get_net(net_type).unwrap();
             let tree_idx = NodeIndex::new(tree_sid);
             if net.graph.contains_node(tree_idx) {
-                let tree_id = net.graph[tree_idx].pid;
+                let tree_id = net.graph[tree_idx].zid;
 
                 let subs_res = match net_type {
                     WhatAmI::Router => &tables.router_subs,
@@ -719,7 +719,7 @@ fn insert_faces_for_subs(
                 if net.trees[source].directions.len() > sub_idx.index() {
                     if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
                         if net.graph.contains_node(direction) {
-                            if let Some(face) = tables.get_face(&net.graph[direction].pid) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 route.entry(face.id).or_insert_with(|| {
                                     let key_expr = Resource::get_best_key(prefix, suffix, face.id);
                                     (
@@ -764,7 +764,7 @@ fn compute_data_route(
         .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
     let master = tables.whatami != WhatAmI::Router
-        || *elect_router(&key_expr, &tables.shared_nodes) == tables.pid;
+        || *elect_router(&key_expr, &tables.shared_nodes) == tables.zid;
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();

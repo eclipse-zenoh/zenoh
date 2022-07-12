@@ -62,7 +62,7 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
     buf
 }
 
-fn gen_pid() -> ZenohId {
+fn gen_zid() -> ZenohId {
     ZenohId::from(uuid::Uuid::new_v4())
 }
 
@@ -85,7 +85,7 @@ fn gen_reply_context(is_final: bool) -> ReplyContext {
     let replier = if !is_final {
         Some(ReplierInfo {
             kind: thread_rng().gen_range(0..4),
-            id: gen_pid(),
+            id: gen_zid(),
         })
     } else {
         None
@@ -299,11 +299,11 @@ fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
 fn codec_scout() {
     for _ in 0..NUM_ITER {
         let wami = [None, Some(gen!(ZInt))];
-        let pid_req = [true, false];
+        let zid_req = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
-            for p in pid_req.iter() {
+            for p in zid_req.iter() {
                 for a in attachment.iter() {
                     let msg = TransportMessage::make_scout(
                         w.map(WhatAmIMatcher::try_from).flatten(),
@@ -320,7 +320,7 @@ fn codec_scout() {
 #[test]
 fn codec_hello() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let wami = [None, Some(gen!(ZInt))];
         let locators = [
             None,
@@ -331,7 +331,7 @@ fn codec_hello() {
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
@@ -364,7 +364,7 @@ fn codec_init() {
                         let msg = TransportMessage::make_init_syn(
                             gen!(u8),
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             a.clone(),
@@ -382,7 +382,7 @@ fn codec_init() {
                     for a in attachment.iter() {
                         let msg = TransportMessage::make_init_ack(
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             gen_buffer(64).into(),
@@ -443,7 +443,7 @@ fn codec_join() {
                             let msg = TransportMessage::make_join(
                                 gen!(u8),
                                 *w,
-                                gen_pid(),
+                                gen_zid(),
                                 *l,
                                 *s,
                                 i.clone(),
@@ -461,11 +461,11 @@ fn codec_join() {
 #[test]
 fn codec_close() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let link_only = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for k in link_only.iter() {
                 for a in attachment.iter() {
                     let msg = TransportMessage::make_close(*p, gen!(u8), *k, a.clone());
@@ -512,10 +512,10 @@ fn codec_ack_nack() {
 #[test]
 fn codec_keep_alive() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for a in attachment.iter() {
                 let msg = TransportMessage::make_keep_alive(*p, a.clone());
                 test_write_read_transport_message(msg);

@@ -43,14 +43,14 @@ macro_rules! ztimeout {
 
 // Transport Handler for the router
 struct SHPeer {
-    pid: ZenohId,
+    zid: ZenohId,
     count: Arc<AtomicUsize>,
 }
 
 impl SHPeer {
-    fn new(pid: ZenohId) -> Self {
+    fn new(zid: ZenohId) -> Self {
         Self {
-            pid,
+            zid,
             count: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -90,11 +90,11 @@ impl TransportEventHandler for SHPeer {
             attachment,
         );
 
-        println!("[Simultaneous {}] Sending {}...", self.pid, MSG_COUNT);
+        println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
         for _ in 0..MSG_COUNT {
             transport.handle_message(message.clone()).unwrap();
         }
-        println!("[Simultaneous {}] ... sent {}", self.pid, MSG_COUNT);
+        println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
@@ -144,7 +144,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     let unicast = TransportManager::config_unicast().max_links(endpoint01.len());
     let peer01_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id01)
+        .zid(peer_id01)
         .unicast(unicast)
         .build(peer_sh01.clone())
         .unwrap();
@@ -154,7 +154,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     let unicast = TransportManager::config_unicast().max_links(endpoint02.len());
     let peer02_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id02)
+        .zid(peer_id02)
         .unicast(unicast)
         .build(peer_sh02.clone())
         .unwrap();

@@ -418,7 +418,7 @@ impl TransportManager {
                 // Create the transport
                 let stc = TransportUnicastConfig {
                     manager: self.clone(),
-                    pid: config.peer,
+                    zid: config.peer,
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
                     initial_sn_tx: config.initial_sn_tx,
@@ -531,11 +531,11 @@ impl TransportManager {
         for la in zasyncread!(self.state.unicast.link_authenticator).iter() {
             let res = la.handle_new_link(&peer_link).await;
             match res {
-                Ok(pid) => {
+                Ok(zid) => {
                     // Check that all the peer authenticators, eventually return the same ZenohId
-                    if let Some(pid1) = peer_id.as_ref() {
-                        if let Some(pid2) = pid.as_ref() {
-                            if pid1 != pid2 {
+                    if let Some(zid1) = peer_id.as_ref() {
+                        if let Some(zid2) = zid.as_ref() {
+                            if zid1 != zid2 {
                                 log::debug!("Ambigous PeerID identification for link: {}", link);
                                 let _ = link.close().await;
                                 let mut guard = zasynclock!(self.state.unicast.incoming);
@@ -544,7 +544,7 @@ impl TransportManager {
                             }
                         }
                     } else {
-                        peer_id = pid;
+                        peer_id = zid;
                     }
                 }
                 Err(e) => {

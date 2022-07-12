@@ -36,7 +36,7 @@ use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) version: u8,
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
     pub(super) keep_alive: usize,
@@ -259,7 +259,7 @@ async fn tx_task(
                 let mut message = TransportMessage::make_join(
                     config.version,
                     config.whatami,
-                    config.pid,
+                    config.zid,
                     config.lease,
                     config.sn_resolution,
                     initial_sns,
@@ -277,9 +277,9 @@ async fn tx_task(
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
-                let pid = Some(config.pid);
+                let zid = Some(config.zid);
                 let attachment = None;
-                let mut message = TransportMessage::make_keep_alive(pid, attachment);
+                let mut message = TransportMessage::make_keep_alive(zid, attachment);
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
                 let n = link.write_transport_message(&mut message).await?;

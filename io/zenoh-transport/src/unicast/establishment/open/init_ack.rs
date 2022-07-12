@@ -28,7 +28,7 @@ use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
 /*              OPEN                 */
 /*************************************/
 pub(super) struct Output {
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
@@ -102,7 +102,7 @@ pub(super) async fn recv(
     };
 
     // Store the peer id associate do this link
-    auth_link.peer_id = Some(init_ack.pid);
+    auth_link.peer_id = Some(init_ack.zid);
 
     let mut init_ack_properties = match msg.attachment.take() {
         Some(att) => {
@@ -117,7 +117,7 @@ pub(super) async fn recv(
         let mut att = pa
             .handle_init_ack(
                 auth_link,
-                &init_ack.pid,
+                &init_ack.zid,
                 sn_resolution,
                 init_ack_properties.remove(pa.id().into()).map(|x| x.value),
             )
@@ -154,7 +154,7 @@ pub(super) async fn recv(
     }
 
     let output = Output {
-        pid: init_ack.pid,
+        zid: init_ack.zid,
         whatami: init_ack.whatami,
         sn_resolution,
         is_qos: init_ack.is_qos,

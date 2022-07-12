@@ -26,7 +26,7 @@ use zenoh_core::{bail, zerror};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
-const ZENOH_SHM_PREFIX: &str = "zenoh_shm_pid";
+const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
 
 // Chunk header
 type ChunkHeaderType = AtomicUsize;

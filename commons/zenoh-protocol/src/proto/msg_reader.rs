@@ -198,18 +198,18 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let pid_request = imsg::has_flag(header, tmsg::flag::I);
+        let zid_request = imsg::has_flag(header, tmsg::flag::I);
         let what = if imsg::has_flag(header, tmsg::flag::W) {
             WhatAmIMatcher::try_from(self.read_zint()?)
         } else {
             None
         };
-        Some(TransportBody::Scout(Scout { what, pid_request }))
+        Some(TransportBody::Scout(Scout { what, zid_request }))
     }
 
     fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
@@ -225,7 +225,7 @@ impl MessageReader for ZBufReader<'_> {
         };
 
         Some(TransportBody::Hello(Hello {
-            pid,
+            zid,
             whatami,
             locators,
         }))
@@ -239,7 +239,7 @@ impl MessageReader for ZBufReader<'_> {
         };
         let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
@@ -250,7 +250,7 @@ impl MessageReader for ZBufReader<'_> {
         Some(TransportBody::InitSyn(InitSyn {
             version,
             whatami,
-            pid,
+            zid,
             sn_resolution,
             is_qos,
         }))
@@ -263,7 +263,7 @@ impl MessageReader for ZBufReader<'_> {
             0
         };
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
@@ -274,7 +274,7 @@ impl MessageReader for ZBufReader<'_> {
 
         Some(TransportBody::InitAck(InitAck {
             whatami,
-            pid,
+            zid,
             sn_resolution,
             is_qos,
             cookie,
@@ -318,7 +318,7 @@ impl MessageReader for ZBufReader<'_> {
         };
         let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
@@ -348,7 +348,7 @@ impl MessageReader for ZBufReader<'_> {
         Some(TransportBody::Join(Join {
             version,
             whatami,
-            pid,
+            zid,
             lease,
             sn_resolution,
             next_sns,
@@ -357,15 +357,15 @@ impl MessageReader for ZBufReader<'_> {
 
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
         let link_only = imsg::has_flag(header, tmsg::flag::K);
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
         let reason = self.read_byte()?;
 
         Some(TransportBody::Close(Close {
-            pid,
+            zid,
             reason,
             link_only,
         }))
@@ -402,13 +402,13 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
 
-        Some(TransportBody::KeepAlive(KeepAlive { pid }))
+        Some(TransportBody::KeepAlive(KeepAlive { zid }))
     }
 
     fn read_ping(&mut self, _header: u8) -> Option<TransportBody> {
@@ -439,7 +439,7 @@ impl MessageReader for ZBufReader<'_> {
         } else {
             Some(ReplierInfo {
                 kind: self.read_zint()?,
-                id: self.read_peeexpr_id()?,
+                id: self.read_zid()?,
             })
         };
 
@@ -754,8 +754,8 @@ impl MessageReader for ZBufReader<'_> {
         let options = self.read_zint()?;
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
-        let pid = if imsg::has_option(options, zmsg::link_state::PID) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_option(options, zmsg::link_state::PID) {
+            Some(self.read_zid()?)
         } else {
             None
         };
@@ -778,7 +778,7 @@ impl MessageReader for ZBufReader<'_> {
         Some(LinkState {
             psid,
             sn,
-            pid,
+            zid,
             whatami,
             locators,
             links,

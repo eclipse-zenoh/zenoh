@@ -259,7 +259,7 @@ pub trait ZBufCodec {
     // Same as read_bytes but with array length before the bytes.
     fn read_bytes_array(&mut self) -> Option<Vec<u8>>;
     fn read_string(&mut self) -> Option<String>;
-    fn read_peeexpr_id(&mut self) -> Option<ZenohId>;
+    fn read_zid(&mut self) -> Option<ZenohId>;
     fn read_locator(&mut self) -> Option<Locator>;
     fn read_locators(&mut self) -> Option<Vec<Locator>>;
     fn read_zslice_array(&mut self) -> Option<ZSlice>;
@@ -334,7 +334,7 @@ impl ZBufCodec for ZBufReader<'_> {
         ZenohCodec.read(self).ok()
     }
     #[inline(always)]
-    fn read_peeexpr_id(&mut self) -> Option<ZenohId> {
+    fn read_zid(&mut self) -> Option<ZenohId> {
         ZenohCodec.read(self).ok()
     }
     #[inline(always)]
@@ -583,7 +583,7 @@ pub trait WBufCodec {
     fn write_usize_as_zint(&mut self, v: usize) -> bool;
     fn write_bytes_array(&mut self, s: &[u8]) -> bool;
     fn write_string(&mut self, s: &str) -> bool;
-    fn write_peeexpr_id(&mut self, pid: &ZenohId) -> bool;
+    fn write_zid(&mut self, zid: &ZenohId) -> bool;
     fn write_locator(&mut self, locator: &Locator) -> bool;
     fn write_locators(&mut self, locators: &[Locator]) -> bool;
     fn write_zslice_array(&mut self, slice: ZSlice) -> bool;
@@ -629,8 +629,8 @@ impl WBufCodec for WBuf {
     }
 
     #[inline(always)]
-    fn write_peeexpr_id(&mut self, pid: &ZenohId) -> bool {
-        ZenohCodec.write(self, pid).is_ok()
+    fn write_zid(&mut self, zid: &ZenohId) -> bool {
+        ZenohCodec.write(self, zid).is_ok()
     }
 
     #[inline(always)]

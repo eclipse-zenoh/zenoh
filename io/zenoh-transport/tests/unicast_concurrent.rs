@@ -112,7 +112,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let unicast01 = TransportManager::config_unicast().max_links(endpoint02.len());
     let peer01_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id01)
+        .zid(peer_id01)
         .unicast(unicast01)
         .build(peer_sh01.clone())
         .unwrap();
@@ -122,7 +122,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let unicast02 = TransportManager::config_unicast().max_links(endpoint01.len());
     let peer02_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(peer_id02)
+        .zid(peer_id02)
         .unicast(unicast02)
         .build(peer_sh02.clone())
         .unwrap();
@@ -136,7 +136,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_barp = barrier_peer.clone();
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid02 = peer_id02;
+    let c_zid02 = peer_id02;
     let c_end01 = endpoint01.clone();
     let c_end02 = endpoint02.clone();
     let peer01_task = task::spawn(async move {
@@ -181,7 +181,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         // Verify that the transport has been correctly open
         assert_eq!(peer01_manager.get_transports().len(), 1);
-        let s02 = peer01_manager.get_transport(&c_pid02).unwrap();
+        let s02 = peer01_manager.get_transport(&c_zid02).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -244,7 +244,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
     let c_barp = barrier_peer;
     let c_barow = barrier_open_wait.clone();
     let c_barod = barrier_open_done.clone();
-    let c_pid01 = peer_id01;
+    let c_zid01 = peer_id01;
     let c_end01 = endpoint01.clone();
     let c_end02 = endpoint02.clone();
     let peer02_task = task::spawn(async move {
@@ -293,7 +293,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             peer02_manager.get_transports()
         );
         assert_eq!(peer02_manager.get_transports().len(), 1);
-        let s01 = peer02_manager.get_transport(&c_pid01).unwrap();
+        let s01 = peer02_manager.get_transport(&c_zid01).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()

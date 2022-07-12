@@ -188,7 +188,7 @@ pub mod zmsg {
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 KeySuffix     if K==1 then key_expr has suffix
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
-        pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
+        pub const P: u8 = 1 << 0; // 0x01 Zid           if P==1 then the zid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
@@ -993,7 +993,7 @@ impl Header for Query {
 // +---------------+
 // ~      sn       ~
 // +---------------+
-// ~      pid      ~ if P == 1
+// ~      zid      ~ if P == 1
 // +---------------+
 // ~    whatami    ~ if W == 1
 // +---------------+
@@ -1005,7 +1005,7 @@ impl Header for Query {
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
-    pub pid: Option<ZenohId>,
+    pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
     pub links: Vec<ZInt>,
@@ -1014,7 +1014,7 @@ pub struct LinkState {
 impl Options for LinkState {
     fn options(&self) -> ZInt {
         let mut opts = 0;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             opts |= zmsg::link_state::PID;
         }
         if self.whatami.is_some() {
@@ -1280,14 +1280,14 @@ pub enum TransportMode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
-    pub pid_request: bool,
+    pub zid_request: bool,
 }
 
 impl Header for Scout {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::SCOUT;
-        if self.pid_request {
+        if self.zid_request {
             header |= tmsg::flag::I;
         }
         if self.what.is_some() {
@@ -1331,7 +1331,7 @@ impl Header for Scout {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hello {
-    pub pid: Option<ZenohId>,
+    pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
 }
@@ -1340,7 +1340,7 @@ impl Header for Hello {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::HELLO;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I
         }
         if self.whatami.is_some() && self.whatami.unwrap() != WhatAmI::Router {
@@ -1367,7 +1367,7 @@ impl fmt::Display for Hello {
             None => vec![],
         };
         f.debug_struct("Hello")
-            .field("pid", &self.pid)
+            .field("zid", &self.zid)
             .field("whatami", &what)
             .field("locators", &locators)
             .finish()
@@ -1414,7 +1414,7 @@ impl fmt::Display for Hello {
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
@@ -1450,7 +1450,7 @@ impl Options for InitSyn {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub sn_resolution: Option<ZInt>,
     pub is_qos: bool,
     pub cookie: ZSlice,
@@ -1590,7 +1590,7 @@ impl Header for OpenAck {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: ZenohId,
+    pub zid: ZenohId,
     pub lease: Duration,
     pub sn_resolution: ZInt,
     pub next_sns: ConduitSnList,
@@ -1665,7 +1665,7 @@ impl Options for Join {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
-    pub pid: Option<ZenohId>,
+    pub zid: Option<ZenohId>,
     pub reason: u8,
     pub link_only: bool,
 }
@@ -1674,7 +1674,7 @@ impl Header for Close {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::CLOSE;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I;
         }
         if self.link_only {
@@ -1789,14 +1789,14 @@ impl Header for AckNack {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeepAlive {
-    pub pid: Option<ZenohId>,
+    pub zid: Option<ZenohId>,
 }
 
 impl Header for KeepAlive {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::KEEP_ALIVE;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I;
         }
         header
@@ -1978,11 +1978,11 @@ pub struct TransportMessage {
 impl TransportMessage {
     pub fn make_scout(
         what: Option<WhatAmIMatcher>,
-        pid_request: bool,
+        zid_request: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
-            body: TransportBody::Scout(Scout { what, pid_request }),
+            body: TransportBody::Scout(Scout { what, zid_request }),
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -1990,14 +1990,14 @@ impl TransportMessage {
     }
 
     pub fn make_hello(
-        pid: Option<ZenohId>,
+        zid: Option<ZenohId>,
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::Hello(Hello {
-                pid,
+                zid,
                 whatami,
                 locators,
             }),
@@ -2010,7 +2010,7 @@ impl TransportMessage {
     pub fn make_init_syn(
         version: u8,
         whatami: WhatAmI,
-        pid: ZenohId,
+        zid: ZenohId,
         sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
@@ -2019,7 +2019,7 @@ impl TransportMessage {
             body: TransportBody::InitSyn(InitSyn {
                 version,
                 whatami,
-                pid,
+                zid,
                 sn_resolution,
                 is_qos,
             }),
@@ -2031,7 +2031,7 @@ impl TransportMessage {
 
     pub fn make_init_ack(
         whatami: WhatAmI,
-        pid: ZenohId,
+        zid: ZenohId,
         sn_resolution: Option<ZInt>,
         is_qos: bool,
         cookie: ZSlice,
@@ -2040,7 +2040,7 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::InitAck(InitAck {
                 whatami,
-                pid,
+                zid,
                 sn_resolution,
                 is_qos,
                 cookie,
@@ -2085,7 +2085,7 @@ impl TransportMessage {
     pub fn make_join(
         version: u8,
         whatami: WhatAmI,
-        pid: ZenohId,
+        zid: ZenohId,
         lease: Duration,
         sn_resolution: ZInt,
         next_sns: ConduitSnList,
@@ -2095,7 +2095,7 @@ impl TransportMessage {
             body: TransportBody::Join(Join {
                 version,
                 whatami,
-                pid,
+                zid,
                 lease,
                 sn_resolution,
                 next_sns,
@@ -2107,14 +2107,14 @@ impl TransportMessage {
     }
 
     pub fn make_close(
-        pid: Option<ZenohId>,
+        zid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::Close(Close {
-                pid,
+                zid,
                 reason,
                 link_only,
             }),
@@ -2156,11 +2156,11 @@ impl TransportMessage {
     }
 
     pub fn make_keep_alive(
-        pid: Option<ZenohId>,
+        zid: Option<ZenohId>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
-            body: TransportBody::KeepAlive(KeepAlive { pid }),
+            body: TransportBody::KeepAlive(KeepAlive { zid }),
             attachment,
             #[cfg(feature = "stats")]
             size: None,

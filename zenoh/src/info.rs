@@ -41,7 +41,7 @@ impl<'a> Resolvable for ZidBuilder<'a> {
 impl<'a> SyncResolve for ZidBuilder<'a> {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        self.session.runtime.pid
+        self.session.runtime.zid
     }
 }
 impl<'a> AsyncResolve for ZidBuilder<'a> {
@@ -179,7 +179,7 @@ impl SessionInfos<'_> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Router).then(|| ()))
-                        .and_then(|_| s.get_pid().ok())
+                        .and_then(|_| s.get_zid().ok())
                 })
         })))
     }
@@ -208,7 +208,7 @@ impl SessionInfos<'_> {
                     s.get_whatami()
                         .ok()
                         .and_then(|what| (what == WhatAmI::Peer).then(|| ()))
-                        .and_then(|_| s.get_pid().ok())
+                        .and_then(|_| s.get_zid().ok())
                 })
         })))
     }

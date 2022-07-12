@@ -26,7 +26,7 @@ use zenoh_transport::Primitives;
 
 pub struct FaceState {
     pub(super) id: usize,
-    pub(super) pid: ZenohId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
@@ -43,14 +43,14 @@ pub struct FaceState {
 impl FaceState {
     pub(super) fn new(
         id: usize,
-        pid: ZenohId,
+        zid: ZenohId,
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
-            pid,
+            zid,
             whatami,
             primitives,
             link_id,
@@ -90,7 +90,7 @@ impl FaceState {
         match routing_context {
             Some(routing_context) => {
                 match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                    Some(link) => match link.get_zid(&routing_context.tree_id) {
                         Some(router) => Some(*router),
                         None => {
                             log::error!(
@@ -124,7 +124,7 @@ impl FaceState {
         match routing_context {
             Some(routing_context) => {
                 match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_pid(&routing_context.tree_id) {
+                    Some(link) => match link.get_zid(&routing_context.tree_id) {
                         Some(router) => Some(*router),
                         None => {
                             log::error!(
@@ -153,7 +153,7 @@ impl FaceState {
 
 impl fmt::Display for FaceState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Face{{{}, {}}}", self.id, self.pid)
+        write!(f, "Face{{{}, {}}}", self.id, self.zid)
     }
 }
 

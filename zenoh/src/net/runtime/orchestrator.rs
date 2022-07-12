@@ -598,25 +598,25 @@ impl Runtime {
         None
     }
 
-    pub async fn connect_peer(&self, pid: &ZenohId, locators: &[Locator]) {
-        if pid != &self.manager().pid() {
-            if self.manager().get_transport(pid).is_none() {
-                log::debug!("Try to connect to peer {} via any of {:?}", pid, locators);
+    pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
+        if zid != &self.manager().zid() {
+            if self.manager().get_transport(zid).is_none() {
+                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
                 if let Some(transport) = self.connect(locators).await {
                     log::debug!(
                         "Successfully connected to newly scouted peer {} via {:?}",
-                        pid,
+                        zid,
                         transport
                     );
                 } else {
                     log::warn!(
                         "Unable to connect any locator of scouted peer {} : {:?}",
-                        pid,
+                        zid,
                         locators
                     );
                 }
             } else {
-                log::trace!("Already connected scouted peer : {}", pid);
+                log::trace!("Already connected scouted peer : {}", zid);
             }
         }
     }
@@ -663,16 +663,16 @@ impl Runtime {
         addr: &SocketAddr,
     ) {
         Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
-            match &hello.pid {
-                Some(pid) => {
+            match &hello.zid {
+                Some(zid) => {
                     if let Some(locators) = &hello.locators {
-                        self.connect_peer(pid, locators).await
+                        self.connect_peer(zid, locators).await
                     } else {
                         log::warn!("Received Hello with no locators : {:?}", hello);
                     }
                 }
                 None => {
-                    log::warn!("Received Hello with no pid : {:?}", hello);
+                    log::warn!("Received Hello with no zid : {:?}", hello);
                 }
             }
             Loop::Continue
@@ -721,19 +721,19 @@ impl Runtime {
             if let Some(msg) = zbuf.reader().read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let TransportBody::Scout(Scout {
-                    what, pid_request, ..
+                    what, zid_request, ..
                 }) = &msg.body
                 {
                     let what = what.or(Some(WhatAmI::Router.into())).unwrap();
                     if what.matches(self.whatami) {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-                        let pid = if *pid_request {
-                            Some(self.manager().pid())
+                        let zid = if *zid_request {
+                            Some(self.manager().zid())
                         } else {
                             None
                         };
                         let mut hello = TransportMessage::make_hello(
-                            pid,
+                            zid,
                             Some(self.whatami),
                             Some(self.manager().get_locators().clone()),
                             None,
