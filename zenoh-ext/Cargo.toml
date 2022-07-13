@@ -26,7 +26,7 @@ description = "Zenoh: extensions to the client API."
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = { version = "=1.11.0", default-features = false, features = [
+async-std = { version = "=1.12.0", default-features = false, features = [
     "attributes",
     "unstable",
 ] }
@@ -42,7 +42,7 @@ zenoh-sync = { path = "../commons/zenoh-sync" }
 zenoh-core = { path = "../commons/zenoh-core/" }
 
 [dev-dependencies]
-clap = "2.33.3"
+clap = "3.2.10"
 env_logger = "0.9.0"
 
 
