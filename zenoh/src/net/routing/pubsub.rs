@@ -199,6 +199,11 @@ fn register_peer_subscription(
         // Propagate subscription to peers
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, WhatAmI::Peer);
     }
+
+    if tables.whatami == WhatAmI::Peer {
+        // Propagate subscription to clients
+        propagate_simple_subscription(tables, res, sub_info, face);
+    }
 }
 
 pub fn declare_peer_subscription(
@@ -484,6 +489,10 @@ fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, pe
 
     if res.context().peer_subs.is_empty() {
         tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, res));
+
+        if tables.whatami == WhatAmI::Peer {
+            propagate_forget_simple_subscription(tables, res);
+        }
     }
 }
 

@@ -379,7 +379,7 @@ pub fn declare_router_queryable(
 
 fn register_peer_queryable(
     tables: &mut Tables,
-    face: Option<&mut Arc<FaceState>>,
+    mut face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
@@ -403,7 +403,20 @@ fn register_peer_queryable(
         }
 
         // Propagate queryable to peers
-        propagate_sourced_queryable(tables, res, kind, qabl_info, face, &peer, WhatAmI::Peer);
+        propagate_sourced_queryable(
+            tables,
+            res,
+            kind,
+            qabl_info,
+            face.as_deref_mut(),
+            &peer,
+            WhatAmI::Peer,
+        );
+    }
+
+    if tables.whatami == WhatAmI::Peer {
+        // Propagate queryable to clients
+        propagate_simple_queryable(tables, res, kind, face);
     }
 }
 
@@ -713,6 +726,10 @@ fn unregister_peer_queryable(
 
     if res.context().peer_qabls.is_empty() {
         tables.peer_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
+
+        if tables.whatami == WhatAmI::Peer {
+            propagate_forget_simple_queryable(tables, res, kind);
+        }
     }
 }
 
