@@ -199,6 +199,11 @@ fn register_peer_subscription(
         // Propagate subscription to peers
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &peer, WhatAmI::Peer);
     }
+
+    if tables.whatami == WhatAmI::Peer {
+        // Propagate subscription to clients
+        propagate_simple_subscription(tables, res, sub_info, face);
+    }
 }
 
 pub fn declare_peer_subscription(
@@ -484,6 +489,10 @@ fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, pe
 
     if res.context().peer_subs.is_empty() {
         tables.peer_subs.retain(|sub| !Arc::ptr_eq(sub, res));
+
+        if tables.whatami == WhatAmI::Peer {
+            propagate_forget_simple_subscription(tables, res);
+        }
     }
 }
 
@@ -590,22 +599,35 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         mode: SubMode::Push,
         period: None,
     };
-    if face.whatami == WhatAmI::Client && tables.whatami != WhatAmI::Client {
-        for sub in &tables.router_subs {
-            get_mut_unchecked(face).local_subs.insert(sub.clone());
-            let key_expr = Resource::decl_key(sub, face);
-            face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+    match tables.whatami {
+        WhatAmI::Router => {
+            if face.whatami == WhatAmI::Client {
+                for sub in &tables.router_subs {
+                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                    let key_expr = Resource::decl_key(sub, face);
+                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                }
+            }
         }
-    }
-    if tables.whatami == WhatAmI::Client {
-        for face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            for sub in &face.remote_subs {
-                propagate_simple_subscription(tables, sub, &sub_info, &mut face.clone());
+        WhatAmI::Peer => {
+            if face.whatami == WhatAmI::Client {
+                for sub in &tables.peer_subs {
+                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                    let key_expr = Resource::decl_key(sub, face);
+                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                }
+            }
+        }
+        WhatAmI::Client => {
+            for face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for sub in &face.remote_subs {
+                    propagate_simple_subscription(tables, sub, &sub_info, &mut face.clone());
+                }
             }
         }
     }

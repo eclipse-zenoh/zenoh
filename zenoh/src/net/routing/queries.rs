@@ -196,21 +196,21 @@ fn local_qabl_info(
 
 #[allow(clippy::too_many_arguments)]
 #[inline]
-fn send_sourced_queryable_to_net_childs<Face: std::borrow::Borrow<Arc<FaceState>>>(
+fn send_sourced_queryable_to_net_childs(
     tables: &Tables,
     net: &Network,
     childs: &[NodeIndex],
     res: &Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    src_face: Option<Face>,
+    src_face: Option<&mut Arc<FaceState>>,
     routing_context: Option<RoutingContext>,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
-                    if src_face.is_none() || someface.id != src_face.as_ref().unwrap().borrow().id {
+                    if src_face.is_none() || someface.id != src_face.as_ref().unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
                         log::debug!(
@@ -264,12 +264,12 @@ fn propagate_simple_queryable(
     }
 }
 
-fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
+fn propagate_sourced_queryable(
     tables: &Tables,
     res: &Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
-    src_face: Option<Face>,
+    src_face: Option<&mut Arc<FaceState>>,
     source: &ZenohId,
     net_type: WhatAmI,
 ) {
@@ -306,7 +306,7 @@ fn propagate_sourced_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
 
 fn register_router_queryable(
     tables: &mut Tables,
-    face: Option<&mut Arc<FaceState>>,
+    mut face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
@@ -335,7 +335,7 @@ fn register_router_queryable(
             res,
             kind,
             qabl_info,
-            face.as_deref(),
+            face.as_deref_mut(),
             &router,
             WhatAmI::Router,
         );
@@ -343,7 +343,14 @@ fn register_router_queryable(
     // Propagate queryable to peers
     if face.is_none() || face.as_ref().unwrap().whatami != WhatAmI::Peer {
         let local_info = local_peer_qabl_info(tables, res, kind);
-        register_peer_queryable(tables, face.as_deref(), res, kind, &local_info, tables.zid)
+        register_peer_queryable(
+            tables,
+            face.as_deref_mut(),
+            res,
+            kind,
+            &local_info,
+            tables.zid,
+        )
     }
 
     // Propagate queryable to clients
@@ -370,9 +377,9 @@ pub fn declare_router_queryable(
     }
 }
 
-fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
+fn register_peer_queryable(
     tables: &mut Tables,
-    face: Option<Face>,
+    mut face: Option<&mut Arc<FaceState>>,
     res: &mut Arc<Resource>,
     kind: ZInt,
     qabl_info: &QueryableInfo,
@@ -396,7 +403,20 @@ fn register_peer_queryable<Face: std::borrow::Borrow<Arc<FaceState>>>(
         }
 
         // Propagate queryable to peers
-        propagate_sourced_queryable(tables, res, kind, qabl_info, face, &peer, WhatAmI::Peer);
+        propagate_sourced_queryable(
+            tables,
+            res,
+            kind,
+            qabl_info,
+            face.as_deref_mut(),
+            &peer,
+            WhatAmI::Peer,
+        );
+    }
+
+    if tables.whatami == WhatAmI::Peer {
+        // Propagate queryable to clients
+        propagate_simple_queryable(tables, res, kind, face);
     }
 }
 
@@ -410,10 +430,10 @@ pub fn declare_peer_queryable(
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let face = Some(face);
+            let mut face = Some(face);
             let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
             Resource::match_resource(tables, &mut res);
-            register_peer_queryable(tables, face.as_deref(), &mut res, kind, qabl_info, peer);
+            register_peer_queryable(tables, face.as_deref_mut(), &mut res, kind, qabl_info, peer);
 
             if tables.whatami == WhatAmI::Router {
                 let local_info = local_router_qabl_info(tables, &res, kind);
@@ -706,6 +726,10 @@ fn unregister_peer_queryable(
 
     if res.context().peer_qabls.is_empty() {
         tables.peer_qabls.retain(|qabl| !Arc::ptr_eq(qabl, res));
+
+        if tables.whatami == WhatAmI::Peer {
+            propagate_forget_simple_queryable(tables, res, kind);
+        }
     }
 }
 
@@ -809,14 +833,7 @@ pub(crate) fn undeclare_client_queryable(
                 undeclare_peer_queryable(tables, None, res, kind, &tables.zid.clone());
             } else {
                 let local_info = local_peer_qabl_info(tables, res, kind);
-                register_peer_queryable::<&Arc<FaceState>>(
-                    tables,
-                    None,
-                    res,
-                    kind,
-                    &local_info,
-                    tables.zid,
-                );
+                register_peer_queryable(tables, None, res, kind, &local_info, tables.zid);
             }
         }
         _ => {
@@ -862,30 +879,53 @@ pub fn forget_client_queryable(
 }
 
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami == WhatAmI::Client && tables.whatami != WhatAmI::Client {
-        for qabl in &tables.router_qabls {
-            if let Some(ctx) = qabl.context.as_ref() {
-                for (_, kind) in ctx.router_qabls.keys() {
-                    let info = local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
-                    get_mut_unchecked(face)
-                        .local_qabls
-                        .insert((qabl.clone(), *kind), info.clone());
-                    let key_expr = Resource::decl_key(qabl, face);
-                    face.primitives
-                        .decl_queryable(&key_expr, *kind, &info, None);
+    match tables.whatami {
+        WhatAmI::Router => {
+            if face.whatami == WhatAmI::Client {
+                for qabl in &tables.router_qabls {
+                    if let Some(ctx) = qabl.context.as_ref() {
+                        for (_, kind) in ctx.router_qabls.keys() {
+                            let info =
+                                local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
+                            get_mut_unchecked(face)
+                                .local_qabls
+                                .insert((qabl.clone(), *kind), info.clone());
+                            let key_expr = Resource::decl_key(qabl, face);
+                            face.primitives
+                                .decl_queryable(&key_expr, *kind, &info, None);
+                        }
+                    }
                 }
             }
         }
-    }
-    if tables.whatami == WhatAmI::Client {
-        for face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            for (qabl, kind) in &face.remote_qabls {
-                propagate_simple_queryable(tables, qabl, *kind, None);
+        WhatAmI::Peer => {
+            if face.whatami == WhatAmI::Client {
+                for qabl in &tables.peer_qabls {
+                    if let Some(ctx) = qabl.context.as_ref() {
+                        for (_, kind) in ctx.peer_qabls.keys() {
+                            let info =
+                                local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
+                            get_mut_unchecked(face)
+                                .local_qabls
+                                .insert((qabl.clone(), *kind), info.clone());
+                            let key_expr = Resource::decl_key(qabl, face);
+                            face.primitives
+                                .decl_queryable(&key_expr, *kind, &info, None);
+                        }
+                    }
+                }
+            }
+        }
+        WhatAmI::Client => {
+            for face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for (qabl, kind) in &face.remote_qabls {
+                    propagate_simple_queryable(tables, qabl, *kind, None);
+                }
             }
         }
     }
@@ -981,7 +1021,7 @@ pub(crate) fn queries_tree_change(
                     };
                     for ((qabl, kind), qabl_info) in qabls {
                         if *qabl == tree_id {
-                            send_sourced_queryable_to_net_childs::<&Arc<FaceState>>(
+                            send_sourced_queryable_to_net_childs(
                                 tables,
                                 net,
                                 tree_childs,
