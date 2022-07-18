@@ -862,30 +862,53 @@ pub fn forget_client_queryable(
 }
 
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    if face.whatami == WhatAmI::Client && tables.whatami != WhatAmI::Client {
-        for qabl in &tables.router_qabls {
-            if let Some(ctx) = qabl.context.as_ref() {
-                for (_, kind) in ctx.router_qabls.keys() {
-                    let info = local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
-                    get_mut_unchecked(face)
-                        .local_qabls
-                        .insert((qabl.clone(), *kind), info.clone());
-                    let key_expr = Resource::decl_key(qabl, face);
-                    face.primitives
-                        .decl_queryable(&key_expr, *kind, &info, None);
+    match tables.whatami {
+        WhatAmI::Router => {
+            if face.whatami == WhatAmI::Client {
+                for qabl in &tables.router_qabls {
+                    if let Some(ctx) = qabl.context.as_ref() {
+                        for (_, kind) in ctx.router_qabls.keys() {
+                            let info =
+                                local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
+                            get_mut_unchecked(face)
+                                .local_qabls
+                                .insert((qabl.clone(), *kind), info.clone());
+                            let key_expr = Resource::decl_key(qabl, face);
+                            face.primitives
+                                .decl_queryable(&key_expr, *kind, &info, None);
+                        }
+                    }
                 }
             }
         }
-    }
-    if tables.whatami == WhatAmI::Client {
-        for face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            for (qabl, kind) in &face.remote_qabls {
-                propagate_simple_queryable(tables, qabl, *kind, None);
+        WhatAmI::Peer => {
+            if face.whatami == WhatAmI::Client {
+                for qabl in &tables.peer_qabls {
+                    if let Some(ctx) = qabl.context.as_ref() {
+                        for (_, kind) in ctx.peer_qabls.keys() {
+                            let info =
+                                local_qabl_info(tables.whatami, &tables.zid, qabl, *kind, face);
+                            get_mut_unchecked(face)
+                                .local_qabls
+                                .insert((qabl.clone(), *kind), info.clone());
+                            let key_expr = Resource::decl_key(qabl, face);
+                            face.primitives
+                                .decl_queryable(&key_expr, *kind, &info, None);
+                        }
+                    }
+                }
+            }
+        }
+        WhatAmI::Client => {
+            for face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for (qabl, kind) in &face.remote_qabls {
+                    propagate_simple_queryable(tables, qabl, *kind, None);
+                }
             }
         }
     }

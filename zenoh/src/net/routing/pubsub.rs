@@ -590,22 +590,35 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         mode: SubMode::Push,
         period: None,
     };
-    if face.whatami == WhatAmI::Client && tables.whatami != WhatAmI::Client {
-        for sub in &tables.router_subs {
-            get_mut_unchecked(face).local_subs.insert(sub.clone());
-            let key_expr = Resource::decl_key(sub, face);
-            face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+    match tables.whatami {
+        WhatAmI::Router => {
+            if face.whatami == WhatAmI::Client {
+                for sub in &tables.router_subs {
+                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                    let key_expr = Resource::decl_key(sub, face);
+                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                }
+            }
         }
-    }
-    if tables.whatami == WhatAmI::Client {
-        for face in tables
-            .faces
-            .values()
-            .cloned()
-            .collect::<Vec<Arc<FaceState>>>()
-        {
-            for sub in &face.remote_subs {
-                propagate_simple_subscription(tables, sub, &sub_info, &mut face.clone());
+        WhatAmI::Peer => {
+            if face.whatami == WhatAmI::Client {
+                for sub in &tables.peer_subs {
+                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                    let key_expr = Resource::decl_key(sub, face);
+                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                }
+            }
+        }
+        WhatAmI::Client => {
+            for face in tables
+                .faces
+                .values()
+                .cloned()
+                .collect::<Vec<Arc<FaceState>>>()
+            {
+                for sub in &face.remote_subs {
+                    propagate_simple_subscription(tables, sub, &sub_info, &mut face.clone());
+                }
             }
         }
     }
