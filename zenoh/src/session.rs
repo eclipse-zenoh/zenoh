@@ -603,13 +603,13 @@ impl Session {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    pub fn declare_publisher<'a, TryIntoKeyExpr>(
+    pub fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a>
+    ) -> PublisherBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublisherBuilder {
             session: SessionRef::Borrow(self),
@@ -696,7 +696,7 @@ impl Session {
         &'a self,
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> PutBuilder<'a>
+    ) -> PutBuilder<'a, 'a>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
@@ -726,7 +726,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, TryIntoKeyExpr>(&'a self, key_expr: TryIntoKeyExpr) -> DeleteBuilder<'a>
+    pub fn delete<'a, TryIntoKeyExpr>(&'a self, key_expr: TryIntoKeyExpr) -> DeleteBuilder<'a, 'a>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
@@ -1652,13 +1652,13 @@ impl SessionDeclarations for Arc<Session> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    fn declare_publisher<'a, TryIntoKeyExpr>(
+    fn declare_publisher<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'a>
+    ) -> PublisherBuilder<'static, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublisherBuilder {
             session: SessionRef::Shared(self.clone()),

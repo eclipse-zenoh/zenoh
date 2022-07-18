@@ -434,6 +434,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode> {
         self
     }
 }
+
 impl<'a, 'b> SubscriberBuilder<'a, 'b, PushMode> {
     /// Change the subscription mode to Pull.
     #[inline]

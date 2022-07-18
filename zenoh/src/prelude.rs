@@ -773,7 +773,7 @@ pub(crate) mod common {
         fn declare_publisher<'a, TryIntoKeyExpr>(
             &self,
             key_expr: TryIntoKeyExpr,
-        ) -> PublisherBuilder<'a>
+        ) -> PublisherBuilder<'static, 'a>
         where
             TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
