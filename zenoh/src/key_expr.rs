@@ -81,6 +81,11 @@ impl AsRef<keyexpr> for KeyExpr<'_> {
         self
     }
 }
+impl AsRef<str> for KeyExpr<'_> {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
 impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
     fn from(ke: &'a keyexpr) -> Self {
         Self(KeyExprInner::Borrowed(ke))
