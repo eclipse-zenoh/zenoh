@@ -114,7 +114,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().clear().map_err(|e| {
             let e = zerror!("Unable to close Serial link {}: {}", self, e);
-            log::trace!("{}", e);
+            log::error!("{}", e);
             e
         })?;
         self.is_connected.store(false, Ordering::Release);
@@ -125,7 +125,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut().write(buffer).await.map_err(|e| {
             let e = zerror!("Unable to write on Serial link {}: {}", self, e);
-            log::trace!("{}", e);
+            log::error!("{}", e);
             e
         })?;
         Ok(buffer.len())
@@ -146,7 +146,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
                 Ok(read) => return Ok(read),
                 Err(e) => {
                     let e = zerror!("Read error on Serial link {}: {}", self, e);
-                    log::trace!("{}", e);
+                    log::error!("{}", e);
                     drop(_guard);
                     async_std::task::sleep(std::time::Duration::from_millis(1)).await;
                     continue;
@@ -256,6 +256,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
+        log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate}");
         let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
@@ -280,7 +281,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
-
+        log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate}");
         let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",

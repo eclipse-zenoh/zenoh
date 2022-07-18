@@ -3559,10 +3559,11 @@ dependencies = [
 [[package]]
 name = "z-serial"
 version = "0.1.0"
-source = "git+https://github.com/ZettaScaleLabs/z-serial?branch=feat/cobs#0f1f2b1817acace7b6bb2ada5619a5eba4a40ea4"
+source = "git+https://github.com/ZettaScaleLabs/z-serial?branch=master#01042e9b7297d0cfad6bba6c33418d9b486167c5"
 dependencies = [
  "cobs",
  "futures",
+ "log",
  "tokio",
  "tokio-serial",
 ]
