@@ -634,13 +634,13 @@ impl Session {
     /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
     /// # })
     /// ```
-    pub fn declare_keyexpr<'a, TryIntoKeyExpr>(
+    pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> impl Resolve<ZResult<KeyExpr<'a>>>
+    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         let sid = self.id;
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
