@@ -71,11 +71,28 @@ impl keyexpr {
         }
     }
 
+    /// Joins both sides, inserting a `/` in between them.
+    ///
+    /// This should be your prefered method when concatenating path segments.
+    ///
+    /// This is notably useful for workspaces:
+    /// ```rust
+    /// # use std::convert::TryFrom;
+    /// # use zenoh::prelude::KeyExpr;
+    /// # let get_workspace = || OwnedKeyExpr::try_from("some/workspace").unwrap();
+    /// let workspace: OwnedKeyExpr = get_workspace();
+    /// let topic = workspace.join("some/topic").unwrap();
+    /// ```
     pub fn join<S: AsRef<str> + ?Sized>(&self, other: &S) -> ZResult<OwnedKeyExpr> {
         OwnedKeyExpr::try_from(format!("{}/{}", self, other.as_ref()))
     }
 
-    /// Returns the longest prefix of `self` that doesn't contain any '**' or '$*' character.
+    /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
+    pub fn is_wild(&self) -> bool {
+        self.0.contains('*')
+    }
+
+    /// Returns the longest prefix of `self` that doesn't contain any wildcard character ('**' or '$*').
     ///
     /// NOTE: this operation can typically used in a backend implementation, at creation of a Storage to get the keys prefix,
     /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
