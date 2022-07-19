@@ -141,7 +141,6 @@ use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-pub mod utils;
 use config::{StorageConfig, VolumeConfig};
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.

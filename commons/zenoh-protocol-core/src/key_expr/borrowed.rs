@@ -16,7 +16,7 @@ use std::{
     borrow::Borrow,
     convert::{TryFrom, TryInto},
 };
-use zenoh_core::{bail, Error as ZError};
+use zenoh_core::{bail, Error as ZError, Result as ZResult};
 
 use crate::WireExpr;
 
@@ -69,6 +69,146 @@ impl keyexpr {
         } else {
             Disjoint
         }
+    }
+
+    pub fn join<S: AsRef<str> + ?Sized>(&self, other: &S) -> ZResult<OwnedKeyExpr> {
+        OwnedKeyExpr::try_from(format!("{}/{}", self, other.as_ref()))
+    }
+
+    /// Returns the longest prefix of `self` that doesn't contain any '**' or '$*' character.
+    ///
+    /// NOTE: this operation can typically used in a backend implementation, at creation of a Storage to get the keys prefix,
+    /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
+    /// [`Sample::key_expr`](zenoh::prelude::Sample::key_expr) to retrieve the corrsponding key.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use zenoh_protocol_core::key_expr::keyexpr;
+    /// assert_eq!(
+    ///     Some(keyexpr::new("demo/example").unwrap()),
+    ///     keyexpr::new("demo/example/**").unwrap().get_invariant_prefix());
+    /// assert_eq!(
+    ///     Some(keyexpr::new("demo").unwrap()),
+    ///     keyexpr::new("demo/**/test/**").unwrap().get_invariant_prefix());
+    /// assert_eq!(
+    ///     Some(keyexpr::new("demo/example/test").unwrap()),
+    ///     keyexpr::new("demo/example/test").unwrap().get_invariant_prefix());
+    /// assert_eq!(
+    ///     Some(keyexpr::new("demo").unwrap()),
+    ///     keyexpr::new("demo/ex$*/**").unwrap().get_invariant_prefix());
+    /// assert_eq!(
+    ///     None,
+    ///     keyexpr::new("**").unwrap().get_invariant_prefix());
+    /// assert_eq!(
+    ///     None,
+    ///     keyexpr::new("dem$*").unwrap().get_invariant_prefix());
+    /// ```
+    pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
+        match self.0.find('*') {
+            Some(i) => match self.0[..i].rfind('/') {
+                Some(j) => unsafe { Some(keyexpr::from_str_unchecked(&self.0[..j])) },
+                None => None, // wildcard in the first segment => no invariant prefix
+            },
+            None => Some(self), // no wildcard => return self
+        }
+    }
+
+    /// Remove the specified `prefix` from `self`.
+    /// The result is a list of `keyexpr`, since there might be several ways for the prefix to match the begining of the `self` key expression.  
+    /// For instance, if `self` is `"a/**/c/*" and `prefix` is `a/b/c` then:  
+    ///   - the `prefix` matches `"a/**/c"` leading to a result of `"*"` when stripped from `self`
+    ///   - the `prefix` matches `"a/**"` leading to a result of `"**/c/*"` when stripped from `self`
+    /// So the result is `["*", "**/c/*"]`.  
+    /// If `prefix` cannot match the begining of `self`, an empty list is reuturned.
+    ///
+    /// See below more examples.
+    ///
+    /// NOTE: this operation can typically used in a backend implementation, within the `zenoh_backend_traits::Storage::on_query()` implementation, to transform the received
+    /// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_expr`](zenoh::prelude::Selector::key_expr) in a list of key selectors
+    /// that will match all the relevant stored keys (that correspond to keys stripped from the prefix).
+    ///
+    /// # Examples:
+    /// ```
+    /// # use std::convert::{TryFrom, TryInto};
+    /// # use zenoh_protocol_core::key_expr::keyexpr;
+    /// assert_eq!(
+    ///     ["abc"],
+    ///     keyexpr::new("demo/example/test/abc").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["**"],
+    ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["**"],
+    ///     keyexpr::new("demo/example/**").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["**"],
+    ///     keyexpr::new("**").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["**/xyz"],
+    ///     keyexpr::new("demo/**/xyz").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["**"],
+    ///     keyexpr::new("demo/**/test/**").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["xyz", "**/ex$*/*/xyz"],
+    ///     keyexpr::new("demo/**/ex$*/*/xyz").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert_eq!(
+    ///     ["*", "**/test/*"],
+    ///     keyexpr::new("demo/**/test/*").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
+    /// );
+    /// assert!(
+    ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("not/a/prefix").unwrap()).is_empty()
+    /// );
+    /// ```
+    pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
+        let mut result = vec![];
+        'chunks: for i in (0..=self.len()).rev() {
+            if if i == self.len() {
+                self.ends_with("**")
+            } else {
+                self.as_bytes()[i] == b'/'
+            } {
+                let sub_part = keyexpr::new(&self[..i]).unwrap();
+                if sub_part.intersects(prefix) {
+                    // if sub_part ends with "**", keep those in remaining part
+                    let remaining = if sub_part.ends_with("**") {
+                        &self[i - 2..]
+                    } else {
+                        &self[i + 1..]
+                    };
+                    let remaining: &keyexpr = if remaining.is_empty() {
+                        continue 'chunks;
+                    } else {
+                        remaining
+                    }
+                    .try_into()
+                    .unwrap();
+                    // if remaining is "**" return only this since it covers all
+                    if remaining.as_bytes() == b"**" {
+                        result.clear();
+                        result.push(unsafe { keyexpr::from_str_unchecked(remaining) });
+                        return result;
+                    }
+                    for i in (0..(result.len())).rev() {
+                        if result[i].includes(remaining) {
+                            continue 'chunks;
+                        }
+                        if remaining.includes(result[i]) {
+                            result.swap_remove(i);
+                        }
+                    }
+                    result.push(remaining);
+                }
+            }
+        }
+        result
     }
 
     pub fn as_str(&self) -> &str {
@@ -259,5 +399,46 @@ impl<'a> From<&'a keyexpr> for WireExpr<'a> {
             scope: 0,
             suffix: std::borrow::Cow::Borrowed(val.as_str()),
         }
+    }
+}
+
+#[test]
+fn test_keyexpr_strip_prefix() {
+    let expectations = [
+        (("demo/example/test/**", "demo/example/test"), &["**"][..]),
+        (("demo/example/**", "demo/example/test"), &["**"]),
+        (("**", "demo/example/test"), &["**"]),
+        (
+            ("demo/example/test/**/x$*/**", "demo/example/test"),
+            &["**/x$*/**"],
+        ),
+        (("demo/**/xyz", "demo/example/test"), &["**/xyz"]),
+        (("demo/**/test/**", "demo/example/test"), &["**"]),
+        (
+            ("demo/**/ex$*/*/xyz", "demo/example/test"),
+            ["xyz", "**/ex$*/*/xyz"].as_ref(),
+        ),
+        (
+            ("demo/**/ex$*/t$*/xyz", "demo/example/test"),
+            ["xyz", "**/ex$*/t$*/xyz"].as_ref(),
+        ),
+        (
+            ("demo/**/te$*/*/xyz", "demo/example/test"),
+            ["*/xyz", "**/te$*/*/xyz"].as_ref(),
+        ),
+        (("demo/example/test", "demo/example/test"), [].as_ref()),
+    ]
+    .map(|((a, b), expected)| {
+        (
+            (keyexpr::new(a).unwrap(), keyexpr::new(b).unwrap()),
+            expected
+                .iter()
+                .map(|s| keyexpr::new(*s).unwrap())
+                .collect::<Vec<_>>(),
+        )
+    });
+    for ((ke, prefix), expected) in expectations {
+        dbg!(ke, prefix);
+        assert_eq!(ke.strip_prefix(prefix), expected)
     }
 }

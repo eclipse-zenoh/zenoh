@@ -281,7 +281,7 @@ impl<'a> KeyExpr<'a> {
     /// let topic = workspace.join("some/topic").unwrap();
     /// ```
     pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
-        let r = OwnedKeyExpr::try_from(format!("{}/{}", self, s.as_ref()))?;
+        let r = self.as_keyexpr().join(s)?;
         if let KeyExprInner::Wire {
             expr_id,
             prefix_len,
