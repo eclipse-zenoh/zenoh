@@ -31,7 +31,7 @@ pub(crate) enum StorageMessage {
 pub(crate) async fn start_storage(
     mut storage: Box<dyn zenoh_backend_traits::Storage>,
     admin_key: String,
-    key_expr: KeyExpr<'static>,
+    key_expr: OwnedKeyExpr,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
@@ -52,7 +52,7 @@ pub(crate) async fn start_storage(
         // align with other storages, querying them on key_expr,
         // with `_time=[..]` to get historical data (in case of time-series)
         let replies = match zenoh
-            .get(key_expr.borrowing_clone().with_value_selector("_time=[..]"))
+            .get(KeyExpr::from(&key_expr).with_value_selector("_time=[..]"))
             .target(QueryTarget::All)
             .consolidation(QueryConsolidation::none())
             .res_async()

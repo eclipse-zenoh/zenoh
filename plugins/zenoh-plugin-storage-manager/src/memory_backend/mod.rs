@@ -101,7 +101,7 @@ use StoredValue::{Present, Removed};
 
 struct MemoryStorage {
     config: StorageConfig,
-    map: Arc<RwLock<HashMap<String, StoredValue>>>,
+    map: Arc<RwLock<HashMap<OwnedKeyExpr, StoredValue>>>,
     timer: Timer,
 }
 
@@ -116,7 +116,7 @@ impl MemoryStorage {
 }
 
 impl MemoryStorage {
-    async fn schedule_cleanup(&self, key: String) -> TimedHandle {
+    async fn schedule_cleanup(&self, key: OwnedKeyExpr) -> TimedHandle {
         let event = TimedEvent::once(
             Instant::now() + Duration::from_millis(CLEANUP_TIMEOUT_MS),
             TimedCleanup {
@@ -141,7 +141,7 @@ impl Storage for MemoryStorage {
         sample.ensure_timestamp();
         let timestamp = sample.timestamp.unwrap();
         match sample.kind {
-            SampleKind::Put => match self.map.write().await.entry(sample.key_expr.to_string()) {
+            SampleKind::Put => match self.map.write().await.entry(sample.key_expr.clone().into()) {
                 Entry::Vacant(v) => {
                     v.insert(Present {
                         sample,
@@ -171,60 +171,62 @@ impl Storage for MemoryStorage {
                     }
                 }
             },
-            SampleKind::Delete => match self.map.write().await.entry(sample.key_expr.to_string()) {
-                Entry::Vacant(v) => {
-                    // NOTE: even if key is not known yet, we need to store the removal time:
-                    // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
-                    // we must drop the put.
-                    let cleanup_handle = self.schedule_cleanup(sample.key_expr.to_string()).await;
-                    v.insert(Removed {
-                        ts: timestamp,
-                        cleanup_handle,
-                    });
-                    return Ok(StorageInsertionResult::Deleted);
+            SampleKind::Delete => {
+                match self.map.write().await.entry(sample.key_expr.clone().into()) {
+                    Entry::Vacant(v) => {
+                        // NOTE: even if key is not known yet, we need to store the removal time:
+                        // if ever a put with a lower timestamp arrive (e.g. msg inversion between put and remove)
+                        // we must drop the put.
+                        let cleanup_handle = self.schedule_cleanup(sample.key_expr.into()).await;
+                        v.insert(Removed {
+                            ts: timestamp,
+                            cleanup_handle,
+                        });
+                        return Ok(StorageInsertionResult::Deleted);
+                    }
+                    Entry::Occupied(mut o) => match o.get() {
+                        Removed {
+                            ts,
+                            cleanup_handle: _,
+                        } => {
+                            if ts < &timestamp {
+                                let cleanup_handle =
+                                    self.schedule_cleanup(sample.key_expr.into()).await;
+                                o.insert(Removed {
+                                    ts: timestamp,
+                                    cleanup_handle,
+                                });
+                                return Ok(StorageInsertionResult::Deleted);
+                            } else {
+                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                                return Ok(StorageInsertionResult::Outdated);
+                            }
+                        }
+                        Present { sample: _, ts } => {
+                            if ts < &timestamp {
+                                let cleanup_handle =
+                                    self.schedule_cleanup(sample.key_expr.into()).await;
+                                o.insert(Removed {
+                                    ts: timestamp,
+                                    cleanup_handle,
+                                });
+                                return Ok(StorageInsertionResult::Deleted);
+                            } else {
+                                debug!("DEL on {} dropped: out-of-date", sample.key_expr);
+                                return Ok(StorageInsertionResult::Outdated);
+                            }
+                        }
+                    },
                 }
-                Entry::Occupied(mut o) => match o.get() {
-                    Removed {
-                        ts,
-                        cleanup_handle: _,
-                    } => {
-                        if ts < &timestamp {
-                            let cleanup_handle =
-                                self.schedule_cleanup(sample.key_expr.to_string()).await;
-                            o.insert(Removed {
-                                ts: timestamp,
-                                cleanup_handle,
-                            });
-                            return Ok(StorageInsertionResult::Deleted);
-                        } else {
-                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
-                            return Ok(StorageInsertionResult::Outdated);
-                        }
-                    }
-                    Present { sample: _, ts } => {
-                        if ts < &timestamp {
-                            let cleanup_handle =
-                                self.schedule_cleanup(sample.key_expr.to_string()).await;
-                            o.insert(Removed {
-                                ts: timestamp,
-                                cleanup_handle,
-                            });
-                            return Ok(StorageInsertionResult::Deleted);
-                        } else {
-                            debug!("DEL on {} dropped: out-of-date", sample.key_expr);
-                            return Ok(StorageInsertionResult::Outdated);
-                        }
-                    }
-                },
-            },
+            }
         }
     }
 
     async fn on_query(&mut self, query: Query) -> ZResult<()> {
         trace!("on_query for {}", query.key_expr());
-        if !query.key_expr().as_str().contains('*') {
+        if !query.key_expr().is_wild() {
             if let Some(Present { sample, ts: _ }) =
-                self.map.read().await.get(query.key_expr().as_str())
+                self.map.read().await.get(query.key_expr().as_keyexpr())
             {
                 query.reply(sample.clone()).res_async().await?;
             }
@@ -241,11 +243,11 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
-    async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
+    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
         let map = self.map.read().await;
         let mut result = Vec::with_capacity(map.len());
         for (k, v) in map.iter() {
-            result.push((k.to_string(), *v.ts()));
+            result.push((k.clone(), *v.ts()));
         }
         Ok(result)
     }
@@ -261,8 +263,8 @@ impl Drop for MemoryStorage {
 const CLEANUP_TIMEOUT_MS: u64 = 5000;
 
 struct TimedCleanup {
-    map: Arc<RwLock<HashMap<String, StoredValue>>>,
-    key: String,
+    map: Arc<RwLock<HashMap<OwnedKeyExpr, StoredValue>>>,
+    key: OwnedKeyExpr,
 }
 
 #[async_trait]
