@@ -575,9 +575,8 @@ impl MessageWriter for WBuf {
             QueryTarget::BestMatching => self.write_zint(0 as ZInt),
             QueryTarget::All => self.write_zint(1 as ZInt),
             QueryTarget::AllComplete => self.write_zint(2 as ZInt),
-            QueryTarget::None => self.write_zint(3 as ZInt),
             #[cfg(feature = "complete_n")]
-            QueryTarget::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
+            QueryTarget::Complete(n) => self.write_zint(3 as ZInt) && self.write_zint(*n),
         }
     }
 

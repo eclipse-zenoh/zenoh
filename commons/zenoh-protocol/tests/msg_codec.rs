@@ -194,12 +194,12 @@ fn gen_declarations() -> Vec<Declaration> {
 }
 
 fn gen_key() -> WireExpr<'static> {
-    let num: u8 = thread_rng().gen_range(0..3);
-    match num {
-        0 => WireExpr::from(gen!(ZInt)),
-        1 => WireExpr::from("my_resource"),
-        _ => WireExpr::from(gen!(ZInt)).with_suffix("my_resource"),
-    }
+    let key = [
+        WireExpr::from(gen!(ZInt)),
+        WireExpr::from("my_resource"),
+        WireExpr::from(gen!(ZInt)).with_suffix("my_resource"),
+    ];
+    key[thread_rng().gen_range(0..key.len())].clone()
 }
 
 fn gen_query_target() -> QueryTAK {
@@ -209,24 +209,23 @@ fn gen_query_target() -> QueryTAK {
 }
 
 fn gen_target() -> QueryTarget {
-    let num: u8 = thread_rng().gen_range(0..4);
-    match num {
-        0 => QueryTarget::BestMatching,
-        1 => QueryTarget::All,
-        2 => QueryTarget::AllComplete,
+    let tgt = [
+        QueryTarget::BestMatching,
+        QueryTarget::All,
+        QueryTarget::AllComplete,
         #[cfg(feature = "complete_n")]
-        4 => QueryTarget::Complete(3),
-        _ => QueryTarget::None,
-    }
+        QueryTarget::Complete(3),
+    ];
+    tgt[thread_rng().gen_range(0..tgt.len())]
 }
 
 fn gen_consolidation_mode() -> ConsolidationMode {
-    let num: u8 = thread_rng().gen_range(0..3);
-    match num {
-        0 => ConsolidationMode::None,
-        1 => ConsolidationMode::Lazy,
-        _ => ConsolidationMode::Full,
-    }
+    let cm = [
+        ConsolidationMode::None,
+        ConsolidationMode::Lazy,
+        ConsolidationMode::Full,
+    ];
+    cm[thread_rng().gen_range(0..cm.len())]
 }
 
 fn gen_consolidation() -> ConsolidationStrategy {

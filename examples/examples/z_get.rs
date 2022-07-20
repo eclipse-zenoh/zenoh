@@ -65,12 +65,12 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
                 .default_value("demo/example/**"),
         )
         .arg(
-            Arg::from_usage("-t, --target=[TARGET] 'The query timeout in milliseconds'")
-                .possible_values(&["ALL", "BEST_MATCHING", "ALL_COMPLETE", "NONE"])
+            Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
+                .possible_values(&["BEST_MATCHING", "ALL", "ALL_COMPLETE"])
                 .default_value("ALL"),
         )
         .arg(
-            Arg::from_usage("-o, --timeout=[TIME] 'The target queryables of the query'")
+            Arg::from_usage("-o, --timeout=[TIME] 'The query timeout in milliseconds'")
                 .default_value("10000"),
         )
         .arg(Arg::from_usage(
@@ -110,7 +110,6 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
     let target = match args.value_of("target") {
         Some("BEST_MATCHING") => QueryTarget::BestMatching,
         Some("ALL_COMPLETE") => QueryTarget::AllComplete,
-        Some("NONE") => QueryTarget::None,
         _ => QueryTarget::All,
     };
 

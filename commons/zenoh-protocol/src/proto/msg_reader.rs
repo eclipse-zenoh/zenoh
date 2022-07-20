@@ -822,9 +822,8 @@ impl MessageReader for ZBufReader<'_> {
             0 => Some(QueryTarget::BestMatching),
             1 => Some(QueryTarget::All),
             2 => Some(QueryTarget::AllComplete),
-            3 => Some(QueryTarget::None),
             #[cfg(feature = "complete_n")]
-            4 => {
+            3 => {
                 let n = self.read_zint()?;
                 Some(QueryTarget::Complete(n))
             }

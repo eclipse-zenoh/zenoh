@@ -548,7 +548,6 @@ pub enum QueryTarget {
     BestMatching,
     All,
     AllComplete,
-    None,
     #[cfg(feature = "complete_n")]
     Complete(ZInt),
 }

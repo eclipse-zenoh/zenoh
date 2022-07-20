@@ -1280,7 +1280,6 @@ fn compute_final_route(
     target: &QueryTAK,
 ) -> QueryRoute {
     match &target.target {
-        QueryTarget::None => HashMap::new(),
         QueryTarget::All => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
