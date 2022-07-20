@@ -29,8 +29,8 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 zenoh-core = { path = "../zenoh-core/" }
-aes = "0.7.4"
-hmac = { version = "0.11.0", features = ["std"] }
+aes = "0.8.1"
+hmac = { version = "0.12.1", features = ["std"] }
 rand = "0.8.3"
 rand_chacha = "0.3.0"
-sha3 = "0.9.1"
+sha3 = "0.10.1"

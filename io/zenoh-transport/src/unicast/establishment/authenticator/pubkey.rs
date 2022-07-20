@@ -19,7 +19,7 @@ use crate::unicast::establishment::Cookie;
 use async_std::sync::Mutex;
 use async_trait::async_trait;
 use rand::SeedableRng;
-use rsa::pkcs1::{FromRsaPrivateKey, FromRsaPublicKey};
+use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::HashMap;
 use std::path::Path;
