@@ -126,7 +126,7 @@
 //!     }
 //!
 //!     // To get all entries in the datastore
-//!     async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
+//!     async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
 //!         // @TODO: get the list of (key, timestamp) in the datastore
 //!         Ok(Vec::new())
 //!     }

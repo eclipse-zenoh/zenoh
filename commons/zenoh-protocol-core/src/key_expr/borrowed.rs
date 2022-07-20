@@ -78,7 +78,7 @@ impl keyexpr {
     /// This is notably useful for workspaces:
     /// ```rust
     /// # use std::convert::TryFrom;
-    /// # use zenoh::prelude::KeyExpr;
+    /// # use zenoh_protocol_core::key_expr::OwnedKeyExpr;
     /// # let get_workspace = || OwnedKeyExpr::try_from("some/workspace").unwrap();
     /// let workspace: OwnedKeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
@@ -103,22 +103,22 @@ impl keyexpr {
     /// # use zenoh_protocol_core::key_expr::keyexpr;
     /// assert_eq!(
     ///     Some(keyexpr::new("demo/example").unwrap()),
-    ///     keyexpr::new("demo/example/**").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("demo/example/**").unwrap().get_nonwild_prefix());
     /// assert_eq!(
     ///     Some(keyexpr::new("demo").unwrap()),
-    ///     keyexpr::new("demo/**/test/**").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("demo/**/test/**").unwrap().get_nonwild_prefix());
     /// assert_eq!(
     ///     Some(keyexpr::new("demo/example/test").unwrap()),
-    ///     keyexpr::new("demo/example/test").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("demo/example/test").unwrap().get_nonwild_prefix());
     /// assert_eq!(
     ///     Some(keyexpr::new("demo").unwrap()),
-    ///     keyexpr::new("demo/ex$*/**").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("demo/ex$*/**").unwrap().get_nonwild_prefix());
     /// assert_eq!(
     ///     None,
-    ///     keyexpr::new("**").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("**").unwrap().get_nonwild_prefix());
     /// assert_eq!(
     ///     None,
-    ///     keyexpr::new("dem$*").unwrap().get_invariant_prefix());
+    ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
