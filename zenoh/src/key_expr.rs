@@ -81,6 +81,11 @@ impl AsRef<keyexpr> for KeyExpr<'_> {
         self
     }
 }
+impl AsRef<str> for KeyExpr<'_> {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
 impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
     fn from(ke: &'a keyexpr) -> Self {
         Self(KeyExprInner::Borrowed(ke))
@@ -276,7 +281,7 @@ impl<'a> KeyExpr<'a> {
     /// let topic = workspace.join("some/topic").unwrap();
     /// ```
     pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
-        let r = OwnedKeyExpr::try_from(format!("{}/{}", self, s.as_ref()))?;
+        let r = self.as_keyexpr().join(s)?;
         if let KeyExprInner::Wire {
             expr_id,
             prefix_len,

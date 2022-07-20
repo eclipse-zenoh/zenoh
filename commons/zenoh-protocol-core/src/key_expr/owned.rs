@@ -64,6 +64,12 @@ impl FromStr for OwnedKeyExpr {
         Self::try_from(s.to_string())
     }
 }
+impl TryFrom<&str> for OwnedKeyExpr {
+    type Error = zenoh_core::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::try_from(s.to_string())
+    }
+}
 impl TryFrom<String> for OwnedKeyExpr {
     type Error = zenoh_core::Error;
     fn try_from(mut value: String) -> Result<Self, Self::Error> {

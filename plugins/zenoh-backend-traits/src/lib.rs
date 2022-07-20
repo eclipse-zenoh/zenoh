@@ -135,13 +135,12 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use zenoh::prelude::{KeyExpr, Sample, Selector};
+use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-pub mod utils;
 use config::{StorageConfig, VolumeConfig};
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
@@ -192,7 +191,7 @@ pub trait Storage: Send + Sync {
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
-    async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>>;
+    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>>;
 }
 
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
