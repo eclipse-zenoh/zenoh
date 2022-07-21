@@ -19,6 +19,7 @@ use std::{
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_protocol_core::key_expr::canon::Canonizable;
 pub use zenoh_protocol_core::key_expr::*;
 use zenoh_transport::Primitives;
 
@@ -193,6 +194,22 @@ impl KeyExpr<'static> {
     }
 }
 impl<'a> KeyExpr<'a> {
+    pub fn new<T, E>(t: T) -> Result<Self, E>
+    where
+        Self: TryFrom<T, Error = E>,
+    {
+        Self::try_from(t)
+    }
+
+    pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
+    where
+        Self: TryFrom<T, Error = E>,
+        T: Canonizable,
+    {
+        t.canonize();
+        Self::new(t)
+    }
+
     /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
@@ -305,6 +322,10 @@ impl<'a> KeyExpr<'a> {
     /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierachical separation it inserts.
     pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
+        self._concat(s)
+    }
+
+    fn _concat(&self, s: &str) -> ZResult<KeyExpr<'static>> {
         if self.ends_with('*') && s.starts_with('*') {
             bail!("Tried to concatenate {} (ends with *) and {} (starts with *), which would likely have caused bugs. If you're sure you want to do this, concatenate these into a string and then try to convert.", self, s)
         }
@@ -344,6 +365,71 @@ impl<'a> KeyExpr<'a> {
         Selector {
             key_expr: self,
             value_selector: selector.into(),
+        }
+    }
+}
+
+impl std::ops::Div<&keyexpr> for KeyExpr<'_> {
+    type Output = KeyExpr<'static>;
+
+    fn div(self, rhs: &keyexpr) -> Self::Output {
+        match self.0 {
+            KeyExprInner::Borrowed(key_expr) => (key_expr / rhs).into(),
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExpr(KeyExprInner::Wire {
+                key_expr: key_expr / rhs,
+                expr_id,
+                prefix_len,
+                session_id,
+            }),
+            KeyExprInner::Owned(key_expr) => (key_expr / rhs).into(),
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExpr(KeyExprInner::Wire {
+                key_expr: key_expr / rhs,
+                expr_id,
+                prefix_len,
+                session_id,
+            }),
+        }
+    }
+}
+impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
+    type Output = KeyExpr<'static>;
+
+    fn div(self, rhs: &keyexpr) -> Self::Output {
+        match &self.0 {
+            KeyExprInner::Borrowed(key_expr) => (*key_expr / rhs).into(),
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExpr(KeyExprInner::Wire {
+                key_expr: *key_expr / rhs,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
+            KeyExprInner::Owned(key_expr) => (key_expr / rhs).into(),
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExpr(KeyExprInner::Wire {
+                key_expr: key_expr / rhs,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
         }
     }
 }
