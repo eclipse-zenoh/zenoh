@@ -35,7 +35,7 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     resources_limit: Option<usize>,
 }
 
-impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b,'c> {
+impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
