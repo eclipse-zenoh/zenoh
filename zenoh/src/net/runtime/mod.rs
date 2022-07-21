@@ -33,7 +33,7 @@ use zenoh_core::bail;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol;
-use zenoh_protocol::core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
+use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport;
@@ -48,6 +48,7 @@ pub struct RuntimeState {
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
     pub manager: TransportManager,
+    pub(crate) locators: std::sync::RwLock<Vec<Locator>>,
     pub hlc: Option<Arc<HLC>>,
     pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
 }
@@ -167,6 +168,7 @@ impl Runtime {
                 router,
                 config: config.clone(),
                 manager: transport_manager,
+                locators: std::sync::RwLock::new(vec![]),
                 hlc,
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),

@@ -333,7 +333,9 @@ impl Runtime {
                 }
             }
         }
-        for locator in self.manager().get_locators() {
+        let mut locators = self.locators.write().unwrap();
+        *locators = self.manager().get_locators();
+        for locator in &*locators {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -735,7 +737,7 @@ impl Runtime {
                         let mut hello = TransportMessage::make_hello(
                             zid,
                             Some(self.whatami),
-                            Some(self.manager().get_locators().clone()),
+                            Some(self.locators.read().unwrap().clone()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
