@@ -133,7 +133,10 @@ impl Runtime {
             _ => WhatAmIMatcher::try_from(128).unwrap(),
         };
 
-        let use_link_state = whatami != WhatAmI::Client; // TODO: support disabling link_state: && config.scouting().gossip().enabled().unwrap_or(true);
+        let router_link_state = whatami == WhatAmI::Router;
+        let peer_link_state = whatami != WhatAmI::Client
+            && *config.routing().peer().mode() == Some("linkstate".to_string());
+
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()
@@ -174,10 +177,12 @@ impl Runtime {
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
-        if use_link_state {
-            get_mut_unchecked(&mut runtime.router.clone())
-                .init_link_state(runtime.clone(), autoconnect);
-        }
+        get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
+            runtime.clone(),
+            router_link_state,
+            peer_link_state,
+            autoconnect,
+        );
 
         let receiver = config.subscribe();
         runtime.spawn({

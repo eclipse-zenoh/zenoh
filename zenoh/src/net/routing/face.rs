@@ -196,13 +196,22 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    declare_peer_subscription(
+                if tables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                        declare_peer_subscription(
+                            &mut tables,
+                            &mut self.state.clone(),
+                            key_expr,
+                            sub_info,
+                            peer,
+                        )
+                    }
+                } else {
+                    declare_client_subscription(
                         &mut tables,
                         &mut self.state.clone(),
                         key_expr,
                         sub_info,
-                        peer,
                     )
                 }
             }
@@ -231,8 +240,17 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    forget_peer_subscription(&mut tables, &mut self.state.clone(), key_expr, &peer)
+                if tables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                        forget_peer_subscription(
+                            &mut tables,
+                            &mut self.state.clone(),
+                            key_expr,
+                            &peer,
+                        )
+                    }
+                } else {
+                    forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr)
                 }
             }
             _ => forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr),
@@ -267,14 +285,24 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    declare_peer_queryable(
+                if tables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                        declare_peer_queryable(
+                            &mut tables,
+                            &mut self.state.clone(),
+                            key_expr,
+                            kind,
+                            qabl_info,
+                            peer,
+                        )
+                    }
+                } else {
+                    declare_client_queryable(
                         &mut tables,
                         &mut self.state.clone(),
                         key_expr,
                         kind,
                         qabl_info,
-                        peer,
                     )
                 }
             }
@@ -310,14 +338,18 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                    forget_peer_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        kind,
-                        &peer,
-                    )
+                if tables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                        forget_peer_queryable(
+                            &mut tables,
+                            &mut self.state.clone(),
+                            key_expr,
+                            kind,
+                            &peer,
+                        )
+                    }
+                } else {
+                    forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr, kind)
                 }
             }
             _ => forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr, kind),

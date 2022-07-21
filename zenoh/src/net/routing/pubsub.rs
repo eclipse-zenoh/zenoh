@@ -63,27 +63,60 @@ fn send_sourced_subscription_to_net_childs(
     }
 }
 
+#[inline]
+fn propagate_simple_subscription_to(
+    whatami: WhatAmI,
+    dst_face: &mut Arc<FaceState>,
+    res: &Arc<Resource>,
+    sub_info: &SubInfo,
+    src_face: &mut Arc<FaceState>,
+    full_peer_net: bool,
+) {
+    if src_face.id != dst_face.id
+        && !dst_face.local_subs.contains(res)
+        && match whatami {
+            WhatAmI::Router => {
+                if full_peer_net {
+                    dst_face.whatami == WhatAmI::Client
+                } else {
+                    (src_face.whatami != WhatAmI::Peer || dst_face.whatami != WhatAmI::Peer)
+                        && dst_face.whatami != WhatAmI::Router
+                }
+            }
+            WhatAmI::Peer => {
+                if full_peer_net {
+                    dst_face.whatami == WhatAmI::Client
+                } else {
+                    src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
+                }
+            }
+            _ => (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client),
+        }
+    {
+        get_mut_unchecked(dst_face).local_subs.insert(res.clone());
+        let key_expr = Resource::decl_key(res, dst_face);
+        dst_face
+            .primitives
+            .decl_subscriber(&key_expr, sub_info, None);
+    }
+}
+
 fn propagate_simple_subscription(
     tables: &mut Tables,
     res: &Arc<Resource>,
     sub_info: &SubInfo,
     src_face: &mut Arc<FaceState>,
 ) {
+    let full_peer_net = tables.full_net(WhatAmI::Peer);
     for dst_face in &mut tables.faces.values_mut() {
-        if src_face.id != dst_face.id
-            && !dst_face.local_subs.contains(res)
-            && match tables.whatami {
-                WhatAmI::Router => dst_face.whatami == WhatAmI::Client,
-                WhatAmI::Peer => dst_face.whatami == WhatAmI::Client,
-                _ => (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client),
-            }
-        {
-            get_mut_unchecked(dst_face).local_subs.insert(res.clone());
-            let key_expr = Resource::decl_key(res, dst_face);
-            dst_face
-                .primitives
-                .decl_subscriber(&key_expr, sub_info, None);
-        }
+        propagate_simple_subscription_to(
+            tables.whatami,
+            dst_face,
+            res,
+            sub_info,
+            src_face,
+            full_peer_net,
+        );
     }
 }
 
@@ -151,7 +184,7 @@ fn register_router_subscription(
         propagate_sourced_subscription(tables, res, sub_info, Some(face), &router, WhatAmI::Router);
     }
     // Propagate subscription to peers
-    if face.whatami != WhatAmI::Peer {
+    if tables.full_net(WhatAmI::Peer) && face.whatami != WhatAmI::Peer {
         register_peer_subscription(tables, face, res, sub_info, tables.zid)
     }
 
@@ -300,9 +333,19 @@ pub fn declare_client_subscription(
                     );
                 }
                 WhatAmI::Peer => {
-                    let mut propa_sub_info = sub_info.clone();
-                    propa_sub_info.mode = SubMode::Push;
-                    register_peer_subscription(tables, face, &mut res, &propa_sub_info, tables.zid);
+                    if tables.full_net(WhatAmI::Peer) {
+                        let mut propa_sub_info = sub_info.clone();
+                        propa_sub_info.mode = SubMode::Push;
+                        register_peer_subscription(
+                            tables,
+                            face,
+                            &mut res,
+                            &propa_sub_info,
+                            tables.zid,
+                        );
+                    } else {
+                        propagate_simple_subscription(tables, &res, sub_info, face);
+                    }
                 }
                 _ => {
                     propagate_simple_subscription(tables, &res, sub_info, face);
@@ -439,7 +482,9 @@ fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, 
     if res.context().router_subs.is_empty() {
         tables.router_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
-        undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
+        if tables.full_net(WhatAmI::Peer) {
+            undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
+        }
         propagate_forget_simple_subscription(tables, res);
     }
 }
@@ -558,7 +603,11 @@ pub(crate) fn undeclare_client_subscription(
         }
         WhatAmI::Peer => {
             if client_subs.is_empty() {
-                undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
+                if tables.full_net(WhatAmI::Peer) {
+                    undeclare_peer_subscription(tables, None, res, &tables.zid.clone());
+                } else {
+                    propagate_forget_simple_subscription(tables, res);
+                }
             }
         }
         _ => {
@@ -610,23 +659,50 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             }
         }
         WhatAmI::Peer => {
-            if face.whatami == WhatAmI::Client {
-                for sub in &tables.peer_subs {
-                    get_mut_unchecked(face).local_subs.insert(sub.clone());
-                    let key_expr = Resource::decl_key(sub, face);
-                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+            if tables.full_net(WhatAmI::Peer) {
+                if face.whatami == WhatAmI::Client {
+                    for sub in &tables.peer_subs {
+                        get_mut_unchecked(face).local_subs.insert(sub.clone());
+                        let key_expr = Resource::decl_key(sub, face);
+                        face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                    }
+                }
+            } else {
+                for src_face in tables
+                    .faces
+                    .values()
+                    .cloned()
+                    .collect::<Vec<Arc<FaceState>>>()
+                {
+                    for sub in &src_face.remote_subs {
+                        propagate_simple_subscription_to(
+                            tables.whatami,
+                            face,
+                            sub,
+                            &sub_info,
+                            &mut src_face.clone(),
+                            false,
+                        );
+                    }
                 }
             }
         }
         WhatAmI::Client => {
-            for face in tables
+            for src_face in tables
                 .faces
                 .values()
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
-                for sub in &face.remote_subs {
-                    propagate_simple_subscription(tables, sub, &sub_info, &mut face.clone());
+                for sub in &src_face.remote_subs {
+                    propagate_simple_subscription_to(
+                        tables.whatami,
+                        face,
+                        sub,
+                        &sub_info,
+                        &mut src_face.clone(),
+                        false,
+                    );
                 }
             }
         }
@@ -786,6 +862,7 @@ fn compute_data_route(
         .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
     let master = tables.whatami != WhatAmI::Router
+        || !tables.full_net(WhatAmI::Peer)
         || *elect_router(&key_expr, &tables.shared_nodes) == tables.zid;
 
     for mres in matches.iter() {
@@ -826,7 +903,7 @@ fn compute_data_route(
             }
         }
 
-        if tables.whatami == WhatAmI::Peer {
+        if tables.whatami == WhatAmI::Peer && tables.full_net(WhatAmI::Peer) {
             let net = tables.peers_net.as_ref().unwrap();
             let peer_source = match source_type {
                 WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
@@ -843,10 +920,23 @@ fn compute_data_route(
             );
         }
 
+        // println!("compute data route for {}{}", prefix.expr(), suffix);
         if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
             for (sid, context) in &mres.session_ctxs {
                 if let Some(subinfo) = &context.subs {
-                    if subinfo.mode == SubMode::Push {
+                    // println!("compute data route for {}{} ({} {} {})", prefix.expr(), suffix, tables.whatami, source_type, context.face.whatami);
+                    if match tables.whatami {
+                        WhatAmI::Router => {
+                            (source_type != WhatAmI::Peer || context.face.whatami != WhatAmI::Peer)
+                                && context.face.whatami != WhatAmI::Router
+                        }
+                        _ => {
+                            source_type == WhatAmI::Client
+                                || context.face.whatami == WhatAmI::Client
+                        }
+                    } && subinfo.mode == SubMode::Push
+                    {
+                        // println!("compute data route for {}{} add entry", prefix.expr(), suffix);
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(prefix, suffix, *sid);
                             (context.face.clone(), key_expr.to_owned(), None)
@@ -912,7 +1002,9 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                     compute_data_route(tables, res, "", Some(idx.index()), WhatAmI::Router);
             }
         }
-        if tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer {
+        if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
+            && tables.full_net(WhatAmI::Peer)
+        {
             let indexes = tables
                 .peers_net
                 .as_ref()
@@ -930,7 +1022,9 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                     compute_data_route(tables, res, "", Some(idx.index()), WhatAmI::Peer);
             }
         }
-        if tables.whatami == WhatAmI::Client {
+        if tables.whatami == WhatAmI::Client
+            || (tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
+        {
             res_mut.context_mut().client_data_route =
                 Some(compute_data_route(tables, res, "", None, WhatAmI::Client));
         }
@@ -1028,7 +1122,7 @@ fn get_data_route(
                             prefix,
                             suffix,
                             Some(local_context),
-                            WhatAmI::Router,
+                            face.whatami,
                         )
                     })
             }
@@ -1044,45 +1138,53 @@ fn get_data_route(
                             prefix,
                             suffix,
                             Some(local_context),
-                            WhatAmI::Peer,
+                            face.whatami,
                         )
                     })
             }
             _ => res
                 .as_ref()
                 .and_then(|res| res.routers_data_route(0))
-                .unwrap_or_else(|| {
-                    compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)
-                }),
+                .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, face.whatami)),
         },
-        WhatAmI::Peer => match face.whatami {
-            WhatAmI::Router | WhatAmI::Peer => {
-                let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context =
-                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+        WhatAmI::Peer => {
+            if tables.full_net(WhatAmI::Peer) {
+                match face.whatami {
+                    WhatAmI::Router | WhatAmI::Peer => {
+                        let peers_net = tables.peers_net.as_ref().unwrap();
+                        let local_context = peers_net
+                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                        res.as_ref()
+                            .and_then(|res| res.peers_data_route(local_context))
+                            .unwrap_or_else(|| {
+                                compute_data_route(
+                                    tables,
+                                    prefix,
+                                    suffix,
+                                    Some(local_context),
+                                    face.whatami,
+                                )
+                            })
+                    }
+                    _ => res
+                        .as_ref()
+                        .and_then(|res| res.peers_data_route(0))
+                        .unwrap_or_else(|| {
+                            compute_data_route(tables, prefix, suffix, None, face.whatami)
+                        }),
+                }
+            } else {
                 res.as_ref()
-                    .and_then(|res| res.peers_data_route(local_context))
+                    .and_then(|res| res.client_data_route())
                     .unwrap_or_else(|| {
-                        compute_data_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            Some(local_context),
-                            WhatAmI::Peer,
-                        )
+                        compute_data_route(tables, prefix, suffix, None, face.whatami)
                     })
             }
-            _ => res
-                .as_ref()
-                .and_then(|res| res.peers_data_route(0))
-                .unwrap_or_else(|| {
-                    compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)
-                }),
-        },
+        }
         _ => res
             .as_ref()
             .and_then(|res| res.client_data_route())
-            .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, WhatAmI::Client)),
+            .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, face.whatami)),
     }
 }
 

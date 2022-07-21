@@ -178,6 +178,15 @@ validated_struct::validator! {
         local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
+
+        pub routing: #[derive(Default)]
+        RoutingConf {
+            pub peer: #[derive(Default)]
+            PeerRoutingConf {
+                mode: Option<String>,
+            },
+        },
+
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
