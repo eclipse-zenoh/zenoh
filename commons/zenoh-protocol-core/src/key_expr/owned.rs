@@ -58,6 +58,11 @@ impl std::ops::Deref for OwnedKeyExpr {
         unsafe { keyexpr::from_str_unchecked(&self.0) }
     }
 }
+impl AsRef<str> for OwnedKeyExpr {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
 impl FromStr for OwnedKeyExpr {
     type Err = zenoh_core::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
