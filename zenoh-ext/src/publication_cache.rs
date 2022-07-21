@@ -17,6 +17,7 @@ use futures::FutureExt;
 use futures::StreamExt;
 use futures::{select, Future};
 use std::collections::{HashMap, VecDeque};
+use std::convert::TryInto;
 use std::pin::Pin;
 use zenoh::prelude::*;
 use zenoh::queryable::{HandlerQueryable, Query};
@@ -26,19 +27,19 @@ use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
 use zenoh_core::{Result as ZResult, SyncResolve};
 
 /// The builder of PublicationCache, allowing to configure it.
-pub struct PublicationCacheBuilder<'a, 'b> {
+pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
-    queryable_prefix: Option<String>,
+    queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
     history: usize,
     resources_limit: Option<usize>,
 }
 
-impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
+impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b,'c> {
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
-    ) -> PublicationCacheBuilder<'a, 'b> {
+    ) -> PublicationCacheBuilder<'a, 'b, 'c> {
         PublicationCacheBuilder {
             session,
             pub_key_expr,
@@ -49,8 +50,12 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 
     /// Change the prefix used for queryable.
-    pub fn queryable_prefix(mut self, queryable_prefix: String) -> Self {
-        self.queryable_prefix = Some(queryable_prefix);
+    pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_core::Error>,
+    {
+        self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
     }
 
@@ -67,16 +72,16 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Resolvable for PublicationCacheBuilder<'a, '_> {
+impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
     type Output = ZResult<PublicationCache<'a>>;
 }
-impl AsyncResolve for PublicationCacheBuilder<'_, '_> {
+impl AsyncResolve for PublicationCacheBuilder<'_, '_, '_> {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
     }
 }
-impl SyncResolve for PublicationCacheBuilder<'_, '_> {
+impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
     fn res_sync(self) -> Self::Output {
         PublicationCache::new(self)
     }
@@ -89,7 +94,7 @@ pub struct PublicationCache<'a> {
 }
 
 impl<'a> PublicationCache<'a> {
-    fn new(conf: PublicationCacheBuilder<'a, '_>) -> ZResult<PublicationCache<'a>> {
+    fn new(conf: PublicationCacheBuilder<'a, '_, '_>) -> ZResult<PublicationCache<'a>> {
         let key_expr = conf.pub_key_expr?;
         log::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
@@ -121,12 +126,16 @@ impl<'a> PublicationCache<'a> {
         let quer_recv = queryable.receiver.clone();
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
-        let queryable_prefix = conf.queryable_prefix;
         let history = conf.history;
+        let queryable_prefix: Option<OwnedKeyExpr> = match conf.queryable_prefix {
+            None => None,
+            Some(Ok(ke)) => Some(ke.into()),
+            Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
+        };
 
         let (stoptx, mut stoprx) = bounded::<bool>(1);
         task::spawn(async move {
-            let mut cache: HashMap<String, VecDeque<Sample>> =
+            let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
             let limit = resources_limit.unwrap_or(usize::MAX);
 
@@ -135,13 +144,13 @@ impl<'a> PublicationCache<'a> {
                     // on publication received by the local subscriber, store it
                     sample = sub_recv.recv_async() => {
                         if let Ok(sample) = sample {
-                            let queryable_key_expr = if let Some(prefix) = &queryable_prefix {
-                                format!("{}{}", prefix, sample.key_expr)
+                            let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
+                                prefix.join(&sample.key_expr).unwrap().into()
                             } else {
-                                sample.key_expr.to_string()
+                                sample.key_expr.clone()
                             };
 
-                            if let Some(queue) = cache.get_mut(&queryable_key_expr) {
+                            if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
                                 if queue.len() >= history {
                                     queue.pop_front();
                                 }
@@ -152,7 +161,7 @@ impl<'a> PublicationCache<'a> {
                             } else {
                                 let mut queue: VecDeque<Sample> = VecDeque::new();
                                 queue.push_back(sample);
-                                cache.insert(queryable_key_expr, queue);
+                                cache.insert(queryable_key_expr.into(), queue);
                             }
                         }
                     },
@@ -161,7 +170,7 @@ impl<'a> PublicationCache<'a> {
                     query = quer_recv.recv_async() => {
                         if let Ok(query) = query {
                             if !query.selector().key_expr.as_str().contains('*') {
-                                if let Some(queue) = cache.get(query.selector().key_expr.as_str()) {
+                                if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
                                         if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                             log::warn!("Error replying to query: {}", e);

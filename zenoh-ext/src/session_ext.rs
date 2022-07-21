@@ -83,10 +83,10 @@ pub trait SessionExt {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
-    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
+    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
-    ) -> PublicationCacheBuilder<'a, 'b>
+    ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
@@ -107,10 +107,10 @@ impl SessionExt for Session {
         )
     }
 
-    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
+    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
-    ) -> PublicationCacheBuilder<'a, 'b>
+    ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -134,10 +134,10 @@ impl SessionExt for Arc<Session> {
         )
     }
 
-    fn publication_cache<'a, 'b, TryIntoKeyExpr>(
+    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
-    ) -> PublicationCacheBuilder<'a, 'b>
+    ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
