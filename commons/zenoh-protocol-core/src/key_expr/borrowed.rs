@@ -42,6 +42,12 @@ use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 pub struct keyexpr(str);
 
 impl keyexpr {
+    /// Equivalent to `<&keyexpr as TryFrom>::try_from(t)`.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    /// Note that to be considered a valid key expression, a string MUST be canon.
+    ///
+    /// [`keyexpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
     pub fn new<'a, T, E>(t: &'a T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
@@ -50,6 +56,11 @@ impl keyexpr {
         t.try_into()
     }
 
+    /// Canonizes the passed value before returning it as a `&keyexpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    ///
+    /// Note that this function does not allocate, and will instead mutate the passed value in place during canonization.
     pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
@@ -99,6 +110,8 @@ impl keyexpr {
     /// let workspace: OwnedKeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
     /// ```
+    ///
+    /// If `other` is of type `&keyexpr`, you may use `self / other` instead, as the joining becomes infallible.
     pub fn join<S: AsRef<str> + ?Sized>(&self, other: &S) -> ZResult<OwnedKeyExpr> {
         OwnedKeyExpr::autocanonize(format!("{}/{}", self, other.as_ref()))
     }

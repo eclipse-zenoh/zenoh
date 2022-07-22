@@ -43,8 +43,9 @@ pub(crate) enum KeyExprInner<'a> {
     },
 }
 
-/// A possibly-owned, possibly pre-optimized version of [`keyexpr`].
-/// Check [`keyexpr`]'s documentation for detailed explainations.
+/// A possibly-owned version of [`keyexpr`] that may carry optimisations for use with a [`Session`] that may have declared it.
+///
+/// Check [`keyexpr`]'s documentation for detailed explainations of the Key Expression Language.
 #[repr(transparent)]
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(from = "OwnedKeyExpr")]
@@ -59,118 +60,6 @@ impl std::ops::Deref for KeyExpr<'_> {
             KeyExprInner::Wire { key_expr, .. } => key_expr,
             KeyExprInner::BorrowedWire { key_expr, .. } => key_expr,
         }
-    }
-}
-impl FromStr for KeyExpr<'static> {
-    type Err = zenoh_core::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(KeyExprInner::Owned(s.parse()?)))
-    }
-}
-impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
-    fn from(val: super::KeyExpr<'a>) -> Self {
-        match val.0 {
-            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                key_expr.into()
-            }
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr,
-        }
-    }
-}
-impl AsRef<keyexpr> for KeyExpr<'_> {
-    fn as_ref(&self) -> &keyexpr {
-        self
-    }
-}
-impl AsRef<str> for KeyExpr<'_> {
-    fn as_ref(&self) -> &str {
-        self
-    }
-}
-impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
-    fn from(ke: &'a keyexpr) -> Self {
-        Self(KeyExprInner::Borrowed(ke))
-    }
-}
-impl From<OwnedKeyExpr> for KeyExpr<'_> {
-    fn from(v: OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Owned(v))
-    }
-}
-impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
-    fn from(v: &'a OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Borrowed(&*v))
-    }
-}
-impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
-    fn from(val: &'a KeyExpr<'a>) -> Self {
-        Self::from(val.as_keyexpr())
-    }
-}
-impl<'a> From<KeyExpr<'a>> for String {
-    fn from(ke: KeyExpr) -> Self {
-        match ke.0 {
-            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                key_expr.as_str().to_owned()
-            }
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr.into(),
-        }
-    }
-}
-impl TryFrom<String> for KeyExpr<'static> {
-    type Error = zenoh_core::Error;
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Owned(value.try_into()?)))
-    }
-}
-impl<'a> TryFrom<&'a String> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
-    fn try_from(value: &'a String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
-impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
-    fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
-        Ok(Self::from(keyexpr::new(value)?))
-    }
-}
-impl<'a> TryFrom<&'a str> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
-    }
-}
-impl<'a> TryFrom<&'a mut str> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
-    fn try_from(value: &'a mut str) -> Result<Self, Self::Error> {
-        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
-    }
-}
-impl std::fmt::Debug for KeyExpr<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self.as_keyexpr(), f)
-    }
-}
-impl std::fmt::Display for KeyExpr<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(self.as_keyexpr(), f)
-    }
-}
-impl PartialEq for KeyExpr<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_keyexpr() == other.as_keyexpr()
-    }
-}
-impl<T: PartialEq<keyexpr>> PartialEq<T> for KeyExpr<'_> {
-    fn eq(&self, other: &T) -> bool {
-        other == self.as_keyexpr()
-    }
-}
-impl Eq for KeyExpr<'_> {}
-impl std::hash::Hash for KeyExpr<'_> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_keyexpr().hash(state);
     }
 }
 
@@ -194,6 +83,12 @@ impl KeyExpr<'static> {
     }
 }
 impl<'a> KeyExpr<'a> {
+    /// Equivalent to `<KeyExpr as TryFrom>::try_from(t)`.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    /// Note that to be considered a valid key expression, a string MUST be canon.
+    ///
+    /// [`KeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -201,6 +96,9 @@ impl<'a> KeyExpr<'a> {
         Self::try_from(t)
     }
 
+    /// Canonizes the passed value before returning it as a `KeyExpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -366,6 +264,119 @@ impl<'a> KeyExpr<'a> {
             key_expr: self,
             value_selector: selector.into(),
         }
+    }
+}
+
+impl FromStr for KeyExpr<'static> {
+    type Err = zenoh_core::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(KeyExprInner::Owned(s.parse()?)))
+    }
+}
+impl<'a> From<super::KeyExpr<'a>> for OwnedKeyExpr {
+    fn from(val: super::KeyExpr<'a>) -> Self {
+        match val.0 {
+            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
+                key_expr.into()
+            }
+            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr,
+        }
+    }
+}
+impl AsRef<keyexpr> for KeyExpr<'_> {
+    fn as_ref(&self) -> &keyexpr {
+        self
+    }
+}
+impl AsRef<str> for KeyExpr<'_> {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
+    fn from(ke: &'a keyexpr) -> Self {
+        Self(KeyExprInner::Borrowed(ke))
+    }
+}
+impl From<OwnedKeyExpr> for KeyExpr<'static> {
+    fn from(v: OwnedKeyExpr) -> Self {
+        Self(KeyExprInner::Owned(v))
+    }
+}
+impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
+    fn from(v: &'a OwnedKeyExpr) -> Self {
+        Self(KeyExprInner::Borrowed(&*v))
+    }
+}
+impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
+    fn from(val: &'a KeyExpr<'a>) -> Self {
+        Self::from(val.as_keyexpr())
+    }
+}
+impl<'a> From<KeyExpr<'a>> for String {
+    fn from(ke: KeyExpr) -> Self {
+        match ke.0 {
+            KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
+                key_expr.as_str().to_owned()
+            }
+            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => key_expr.into(),
+        }
+    }
+}
+impl TryFrom<String> for KeyExpr<'static> {
+    type Error = zenoh_core::Error;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Ok(Self(KeyExprInner::Owned(value.try_into()?)))
+    }
+}
+impl<'a> TryFrom<&'a String> for KeyExpr<'a> {
+    type Error = zenoh_core::Error;
+    fn try_from(value: &'a String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
+    type Error = zenoh_core::Error;
+    fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
+        Ok(Self::from(keyexpr::new(value)?))
+    }
+}
+impl<'a> TryFrom<&'a str> for KeyExpr<'a> {
+    type Error = zenoh_core::Error;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
+    }
+}
+impl<'a> TryFrom<&'a mut str> for KeyExpr<'a> {
+    type Error = zenoh_core::Error;
+    fn try_from(value: &'a mut str) -> Result<Self, Self::Error> {
+        Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
+    }
+}
+impl std::fmt::Debug for KeyExpr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_keyexpr(), f)
+    }
+}
+impl std::fmt::Display for KeyExpr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.as_keyexpr(), f)
+    }
+}
+impl PartialEq for KeyExpr<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_keyexpr() == other.as_keyexpr()
+    }
+}
+impl<T: PartialEq<keyexpr>> PartialEq<T> for KeyExpr<'_> {
+    fn eq(&self, other: &T) -> bool {
+        other == self.as_keyexpr()
+    }
+}
+impl Eq for KeyExpr<'_> {}
+impl std::hash::Hash for KeyExpr<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_keyexpr().hash(state);
     }
 }
 

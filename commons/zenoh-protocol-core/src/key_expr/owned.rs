@@ -26,6 +26,12 @@ use std::{convert::TryFrom, str::FromStr};
 pub struct OwnedKeyExpr(pub(crate) Box<str>);
 
 impl OwnedKeyExpr {
+    /// Equivalent to `<OwnedKeyExpr as TryFrom>::try_from(t)`.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    /// Note that to be considered a valid key expression, a string MUST be canon.
+    ///
+    /// [`OwnedKeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -33,6 +39,9 @@ impl OwnedKeyExpr {
         Self::try_from(t)
     }
 
+    /// Canonizes the passed value before returning it as an `OwnedKeyExpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
