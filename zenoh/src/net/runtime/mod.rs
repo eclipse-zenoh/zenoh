@@ -220,6 +220,10 @@ impl Runtime {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
 
+    pub fn get_locators(&self) -> Vec<Locator> {
+        self.locators.read().unwrap().clone()
+    }
+
     pub(crate) fn spawn<F, T>(&self, future: F) -> Option<JoinHandle<Result<T, TimedOutError>>>
     where
         F: Future<Output = T> + Send + 'static,

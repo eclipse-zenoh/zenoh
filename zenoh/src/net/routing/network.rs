@@ -173,11 +173,6 @@ impl Network {
         }
     }
 
-    #[inline]
-    fn get_locators(&self) -> Vec<Locator> {
-        self.runtime.manager().get_locators()
-    }
-
     fn add_node(&mut self, node: Node) -> NodeIndex {
         let zid = node.zid;
         let idx = self.graph.add_node(node);
@@ -216,7 +211,7 @@ impl Network {
             },
             whatami: self.graph[idx].whatami,
             locators: if idx == self.idx {
-                Some(self.get_locators())
+                Some(self.runtime.get_locators())
             } else {
                 self.graph[idx].locators.clone()
             },
@@ -594,7 +589,7 @@ impl Network {
                 sn: self.graph[self.idx].sn,
                 zid: None,
                 whatami: self.graph[self.idx].whatami,
-                locators: Some(self.get_locators()),
+                locators: Some(self.runtime.get_locators()),
                 links,
             }],
             None,

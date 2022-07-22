@@ -737,7 +737,7 @@ impl Runtime {
                         let mut hello = TransportMessage::make_hello(
                             zid,
                             Some(self.whatami),
-                            Some(self.locators.read().unwrap().clone()),
+                            Some(self.get_locators()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
