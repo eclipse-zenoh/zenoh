@@ -64,7 +64,7 @@ pub struct Property {
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,
@@ -383,7 +383,7 @@ pub struct ConduitSn {
 }
 
 /// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
