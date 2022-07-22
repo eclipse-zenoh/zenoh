@@ -275,12 +275,13 @@ impl Router {
         }
     }
 
-    pub fn init_link_state(&mut self, runtime: Runtime, autoconnect: WhatAmIMatcher) {
+    pub fn init_link_state(&mut self, runtime: Runtime, gossip: bool, autoconnect: WhatAmIMatcher) {
         let mut tables = zwrite!(self.tables);
         tables.peers_net = Some(Network::new(
             "[Peers network]".to_string(),
             tables.zid,
             runtime.clone(),
+            gossip,
             autoconnect,
         ));
         if runtime.whatami == WhatAmI::Router {
@@ -288,6 +289,7 @@ impl Router {
                 "[Routers network]".to_string(),
                 tables.zid,
                 runtime,
+                gossip,
                 autoconnect,
             ));
             tables.shared_nodes = shared_nodes(

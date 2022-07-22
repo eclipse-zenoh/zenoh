@@ -103,6 +103,7 @@ impl Runtime {
             .drop_future_timestamp()
             .unwrap_or(false);
 
+        let gossip = config.scouting().gossip().enabled().unwrap_or(true);
         let autoconnect = match whatami {
             WhatAmI::Router => {
                 if config.scouting().gossip().enabled().unwrap_or(true) {
@@ -175,8 +176,11 @@ impl Runtime {
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
         if use_link_state {
-            get_mut_unchecked(&mut runtime.router.clone())
-                .init_link_state(runtime.clone(), autoconnect);
+            get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
+                runtime.clone(),
+                gossip,
+                autoconnect,
+            );
         }
 
         let receiver = config.subscribe();
