@@ -70,6 +70,7 @@ impl std::ops::Div<&keyexpr> for OwnedKeyExpr {
     type Output = Self;
     fn div(self, rhs: &keyexpr) -> Self::Output {
         let mut s: String = self.0.into();
+        s.push('/');
         s += rhs.as_str();
         Self::autocanonize(s).unwrap() // Joining 2 key expressions should always result in a canonizable string.
     }
