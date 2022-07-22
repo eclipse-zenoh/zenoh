@@ -26,6 +26,30 @@ use std::{convert::TryFrom, str::FromStr};
 pub struct OwnedKeyExpr(pub(crate) Box<str>);
 
 impl OwnedKeyExpr {
+    /// Equivalent to `<OwnedKeyExpr as TryFrom>::try_from(t)`.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    /// Note that to be considered a valid key expression, a string MUST be canon.
+    ///
+    /// [`OwnedKeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
+    pub fn new<T, E>(t: T) -> Result<Self, E>
+    where
+        Self: TryFrom<T, Error = E>,
+    {
+        Self::try_from(t)
+    }
+
+    /// Canonizes the passed value before returning it as an `OwnedKeyExpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
+    where
+        Self: TryFrom<T, Error = E>,
+        T: Canonizable,
+    {
+        t.canonize();
+        Self::new(t)
+    }
     /// Constructs an OwnedKeyExpr without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
@@ -40,6 +64,31 @@ impl OwnedKeyExpr {
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
         OwnedKeyExpr(s)
     }
+}
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl std::ops::Div<&keyexpr> for OwnedKeyExpr {
+    type Output = Self;
+    fn div(self, rhs: &keyexpr) -> Self::Output {
+        let mut s: String = self.0.into();
+        s.push('/');
+        s += rhs.as_str();
+        Self::autocanonize(s).unwrap() // Joining 2 key expressions should always result in a canonizable string.
+    }
+}
+#[allow(clippy::suspicious_arithmetic_impl)]
+impl std::ops::Div<&keyexpr> for &OwnedKeyExpr {
+    type Output = OwnedKeyExpr;
+    fn div(self, rhs: &keyexpr) -> Self::Output {
+        let s: String = [self.as_str(), "/", rhs.as_str()].concat();
+        OwnedKeyExpr::autocanonize(s).unwrap() // Joining 2 key expressions should always result in a canonizable string.
+    }
+}
+#[test]
+fn div() {
+    let a = OwnedKeyExpr::new("a").unwrap();
+    let b = OwnedKeyExpr::new("b").unwrap();
+    let k = a / &b;
+    assert_eq!(k.as_str(), "a/b")
 }
 impl std::fmt::Debug for OwnedKeyExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -66,19 +115,18 @@ impl AsRef<str> for OwnedKeyExpr {
 impl FromStr for OwnedKeyExpr {
     type Err = zenoh_core::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::try_from(s.to_string())
+        Self::try_from(s.to_owned())
     }
 }
 impl TryFrom<&str> for OwnedKeyExpr {
     type Error = zenoh_core::Error;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Self::try_from(s.to_string())
+        Self::try_from(s.to_owned())
     }
 }
 impl TryFrom<String> for OwnedKeyExpr {
     type Error = zenoh_core::Error;
-    fn try_from(mut value: String) -> Result<Self, Self::Error> {
-        value.canonize();
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         <&keyexpr as TryFrom<&str>>::try_from(value.as_str())?;
         Ok(Self(value.into_boxed_str()))
     }

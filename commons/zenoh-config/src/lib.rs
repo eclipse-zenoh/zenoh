@@ -405,6 +405,10 @@ impl Config {
 
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         let key = key.as_ref();
+        self._remove(key)
+    }
+
+    fn _remove(&mut self, key: &str) -> ZResult<()> {
         let key = key.strip_prefix('/').unwrap_or(key);
         if !key.starts_with("plugins/") {
             bail!(
@@ -438,6 +442,9 @@ impl std::error::Error for ConfigOpenErr {}
 impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
+        Self::_from_file(path)
+    }
+    fn _from_file(path: &Path) -> ZResult<Config> {
         match std::fs::File::open(path) {
             Ok(mut f) => {
                 let mut content = String::new();
@@ -512,6 +519,10 @@ impl<T> Clone for Notifier<T> {
 impl Notifier<Config> {
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
         let key = key.as_ref();
+        self._remove(key)
+    }
+
+    fn _remove(&self, key: &str) -> ZResult<()> {
         {
             let mut guard = zlock!(self.inner.inner);
             guard.remove(key)?;
@@ -537,7 +548,11 @@ impl<T: ValidatedMap> Notifier<T> {
         rx
     }
     pub fn notify<K: AsRef<str>>(&self, key: K) {
-        let key: Arc<str> = Arc::from(key.as_ref());
+        let key = key.as_ref();
+        self._notify(key);
+    }
+    fn _notify(&self, key: &str) {
+        let key: Arc<str> = Arc::from(key);
         let mut marked = Vec::new();
         let mut guard = zlock!(self.inner.subscribers);
         for (i, sub) in guard.iter().enumerate() {
@@ -561,6 +576,7 @@ impl<T: ValidatedMap> Notifier<T> {
         unsafe { std::mem::transmute(self) }
     }
 }
+
 impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
     type Accessor = GetGuard<'a, T>;
 }

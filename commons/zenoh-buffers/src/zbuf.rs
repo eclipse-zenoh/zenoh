@@ -656,9 +656,9 @@ impl crate::traits::buffer::ConstructibleBuffer for ZBuf {
         ZBuf::with_slice_capacity(slice_capacity)
     }
 }
-impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
-    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
-        let slice = slice.into();
+
+impl ZBuf {
+    fn append_zslice(&mut self, slice: ZSlice) -> Option<NonZeroUsize> {
         let len = slice.len();
         if len > 0 {
             self.add_zslice(slice);
@@ -666,6 +666,11 @@ impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
         } else {
             None
         }
+    }
+}
+impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        self.append_zslice(slice.into())
     }
 }
 

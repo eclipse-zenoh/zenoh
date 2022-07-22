@@ -236,6 +236,13 @@ impl<'a> Publisher<'a> {
         self.local_routing = Some(local_routing);
         self
     }
+    fn _write(&self, kind: SampleKind, value: Value) -> Publication {
+        Publication {
+            publisher: self,
+            value,
+            kind,
+        }
+    }
 
     /// Send data with [`kind`](SampleKind) (Put or Delete).
     ///
@@ -253,11 +260,7 @@ impl<'a> Publisher<'a> {
     where
         IntoValue: Into<Value>,
     {
-        Publication {
-            publisher: self,
-            value: value.into(),
-            kind,
-        }
+        self._write(kind, value.into())
     }
 
     /// Put data.
@@ -277,7 +280,7 @@ impl<'a> Publisher<'a> {
     where
         IntoValue: Into<Value>,
     {
-        self.write(SampleKind::Put, value.into())
+        self._write(SampleKind::Put, value.into())
     }
 
     /// Delete data.
@@ -294,7 +297,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     pub fn delete(&self) -> Publication {
-        self.write(SampleKind::Delete, Value::empty())
+        self._write(SampleKind::Delete, Value::empty())
     }
 
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
@@ -346,7 +349,9 @@ impl SyncResolve for PublisherUndeclaration<'_> {
         let Publisher {
             session, key_expr, ..
         } = &self.publisher;
-        session.undeclare_publication_intent(key_expr).res_sync()?;
+        session
+            .undeclare_publication_intent(key_expr.borrowing_clone())
+            .res_sync()?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
     }
@@ -362,7 +367,7 @@ impl Drop for Publisher<'_> {
         if !self.key_expr.is_empty() {
             let _ = self
                 .session
-                .undeclare_publication_intent(&self.key_expr)
+                .undeclare_publication_intent(self.key_expr.borrowing_clone())
                 .res_sync();
         }
     }
@@ -557,7 +562,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             }
         }
         self.session
-            .declare_publication_intent(&key_expr)
+            .declare_publication_intent(key_expr.borrowing_clone())
             .res_sync()?;
         let publisher = Publisher {
             session: self.session,

@@ -20,7 +20,7 @@ use zenoh_core::{bail, Error as ZError, Result as ZResult};
 
 use crate::WireExpr;
 
-use super::{OwnedKeyExpr, FORBIDDEN_CHARS};
+use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -42,6 +42,33 @@ use super::{OwnedKeyExpr, FORBIDDEN_CHARS};
 pub struct keyexpr(str);
 
 impl keyexpr {
+    /// Equivalent to `<&keyexpr as TryFrom>::try_from(t)`.
+    ///
+    /// Will return an Err if `t` isn't a valid key expression.
+    /// Note that to be considered a valid key expression, a string MUST be canon.
+    ///
+    /// [`keyexpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
+    pub fn new<'a, T, E>(t: &'a T) -> Result<&'a Self, E>
+    where
+        &'a Self: TryFrom<&'a T, Error = E>,
+        T: ?Sized,
+    {
+        t.try_into()
+    }
+
+    /// Canonizes the passed value before returning it as a `&keyexpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    ///
+    /// Note that this function does not allocate, and will instead mutate the passed value in place during canonization.
+    pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
+    where
+        &'a Self: TryFrom<&'a T, Error = E>,
+        T: Canonizable + ?Sized,
+    {
+        t.canonize();
+        Self::new(t)
+    }
     /// Returns `true` if the `keyexpr`s intersect, i.e. there exists at least one key which is contained in both of the sets defined by `self` and `other`.
     pub fn intersects(&self, other: &Self) -> bool {
         use super::intersect::Intersector;
@@ -83,8 +110,10 @@ impl keyexpr {
     /// let workspace: OwnedKeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
     /// ```
+    ///
+    /// If `other` is of type `&keyexpr`, you may use `self / other` instead, as the joining becomes infallible.
     pub fn join<S: AsRef<str> + ?Sized>(&self, other: &S) -> ZResult<OwnedKeyExpr> {
-        OwnedKeyExpr::try_from(format!("{}/{}", self, other.as_ref()))
+        OwnedKeyExpr::autocanonize(format!("{}/{}", self, other.as_ref()))
     }
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
@@ -249,11 +278,12 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         std::mem::transmute(s)
     }
-    pub fn new<'a, T, E>(t: T) -> Result<&'a Self, E>
-    where
-        &'a Self: TryFrom<T, Error = E>,
-    {
-        t.try_into()
+}
+
+impl std::ops::Div for &keyexpr {
+    type Output = OwnedKeyExpr;
+    fn div(self, rhs: Self) -> Self::Output {
+        self.join(rhs).unwrap() // Joining 2 key expressions should always result in a canonizable string.
     }
 }
 
@@ -360,8 +390,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
 
 impl<'a> TryFrom<&'a mut str> for &'a keyexpr {
     type Error = ZError;
-    fn try_from(mut value: &'a mut str) -> Result<Self, Self::Error> {
-        super::canon::Canonizable::canonize(&mut value);
+    fn try_from(value: &'a mut str) -> Result<Self, Self::Error> {
         (value as &'a str).try_into()
     }
 }
@@ -369,9 +398,33 @@ impl<'a> TryFrom<&'a mut str> for &'a keyexpr {
 impl<'a> TryFrom<&'a mut String> for &'a keyexpr {
     type Error = ZError;
     fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
-        super::canon::Canonizable::canonize(value);
         (value.as_str()).try_into()
     }
+}
+
+impl<'a> TryFrom<&'a String> for &'a keyexpr {
+    type Error = ZError;
+    fn try_from(value: &'a String) -> Result<Self, Self::Error> {
+        (value.as_str()).try_into()
+    }
+}
+impl<'a> TryFrom<&'a &'a str> for &'a keyexpr {
+    type Error = ZError;
+    fn try_from(value: &'a &'a str) -> Result<Self, Self::Error> {
+        (*value).try_into()
+    }
+}
+impl<'a> TryFrom<&'a &'a mut str> for &'a keyexpr {
+    type Error = ZError;
+    fn try_from(value: &'a &'a mut str) -> Result<Self, Self::Error> {
+        keyexpr::new(*value)
+    }
+}
+#[test]
+fn autocanon() {
+    let mut s: Box<str> = Box::from("hello/**/*");
+    let mut s: &mut str = &mut s;
+    assert_eq!(keyexpr::autocanonize(&mut s).unwrap(), "hello/*/**");
 }
 
 impl std::ops::Deref for keyexpr {
