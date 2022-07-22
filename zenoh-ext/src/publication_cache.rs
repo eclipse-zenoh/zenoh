@@ -96,6 +96,16 @@ pub struct PublicationCache<'a> {
 impl<'a> PublicationCache<'a> {
     fn new(conf: PublicationCacheBuilder<'a, '_, '_>) -> ZResult<PublicationCache<'a>> {
         let key_expr = conf.pub_key_expr?;
+        // the queryable_prefix (optional), and the key_expr for PublicationCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
+        let (queryable_prefix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
+            match conf.queryable_prefix {
+                None => (None, key_expr.clone()),
+                Some(Ok(ke)) => {
+                    let queryable_key_expr = (&ke) / &key_expr;
+                    (Some(ke.into()), queryable_key_expr)
+                }
+                Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
+            };
         log::debug!(
             "Create PublicationCache on {} with history={} resource_limit={:?}",
             &key_expr,
@@ -119,7 +129,10 @@ impl<'a> PublicationCache<'a> {
             .res_sync()?;
 
         // declare the queryable that will answer to queries on cache
-        let queryable = conf.session.declare_queryable(&key_expr).res_sync()?;
+        let queryable = conf
+            .session
+            .declare_queryable(&queryable_key_expr)
+            .res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();
@@ -127,11 +140,6 @@ impl<'a> PublicationCache<'a> {
         let pub_key_expr = key_expr.into_owned();
         let resources_limit = conf.resources_limit;
         let history = conf.history;
-        let queryable_prefix: Option<OwnedKeyExpr> = match conf.queryable_prefix {
-            None => None,
-            Some(Ok(ke)) => Some(ke.into()),
-            Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
-        };
 
         let (stoptx, mut stoprx) = bounded::<bool>(1);
         task::spawn(async move {
