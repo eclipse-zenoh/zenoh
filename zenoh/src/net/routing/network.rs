@@ -85,6 +85,7 @@ pub(crate) struct Tree {
 
 pub(crate) struct Network {
     pub(crate) name: String,
+    pub(crate) gossip: bool,
     pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
@@ -99,6 +100,7 @@ impl Network {
         name: String,
         zid: ZenohId,
         runtime: Runtime,
+        gossip: bool,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -112,6 +114,7 @@ impl Network {
         });
         Network {
             name,
+            gossip,
             autoconnect,
             idx,
             links: VecMap::new(),
@@ -173,11 +176,6 @@ impl Network {
         }
     }
 
-    #[inline]
-    fn get_locators(&self) -> Vec<Locator> {
-        self.runtime.manager().get_locators()
-    }
-
     fn add_node(&mut self, node: Node) -> NodeIndex {
         let zid = node.zid;
         let idx = self.graph.add_node(node);
@@ -216,7 +214,7 @@ impl Network {
             },
             whatami: self.graph[idx].whatami,
             locators: if idx == self.idx {
-                Some(self.get_locators())
+                self.gossip.then(|| self.runtime.get_locators())
             } else {
                 self.graph[idx].locators.clone()
             },
@@ -594,7 +592,7 @@ impl Network {
                 sn: self.graph[self.idx].sn,
                 zid: None,
                 whatami: self.graph[self.idx].whatami,
-                locators: Some(self.get_locators()),
+                locators: self.gossip.then(|| self.runtime.get_locators()),
                 links,
             }],
             None,

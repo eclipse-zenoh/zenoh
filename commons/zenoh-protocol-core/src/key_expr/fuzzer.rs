@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 use super::OwnedKeyExpr;
 
 fn random_chunk(rng: &'_ mut impl rand::Rng) -> impl Iterator<Item = u8> + '_ {
@@ -44,6 +42,6 @@ impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
         if let Some(n) = next.strip_prefix('/') {
             next = n.to_owned()
         }
-        Some(next.try_into().unwrap())
+        Some(OwnedKeyExpr::autocanonize(next).unwrap())
     }
 }

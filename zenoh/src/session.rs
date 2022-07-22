@@ -642,8 +642,15 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
-        let sid = self.id;
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
+        self._declare_keyexpr(key_expr)
+    }
+
+    fn _declare_keyexpr<'a, 'b: 'a>(
+        &'a self,
+        key_expr: ZResult<KeyExpr<'b>>,
+    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
+        let sid = self.id;
         ClosureResolve(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
@@ -858,20 +865,14 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression to publish
-    pub(crate) fn declare_publication_intent<'a, TryIntoKeyExpr>(
+    pub(crate) fn declare_publication_intent<'a>(
         &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> impl Resolve<ZResult<()>> + 'a
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        let key_expr = key_expr.try_into().map_err(Into::into);
+        key_expr: KeyExpr<'a>,
+    ) -> impl Resolve<Result<(), std::convert::Infallible>> + 'a {
         ClosureResolve(move || {
-            let key_expr: KeyExpr = key_expr?;
             log::trace!("declare_publication({:?})", key_expr);
             let mut state = zwrite!(self.state);
-            if !state.publications.iter().any(|p| **p == *key_expr) {
+            if !state.publications.iter().any(|p| **p == **key_expr) {
                 let declared_pub = if let Some(join_pub) = state
                     .join_publications
                     .iter()
@@ -882,7 +883,7 @@ impl Session {
                 } else {
                     Some(key_expr.clone())
                 };
-                state.publications.push(OwnedKeyExpr::from(key_expr));
+                state.publications.push(key_expr.into());
 
                 if let Some(res) = declared_pub {
                     let primitives = state.primitives.as_ref().unwrap().clone();
@@ -900,17 +901,11 @@ impl Session {
     /// # Arguments
     ///
     /// * `key_expr` - The key expression of the publication to undeclarte
-    pub(crate) fn undeclare_publication_intent<'a, TryIntoKeyExpr>(
+    pub(crate) fn undeclare_publication_intent<'a>(
         &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> impl Resolve<ZResult<()>> + 'a
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
-    {
-        let key_expr = key_expr.try_into().map_err(Into::into);
+        key_expr: KeyExpr<'a>,
+    ) -> impl Resolve<ZResult<()>> + 'a {
         ClosureResolve(move || {
-            let key_expr: KeyExpr = key_expr?;
             let mut state = zwrite!(self.state);
             if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
                 trace!("undeclare_publication({:?})", key_expr);

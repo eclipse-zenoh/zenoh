@@ -440,8 +440,15 @@ where
         Err(_) => bail!("invalid configuration"),
     };
 
-    log::trace!("scout({}, {})", what, &config);
+    _scout(what, config, callback)
+}
 
+fn _scout(
+    what: WhatAmIMatcher,
+    config: zenoh_config::Config,
+    callback: Callback<Hello>,
+) -> ZResult<CallbackScout> {
+    log::trace!("scout({}, {})", what, &config);
     let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
         Ok(addr) => addr,
         Err(e) => {
@@ -452,7 +459,6 @@ where
             )
         }
     };
-
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
     let ifaces = config
         .scouting
@@ -460,10 +466,8 @@ where
         .interface()
         .as_ref()
         .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
-
     let callback = Arc::from(callback);
     let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
-
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
         let sockets: Vec<UdpSocket> = ifaces
@@ -488,6 +492,5 @@ where
             });
         }
     }
-
     Ok(CallbackScout { stop_sender })
 }

@@ -57,7 +57,9 @@ impl LibLoader {
                 Err(err) => warn!("Cannot search for libraries in '{}': {} ", s.as_ref(), err),
             }
         }
-
+        Self::_new(search_paths, exe_parent_dir)
+    }
+    fn _new(mut search_paths: Vec<PathBuf>, exe_parent_dir: bool) -> Self {
         if exe_parent_dir {
             match std::env::current_exe() {
                 Ok(path) => match path.parent() {
@@ -189,11 +191,8 @@ impl LibLoader {
         result
     }
 
-    pub fn plugin_name<P>(path: &P) -> Option<&str>
-    where
-        P: AsRef<std::path::Path>,
-    {
-        path.as_ref().file_name().and_then(|f| {
+    pub fn _plugin_name(path: &std::path::Path) -> Option<&str> {
+        path.file_name().and_then(|f| {
             f.to_str().map(|s| {
                 let start = if s.starts_with(LIB_PREFIX.as_str()) {
                     LIB_PREFIX.len()
@@ -209,6 +208,12 @@ impl LibLoader {
                 &s[start..end]
             })
         })
+    }
+    pub fn plugin_name<P>(path: &P) -> Option<&str>
+    where
+        P: AsRef<std::path::Path>,
+    {
+        Self::_plugin_name(path.as_ref())
     }
 
     fn str_to_canonical_path(s: &str) -> ZResult<PathBuf> {

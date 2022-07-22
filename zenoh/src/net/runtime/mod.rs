@@ -103,6 +103,7 @@ impl Runtime {
             .drop_future_timestamp()
             .unwrap_or(false);
 
+        let gossip = config.scouting().gossip().enabled().unwrap_or(true);
         let autoconnect = match whatami {
             WhatAmI::Router => {
                 if config.scouting().gossip().enabled().unwrap_or(true) {
@@ -181,6 +182,7 @@ impl Runtime {
             runtime.clone(),
             router_link_state,
             peer_link_state,
+            gossip,
             autoconnect,
         );
 
@@ -223,6 +225,10 @@ impl Runtime {
 
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
+    }
+
+    pub fn get_locators(&self) -> Vec<Locator> {
+        self.locators.read().unwrap().clone()
     }
 
     pub(crate) fn spawn<F, T>(&self, future: F) -> Option<JoinHandle<Result<T, TimedOutError>>>

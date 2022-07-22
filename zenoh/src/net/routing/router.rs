@@ -289,6 +289,7 @@ impl Router {
         runtime: Runtime,
         router: bool,
         peer: bool,
+        gossip: bool,
         autoconnect: WhatAmIMatcher,
     ) {
         let mut tables = zwrite!(self.tables);
@@ -297,6 +298,7 @@ impl Router {
                 "[Routers network]".to_string(),
                 tables.zid,
                 runtime.clone(),
+                gossip,
                 autoconnect,
             ));
         }
@@ -305,6 +307,7 @@ impl Router {
                 "[Peers network]".to_string(),
                 tables.zid,
                 runtime,
+                gossip,
                 autoconnect,
             ));
         }

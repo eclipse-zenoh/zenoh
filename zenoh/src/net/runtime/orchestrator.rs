@@ -92,7 +92,7 @@ impl Runtime {
                         if sockets.is_empty() {
                             bail!("Unable to bind UDP port to any multicast interface!")
                         } else {
-                            self.connect_first(&sockets, WhatAmI::Router, &addr, timeout)
+                            self.connect_first(&sockets, WhatAmI::Router.into(), &addr, timeout)
                                 .await
                         }
                     }
@@ -623,15 +623,15 @@ impl Runtime {
         }
     }
 
-    async fn connect_first<I: Into<WhatAmIMatcher>>(
+    async fn connect_first(
         &self,
         sockets: &[UdpSocket],
-        what: I,
+        what: WhatAmIMatcher,
         addr: &SocketAddr,
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what.into(), addr, move |hello| async move {
+            Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if let Some(transport) = self.connect(locators).await {
@@ -658,13 +658,13 @@ impl Runtime {
         async_std::prelude::FutureExt::race(scout, timeout).await
     }
 
-    async fn connect_all<I: Into<WhatAmIMatcher>>(
+    async fn connect_all(
         &self,
         ucast_sockets: &[UdpSocket],
-        what: I,
+        what: WhatAmIMatcher,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
+        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
             match &hello.zid {
                 Some(zid) => {
                     if let Some(locators) = &hello.locators {
@@ -737,7 +737,7 @@ impl Runtime {
                         let mut hello = TransportMessage::make_hello(
                             zid,
                             Some(self.whatami),
-                            Some(self.locators.read().unwrap().clone()),
+                            Some(self.get_locators()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
