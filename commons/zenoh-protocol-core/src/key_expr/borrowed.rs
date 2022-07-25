@@ -121,9 +121,9 @@ impl keyexpr {
         self.0.contains(super::SINGLE_WILD as char)
     }
 
-    /// Returns the longest prefix of `self` that doesn't contain any wildcard character ('**' or '$*').
+    /// Returns the longest prefix of `self` that doesn't contain any wildcard character (`**` or `$*`).
     ///
-    /// NOTE: this operation can typically used in a backend implementation, at creation of a Storage to get the keys prefix,
+    /// NOTE: this operation can typically be used in a backend implementation, at creation of a Storage to get the keys prefix,
     /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
     /// [`Sample::key_expr`](zenoh::prelude::Sample::key_expr) to retrieve the corrsponding key.
     ///

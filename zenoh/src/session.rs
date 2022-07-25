@@ -141,22 +141,6 @@ impl SessionState {
         }
     }
 
-    // #[inline]
-    // fn local_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
-    //     match self.local_resources.get(id) {
-    //         Some(res) => Ok(&res.name),
-    //         None => bail!("{}", id),
-    //     }
-    // }
-
-    // #[inline]
-    // fn remote_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
-    //     match self.remote_resources.get(id) {
-    //         Some(res) => Ok(&res.name),
-    //         None => self.local_wireid_to_str(id),
-    //     }
-    // }
-
     pub(crate) fn remote_key_to_expr<'a>(&'a self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
@@ -419,9 +403,10 @@ impl Session {
         Box::leak(Box::new(s))
     }
 
-    /// Returns the identifier for this session.
-    pub fn id(&self) -> ZenohId {
-        self.runtime.zid
+    /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
+    /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
+    pub fn zid(&self) -> ZenohId {
+        self.info().zid().res_sync()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -505,8 +490,8 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> SessionInfos {
-        SessionInfos {
+    pub fn info(&self) -> SessionInfo {
+        SessionInfo {
             session: SessionRef::Borrow(self),
         }
     }
@@ -1924,6 +1909,6 @@ impl Drop for Session {
 
 impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Session").field("id", &self.id()).finish()
+        f.debug_struct("Session").field("id", &self.zid()).finish()
     }
 }

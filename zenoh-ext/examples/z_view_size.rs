@@ -12,7 +12,7 @@ async fn main() {
     let (config, group_name, id, size, timeout) = parse_args();
 
     let z = Arc::new(zenoh::open(config).res().await.unwrap());
-    let member_id = id.unwrap_or_else(|| z.id().to_string());
+    let member_id = id.unwrap_or_else(|| z.zid().to_string());
     let member = Member::new(member_id.as_str())
         .unwrap()
         .lease(Duration::from_secs(3));

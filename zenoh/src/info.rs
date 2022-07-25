@@ -19,7 +19,7 @@ use crate::SessionRef;
 use zenoh_config::{WhatAmI, ZenohId};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
-/// A builder retuned by [`SessionInfos::zid()`](SessionInfos::zid) that allows
+/// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
 ///
 /// # Examples
@@ -80,7 +80,7 @@ macro_rules! closure_builder {
 }
 
 closure_builder! {
-    /// A builder retuned by [`SessionInfos::routers_zid()`](SessionInfos::routers_zid) that allows
+    /// A builder retuned by [`SessionInfo::routers_zid()`](SessionInfo::routers_zid) that allows
     /// to access the [`ZenohId`] of the zenoh routers this process is currently connected to
     /// or the [`ZenohId`] of the current router if this code is run from a router (plugin).
     ///
@@ -99,7 +99,7 @@ closure_builder! {
 }
 
 closure_builder! {
-    /// A builder retuned by [`SessionInfos::peers_zid()`](SessionInfos::peers_zid) that allows
+    /// A builder retuned by [`SessionInfo::peers_zid()`](SessionInfo::peers_zid) that allows
     /// to access the [`ZenohId`] of the zenoh peers this process is currently connected to.
     ///
     /// # Examples
@@ -131,11 +131,11 @@ closure_builder! {
 /// let zid = info.zid().res().await;
 /// # })
 /// ```
-pub struct SessionInfos<'a> {
+pub struct SessionInfo<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
-impl SessionInfos<'_> {
+impl SessionInfo<'_> {
     /// Return the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
     ///
     /// # Examples
