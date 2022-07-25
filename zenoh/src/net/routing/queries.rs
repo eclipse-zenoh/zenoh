@@ -1105,7 +1105,11 @@ fn compute_query_route(
     source_type: WhatAmI,
 ) -> Arc<QueryTargetQablSet> {
     let mut route = QueryTargetQablSet::new();
-    let key_expr = match KeyExpr::try_from(prefix.expr() + suffix) {
+    let key_expr = prefix.expr() + suffix;
+    if key_expr.ends_with('/') {
+        return EMPTY_ROUTE.clone();
+    }
+    let key_expr = match KeyExpr::try_from(key_expr) {
         Ok(ke) => ke,
         Err(e) => {
             log::warn!("Invalid KE reached the system: {}", e);

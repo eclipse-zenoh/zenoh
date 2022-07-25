@@ -773,10 +773,16 @@ fn compute_data_route(
     source_type: WhatAmI,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
-    let key_expr = if let Ok(ke) = OwnedKeyExpr::try_from(prefix.expr() + suffix) {
-        ke
-    } else {
+    let key_expr = prefix.expr() + suffix;
+    if key_expr.ends_with('/') {
         return Arc::new(route);
+    }
+    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+        Ok(ke) => ke,
+        Err(e) => {
+            log::warn!("Invalid KE reached the system: {}", e);
+            return Arc::new(route);
+        }
     };
     let res = Resource::get_resource(prefix, suffix);
     let matches = res
@@ -949,7 +955,6 @@ fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
 pub(crate) fn compute_matches_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         compute_data_routes(tables, res);
-
         let resclone = res.clone();
         for match_ in &mut get_mut_unchecked(res).context_mut().matches {
             if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
