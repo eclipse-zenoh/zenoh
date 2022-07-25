@@ -12,10 +12,14 @@ async fn main() {
     let (config, group_name, id, size, timeout) = parse_args();
 
     let z = Arc::new(zenoh::open(config).res().await.unwrap());
-    let member_id = id.unwrap_or_else(|| z.id());
-    let member = Member::new(&member_id).lease(Duration::from_secs(3));
+    let member_id = id.unwrap_or_else(|| z.id().to_string());
+    let member = Member::new(member_id.as_str())
+        .unwrap()
+        .lease(Duration::from_secs(3));
 
-    let group = Group::join(z.clone(), &group_name, member).await;
+    let group = Group::join(z.clone(), group_name.as_str(), member)
+        .await
+        .unwrap();
     println!(
         "Member {} waiting for {} members in group {} for {} seconds...",
         member_id, size, group_name, timeout

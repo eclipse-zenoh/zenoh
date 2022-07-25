@@ -9,9 +9,11 @@ use zenoh_ext::group::*;
 async fn main() {
     env_logger::init();
     let z = Arc::new(zenoh::open(Config::default()).res().await.unwrap());
-    let member = Member::new(&z.id()).lease(Duration::from_secs(3));
+    let member = Member::new(z.id().to_string())
+        .unwrap()
+        .lease(Duration::from_secs(3));
 
-    let group = Group::join(z.clone(), "zgroup", member).await;
+    let group = Group::join(z.clone(), "zgroup", member).await.unwrap();
     let rx = group.subscribe().await;
     let mut stream = rx.stream();
     while let Some(evt) = stream.next().await {

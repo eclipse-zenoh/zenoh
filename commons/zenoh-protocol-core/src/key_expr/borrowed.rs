@@ -118,7 +118,7 @@ impl keyexpr {
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
     pub fn is_wild(&self) -> bool {
-        self.0.contains('*')
+        self.0.contains(super::SINGLE_WILD as char)
     }
 
     /// Returns the longest prefix of `self` that doesn't contain any wildcard character ('**' or '$*').
