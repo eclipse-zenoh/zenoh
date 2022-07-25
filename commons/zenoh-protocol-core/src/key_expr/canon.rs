@@ -16,6 +16,7 @@ use crate::key_expr::{
     utils::{Split, Writer},
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
+
 pub trait Canonizable {
     fn canonize(&mut self);
 }
@@ -41,7 +42,7 @@ impl Canonizable for &mut str {
 
         for chunk in ke.by_ref() {
             if chunk.is_empty() {
-                continue;
+                break;
             }
             if in_big_wild {
                 match chunk {
@@ -67,6 +68,7 @@ impl Canonizable for &mut str {
         }
         for chunk in ke {
             if chunk.is_empty() {
+                writer.write_byte(b'/');
                 continue;
             }
             if in_big_wild {
@@ -109,4 +111,12 @@ impl Canonizable for String {
         let len = s.len();
         self.truncate(len);
     }
+}
+
+#[test]
+fn canonizer() {
+    use super::OwnedKeyExpr;
+    dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b/")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/")).unwrap_err());
 }
