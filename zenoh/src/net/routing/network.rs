@@ -85,6 +85,7 @@ pub(crate) struct Tree {
 
 pub(crate) struct Network {
     pub(crate) name: String,
+    pub(crate) full_linkstate: bool,
     pub(crate) gossip: bool,
     pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
@@ -100,6 +101,7 @@ impl Network {
         name: String,
         zid: ZenohId,
         runtime: Runtime,
+        full_linkstate: bool,
         gossip: bool,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
@@ -114,6 +116,7 @@ impl Network {
         });
         Network {
             name,
+            full_linkstate,
             gossip,
             autoconnect,
             idx,
@@ -368,6 +371,41 @@ impl Network {
             );
         }
 
+        if !self.full_linkstate {
+            for (zid, whatami, locators, sn, links) in link_states.into_iter() {
+                if self.get_idx(&zid).is_none() {
+                    let idx = self.add_node(Node {
+                        zid,
+                        whatami: Some(whatami),
+                        locators: locators.clone(),
+                        sn,
+                        links,
+                    });
+                    self.send_on_links(vec![(idx, true)], |link| link.zid != zid);
+
+                    if !self.autoconnect.is_empty() {
+                        // Connect discovered peers
+                        if self.runtime.manager().get_transport(&zid).is_none()
+                            && self.autoconnect.matches(whatami)
+                        {
+                            if let Some(locators) = locators {
+                                let runtime = self.runtime.clone();
+                                self.runtime.spawn(async move {
+                                    // random backoff
+                                    async_std::task::sleep(std::time::Duration::from_millis(
+                                        rand::random::<u64>() % 100,
+                                    ))
+                                    .await;
+                                    runtime.connect_peer(&zid, &locators).await;
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            return vec![];
+        }
+
         // Add nodes to graph & filter out up to date states
         let mut link_states = link_states
             .into_iter()
@@ -460,7 +498,9 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.autoconnect.matches(whatami) {
+                    if self.runtime.manager().get_transport(&node.zid).is_none()
+                        && self.autoconnect.matches(whatami)
+                    {
                         if let Some(locators) = &node.locators {
                             let runtime = self.runtime.clone();
                             let zid = node.zid;
@@ -531,35 +571,37 @@ impl Network {
 
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
-        let (idx, new) = match self.get_idx(&zid) {
-            Some(idx) => (idx, false),
-            None => {
-                log::debug!("{} Add node (link) {}", self.name, zid);
-                (
-                    self.add_node(Node {
-                        zid,
-                        whatami: Some(whatami),
-                        locators: None,
-                        sn: 0,
-                        links: vec![],
-                    }),
-                    true,
-                )
+
+        if self.full_linkstate {
+            let (idx, new) = match self.get_idx(&zid) {
+                Some(idx) => (idx, false),
+                None => {
+                    log::debug!("{} Add node (link) {}", self.name, zid);
+                    (
+                        self.add_node(Node {
+                            zid,
+                            whatami: Some(whatami),
+                            locators: None,
+                            sn: 0,
+                            links: vec![],
+                        }),
+                        true,
+                    )
+                }
+            };
+            if self.graph[idx].links.contains(&self.graph[self.idx].zid) {
+                log::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
+                self.update_edge(self.idx, idx);
             }
-        };
-        if self.graph[idx].links.contains(&self.graph[self.idx].zid) {
-            log::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
-            self.update_edge(self.idx, idx);
-        }
-        self.graph[self.idx].links.push(zid);
-        self.graph[self.idx].sn += 1;
+            self.graph[self.idx].links.push(zid);
+            self.graph[self.idx].sn += 1;
 
-        if new {
-            self.send_on_links(vec![(idx, true), (self.idx, false)], |link| link.zid != zid);
-        } else {
-            self.send_on_links(vec![(self.idx, false)], |link| link.zid != zid);
+            if new {
+                self.send_on_links(vec![(idx, true), (self.idx, false)], |link| link.zid != zid);
+            } else {
+                self.send_on_links(vec![(self.idx, false)], |link| link.zid != zid);
+            }
         }
-
         let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
         self.send_on_link(idxs, &transport);
         free_index
@@ -570,41 +612,48 @@ impl Network {
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);
 
-        if let Some((edge, _)) = self
-            .get_idx(zid)
-            .and_then(|idx| self.graph.find_edge_undirected(self.idx, idx))
-        {
-            self.graph.remove_edge(edge);
-        }
-        let removed = self.remove_detached_nodes();
-
-        self.graph[self.idx].sn += 1;
-
-        let links = self
-            .links
-            .values()
-            .map(|link| self.get_idx(&link.zid).unwrap().index().try_into().unwrap())
-            .collect::<Vec<ZInt>>();
-
-        let msg = ZenohMessage::make_link_state_list(
-            vec![LinkState {
-                psid: self.idx.index().try_into().unwrap(),
-                sn: self.graph[self.idx].sn,
-                zid: None,
-                whatami: self.graph[self.idx].whatami,
-                locators: self.gossip.then(|| self.runtime.get_locators()),
-                links,
-            }],
-            None,
-        );
-
-        for link in self.links.values() {
-            if let Err(e) = link.transport.handle_message(msg.clone()) {
-                log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if self.full_linkstate {
+            if let Some((edge, _)) = self
+                .get_idx(zid)
+                .and_then(|idx| self.graph.find_edge_undirected(self.idx, idx))
+            {
+                self.graph.remove_edge(edge);
             }
-        }
+            let removed = self.remove_detached_nodes();
 
-        removed
+            self.graph[self.idx].sn += 1;
+
+            let links = self
+                .links
+                .values()
+                .map(|link| self.get_idx(&link.zid).unwrap().index().try_into().unwrap())
+                .collect::<Vec<ZInt>>();
+
+            let msg = ZenohMessage::make_link_state_list(
+                vec![LinkState {
+                    psid: self.idx.index().try_into().unwrap(),
+                    sn: self.graph[self.idx].sn,
+                    zid: None,
+                    whatami: self.graph[self.idx].whatami,
+                    locators: self.gossip.then(|| self.runtime.get_locators()),
+                    links,
+                }],
+                None,
+            );
+
+            for link in self.links.values() {
+                if let Err(e) = link.transport.handle_message(msg.clone()) {
+                    log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                }
+            }
+
+            removed
+        } else {
+            if let Some(idx) = self.get_idx(zid) {
+                self.graph.remove_node(idx);
+            }
+            vec![]
+        }
     }
 
     fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, Node)> {

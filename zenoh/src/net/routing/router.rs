@@ -126,8 +126,16 @@ impl Tables {
     #[inline]
     pub(crate) fn full_net(&self, net_type: WhatAmI) -> bool {
         match net_type {
-            WhatAmI::Router => self.routers_net.is_some(),
-            WhatAmI::Peer => self.peers_net.is_some(),
+            WhatAmI::Router => self
+                .routers_net
+                .as_ref()
+                .map(|net| net.full_linkstate)
+                .unwrap_or(false),
+            WhatAmI::Peer => self
+                .peers_net
+                .as_ref()
+                .map(|net| net.full_linkstate)
+                .unwrap_or(false),
             _ => false,
         }
     }
@@ -287,31 +295,33 @@ impl Router {
     pub fn init_link_state(
         &mut self,
         runtime: Runtime,
-        router: bool,
-        peer: bool,
+        router_full_linkstate: bool,
+        peer_full_linkstate: bool,
         gossip: bool,
         autoconnect: WhatAmIMatcher,
     ) {
         let mut tables = zwrite!(self.tables);
-        if router {
+        if router_full_linkstate | gossip {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
                 tables.zid,
                 runtime.clone(),
+                router_full_linkstate,
                 gossip,
                 autoconnect,
             ));
         }
-        if peer {
+        if peer_full_linkstate | gossip {
             tables.peers_net = Some(Network::new(
                 "[Peers network]".to_string(),
                 tables.zid,
                 runtime,
+                peer_full_linkstate,
                 gossip,
                 autoconnect,
             ));
         }
-        if router && peer {
+        if router_full_linkstate && peer_full_linkstate {
             tables.shared_nodes = shared_nodes(
                 tables.routers_net.as_ref().unwrap(),
                 tables.peers_net.as_ref().unwrap(),
@@ -480,6 +490,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                 }
 
                                 tables.schedule_compute_trees(self.tables.clone(), WhatAmI::Peer);
+                            } else if let Some(net) = tables.peers_net.as_mut() {
+                                net.link_states(list.link_states, zid);
                             }
                         }
                         _ => (),
@@ -539,6 +551,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                             }
 
                             tables.schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
+                        } else if let Some(net) = tables.peers_net.as_mut() {
+                            net.remove_link(&zid);
                         }
                     }
                     _ => (),
