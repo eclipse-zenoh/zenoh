@@ -340,7 +340,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
