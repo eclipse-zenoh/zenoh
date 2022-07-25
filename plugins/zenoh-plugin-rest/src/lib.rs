@@ -428,7 +428,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let zid = runtime.get_zid_str();
+    let zid = runtime.zid.to_string();
     let session = Session::init(runtime, true, vec![], vec![])
         .res_async()
         .await;

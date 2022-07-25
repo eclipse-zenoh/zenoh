@@ -420,8 +420,8 @@ impl Session {
     }
 
     /// Returns the identifier for this session.
-    pub fn id(&self) -> String {
-        self.runtime.get_zid_str()
+    pub fn id(&self) -> ZenohId {
+        self.runtime.zid
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
