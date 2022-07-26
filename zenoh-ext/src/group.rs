@@ -256,7 +256,11 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                     log::debug!(
                         "KeepAlive from {} ({})",
                         &kae.mid,
-                        if kae.mid.ne(&state.local_member.mid) { "other" } else { "myself" }
+                        if kae.mid.ne(&state.local_member.mid) {
+                            "other"
+                        } else {
+                            "myself"
+                        }
                     );
                     if kae.mid.ne(&state.local_member.mid) {
                         let mut mm = state.members.lock().await;
@@ -293,7 +297,10 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                                         &m
                                                     );
                                                     mm.insert(kae.mid.clone(), (m.clone(), expiry));
-                                                    log::debug!("Other members list: {:?}", mm.keys());
+                                                    log::debug!(
+                                                        "Other members list: {:?}",
+                                                        mm.keys()
+                                                    );
                                                     // Advertise a JoinEvent
                                                     let u_evt = &*state.user_events_tx.lock().await;
                                                     if let Some(tx) = u_evt {
