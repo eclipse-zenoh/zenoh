@@ -154,7 +154,13 @@ jobs:
               os: ubuntu-20.04,
               use-cross: true,
             }
-          - { target: x86_64-apple-darwin, arch: darwin, os: macos-10.15 }
+          - {
+              target: aarch64-unknown-linux-musl,
+              arch: arm64,
+              os: ubuntu-20.04,
+              use-cross: true,
+            }
+          - { target: x86_64-apple-darwin, arch: darwin, os: macos-latest }
           - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019 }
           # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
     steps:
@@ -200,7 +206,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --release --bins --lib --examples --target=${{ matrix.job.target }}
+          args: --release --bins --lib --target=${{ matrix.job.target }}
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
@@ -229,7 +235,6 @@ jobs:
         run: |
           TARGET=${{ matrix.job.target }}
           MAIN_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}.zip"
-          EXPL_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-examples.zip"
           DEBS_PKG_NAME="${GITHUB_WORKSPACE}/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-${TARGET}-deb-pkgs.zip"
 
           case ${TARGET} in
@@ -238,14 +243,7 @@ jobs:
               echo "Packaging ${MAIN_PKG_NAME}:"
               zip ${MAIN_PKG_NAME} zenohd libzplugin_*.so
               cd -
-              cd "target/${TARGET}/release/examples"
-              # remove temporary build files we don't want to package
-              rm -f *.* *-????????????????
-              echo "Packaging ${EXPL_PKG_NAME}:"
-              zip ${EXPL_PKG_NAME} *
-              cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-              echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
 
               # check if debian packages has been created and packages them in a single tgz
               if [[ -d target/${TARGET}/debian ]]; then
@@ -262,27 +260,14 @@ jobs:
               echo "Packaging ${MAIN_PKG_NAME}:"
               zip ${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
               cd -
-              cd "target/${TARGET}/release/examples"
-              # remove temporary build files we don't want to package
-              rm -f *.* *-????????????????
-              echo "Packaging ${EXPL_PKG_NAME}:"
-              zip ${EXPL_PKG_NAME} *
-              cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-              echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
               ;;
             *windows*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
               7z -y a "${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
               cd -
-              cd "target/${TARGET}/release/examples"
-              rm -f *-????????????????.exe
-              echo "Packaging ${EXPL_PKG_NAME}:"
-              7z -y a "${EXPL_PKG_NAME}" "*.exe"
-              cd -
               echo ::set-output name=MAIN_PKG_NAME::"${MAIN_PKG_NAME}"
-              echo ::set-output name=EXPL_PKG_NAME::"${EXPL_PKG_NAME}"
               ;;
           esac
 
@@ -292,7 +277,6 @@ jobs:
           name: ${{ matrix.job.target }}
           path: |
             ${{ steps.package.outputs.MAIN_PKG_NAME }}
-            ${{ steps.package.outputs.EXPL_PKG_NAME }}
             ${{ steps.package.outputs.DEBS_PKG_NAME }}
 
   publication:
@@ -367,16 +351,6 @@ jobs:
         if: failure()
         uses: andymckay/cancel-action@0.2
 
-  #
-  # Note: Docker build is quite long (1h40) because of arm64 build via QEMU.
-  #       I didn't found a solution to have the docker build in parallel of other builds,
-  #       and the push in another job (only if all parallel builds succeed)...
-  #       It would require upload/download of the image via a file,
-  #       but "docker" output type doesn't support multi-platforms image
-  #       (see https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md#docker)
-  #       Therfore, Docker build+push is made in parallel of other publications. At least, builds and publications
-  #       of other dependent repos can be kicked as soon as publication to crates.io is done, not waiting for this Docker job.
-  #
   docker:
     name: Docker build and push
     needs: [checks, builds, tests, doc]
@@ -388,8 +362,20 @@ jobs:
       - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
         shell: bash
         run: git fetch --tags --force
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      - name: Download packages from previous job
+        uses: actions/download-artifact@v2
+        with:
+          path: PACKAGES
+      - name: Unzip PACKAGES
+        run: |
+          ls PACKAGES
+          mkdir -p docker/linux/amd
+          unzip PACKAGES/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d docker/linux/amd64/
+          rm docker/linux/amd64/libzplugin_example.so
+          mkdir -p docker/linux/arm64
+          unzip PACKAGES/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
+          rm docker/linux/arm64/libzplugin_example.so
+          tree docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Docker meta - set tags and labels
@@ -410,5 +396,6 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64, linux/arm64
+          file: .github/workflows/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
