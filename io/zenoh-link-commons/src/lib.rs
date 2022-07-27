@@ -176,11 +176,11 @@ impl LinkUnicast {
         let buffer = if self.is_streamed() {
             // Read and decode the message length
             let mut length_bytes = [0_u8; 2];
-            let _ = self.read_exact(&mut length_bytes).await?;
+            self.read_exact(&mut length_bytes).await?;
             let to_read = u16::from_le_bytes(length_bytes) as usize;
             // Read the message
             let mut buffer = vec![0_u8; to_read];
-            let _ = self.read_exact(&mut buffer).await?;
+            self.read_exact(&mut buffer).await?;
             buffer
         } else {
             // Read the message

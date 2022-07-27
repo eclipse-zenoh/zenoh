@@ -437,8 +437,12 @@ impl Network {
                     reintroduced_nodes.push((vec![], idx, true));
                 }
             }
+            let mut edges = vec![];
             let mut neighbors = self.graph.neighbors_undirected(*idx1).detach();
-            while let Some((eidx, idx2)) = neighbors.next(&self.graph) {
+            while let Some(edge) = neighbors.next(&self.graph) {
+                edges.push(edge);
+            }
+            for (eidx, idx2) in edges {
                 if !links.contains(&self.graph[idx2].pid) {
                     log::trace!(
                         "{} Remove edge (state) {} {}",

@@ -72,7 +72,7 @@ impl<'a, 'b> PublicationCacheBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Future for PublicationCacheBuilder<'a, '_> {
+impl<'a> Future for PublicationCacheBuilder<'a, '_> {
     type Output = ZResult<PublicationCache<'a>>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {

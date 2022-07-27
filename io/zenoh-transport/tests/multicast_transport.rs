@@ -211,13 +211,13 @@ mod tests {
     ) {
         // Close the peer01 transport
         println!("Closing transport with {}", endpoint);
-        let _ = ztimeout!(peer01.transport.close()).unwrap();
+        ztimeout!(peer01.transport.close()).unwrap();
         assert!(peer01.manager.get_transports_multicast().is_empty());
         assert!(peer02.transport.get_peers().unwrap().is_empty());
 
         // Close the peer02 transport
         println!("Closing transport with {}", endpoint);
-        let _ = ztimeout!(peer02.transport.close()).unwrap();
+        ztimeout!(peer02.transport.close()).unwrap();
         assert!(peer02.manager.get_transports_multicast().is_empty());
 
         // Wait a little bit

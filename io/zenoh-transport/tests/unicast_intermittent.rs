@@ -261,7 +261,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [4] */
     println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
-    let res = ztimeout!(task::spawn_blocking(move || {
+    ztimeout!(task::spawn_blocking(move || {
         // Create the message to send
         let key = "/test".into();
         let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
@@ -322,11 +322,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     // Stop the tasks
     ztimeout!(c2_handle.cancel());
     ztimeout!(c3_handle.cancel());
-    println!("\nTransport Intermittent [4a2]: {:?}", res);
 
     // Check that client01 received all the messages
     println!("Transport Intermittent [4b1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let c = counter.load(Ordering::Acquire);
             if c == MSG_COUNT {
@@ -336,7 +335,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             task::sleep(SLEEP).await;
         }
     });
-    println!("Transport Intermittent [4b3]: {:?}", res);
 
     /* [5] */
     // Close the open transport on the client
@@ -356,7 +354,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [6] */
     // Verify that the transport has been closed also on the router
     println!("Transport Intermittent [6a1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -365,14 +363,11 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             task::sleep(SLEEP).await;
         }
     });
-    println!("Transport Intermittent [6a2]: {:?}", res);
 
     /* [7] */
     // Perform clean up of the open locators
     println!("\nTransport Intermittent [7a1]");
-    let res = ztimeout!(router_manager.del_listener(endpoint));
-    println!("Transport Intermittent [7a2]: {:?}", res);
-    assert!(res.is_ok());
+    ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
     task::sleep(SLEEP).await;

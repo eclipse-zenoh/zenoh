@@ -244,7 +244,7 @@ pub(super) async fn transport_finalize(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    let _ = transport.start_tx(
+    transport.start_tx(
         link,
         &manager.tx_executor,
         keep_alive,
@@ -282,7 +282,7 @@ pub(super) async fn transport_finalize(
     drop(a_guard);
 
     // Start the RX loop
-    let _ = transport.start_rx(link, input.lease)?;
+    transport.start_rx(link, input.lease)?;
 
     Ok(())
 }
