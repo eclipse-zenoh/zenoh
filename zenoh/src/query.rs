@@ -39,7 +39,7 @@ pub use zenoh_protocol_core::ConsolidationMode;
 pub use zenoh_protocol_core::ConsolidationStrategy;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QueryConsolidation {
     Auto,
     Manual(ConsolidationStrategy),

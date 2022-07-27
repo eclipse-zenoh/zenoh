@@ -469,7 +469,7 @@ pub mod queryable {
 }
 
 /// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[repr(u8)]
 pub enum ConsolidationMode {
     None,
@@ -479,7 +479,7 @@ pub enum ConsolidationMode {
 
 /// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
@@ -564,7 +564,7 @@ impl Default for ConsolidationStrategy {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
     BestMatching,
     All,
@@ -580,7 +580,7 @@ impl Default for QueryTarget {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryTAK {
     pub kind: ZInt,
     pub target: QueryTarget,
