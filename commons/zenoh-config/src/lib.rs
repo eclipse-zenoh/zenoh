@@ -122,14 +122,6 @@ validated_struct::validator! {
         ListenConfig {
             pub endpoints: Vec<EndPoint>,
         },
-        /// Actions taken by the Zenoh instance upon startup.
-        pub startup: #[derive(Default)]
-        JoinConfig {
-            /// A list of key-expressions to subscribe to upon startup.
-            subscribe: Vec<OwnedKeyExpr>,
-            /// A list of key-expressions to declare publications onto upon startup.
-            declare_publications: Vec<OwnedKeyExpr>,
-        },
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
@@ -178,6 +170,14 @@ validated_struct::validator! {
         local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
+        /// The declarations aggregation strategy.
+        pub aggregation: #[derive(Default)]
+        AggregationConf {
+            /// A list of key-expressions for which all included subscribers will be aggregated into.
+            subscribers: Vec<OwnedKeyExpr>,
+            /// A list of key-expressions for which all included publishers will be aggregated into.
+            publishers: Vec<OwnedKeyExpr>,
+        },
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {

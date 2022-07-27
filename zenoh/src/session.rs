@@ -87,16 +87,16 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) local_routing: bool,
-    pub(crate) join_subscriptions: Vec<OwnedKeyExpr>,
-    pub(crate) join_publications: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) timer: Timer,
 }
 
 impl SessionState {
     pub(crate) fn new(
         local_routing: bool,
-        join_subscriptions: Vec<OwnedKeyExpr>,
-        join_publications: Vec<OwnedKeyExpr>,
+        aggregated_subscribers: Vec<OwnedKeyExpr>,
+        aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -111,8 +111,8 @@ impl SessionState {
             queryables: HashMap::new(),
             queries: HashMap::new(),
             local_routing,
-            join_subscriptions,
-            join_publications,
+            aggregated_subscribers,
+            aggregated_publishers,
             timer: Timer::new(true),
         }
     }
@@ -319,15 +319,15 @@ impl Session {
     pub fn init(
         runtime: Runtime,
         local_routing: bool,
-        join_subscriptions: Vec<OwnedKeyExpr>,
-        join_publications: Vec<OwnedKeyExpr>,
+        aggregated_subscribers: Vec<OwnedKeyExpr>,
+        aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ClosureResolve(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
                 local_routing,
-                join_subscriptions,
-                join_publications,
+                aggregated_subscribers,
+                aggregated_publishers,
             )));
             let session = Session {
                 runtime,
@@ -780,15 +780,15 @@ impl Session {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.startup().subscribe().clone();
-            let join_publications = config.startup().declare_publications().clone();
+            let aggregated_subscribers = config.aggregation().subscribers().clone();
+            let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
                         local_routing,
-                        join_subscriptions,
-                        join_publications,
+                        aggregated_subscribers,
+                        aggregated_publishers,
                     )
                     .res_async()
                     .await;
@@ -859,7 +859,7 @@ impl Session {
             let mut state = zwrite!(self.state);
             if !state.publications.iter().any(|p| **p == **key_expr) {
                 let declared_pub = if let Some(join_pub) = state
-                    .join_publications
+                    .aggregated_publishers
                     .iter()
                     .find(|s| s.includes(&key_expr))
                 {
@@ -896,7 +896,7 @@ impl Session {
                 trace!("undeclare_publication({:?})", key_expr);
                 state.publications.remove(idx);
                 match state
-                    .join_publications
+                    .aggregated_publishers
                     .iter()
                     .find(|s| s.includes(&key_expr))
                 {
@@ -937,7 +937,7 @@ impl Session {
             callback,
         });
         let declared_sub = match state
-            .join_subscriptions // TODO: can this be an OwnedKeyExpr?
+            .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
             .iter()
             .find(|s| s.includes( key_expr))
         {
@@ -1067,7 +1067,7 @@ impl Session {
             // Before calling forget_subscriber(key_expr), check if this was the last one.
             let key_expr = &sub_state.key_expr;
             match state
-                .join_subscriptions
+                .aggregated_subscribers
                 .iter()
                 .find(|s| s.includes(key_expr))
             {
