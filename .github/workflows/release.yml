@@ -83,37 +83,37 @@ jobs:
       ZENOH_VERSION: ${{ steps.env.outputs.ZENOH_VERSION }}
       PKG_VERSION: ${{ steps.env.outputs.PKG_VERSION }}
 
-  # tests:
-  #   name: Tests
-  #   needs: checks
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #     - name: Run tests
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: test
-  #         args: --release --verbose
-  #       env:
-  #         ASYNC_STD_THREAD_COUNT: 4
+  tests:
+    name: Tests
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release --verbose
+        env:
+          ASYNC_STD_THREAD_COUNT: 4
 
-  # doc:
-  #   name: Doc generation
-  #   needs: checks
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Install Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #     - name: generate doc
-  #       env:
-  #         RUSTDOCFLAGS: -Dwarnings
-  #       uses: actions-rs/cargo@v1
-  #       with:
-  #         command: doc
-  #         args: --no-deps
+  doc:
+    name: Doc generation
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+      - name: generate doc
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --no-deps
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -279,81 +279,81 @@ jobs:
             ${{ steps.package.outputs.MAIN_PKG_NAME }}
             ${{ steps.package.outputs.DEBS_PKG_NAME }}
 
-  # publication:
-  #   name: Release publication
-  #   if: needs.checks.outputs.IS_RELEASE == 'true'
-  #   needs: [checks, builds, tests, doc]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Download result of previous builds
-  #       uses: actions/download-artifact@v2
-  #       with:
-  #         path: ARTIFACTS
-  #     - name: Publish as github release
-  #       uses: softprops/action-gh-release@v1
-  #       with:
-  #         files: ARTIFACTS/*/*.*
-  #     - name: Publish to download.eclipse.org/zenoh
-  #       env:
-  #         SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
-  #         ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
-  #       shell: bash
-  #       run: |
-  #         echo "--- setup ssh-agent"
-  #         eval "$(ssh-agent -s)"
-  #         echo 'echo "${{ secrets.SSH_PASSPHRASE }}"' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
-  #         echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | DISPLAY=NONE SSH_ASKPASS=~/.ssh_askpass ssh-add - > /dev/null 2>&1
-  #         rm -f ~/.ssh_askpass
-  #         echo "--- test ssh:"
-  #         ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} ls -al
-  #         echo "---- list artifacts to upload:"
-  #         ls -R ARTIFACTS || true
-  #         DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
-  #         echo "---- copy artifacts into ${DOWNLOAD_DIR}"
-  #         ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} mkdir -p ${DOWNLOAD_DIR}
-  #         cd ARTIFACTS
-  #         sha256sum */* > sha256sums.txt
-  #         scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
-  #         echo "---- cleanup identity"
-  #         ssh-add -D
-  #     - uses: actions/checkout@v2
-  #     - name: Install Rust toolchain
-  #       uses: actions-rs/toolchain@v1
-  #     - name: Publish to crates.io
-  #       shell: bash
-  #       run: |
-  #         cargo login ${{ secrets.CRATES_IO_TOKEN }}
-  #         cd commons/zenoh-macros && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-core && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-cfg-properties && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-collections && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-crypto && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-sync && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-util && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-config && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-buffers && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-protocol-core && cargo publish && cd - && sleep 30
-  #         cd commons/zenoh-protocol && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-link-commons && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-links/zenoh-link-udp && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-links/zenoh-link-tls && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-links/zenoh-link-quic && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-link && cargo publish && cd - && sleep 30
-  #         cd io/zenoh-transport && cargo publish && cd - && sleep 30
-  #         cd zenoh && cargo publish && cd - && sleep 30
-  #         cd zenoh-ext && cargo publish && cd - && sleep 30
-  #         cd zenohd && cargo publish && cd - && sleep 30
-  #         cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
-  #         cd plugins/zenoh-backend-traits && cargo publish && cd - && sleep 30
-  #     - name: Cancel workflow if fail # thus Docker job be interrupted
-  #       if: failure()
-  #       uses: andymckay/cancel-action@0.2
+  publication:
+    name: Release publication
+    if: needs.checks.outputs.IS_RELEASE == 'true'
+    needs: [checks, builds, tests, doc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download result of previous builds
+        uses: actions/download-artifact@v2
+        with:
+          path: ARTIFACTS
+      - name: Publish as github release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ARTIFACTS/*/*.*
+      - name: Publish to download.eclipse.org/zenoh
+        env:
+          SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
+          ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
+        shell: bash
+        run: |
+          echo "--- setup ssh-agent"
+          eval "$(ssh-agent -s)"
+          echo 'echo "${{ secrets.SSH_PASSPHRASE }}"' > ~/.ssh_askpass && chmod +x ~/.ssh_askpass
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' | DISPLAY=NONE SSH_ASKPASS=~/.ssh_askpass ssh-add - > /dev/null 2>&1
+          rm -f ~/.ssh_askpass
+          echo "--- test ssh:"
+          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} ls -al
+          echo "---- list artifacts to upload:"
+          ls -R ARTIFACTS || true
+          DOWNLOAD_DIR=${ECLIPSE_BASE_DIR}/zenoh/${{ needs.checks.outputs.ZENOH_VERSION }}
+          echo "---- copy artifacts into ${DOWNLOAD_DIR}"
+          ssh -o "StrictHostKeyChecking=no" ${SSH_TARGET} mkdir -p ${DOWNLOAD_DIR}
+          cd ARTIFACTS
+          sha256sum */* > sha256sums.txt
+          scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
+          echo "---- cleanup identity"
+          ssh-add -D
+      - uses: actions/checkout@v2
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+      - name: Publish to crates.io
+        shell: bash
+        run: |
+          cargo login ${{ secrets.CRATES_IO_TOKEN }}
+          cd commons/zenoh-macros && cargo publish && cd - && sleep 30
+          cd commons/zenoh-core && cargo publish && cd - && sleep 30
+          cd commons/zenoh-cfg-properties && cargo publish && cd - && sleep 30
+          cd commons/zenoh-collections && cargo publish && cd - && sleep 30
+          cd commons/zenoh-crypto && cargo publish && cd - && sleep 30
+          cd commons/zenoh-sync && cargo publish && cd - && sleep 30
+          cd commons/zenoh-util && cargo publish && cd - && sleep 30
+          cd commons/zenoh-config && cargo publish && cd - && sleep 30
+          cd commons/zenoh-buffers && cargo publish && cd - && sleep 30
+          cd commons/zenoh-protocol-core && cargo publish && cd - && sleep 30
+          cd commons/zenoh-protocol && cargo publish && cd - && sleep 30
+          cd io/zenoh-link-commons && cargo publish && cd - && sleep 30
+          cd io/zenoh-links/zenoh-link-udp && cargo publish && cd - && sleep 30
+          cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd - && sleep 30
+          cd io/zenoh-links/zenoh-link-tls && cargo publish && cd - && sleep 30
+          cd io/zenoh-links/zenoh-link-quic && cargo publish && cd - && sleep 30
+          cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd - && sleep 30
+          cd io/zenoh-link && cargo publish && cd - && sleep 30
+          cd io/zenoh-transport && cargo publish && cd - && sleep 30
+          cd zenoh && cargo publish && cd - && sleep 30
+          cd zenoh-ext && cargo publish && cd - && sleep 30
+          cd zenohd && cargo publish && cd - && sleep 30
+          cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
+          cd plugins/zenoh-backend-traits && cargo publish && cd - && sleep 30
+      - name: Cancel workflow if fail # thus Docker job be interrupted
+        if: failure()
+        uses: andymckay/cancel-action@0.2
 
   docker:
     name: Docker build and push
-    needs: [checks, builds]
+    needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
