@@ -492,7 +492,7 @@ impl ConsolidationStrategy {
     /// This is usefull when querying timeseries data bases or
     /// when using quorums.
     #[inline]
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         Self {
             first_routers: ConsolidationMode::None,
             last_router: ConsolidationMode::None,
@@ -508,7 +508,7 @@ impl ConsolidationStrategy {
     ///
     /// This mode does not garantie that there will be no duplicates.
     #[inline]
-    pub fn lazy() -> Self {
+    pub const fn lazy() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Lazy,
@@ -521,7 +521,7 @@ impl ConsolidationStrategy {
     /// This is the default strategy. It offers the best latency while
     /// garantying that there will be no duplicates.
     #[inline]
-    pub fn reception() -> Self {
+    pub const fn reception() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Lazy,
@@ -534,7 +534,7 @@ impl ConsolidationStrategy {
     /// This mode offers a good latency while optimizing bandwidth on
     /// the last transport link between the router and the application.
     #[inline]
-    pub fn last_router() -> Self {
+    pub const fn last_router() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Full,
@@ -547,7 +547,7 @@ impl ConsolidationStrategy {
     /// This mode optimizes bandwidth on all links in the system
     /// but will provide a very poor latency.
     #[inline]
-    pub fn full() -> Self {
+    pub const fn full() -> Self {
         Self {
             first_routers: ConsolidationMode::Full,
             last_router: ConsolidationMode::Full,

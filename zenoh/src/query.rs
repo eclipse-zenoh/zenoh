@@ -52,7 +52,7 @@ impl QueryConsolidation {
     /// the query selector. If the selector contains time range properties,
     /// no consolidation is performed. Otherwise the [`reception`](QueryConsolidation::reception) strategy is used.
     #[inline]
-    pub fn auto() -> Self {
+    pub const fn auto() -> Self {
         QueryConsolidation::Auto
     }
 
@@ -61,7 +61,7 @@ impl QueryConsolidation {
     /// This is useful when querying timeseries data bases or
     /// when using quorums.
     #[inline]
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::none())
     }
 
@@ -73,7 +73,7 @@ impl QueryConsolidation {
     ///
     /// This mode does not guarantee that there will be no duplicates.
     #[inline]
-    pub fn lazy() -> Self {
+    pub const fn lazy() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::lazy())
     }
 
@@ -82,7 +82,7 @@ impl QueryConsolidation {
     /// This is the default strategy. It offers the best latency while
     /// guarantying that there will be no duplicates.
     #[inline]
-    pub fn reception() -> Self {
+    pub const fn reception() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::reception())
     }
 
@@ -91,7 +91,7 @@ impl QueryConsolidation {
     /// This mode offers a good latency while optimizing bandwidth on
     /// the last transport link between the router and the application.
     #[inline]
-    pub fn last_router() -> Self {
+    pub const fn last_router() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::last_router())
     }
 
@@ -100,7 +100,7 @@ impl QueryConsolidation {
     /// This mode optimizes bandwidth on all links in the system
     /// but will provide a very poor latency.
     #[inline]
-    pub fn full() -> Self {
+    pub const fn full() -> Self {
         QueryConsolidation::Manual(ConsolidationStrategy::full())
     }
 }
