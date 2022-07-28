@@ -90,9 +90,7 @@ async fn run(endpoints: &[EndPoint]) {
         // Create the listeners
         for e in endpoints.iter() {
             println!("Add {}", e);
-            let res = ztimeout!(sm.add_listener(e.clone()));
-            println!("Res: {:?}", res);
-            assert!(res.is_ok());
+            ztimeout!(sm.add_listener(e.clone())).unwrap();
         }
 
         task::sleep(SLEEP).await;
@@ -100,9 +98,7 @@ async fn run(endpoints: &[EndPoint]) {
         // Delete the listeners
         for e in endpoints.iter() {
             println!("Del {}", e);
-            let res = ztimeout!(sm.del_listener(e));
-            println!("Res: {:?}", res);
-            assert!(res.is_ok());
+            ztimeout!(sm.del_listener(e)).unwrap();
         }
 
         task::sleep(SLEEP).await;

@@ -155,7 +155,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [1f1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -173,7 +173,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [1f2]: {:?}", res);
 
     /* [2] */
     // Open a second transport from the client to the router
@@ -198,7 +197,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [2d1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -214,7 +213,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [2d2]: {:?}", res);
 
     /* [3] */
     // Open transport -> This should be rejected because
@@ -235,7 +233,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [3d1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -247,7 +245,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(links.len(), links_num);
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [3d2]: {:?}", res);
 
     /* [4] */
     // Close the open transport on the client
@@ -262,7 +259,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [4c1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let index = transports
@@ -275,7 +272,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [4c2]: {:?}", res);
 
     /* [5] */
     // Open transport -> This should be accepted because
@@ -299,7 +295,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [5d1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -311,7 +307,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(links.len(), links_num);
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [5d2]: {:?}", res);
 
     /* [6] */
     // Open transport -> This should be rejected because
@@ -327,7 +322,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has not been open on the router
     println!("Transport Open Close [6c1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         task::sleep(SLEEP).await;
         let transports = router_manager.get_transports();
         assert_eq!(transports.len(), 1);
@@ -339,7 +334,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         assert_eq!(links.len(), links_num);
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [6c2]: {:?}", res);
 
     /* [7] */
     // Close the open transport on the client
@@ -354,7 +348,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [7c1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -364,7 +358,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [7c2]: {:?}", res);
 
     /* [8] */
     // Open transport -> This should be accepted because
@@ -387,7 +380,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been open on the router
     println!("Transport Open Close [8d1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             let s = transports
@@ -404,7 +397,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [8d2]: {:?}", res);
 
     /* [9] */
     // Close the open transport on the client
@@ -419,7 +411,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 
     // Verify that the transport has been closed also on the router
     println!("Transport Open Close [9c1]");
-    let res = ztimeout!(async {
+    ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
             if transports.is_empty() {
@@ -429,7 +421,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
         Ok(()) as ZResult<()>
     });
-    println!("Transport Open Close [9c2]: {:?}", res);
 
     /* [10] */
     // Perform clean up of the open locators

@@ -334,9 +334,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     /* [1] */
     println!("\nTransport Authenticator PubKey [1a1]");
     // Add the locator on the router
-    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-    println!("Transport Authenticator PubKey [1a1]: {:?}", res);
-    assert!(res.is_ok());
+    ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
     let locators = router_manager.get_listeners();
     println!("Transport Authenticator PubKey [1a2]: {:?}", locators);
@@ -346,19 +344,15 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Open a first transport from client01 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [2a1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [2a2]: {:?}", res);
-    assert!(res.is_ok());
-    let c_ses1 = res.unwrap();
+    let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
 
     /* [2b] */
     // Open a second transport from client01 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [2b1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [2b2]: {:?}", res);
-    assert!(res.is_ok());
+    let c_ses1_tmp = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
+    assert_eq!(c_ses1, c_ses1_tmp);
     assert_eq!(c_ses1.get_links().unwrap().len(), 2);
 
     /* [2c] */
@@ -373,9 +367,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     /* [2d] */
     // Close the session
     println!("Transport Authenticator PubKey [2d1]");
-    let res = ztimeout!(c_ses1.close());
-    println!("Transport Authenticator PubKey [2d2]: {:?}", res);
-    assert!(res.is_ok());
+    ztimeout!(c_ses1.close()).unwrap();
 
     ztimeout!(async {
         while !router_manager.get_transports().is_empty() {
@@ -387,19 +379,15 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Open a first transport from client02 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [3a1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [3a2]: {:?}", res);
-    assert!(res.is_ok());
-    let c_ses2 = res.unwrap();
+    let c_ses2 = ztimeout!(client02_manager.open_transport(endpoint.clone())).unwrap();
     assert_eq!(c_ses2.get_links().unwrap().len(), 1);
 
     /* [3b] */
     // Open a second transport from client02 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [3b1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [3b2]: {:?}", res);
-    assert!(res.is_ok());
+    let c_ses2_tmp = ztimeout!(client02_manager.open_transport(endpoint.clone())).unwrap();
+    assert_eq!(c_ses2, c_ses2_tmp);
     assert_eq!(c_ses2.get_links().unwrap().len(), 2);
 
     /* [3c] */
