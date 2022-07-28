@@ -171,7 +171,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [2] */
@@ -211,7 +210,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [3] */
@@ -243,7 +241,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-        Ok(()) as ZResult<()>
     });
 
     /* [4] */
@@ -270,7 +267,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [5] */
@@ -305,7 +301,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-        Ok(()) as ZResult<()>
     });
 
     /* [6] */
@@ -332,7 +327,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             .unwrap();
         let links = s.get_links().unwrap();
         assert_eq!(links.len(), links_num);
-        Ok(()) as ZResult<()>
     });
 
     /* [7] */
@@ -356,7 +350,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [8] */
@@ -395,7 +388,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
                 None => task::sleep(SLEEP).await,
             }
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [9] */
@@ -419,7 +411,6 @@ async fn openclose_transport(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [10] */

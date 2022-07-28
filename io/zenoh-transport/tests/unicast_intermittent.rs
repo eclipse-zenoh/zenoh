@@ -318,7 +318,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
                 thread::sleep(USLEEP);
             }
         }
-        Ok(()) as ZResult<()>
     }));
 
     // Stop the tasks
@@ -336,7 +335,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             println!("Transport Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [5] */
@@ -365,7 +363,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             }
             task::sleep(SLEEP).await;
         }
-        Ok(()) as ZResult<()>
     });
 
     /* [7] */
