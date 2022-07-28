@@ -25,6 +25,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, Reply};
+use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
 use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
@@ -340,7 +341,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == "_time") {
+        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
             QueryConsolidation::none()
         } else {
             QueryConsolidation::default()

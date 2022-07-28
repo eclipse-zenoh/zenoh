@@ -26,6 +26,7 @@ use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::utils::ClosureResolve;
 use crate::utils::FutureResolve;
@@ -1368,7 +1369,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation {
             QueryConsolidation::Auto => {
-                if selector.decode().any(|(k, _)| k.as_ref() == "_time") {
+                if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationStrategy::none()
                 } else {
                     ConsolidationStrategy::default()
