@@ -58,8 +58,30 @@ impl<'a> Selector<'a> {
     pub fn value_selector(&self) -> &str {
         &self.value_selector
     }
-    pub fn value_selector_map(&'a self) -> HashMap<Cow<'a, str>, Cow<'a, str>> {
-        self.decode().collect()
+    pub fn value_selector_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
+    where
+        K: Eq + Hash + std::fmt::Debug,
+        Cow<'a, str>: Into<K> + Into<V>,
+    {
+        let mut result = HashMap::new();
+        for (k, v) in self.decode() {
+            let k = k.into();
+            match result.entry(k) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    bail!("Duplicated selector key: {:?}", entry.key())
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(v.into());
+                }
+            }
+        }
+        Ok(result)
+    }
+    pub fn value_selector_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
+        self.value_selector_map()
+    }
+    pub fn value_selector_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
+        self.value_selector_map()
     }
     /// Gets a mutable reference to the value_selector as a String.
     ///
@@ -169,7 +191,7 @@ fn selector_accessors() {
         selector.with_time_range(time_range);
         assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
         assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
-        let map_selector = selector.value_selector_map();
+        let map_selector = selector.value_selector_cowmap().unwrap();
         assert_eq!(
             selector.time_range().unwrap(),
             map_selector.time_range().unwrap()
