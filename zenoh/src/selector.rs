@@ -75,6 +75,9 @@ impl<'a> Selector<'a> {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
+    pub fn set_value_selector(&mut self, selector: impl Into<Cow<'a, str>>) {
+        self.value_selector = selector.into();
+    }
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
             key_expr: self.key_expr.borrowing_clone(),
