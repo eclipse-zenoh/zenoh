@@ -17,7 +17,7 @@ use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
-use flume::{Receiver, Sender};
+use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -77,9 +77,13 @@ struct StageInOut {
 }
 
 impl StageInOut {
-    fn move_batch(&mut self, batch: SerializationBatch) {
-        let _ = self.s_out_w.push(batch);
+    fn notify(&self) {
         let _ = self.n_out_w.try_send(());
+    }
+
+    fn move_batch(&mut self, batch: SerializationBatch) {
+        let _ = self.s_out_w.push(batch).is_none();
+        self.notify();
     }
 }
 
@@ -129,6 +133,7 @@ impl StageIn {
                 if batch.serialize_zenoh_message(&mut msg, prio, &mut channel.sn) {
                     if self.backoff {
                         *c_guard = Some(batch);
+                        self.s_out.notify();
                     } else {
                         self.s_out.move_batch(batch);
                     }
@@ -308,7 +313,7 @@ impl TransmissionPipeline {
 
         // Create the channel for notifying that new batches are in the out ring buffer
         // This is a MPSC channel
-        let (n_out_w, n_out_r) = flume::bounded(1);
+        let (n_out_w, n_out_r) = bounded(1);
 
         // @TODO: remove this workaround
         if conduit.len() == 0 {
@@ -338,7 +343,7 @@ impl TransmissionPipeline {
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
-            let (n_ref_w, n_ref_r) = flume::bounded(1);
+            let (n_ref_w, n_ref_r) = bounded(1);
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
@@ -358,7 +363,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                backoff: !(prio == 0 || prio == 1),
+                backoff: prio != Priority::Control as usize && prio != Priority::RealTime as usize,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             })));
 
@@ -368,11 +373,7 @@ impl TransmissionPipeline {
                 s_ref_w,
                 s_out_r,
                 current,
-                backoff: Duration::from_micros(if prio == 0 || prio == 1 {
-                    0 as u64
-                } else {
-                    5 * prio.pow(2) as u64
-                }),
+                backoff: Duration::from_micros(5 * prio.pow(2) as u64),
                 last_pull: Instant::now(),
             });
         }
@@ -432,33 +433,49 @@ pub(crate) struct TransmissionPipelineConsumer {
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
-        async fn notification(ch: &Receiver<()>) -> bool {
+        #[derive(Debug)]
+        enum Action {
+            NotificationOk,
+            NotificationErr,
+            Backoff,
+        }
+
+        async fn notification(ch: &Receiver<()>) -> Action {
             match ch.recv_async().await {
-                Ok(_) => true,
-                Err(_) => false,
+                Ok(_) => Action::NotificationOk,
+                Err(_) => Action::NotificationErr,
             }
         }
 
-        async fn backoff(bo: Duration) -> bool {
+        async fn backoff(bo: Duration) -> Action {
             async_std::task::sleep(bo).await;
-            true
+            Action::Backoff
         }
 
         loop {
             let mut bo = Duration::from_micros(u32::MAX as u64);
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
-                    PullResult::Some(batch) => return Some((batch, prio)),
+                    PullResult::Some(batch) => {
+                        // println!("[{}] Try Pull", prio);
+                        return Some((batch, prio));
+                    }
                     PullResult::Backoff(b) => {
+                        // println!("[{}] Backoff", prio);
                         if b < bo {
                             bo = b;
                         }
                     }
-                    PullResult::None => {}
+                    PullResult::None => {
+                        // println!("[{}] None", prio);
+                    }
                 }
             }
 
-            if !notification(&self.n_out_r).race(backoff(bo)).await {
+            // println!("BackOff {:?}", bo);
+            let res = notification(&self.n_out_r).race(backoff(bo)).await;
+            // println!("{:?}", res);
+            if let Action::NotificationErr = res {
                 return None;
             };
         }

@@ -35,6 +35,7 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_ping)
         .congestion_control(CongestionControl::Block)
+        .priority(Priority::RealTime)
         .res()
         .unwrap();
 
