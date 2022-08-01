@@ -27,16 +27,15 @@ impl TransportMulticastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                return pl.push_zenoh_message($msg);
+                // return pl.push_zenoh_message($msg);
+                return true;
             };
         }
 
         let guard = zread!(self.link);
         match guard.as_ref() {
             Some(l) => {
-                if let Some(pipeline) = l.pipeline.as_ref() {
-                    zpush!(guard, pipeline, msg);
-                }
+                zpush!(guard, l.pipeline, msg);
             }
             None => {
                 log::trace!(

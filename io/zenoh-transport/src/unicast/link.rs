@@ -11,13 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
+use super::common::conduit::TransportConduitTx;
 use super::protocol::io::{ZBuf, ZSlice};
 use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::common::pipeline::TransmissionPipelineConf;
+use crate::common::pipeline::{
+    TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+    TransmissionPipelineProducer,
+};
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
@@ -40,7 +43,7 @@ pub(super) struct TransportLinkUnicast {
     // The underlying link
     pub(super) link: LinkUnicast,
     // The transmission pipeline
-    pub(super) pipeline: Option<Arc<TransmissionPipeline>>,
+    pub(super) pipeline: TransmissionPipelineProducer,
     // The transport this link is associated to
     transport: TransportUnicastInner,
     // The signals to stop TX/RX tasks
@@ -55,11 +58,12 @@ impl TransportLinkUnicast {
         link: LinkUnicast,
         direction: LinkUnicastDirection,
     ) -> TransportLinkUnicast {
+        let (producer, _) = TransmissionPipeline::new(TransmissionPipelineConf::default(), &[]);
         TransportLinkUnicast {
             direction,
             transport,
             link,
-            pipeline: None,
+            pipeline: producer,
             handle_tx: None,
             signal_rx: Signal::new(),
             handle_rx: None,
@@ -73,7 +77,7 @@ impl TransportLinkUnicast {
         executor: &TransportExecutor,
         keep_alive: Duration,
         batch_size: u16,
-        conduit_tx: Arc<[TransportConduitTx]>,
+        conduit_tx: &[TransportConduitTx],
     ) {
         if self.handle_tx.is_none() {
             let config = TransmissionPipelineConf {
@@ -83,22 +87,21 @@ impl TransportLinkUnicast {
                 backoff: self.transport.config.manager.config.queue_backoff,
             };
             // The pipeline
-            let pipeline = Arc::new(TransmissionPipeline::new(config, conduit_tx));
-            self.pipeline = Some(pipeline.clone());
+            let (producer, consumer) = TransmissionPipeline::new(config, conduit_tx);
+            self.pipeline = producer;
 
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let handle = executor.spawn(async move {
                 let res = tx_task(
-                    pipeline.clone(),
+                    consumer,
                     c_link.clone(),
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
                 )
                 .await;
-                pipeline.disable();
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
@@ -111,9 +114,7 @@ impl TransportLinkUnicast {
     }
 
     pub(super) fn stop_tx(&mut self) {
-        if let Some(pipeline) = self.pipeline.take() {
-            pipeline.disable();
-        }
+        self.pipeline.disable();
     }
 
     pub(super) fn start_rx(&mut self, lease: Duration) {
@@ -174,7 +175,7 @@ impl TransportLinkUnicast {
 /*              TASKS                */
 /*************************************/
 async fn tx_task(
-    pipeline: Arc<TransmissionPipeline>,
+    mut pipeline: TransmissionPipelineConsumer,
     link: LinkUnicast,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,

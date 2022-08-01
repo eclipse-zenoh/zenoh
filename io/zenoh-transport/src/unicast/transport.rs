@@ -12,10 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use super::common::{
-    conduit::{TransportConduitRx, TransportConduitTx},
-    pipeline::TransmissionPipeline,
-};
+use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
 use super::protocol::core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
@@ -248,7 +245,7 @@ impl TransportUnicastInner {
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, self.conduit_tx.clone());
+                l.start_tx(executor, keep_alive, batch_size, &self.conduit_tx);
                 Ok(())
             }
             None => {
@@ -390,19 +387,18 @@ impl TransportUnicastInner {
     pub(crate) async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
-        let mut pipeline = zlinkget!(zread!(self.links), link)
+        let pipeline = zlinkget!(zread!(self.links), link)
             .map(|l| l.pipeline.clone())
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
-        if let Some(p) = pipeline.take() {
-            // Close message to be sent on the target link
-            let peer_id = Some(self.config.manager.zid());
-            let reason_id = reason;
-            let link_only = true; // This is should always be true when closing a link
-            let attachment = None; // No attachment here
-            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+        // Close message to be sent on the target link
+        let peer_id = Some(self.config.manager.zid());
+        let reason_id = reason;
+        let link_only = true; // This is should always be true when closing a link
+        let attachment = None; // No attachment here
+        let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-            p.push_transport_message(msg, Priority::Background);
-        }
+        pipeline.push_transport_message(msg, Priority::Background);
+
         // Remove the link from the channel
         self.del_link(link).await
     }
@@ -410,10 +406,10 @@ impl TransportUnicastInner {
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
+        let mut pipelines = zread!(self.links)
             .iter()
-            .filter_map(|sl| sl.pipeline.clone())
-            .collect();
+            .map(|sl| sl.pipeline.clone())
+            .collect::<Vec<_>>();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
             let peer_id = Some(self.config.manager.zid());
