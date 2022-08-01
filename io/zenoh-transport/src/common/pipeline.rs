@@ -226,29 +226,42 @@ struct StageOut {
     s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
     s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
     current: Arc<Mutex<Option<SerializationBatch>>>,
-    backoff: Duration,
-    last_pull: Instant,
+    backoff: Option<Duration>,
+    init: Duration,
 }
 
 impl StageOut {
+    #[inline]
     fn try_pull(&mut self) -> PullResult {
         if let Some(mut batch) = self.s_out_r.pull() {
             batch.write_len();
+            self.backoff = None;
             return PullResult::Some(batch);
         }
-        let now = Instant::now();
-        let diff = now - self.last_pull;
-        if diff < self.backoff {
-            self.last_pull = now;
-            return PullResult::Backoff(self.backoff - diff);
-        }
+        self.try_pull_deep()
+    }
 
+    #[cold]
+    fn try_pull_deep(&mut self) -> PullResult {
         match self.current.try_lock() {
-            Ok(mut g) => g.take().map_or(PullResult::None, |mut batch| {
-                batch.write_len();
-                PullResult::Some(batch)
-            }),
-            Err(_) => PullResult::Backoff(self.backoff),
+            Ok(mut g) => match g.take() {
+                Some(mut batch) => {
+                    batch.write_len();
+                    self.backoff = None;
+                    PullResult::Some(batch)
+                }
+                None => PullResult::None,
+            },
+            Err(_) => match self.backoff {
+                Some(backoff) => {
+                    self.backoff = Some(2 * backoff);
+                    PullResult::Backoff(backoff)
+                }
+                None => {
+                    self.backoff = Some(self.init);
+                    PullResult::Backoff(self.init)
+                }
+            },
         }
     }
 
@@ -373,8 +386,8 @@ impl TransmissionPipeline {
                 s_ref_w,
                 s_out_r,
                 current,
-                backoff: Duration::from_micros(5 * prio.pow(2) as u64),
-                last_pull: Instant::now(),
+                init: Duration::from_micros(5 * prio.pow(2) as u64),
+                backoff: None,
             });
         }
 
