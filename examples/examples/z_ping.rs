@@ -75,7 +75,7 @@ fn main() {
     }
 
     for (i, rtt) in samples.iter().enumerate().take(n) {
-        println!("{} bytes: seq={} time={:?}µs", size, i, rtt);
+        println!("{} bytes: seq={} time={:?}µs", size, i, rtt / 2);
     }
 }
 

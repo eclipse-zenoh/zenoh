@@ -385,6 +385,7 @@ impl TransmissionPipeline {
             let current = Arc::new(Mutex::new(None));
 
             // The stage in for this priority
+            let backoff = prio != Priority::Control as usize && prio != Priority::RealTime as usize;
             stage_in.push(Arc::new(Mutex::new(StageIn {
                 s_ref: StageInRefill { n_ref_r, s_ref_r },
                 s_out: StageInOut {
@@ -395,18 +396,22 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                backoff: prio != Priority::Control as usize && prio != Priority::RealTime as usize,
+                backoff,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             })));
 
             // The stage out for this priority
-            let init = Duration::from_micros(5 * prio.pow(2) as u64);
+            let init = if backoff {
+                Duration::from_micros(5 * prio.pow(2) as u64)
+            } else {
+                Duration::from_micros(0)
+            };
             stage_out.push(StageOut {
                 n_ref_w,
                 s_ref_w,
                 s_out_r,
                 current,
-                init: Duration::from_micros(5 * prio.pow(2) as u64),
+                init,
                 backoff: Backoff {
                     start: Instant::now(),
                     amount: init,
