@@ -221,12 +221,31 @@ enum PullResult {
     None,
     Backoff(Duration),
 }
+
+struct Backoff {
+    start: Instant,
+    amount: Duration,
+}
+
+impl Backoff {
+    fn new(amount: Duration) -> Self {
+        Self {
+            start: Instant::now(),
+            amount,
+        }
+    }
+
+    fn next(&mut self) {
+        self.amount *= 2;
+    }
+}
+
 struct StageOut {
     n_ref_w: Sender<()>,
     s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
     s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
     current: Arc<Mutex<Option<SerializationBatch>>>,
-    backoff: Option<Duration>,
+    backoff: Backoff,
     init: Duration,
 }
 
@@ -235,7 +254,7 @@ impl StageOut {
     fn try_pull(&mut self) -> PullResult {
         if let Some(mut batch) = self.s_out_r.pull() {
             batch.write_len();
-            self.backoff = None;
+            self.backoff = Backoff::new(self.init);
             return PullResult::Some(batch);
         }
         self.try_pull_deep()
@@ -243,25 +262,25 @@ impl StageOut {
 
     #[cold]
     fn try_pull_deep(&mut self) -> PullResult {
+        let now = Instant::now();
+        let diff = now - self.backoff.start;
+        if diff < self.backoff.amount {
+            return PullResult::Backoff(self.backoff.amount - diff);
+        }
+
         match self.current.try_lock() {
             Ok(mut g) => match g.take() {
                 Some(mut batch) => {
                     batch.write_len();
-                    self.backoff = None;
+                    self.backoff = Backoff::new(self.init);
                     PullResult::Some(batch)
                 }
                 None => PullResult::None,
             },
-            Err(_) => match self.backoff {
-                Some(backoff) => {
-                    self.backoff = Some(2 * backoff);
-                    PullResult::Backoff(backoff)
-                }
-                None => {
-                    self.backoff = Some(self.init);
-                    PullResult::Backoff(self.init)
-                }
-            },
+            Err(_) => {
+                self.backoff.next();
+                PullResult::Backoff(self.backoff.amount)
+            }
         }
     }
 
@@ -381,13 +400,17 @@ impl TransmissionPipeline {
             })));
 
             // The stage out for this priority
+            let init = Duration::from_micros(5 * prio.pow(2) as u64);
             stage_out.push(StageOut {
                 n_ref_w,
                 s_ref_w,
                 s_out_r,
                 current,
                 init: Duration::from_micros(5 * prio.pow(2) as u64),
-                backoff: None,
+                backoff: Backoff {
+                    start: Instant::now(),
+                    amount: init,
+                },
             });
         }
 
