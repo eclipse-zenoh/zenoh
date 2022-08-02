@@ -50,6 +50,7 @@ impl OwnedKeyExpr {
         t.canonize();
         Self::new(t)
     }
+
     /// Constructs an OwnedKeyExpr without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.

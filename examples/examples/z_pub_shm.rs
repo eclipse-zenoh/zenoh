@@ -32,8 +32,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Shared Memory Manager...");
-    let id = session.id();
-    let mut shm = SharedMemoryManager::make(id, N * 1024).unwrap();
+    let id = session.zid();
+    let mut shm = SharedMemoryManager::make(id.to_string(), N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();

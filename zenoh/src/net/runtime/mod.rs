@@ -219,10 +219,6 @@ impl Runtime {
         Ok(())
     }
 
-    pub fn get_zid_str(&self) -> String {
-        self.zid.to_string()
-    }
-
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }

@@ -229,7 +229,7 @@ async fn close_transport(
     endpoints: &[EndPoint],
 ) {
     // Close the client transport
-    let mut ee = "".to_string();
+    let mut ee = String::new();
     for e in endpoints.iter() {
         let _ = write!(ee, "{} ", e);
     }

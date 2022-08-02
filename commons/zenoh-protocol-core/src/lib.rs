@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod key_expr;
 
+use key_expr::OwnedKeyExpr;
 use std::convert::{From, TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -21,8 +23,6 @@ use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_core::{bail, zerror};
-
-pub mod key_expr;
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -64,7 +64,7 @@ pub struct Property {
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,
@@ -118,6 +118,10 @@ impl ZenohId {
     pub fn rand() -> ZenohId {
         ZenohId::from(Uuid::new_v4())
     }
+
+    pub fn into_keyexpr(self) -> OwnedKeyExpr {
+        self.into()
+    }
 }
 
 impl Default for ZenohId {
@@ -132,6 +136,7 @@ impl From<uuid::Uuid> for ZenohId {
         ZenohId(uuid.into())
     }
 }
+
 macro_rules! derive_tryfrom {
     ($T: ty) => {
         impl TryFrom<$T> for ZenohId {
@@ -216,6 +221,22 @@ impl fmt::Display for ZenohId {
 impl From<&ZenohId> for uhlc::ID {
     fn from(zid: &ZenohId) -> Self {
         zid.0
+    }
+}
+
+impl From<ZenohId> for OwnedKeyExpr {
+    fn from(zid: ZenohId) -> Self {
+        // Safety: zid.to_string() returns an stringified hexadecimal
+        // representation of the zid. Therefore, building a OwnedKeyExpr
+        // by calling from_string_unchecked() is safe because it is
+        // guaranteed that no wildcards nor reserved chars will be present.
+        unsafe { OwnedKeyExpr::from_string_unchecked(zid.to_string()) }
+    }
+}
+
+impl From<&ZenohId> for OwnedKeyExpr {
+    fn from(zid: &ZenohId) -> Self {
+        (*zid).into()
     }
 }
 
@@ -319,7 +340,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
@@ -383,7 +404,7 @@ pub struct ConduitSn {
 }
 
 /// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
@@ -448,7 +469,7 @@ pub mod queryable {
 }
 
 /// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[repr(u8)]
 pub enum ConsolidationMode {
     None,
@@ -458,7 +479,7 @@ pub enum ConsolidationMode {
 
 /// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
@@ -471,7 +492,7 @@ impl ConsolidationStrategy {
     /// This is usefull when querying timeseries data bases or
     /// when using quorums.
     #[inline]
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         Self {
             first_routers: ConsolidationMode::None,
             last_router: ConsolidationMode::None,
@@ -487,7 +508,7 @@ impl ConsolidationStrategy {
     ///
     /// This mode does not garantie that there will be no duplicates.
     #[inline]
-    pub fn lazy() -> Self {
+    pub const fn lazy() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Lazy,
@@ -500,7 +521,7 @@ impl ConsolidationStrategy {
     /// This is the default strategy. It offers the best latency while
     /// garantying that there will be no duplicates.
     #[inline]
-    pub fn reception() -> Self {
+    pub const fn reception() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Lazy,
@@ -513,7 +534,7 @@ impl ConsolidationStrategy {
     /// This mode offers a good latency while optimizing bandwidth on
     /// the last transport link between the router and the application.
     #[inline]
-    pub fn last_router() -> Self {
+    pub const fn last_router() -> Self {
         Self {
             first_routers: ConsolidationMode::Lazy,
             last_router: ConsolidationMode::Full,
@@ -526,7 +547,7 @@ impl ConsolidationStrategy {
     /// This mode optimizes bandwidth on all links in the system
     /// but will provide a very poor latency.
     #[inline]
-    pub fn full() -> Self {
+    pub const fn full() -> Self {
         Self {
             first_routers: ConsolidationMode::Full,
             last_router: ConsolidationMode::Full,
@@ -543,7 +564,7 @@ impl Default for ConsolidationStrategy {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
     BestMatching,
     All,
@@ -559,7 +580,7 @@ impl Default for QueryTarget {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryTAK {
     pub kind: ZInt,
     pub target: QueryTarget,

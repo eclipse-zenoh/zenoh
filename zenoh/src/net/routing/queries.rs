@@ -16,7 +16,7 @@ use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 // use std::time::Instant;
@@ -26,6 +26,7 @@ use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol_core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol_core::{
     queryable, ConsolidationStrategy, QueryTAK, QueryTarget, QueryableInfo, WhatAmI, WireExpr,
     ZInt, ZenohId,
@@ -1172,7 +1173,11 @@ fn compute_query_route(
     source_type: WhatAmI,
 ) -> Arc<QueryTargetQablSet> {
     let mut route = QueryTargetQablSet::new();
-    let key_expr = match KeyExpr::try_from(prefix.expr() + suffix) {
+    let key_expr = prefix.expr() + suffix;
+    if key_expr.ends_with('/') {
+        return EMPTY_ROUTE.clone();
+    }
+    let key_expr = match KeyExpr::try_from(key_expr) {
         Ok(ke) => ke,
         Err(e) => {
             log::warn!("Invalid KE reached the system: {}", e);
@@ -1192,11 +1197,7 @@ fn compute_query_route(
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();
-        let complete = mres
-            .expr()
-            .as_str()
-            .try_into()
-            .map_or(false, |res| key_expr.includes(res));
+        let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
         if tables.whatami == WhatAmI::Router {
             if master || source_type == WhatAmI::Router {
                 let net = tables.routers_net.as_ref().unwrap();

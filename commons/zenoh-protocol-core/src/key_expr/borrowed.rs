@@ -118,14 +118,14 @@ impl keyexpr {
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
     pub fn is_wild(&self) -> bool {
-        self.0.contains('*')
+        self.0.contains(super::SINGLE_WILD as char)
     }
 
-    /// Returns the longest prefix of `self` that doesn't contain any wildcard character ('**' or '$*').
+    /// Returns the longest prefix of `self` that doesn't contain any wildcard character (`**` or `$*`).
     ///
-    /// NOTE: this operation can typically used in a backend implementation, at creation of a Storage to get the keys prefix,
+    /// NOTE: this operation can typically be used in a backend implementation, at creation of a Storage to get the keys prefix,
     /// and then in `zenoh_backend_traits::Storage::on_sample()` this prefix has to be stripped from all received
-    /// [`Sample::key_expr`](zenoh::prelude::Sample::key_expr) to retrieve the corrsponding key.
+    /// `Sample::key_expr` to retrieve the corrsponding key.
     ///
     /// # Examples:
     /// ```
@@ -169,8 +169,8 @@ impl keyexpr {
     ///
     /// See below more examples.
     ///
-    /// NOTE: this operation can typically used in a backend implementation, within the `zenoh_backend_traits::Storage::on_query()` implementation, to transform the received
-    /// [`Query::selector()`](zenoh::queryable::Query::selector)`.`[`key_expr`](zenoh::prelude::Selector::key_expr) in a list of key selectors
+    /// NOTE: this operation can typically used in a backend implementation, within the `zenoh_backend_traits::Storage::on_query()` implementation,
+    /// to transform the received `Query::selector()`'s `key_expr` into a list of key selectors
     /// that will match all the relevant stored keys (that correspond to keys stripped from the prefix).
     ///
     /// # Examples:

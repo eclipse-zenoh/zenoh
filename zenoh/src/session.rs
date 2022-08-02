@@ -26,6 +26,7 @@ use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::utils::ClosureResolve;
 use crate::utils::FutureResolve;
@@ -87,16 +88,16 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) local_routing: bool,
-    pub(crate) join_subscriptions: Vec<OwnedKeyExpr>,
-    pub(crate) join_publications: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
+    pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) timer: Timer,
 }
 
 impl SessionState {
     pub(crate) fn new(
         local_routing: bool,
-        join_subscriptions: Vec<OwnedKeyExpr>,
-        join_publications: Vec<OwnedKeyExpr>,
+        aggregated_subscribers: Vec<OwnedKeyExpr>,
+        aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -111,8 +112,8 @@ impl SessionState {
             queryables: HashMap::new(),
             queries: HashMap::new(),
             local_routing,
-            join_subscriptions,
-            join_publications,
+            aggregated_subscribers,
+            aggregated_publishers,
             timer: Timer::new(true),
         }
     }
@@ -140,22 +141,6 @@ impl SessionState {
             self.get_remote_res(id)
         }
     }
-
-    // #[inline]
-    // fn local_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
-    //     match self.local_resources.get(id) {
-    //         Some(res) => Ok(&res.name),
-    //         None => bail!("{}", id),
-    //     }
-    // }
-
-    // #[inline]
-    // fn remote_wireid_to_str<'a>(&'a self, id: &ExprId) -> ZResult<&'a str> {
-    //     match self.remote_resources.get(id) {
-    //         Some(res) => Ok(&res.name),
-    //         None => self.local_wireid_to_str(id),
-    //     }
-    // }
 
     pub(crate) fn remote_key_to_expr<'a>(&'a self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
         if key_expr.scope == EMPTY_EXPR_ID {
@@ -335,15 +320,15 @@ impl Session {
     pub fn init(
         runtime: Runtime,
         local_routing: bool,
-        join_subscriptions: Vec<OwnedKeyExpr>,
-        join_publications: Vec<OwnedKeyExpr>,
+        aggregated_subscribers: Vec<OwnedKeyExpr>,
+        aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ClosureResolve(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
                 local_routing,
-                join_subscriptions,
-                join_publications,
+                aggregated_subscribers,
+                aggregated_publishers,
             )));
             let session = Session {
                 runtime,
@@ -419,9 +404,10 @@ impl Session {
         Box::leak(Box::new(s))
     }
 
-    /// Returns the identifier for this session.
-    pub fn id(&self) -> String {
-        self.runtime.get_zid_str()
+    /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
+    /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
+    pub fn zid(&self) -> ZenohId {
+        self.info().zid().res_sync()
     }
 
     pub fn hlc(&self) -> Option<&HLC> {
@@ -505,8 +491,8 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> SessionInfos {
-        SessionInfos {
+    pub fn info(&self) -> SessionInfo {
+        SessionInfo {
             session: SessionRef::Borrow(self),
         }
     }
@@ -795,15 +781,15 @@ impl Session {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
             let local_routing = config.local_routing().unwrap_or(true);
-            let join_subscriptions = config.startup().subscribe().clone();
-            let join_publications = config.startup().declare_publications().clone();
+            let aggregated_subscribers = config.aggregation().subscribers().clone();
+            let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
                         local_routing,
-                        join_subscriptions,
-                        join_publications,
+                        aggregated_subscribers,
+                        aggregated_publishers,
                     )
                     .res_async()
                     .await;
@@ -874,7 +860,7 @@ impl Session {
             let mut state = zwrite!(self.state);
             if !state.publications.iter().any(|p| **p == **key_expr) {
                 let declared_pub = if let Some(join_pub) = state
-                    .join_publications
+                    .aggregated_publishers
                     .iter()
                     .find(|s| s.includes(&key_expr))
                 {
@@ -911,7 +897,7 @@ impl Session {
                 trace!("undeclare_publication({:?})", key_expr);
                 state.publications.remove(idx);
                 match state
-                    .join_publications
+                    .aggregated_publishers
                     .iter()
                     .find(|s| s.includes(&key_expr))
                 {
@@ -952,7 +938,7 @@ impl Session {
             callback,
         });
         let declared_sub = match state
-            .join_subscriptions // TODO: can this be an OwnedKeyExpr?
+            .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
             .iter()
             .find(|s| s.includes( key_expr))
         {
@@ -1082,7 +1068,7 @@ impl Session {
             // Before calling forget_subscriber(key_expr), check if this was the last one.
             let key_expr = &sub_state.key_expr;
             match state
-                .join_subscriptions
+                .aggregated_subscribers
                 .iter()
                 .find(|s| s.includes(key_expr))
             {
@@ -1383,7 +1369,7 @@ impl Session {
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation {
             QueryConsolidation::Auto => {
-                if selector.decode().any(|(k, _)| k.as_ref() == "_time") {
+                if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationStrategy::none()
                 } else {
                     ConsolidationStrategy::default()
@@ -1924,6 +1910,6 @@ impl Drop for Session {
 
 impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Session").field("id", &self.id()).finish()
+        f.debug_struct("Session").field("id", &self.zid()).finish()
     }
 }

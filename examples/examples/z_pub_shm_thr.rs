@@ -24,8 +24,8 @@ async fn main() {
     let (config, sm_size, size) = parse_args();
 
     let z = zenoh::open(config).res().await.unwrap();
-    let id = z.id();
-    let mut shm = SharedMemoryManager::make(id, sm_size).unwrap();
+    let id = z.zid();
+    let mut shm = SharedMemoryManager::make(id.to_string(), sm_size).unwrap();
     let mut buf = shm.alloc(size).unwrap();
     let bs = unsafe { buf.as_mut_slice() };
     for b in bs {

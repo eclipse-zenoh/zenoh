@@ -567,7 +567,7 @@ pub(crate) mod common {
     }
 
     /// The Priority of zenoh messages.
-    #[derive(Debug, Copy, Clone, PartialEq)]
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     #[repr(u8)]
     pub enum Priority {
         RealTime = 1,
