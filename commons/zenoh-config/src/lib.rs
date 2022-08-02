@@ -171,10 +171,13 @@ validated_struct::validator! {
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
 
+        /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
         RoutingConf {
+            /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
+                /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
                 mode: Option<String>,
             },
         },
