@@ -133,8 +133,10 @@ impl StageIn {
                 if batch.serialize_zenoh_message(&mut msg, prio, &mut channel.sn) {
                     if self.backoff {
                         *c_guard = Some(batch);
+                        drop(c_guard);
                         self.s_out.notify();
                     } else {
+                        drop(c_guard);
                         self.s_out.move_batch(batch);
                     }
                     return true;
@@ -245,6 +247,7 @@ struct StageOut {
     s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
     s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
     current: Arc<Mutex<Option<SerializationBatch>>>,
+    do_backoff: bool,
     backoff: Backoff,
     init: Duration,
 }
@@ -257,7 +260,11 @@ impl StageOut {
             self.backoff = Backoff::new(self.init);
             return PullResult::Some(batch);
         }
-        self.try_pull_deep()
+        if self.do_backoff {
+            self.try_pull_deep()
+        } else {
+            PullResult::None
+        }
     }
 
     #[cold]
@@ -412,6 +419,7 @@ impl TransmissionPipeline {
                 s_out_r,
                 current,
                 init,
+                do_backoff: backoff,
                 backoff: Backoff {
                     start: Instant::now(),
                     amount: init,
