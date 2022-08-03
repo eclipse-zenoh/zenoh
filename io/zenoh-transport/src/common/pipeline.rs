@@ -211,7 +211,7 @@ impl StageIn {
     }
 }
 
-enum PullResult {
+enum Pull {
     Some(SerializationBatch),
     None,
     Backoff(Duration),
@@ -255,20 +255,20 @@ struct StageOutIn {
 
 impl StageOutIn {
     #[inline]
-    fn try_pull(&mut self) -> PullResult {
+    fn try_pull(&mut self) -> Pull {
         if let Some(mut batch) = self.s_out_r.pull() {
             batch.write_len();
             self.backoff.reset();
-            return PullResult::Some(batch);
+            return Pull::Some(batch);
         }
         self.try_pull_deep()
     }
 
     #[cold]
-    fn try_pull_deep(&mut self) -> PullResult {
+    fn try_pull_deep(&mut self) -> Pull {
         let diff = Instant::now() - self.backoff.last_pull;
         if diff < self.backoff.retry_time {
-            return PullResult::Backoff(self.backoff.retry_time - diff);
+            return Pull::Backoff(self.backoff.retry_time - diff);
         }
 
         let new_bytes = self.backoff.bytes.load(Ordering::Acquire);
@@ -276,7 +276,7 @@ impl StageOutIn {
         self.backoff.last_bytes = new_bytes;
         if last_bytes != new_bytes {
             self.backoff.next();
-            return PullResult::Backoff(self.backoff.retry_time);
+            return Pull::Backoff(self.backoff.retry_time);
         }
 
         match self.current.try_lock() {
@@ -284,20 +284,20 @@ impl StageOutIn {
                 Some(mut batch) => {
                     batch.write_len();
                     self.backoff.reset();
-                    PullResult::Some(batch)
+                    Pull::Some(batch)
                 }
                 None => match g.take() {
                     Some(mut batch) => {
                         batch.write_len();
                         self.backoff.reset();
-                        PullResult::Some(batch)
+                        Pull::Some(batch)
                     }
-                    None => PullResult::None,
+                    None => Pull::None,
                 },
             },
             Err(_) => {
                 self.backoff.next();
-                PullResult::Backoff(self.backoff.retry_time)
+                Pull::Backoff(self.backoff.retry_time)
             }
         }
     }
@@ -322,7 +322,7 @@ struct StageOut {
 
 impl StageOut {
     #[inline]
-    fn try_pull(&mut self) -> PullResult {
+    fn try_pull(&mut self) -> Pull {
         self.s_in.try_pull()
     }
 
@@ -516,15 +516,15 @@ impl TransmissionPipelineConsumer {
             let mut bo = Duration::from_micros(u32::MAX as u64);
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
-                    PullResult::Some(batch) => {
+                    Pull::Some(batch) => {
                         return Some((batch, prio));
                     }
-                    PullResult::Backoff(b) => {
+                    Pull::Backoff(b) => {
                         if b < bo {
                             bo = b;
                         }
                     }
-                    PullResult::None => {}
+                    Pull::None => {}
                 }
             }
 
