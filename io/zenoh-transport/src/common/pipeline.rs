@@ -428,7 +428,7 @@ impl TransmissionPipeline {
 
             // The stage in for this priority
             let low_latency =
-                prio != Priority::Control as usize && prio != Priority::RealTime as usize;
+                prio == Priority::Control as usize || prio == Priority::RealTime as usize;
             let bytes = Arc::new(AtomicUsize::new(0));
 
             stage_in.push(Arc::new(Mutex::new(StageIn {
