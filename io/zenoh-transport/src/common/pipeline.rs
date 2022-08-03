@@ -117,7 +117,7 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    backoff: Option<()>,
+    low_latency: bool,
     fragbuf: WBuf,
 }
 
@@ -138,17 +138,14 @@ impl StageIn {
                 let mut batch = zgetbatch!(self, c_guard, is_droppable);
                 let prio = msg.channel.priority;
                 if batch.serialize_zenoh_message(&mut msg, prio, &mut channel.sn) {
-                    match self.backoff.as_mut() {
-                        Some(_) => {
-                            let bytes = batch.len();
-                            *c_guard = Some(batch);
-                            drop(c_guard);
-                            self.s_out.notify(bytes);
-                        }
-                        None => {
-                            drop(c_guard);
-                            self.s_out.move_batch(batch);
-                        }
+                    if self.low_latency {
+                        drop(c_guard);
+                        self.s_out.move_batch(batch);
+                    } else {
+                        let bytes = batch.len();
+                        *c_guard = Some(batch);
+                        drop(c_guard);
+                        self.s_out.notify(bytes);
                     }
                     return true;
                 }
@@ -283,13 +280,20 @@ impl StageOutIn {
         }
 
         match self.current.try_lock() {
-            Ok(mut g) => match g.take() {
+            Ok(mut g) => match self.s_out_r.pull() {
                 Some(mut batch) => {
                     batch.write_len();
                     self.backoff.reset();
                     PullResult::Some(batch)
                 }
-                None => PullResult::None,
+                None => match g.take() {
+                    Some(mut batch) => {
+                        batch.write_len();
+                        self.backoff.reset();
+                        PullResult::Some(batch)
+                    }
+                    None => PullResult::None,
+                },
             },
             Err(_) => {
                 self.backoff.next();
@@ -423,7 +427,8 @@ impl TransmissionPipeline {
             let current = Arc::new(Mutex::new(None));
 
             // The stage in for this priority
-            let lowlat = prio != Priority::Control as usize && prio != Priority::RealTime as usize;
+            let low_latency =
+                prio != Priority::Control as usize && prio != Priority::RealTime as usize;
             let bytes = Arc::new(AtomicUsize::new(0));
 
             stage_in.push(Arc::new(Mutex::new(StageIn {
@@ -437,7 +442,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                backoff: if lowlat { Some(()) } else { None },
+                low_latency,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             })));
 
@@ -446,7 +451,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(Duration::from_micros(prio.pow(2) as u64), bytes),
+                    backoff: Backoff::new(Duration::from_micros(1), bytes),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
