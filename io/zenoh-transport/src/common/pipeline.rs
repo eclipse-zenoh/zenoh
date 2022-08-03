@@ -19,10 +19,11 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
-use zenoh_core::{zlock, Result as ZResult};
+use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 
 const RBLEN: usize = 16;
@@ -74,16 +75,20 @@ impl StageInRefill {
 struct StageInOut {
     n_out_w: Sender<()>,
     s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
+    bytes: Arc<AtomicUsize>,
 }
 
 impl StageInOut {
-    fn notify(&self) {
+    #[inline]
+    fn notify(&self, bytes: usize) {
+        self.bytes.store(bytes, Ordering::Release);
         let _ = self.n_out_w.try_send(());
     }
 
+    #[inline]
     fn move_batch(&mut self, batch: SerializationBatch) {
         let _ = self.s_out_w.push(batch).is_none();
-        self.notify();
+        self.notify(0);
     }
 }
 
@@ -93,10 +98,12 @@ struct StageInMutex {
 }
 
 impl StageInMutex {
+    #[inline]
     fn current(&self) -> MutexGuard<'_, Option<SerializationBatch>> {
         zlock!(self.current)
     }
 
+    #[inline]
     fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
             zlock!(self.conduit.reliable)
@@ -110,7 +117,7 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    backoff: bool,
+    backoff: Option<()>,
     fragbuf: WBuf,
 }
 
@@ -131,13 +138,17 @@ impl StageIn {
                 let mut batch = zgetbatch!(self, c_guard, is_droppable);
                 let prio = msg.channel.priority;
                 if batch.serialize_zenoh_message(&mut msg, prio, &mut channel.sn) {
-                    if self.backoff {
-                        *c_guard = Some(batch);
-                        drop(c_guard);
-                        self.s_out.notify();
-                    } else {
-                        drop(c_guard);
-                        self.s_out.move_batch(batch);
+                    match self.backoff.as_mut() {
+                        Some(_) => {
+                            let bytes = batch.len();
+                            *c_guard = Some(batch);
+                            drop(c_guard);
+                            self.s_out.notify(bytes);
+                        }
+                        None => {
+                            drop(c_guard);
+                            self.s_out.move_batch(batch);
+                        }
                     }
                     return true;
                 }
@@ -149,28 +160,13 @@ impl StageIn {
         let batch = zserialize!();
 
         // The first serialization attempt has failed. This means that the current
-        // batch is full. Therefore move the current batch to stage out.
+        // batch is full. Therefore, we move the current batch to stage out.
         self.s_out.move_batch(batch);
 
         let mut batch = zserialize!();
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
-        //     self.fragment_zenoh_message(msg, channel, c_guard, batch)
-        // }
-
-        // fn fragment_zenoh_message(
-        //     &mut self,
-        //     mut msg: ZenohMessage,
-        //     channel: MutexGuard<'_, TransportChannelTx>,
-        //     c_guard: MutexGuard<'_, Option<SerializationBatch>>,
-        //     batch: SerializationBatch,
-        // ) -> bool {
-        //     // Assign the stage_in to in_guard to avoid lifetime warnings
-        //     let mut channel = channel;
-        //     let mut c_guard = c_guard;
-        //     let mut batch = batch;
-        //     let is_droppable = msg.is_droppable();
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
@@ -224,76 +220,111 @@ enum PullResult {
     Backoff(Duration),
 }
 
+#[derive(Clone)]
 struct Backoff {
-    start: Instant,
-    amount: Duration,
+    time_slot: Duration,
+    last_pull: Instant,
+    retry_time: Duration,
+    last_bytes: usize,
+    bytes: Arc<AtomicUsize>,
 }
 
 impl Backoff {
-    fn new(amount: Duration) -> Self {
+    fn new(time_slot: Duration, bytes: Arc<AtomicUsize>) -> Self {
         Self {
-            start: Instant::now(),
-            amount,
+            time_slot,
+            last_pull: Instant::now(),
+            retry_time: time_slot,
+            last_bytes: 0,
+            bytes,
         }
     }
 
     fn next(&mut self) {
-        self.amount *= 2;
+        self.retry_time *= 2;
+    }
+
+    fn reset(&mut self) {
+        self.last_pull = Instant::now();
+        self.retry_time = self.time_slot;
     }
 }
 
-struct StageOut {
-    n_ref_w: Sender<()>,
-    s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
+struct StageOutIn {
     s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
     current: Arc<Mutex<Option<SerializationBatch>>>,
-    do_backoff: bool,
     backoff: Backoff,
-    init: Duration,
 }
 
-impl StageOut {
+impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> PullResult {
         if let Some(mut batch) = self.s_out_r.pull() {
             batch.write_len();
-            self.backoff = Backoff::new(self.init);
+            self.backoff.reset();
             return PullResult::Some(batch);
         }
-        if self.do_backoff {
-            self.try_pull_deep()
-        } else {
-            PullResult::None
-        }
+        self.try_pull_deep()
     }
 
     #[cold]
     fn try_pull_deep(&mut self) -> PullResult {
-        let now = Instant::now();
-        let diff = now - self.backoff.start;
-        if diff < self.backoff.amount {
-            return PullResult::Backoff(self.backoff.amount - diff);
+        let diff = Instant::now() - self.backoff.last_pull;
+        if diff < self.backoff.retry_time {
+            return PullResult::Backoff(self.backoff.retry_time - diff);
+        }
+
+        let new_bytes = self.backoff.bytes.load(Ordering::Acquire);
+        let last_bytes = self.backoff.last_bytes;
+        self.backoff.last_bytes = new_bytes;
+        if last_bytes != new_bytes {
+            self.backoff.next();
+            return PullResult::Backoff(self.backoff.retry_time);
         }
 
         match self.current.try_lock() {
             Ok(mut g) => match g.take() {
                 Some(mut batch) => {
                     batch.write_len();
-                    self.backoff = Backoff::new(self.init);
+                    self.backoff.reset();
                     PullResult::Some(batch)
                 }
                 None => PullResult::None,
             },
             Err(_) => {
                 self.backoff.next();
-                PullResult::Backoff(self.backoff.amount)
+                PullResult::Backoff(self.backoff.retry_time)
             }
         }
     }
+}
 
+struct StageOutRefill {
+    n_ref_w: Sender<()>,
+    s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
+}
+
+impl StageOutRefill {
     fn refill(&mut self, batch: SerializationBatch) {
         let _ = self.s_ref_w.push(batch);
         let _ = self.n_ref_w.try_send(());
+    }
+}
+
+struct StageOut {
+    s_in: StageOutIn,
+    s_ref: StageOutRefill,
+}
+
+impl StageOut {
+    #[inline]
+    fn try_pull(&mut self) -> PullResult {
+        self.s_in.try_pull()
+    }
+
+    #[inline]
+    fn refill(&mut self, batch: SerializationBatch) {
+        self.s_ref.refill(batch);
     }
 
     fn drain(
@@ -302,7 +333,7 @@ impl StageOut {
     ) -> Vec<SerializationBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
-        while let Some(mut batch) = self.s_out_r.pull() {
+        while let Some(mut batch) = self.s_in.s_out_r.pull() {
             batch.write_len();
             batches.push(batch);
         }
@@ -392,38 +423,32 @@ impl TransmissionPipeline {
             let current = Arc::new(Mutex::new(None));
 
             // The stage in for this priority
-            let backoff = prio != Priority::Control as usize && prio != Priority::RealTime as usize;
+            let lowlat = prio != Priority::Control as usize && prio != Priority::RealTime as usize;
+            let bytes = Arc::new(AtomicUsize::new(0));
+
             stage_in.push(Arc::new(Mutex::new(StageIn {
                 s_ref: StageInRefill { n_ref_r, s_ref_r },
                 s_out: StageInOut {
                     n_out_w: n_out_w.clone(),
                     s_out_w,
+                    bytes: bytes.clone(),
                 },
                 mutex: StageInMutex {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                backoff,
+                backoff: if lowlat { Some(()) } else { None },
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             })));
 
             // The stage out for this priority
-            let init = if backoff {
-                Duration::from_micros(5 * prio.pow(2) as u64)
-            } else {
-                Duration::from_micros(0)
-            };
             stage_out.push(StageOut {
-                n_ref_w,
-                s_ref_w,
-                s_out_r,
-                current,
-                init,
-                do_backoff: backoff,
-                backoff: Backoff {
-                    start: Instant::now(),
-                    amount: init,
+                s_in: StageOutIn {
+                    s_out_r,
+                    current,
+                    backoff: Backoff::new(Duration::from_micros(prio.pow(2) as u64), bytes),
                 },
+                s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
         }
 
@@ -482,51 +507,24 @@ pub(crate) struct TransmissionPipelineConsumer {
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
-        #[derive(Debug)]
-        enum Action {
-            NotificationOk,
-            NotificationErr,
-            Backoff,
-        }
-
-        async fn notification(ch: &Receiver<()>) -> Action {
-            match ch.recv_async().await {
-                Ok(_) => Action::NotificationOk,
-                Err(_) => Action::NotificationErr,
-            }
-        }
-
-        async fn backoff(bo: Duration) -> Action {
-            async_std::task::sleep(bo).await;
-            Action::Backoff
-        }
-
         loop {
             let mut bo = Duration::from_micros(u32::MAX as u64);
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
                     PullResult::Some(batch) => {
-                        // println!("[{}] Try Pull", prio);
                         return Some((batch, prio));
                     }
                     PullResult::Backoff(b) => {
-                        // println!("[{}] Backoff", prio);
                         if b < bo {
                             bo = b;
                         }
                     }
-                    PullResult::None => {
-                        // println!("[{}] None", prio);
-                    }
+                    PullResult::None => {}
                 }
             }
 
-            // println!("BackOff {:?}", bo);
-            let res = notification(&self.n_out_r).race(backoff(bo)).await;
-            // println!("{:?}", res);
-            if let Action::NotificationErr = res {
-                return None;
-            };
+            // Wait
+            let _ = self.n_out_r.recv_async().timeout(bo).await;
         }
     }
 
@@ -547,7 +545,7 @@ impl TransmissionPipelineConsumer {
         let locks = self
             .stage_out
             .iter()
-            .map(|x| x.current.clone())
+            .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
         let mut currents: Vec<MutexGuard<'_, Option<SerializationBatch>>> =
             locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
