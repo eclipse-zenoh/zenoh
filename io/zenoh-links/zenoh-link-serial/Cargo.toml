@@ -49,6 +49,5 @@ tokio = { version = "1.17.0", default-features = false, features = ["io-std", "m
 async-trait = "0.1.42"
 log = "0.4"
 futures = "0.3.21"
-# z-serial = {git = "https://github.com/ZettaScaleLabs/z-serial", branch = "master"}
-z-serial = {path = "../../../../z-serial"}
+z-serial = "0.1.0 "
 uuid = { version = "1.1.2", features = ["v4"] }
