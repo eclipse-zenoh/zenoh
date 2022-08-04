@@ -90,7 +90,7 @@ impl StageInOut {
 
     #[inline]
     fn move_batch(&mut self, batch: SerializationBatch) {
-        let _ = self.s_out_w.push(batch).is_none();
+        let _ = self.s_out_w.push(batch);
         self.bytes.store(0, Ordering::Release);
         let _ = self.n_out_w.try_send(());
     }
