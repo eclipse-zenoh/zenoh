@@ -58,30 +58,22 @@ impl<'a> Selector<'a> {
     pub fn value_selector(&self) -> &str {
         &self.value_selector
     }
+    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
     pub fn value_selector_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
-        K: Eq + Hash + std::fmt::Debug,
-        Cow<'a, str>: Into<K> + Into<V>,
+        K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
+        ExtractedKey<'a, Self>: Into<K>,
+        ExtractedValue<'a, Self>: Into<V>,
     {
-        let mut result = HashMap::new();
-        for (k, v) in self.decode() {
-            let k = k.into();
-            match result.entry(k) {
-                std::collections::hash_map::Entry::Occupied(entry) => {
-                    bail!("Duplicated selector key: {:?}", entry.key())
-                }
-                std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(v.into());
-                }
-            }
-        }
-        Ok(result)
+        self.decode_into_map()
     }
+    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
     pub fn value_selector_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
-        self.value_selector_map()
+        self.decode_into_map()
     }
+    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
     pub fn value_selector_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
-        self.value_selector_map()
+        self.decode_into_map()
     }
     /// Gets a mutable reference to the value_selector as a String.
     ///
@@ -198,53 +190,131 @@ fn selector_accessors() {
         );
     }
 }
-pub trait ValueSelectorProperty {
-    fn key(&self) -> &str;
-    fn value(&self) -> &str;
+pub trait KeyValuePair: Sized {
+    type Key: AsRef<str> + Sized;
+    type Value: AsRef<str> + Sized;
+    fn key(&self) -> &Self::Key;
+    fn value(&self) -> &Self::Value;
+    fn split(self) -> (Self::Key, Self::Value);
+    fn extract_key(self) -> Self::Key {
+        self.split().0
+    }
+    fn extract_value(self) -> Self::Value {
+        self.split().1
+    }
 }
-impl ValueSelectorProperty for (&str, &str) {
-    fn key(&self) -> &str {
+impl<K: AsRef<str> + Sized, V: AsRef<str> + Sized> KeyValuePair for (K, V) {
+    type Key = K;
+    type Value = V;
+    fn key(&self) -> &K {
+        &self.0
+    }
+    fn value(&self) -> &V {
+        &self.1
+    }
+    fn split(self) -> (Self::Key, Self::Value) {
+        self
+    }
+    fn extract_key(self) -> Self::Key {
         self.0
     }
-    fn value(&self) -> &str {
+    fn extract_value(self) -> Self::Value {
         self.1
     }
 }
-impl ValueSelectorProperty for (Cow<'_, str>, Cow<'_, str>) {
-    fn key(&self) -> &str {
-        self.0.borrow()
-    }
-    fn value(&self) -> &str {
-        self.1.borrow()
-    }
-}
-impl ValueSelectorProperty for (&Cow<'_, str>, &Cow<'_, str>) {
-    fn key(&self) -> &str {
-        self.0.borrow()
-    }
-    fn value(&self) -> &str {
-        self.1.borrow()
-    }
-}
-/// A trait to help decode zenoh value selectors as properties.
+
+#[allow(type_alias_bounds)]
+type ExtractedKey<'a, VS: ValueSelector<'a>> =
+    <<VS::Decoder as Iterator>::Item as KeyValuePair>::Key;
+#[allow(type_alias_bounds)]
+type ExtractedValue<'a, VS: ValueSelector<'a>> =
+    <<VS::Decoder as Iterator>::Item as KeyValuePair>::Value;
+/// A trait to help decode zenoh value selectors as a set of key-value pairs.
+///
+/// Most methods will return an Error if duplicates of a same key are found, to avoid HTTP Parameter Pollution like vulnerabilities.
 pub trait ValueSelector<'a> {
     type Decoder: Iterator + 'a;
-
-    /// Returns this value selector as properties.
+    /// Returns this value selector as an iterator of key-value pairs.
     fn decode(&'a self) -> Self::Decoder
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty;
-    ///
-    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+        <Self::Decoder as Iterator>::Item: KeyValuePair;
+
+    /// Extracts all key-value pairs into a HashMap, returning an error if duplicate keys arrise.
+    fn decode_into_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+        <Self::Decoder as Iterator>::Item: KeyValuePair,
+        K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
+        ExtractedKey<'a, Self>: Into<K>,
+        ExtractedValue<'a, Self>: Into<V>,
     {
-        for prop in self.decode() {
-            if prop.key() == TIME_RANGE_KEY {
-                return Ok(Some(prop.value().parse()?));
+        let mut result: HashMap<K, V> = HashMap::new();
+        for (key, value) in self.decode().map(KeyValuePair::split) {
+            match result.entry(key.into()) {
+                std::collections::hash_map::Entry::Occupied(e) => {
+                    bail!("Duplicated key `{}` detected", e.key().as_ref())
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(value.into());
+                }
             }
         }
-        Ok(None)
+        Ok(result)
+    }
+
+    /// Extracts the requested arguments from the value selector.
+    ///
+    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested keys were present more than once.
+    fn get_attrs<const N: usize>(
+        &'a self,
+        keys: [&str; N],
+    ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
+    where
+        <Self::Decoder as Iterator>::Item: KeyValuePair,
+    {
+        let mut result = unsafe {
+            let mut result: std::mem::MaybeUninit<[Option<ExtractedValue<'a, Self>>; N]> =
+                std::mem::MaybeUninit::uninit();
+            for slot in result.assume_init_mut() {
+                std::ptr::write(slot, None);
+            }
+            result.assume_init()
+        };
+        for pair in self.decode() {
+            if let Some(index) = keys.iter().position(|k| *k == pair.key().as_ref()) {
+                let slot = &mut result[index];
+                if slot.is_some() {
+                    bail!("Duplicated key `{}` detected.", keys[index])
+                }
+                *slot = Some(pair.extract_value())
+            }
+        }
+        Ok(result)
+    }
+
+    /// Extracts the requested arguments from the value selector as booleans, following the Zenoh convention that if a key is present and has a value different from "false", its value is truthy.
+    ///
+    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested keys were present more than once.
+    fn get_bools<const N: usize>(&'a self, keys: [&str; N]) -> ZResult<[bool; N]>
+    where
+        <Self::Decoder as Iterator>::Item: KeyValuePair,
+    {
+        Ok(self.get_attrs(keys)?.map(|v| match v {
+            None => false,
+            Some(s) => s.as_ref() != "false",
+        }))
+    }
+
+    /// Extracts the standardized `_time` argument from the value selector.
+    ///
+    /// The default implementation still causes a complete pass through the value selector to ensure that there are no duplicates of the `_time` key.
+    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+    where
+        <Self::Decoder as Iterator>::Item: KeyValuePair,
+    {
+        Ok(match &self.get_attrs([TIME_RANGE_KEY])?[0] {
+            Some(s) => Some(s.as_ref().parse()?),
+            None => None,
+        })
     }
 }
 impl<'a> ValueSelector<'a> for Selector<'a> {
@@ -265,14 +335,15 @@ impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a>
     fn decode(&'a self) -> Self::Decoder {
         self.iter()
     }
-    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+    fn get_attrs<const N: usize>(
+        &'a self,
+        keys: [&str; N],
+    ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+        <Self::Decoder as Iterator>::Item: KeyValuePair,
     {
-        match self.get::<str>(TIME_RANGE_KEY) {
-            Some(s) => Ok(Some(s.borrow().parse()?)),
-            None => Ok(None),
-        }
+        // `Ok(keys.map(|key| self.get(key)))` would be very slightly faster, but doesn't compile for some reason :(
+        Ok(keys.map(|key| self.get_key_value(key).map(|kv| kv.extract_value())))
     }
 }
 
