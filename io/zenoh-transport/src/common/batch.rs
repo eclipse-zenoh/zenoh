@@ -24,6 +24,7 @@ use super::seq_num::SeqNumGenerator;
 const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
+#[repr(u8)]
 enum CurrentFrame {
     Reliable,
     BestEffort,
