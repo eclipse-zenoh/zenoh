@@ -220,8 +220,8 @@ enum Pull {
 #[derive(Clone)]
 struct Backoff {
     time_slot: Duration,
-    last_pull: Instant,
     retry_time: Duration,
+    last_pull: Option<Instant>,
     last_bytes: usize,
     bytes: Arc<AtomicUsize>,
 }
@@ -230,11 +230,15 @@ impl Backoff {
     fn new(time_slot: Duration, bytes: Arc<AtomicUsize>) -> Self {
         Self {
             time_slot,
-            last_pull: Instant::now(),
+            last_pull: None,
             retry_time: time_slot,
             last_bytes: 0,
             bytes,
         }
+    }
+
+    fn start(&mut self) {
+        self.last_pull = Some(Instant::now());
     }
 
     fn next(&mut self) {
@@ -242,7 +246,7 @@ impl Backoff {
     }
 
     fn reset(&mut self) {
-        self.last_pull = Instant::now();
+        self.last_pull = None;
         self.retry_time = self.time_slot;
     }
 }
@@ -266,7 +270,14 @@ impl StageOutIn {
 
     #[cold]
     fn try_pull_deep(&mut self) -> Pull {
-        let diff = Instant::now() - self.backoff.last_pull;
+        let diff = match self.backoff.last_pull {
+            Some(lp) => Instant::now() - lp,
+            None => {
+                self.backoff.start();
+                Duration::from_nanos(0)
+            }
+        };
+
         if diff < self.backoff.retry_time {
             return Pull::Backoff(self.backoff.retry_time - diff);
         }
@@ -451,7 +462,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(Duration::from_micros(1), bytes),
+                    backoff: Backoff::new(Duration::from_nanos(100), bytes),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
