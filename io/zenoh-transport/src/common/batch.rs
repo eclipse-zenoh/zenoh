@@ -21,7 +21,6 @@ use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
-type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
@@ -141,10 +140,10 @@ impl SerializationBatch {
 
     /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
     #[inline(always)]
-    pub(crate) fn len(&self) -> usize {
-        let len = self.buffer.as_ref().len();
+    pub(crate) fn len(&self) -> u16 {
+        let len = self.buffer.as_ref().len() as u16;
         if self.is_streamed() {
-            len - LENGTH_BYTES.len()
+            len - (LENGTH_BYTES.len() as u16)
         } else {
             len
         }
@@ -175,7 +174,7 @@ impl SerializationBatch {
     #[inline(always)]
     pub(crate) fn write_len(&mut self) {
         if self.is_streamed() {
-            let length = self.len() as LengthType;
+            let length = self.len();
             let bits = self
                 .buffer
                 .as_mut()

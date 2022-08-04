@@ -19,7 +19,7 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
@@ -75,13 +75,13 @@ impl StageInRefill {
 struct StageInOut {
     n_out_w: Sender<()>,
     s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
-    bytes: Arc<AtomicUsize>,
+    bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
 
 impl StageInOut {
     #[inline]
-    fn notify(&self, bytes: usize) {
+    fn notify(&self, bytes: u16) {
         self.bytes.store(bytes, Ordering::Release);
         if !self.backoff.load(Ordering::Acquire) {
             let _ = self.n_out_w.try_send(());
@@ -215,26 +215,30 @@ impl StageIn {
     }
 }
 
+// It's faster to work directly with nanoseconds.
+// Backoff will never last more the u32::MAX nanoseconds.
+type NanoSeconds = u32;
+
 enum Pull {
     Some(SerializationBatch),
     None,
-    Backoff(u32),
+    Backoff(NanoSeconds),
 }
 
 #[derive(Clone)]
 struct Backoff {
-    time_slot_nanos: u32,
-    retry_time_nanos: u32,
-    last_bytes: usize,
-    bytes: Arc<AtomicUsize>,
+    time_slot: NanoSeconds,
+    retry_time: NanoSeconds,
+    last_bytes: u16,
+    bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
 
 impl Backoff {
-    fn new(time_slot_nanos: u32, bytes: Arc<AtomicUsize>, backoff: Arc<AtomicBool>) -> Self {
+    fn new(time_slot: NanoSeconds, bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
         Self {
-            time_slot_nanos,
-            retry_time_nanos: 0,
+            time_slot,
+            retry_time: 0,
             last_bytes: 0,
             bytes,
             backoff,
@@ -242,16 +246,16 @@ impl Backoff {
     }
 
     fn next(&mut self) {
-        if self.retry_time_nanos == 0 {
-            self.retry_time_nanos = self.time_slot_nanos;
+        if self.retry_time == 0 {
+            self.retry_time = self.time_slot;
             self.backoff.store(true, Ordering::Release);
         } else {
-            self.retry_time_nanos *= 2;
+            self.retry_time *= 2;
         }
     }
 
     fn stop(&mut self) {
-        self.retry_time_nanos = 0;
+        self.retry_time = 0;
         self.backoff.store(false, Ordering::Release);
     }
 }
@@ -313,7 +317,7 @@ impl StageOutIn {
         }
 
         self.backoff.next();
-        Pull::Backoff(self.backoff.retry_time_nanos)
+        Pull::Backoff(self.backoff.retry_time)
     }
 }
 
@@ -443,7 +447,7 @@ impl TransmissionPipeline {
             // The stage in for this priority
             let low_latency =
                 prio == Priority::Control as usize || prio == Priority::RealTime as usize;
-            let bytes = Arc::new(AtomicUsize::new(0));
+            let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
 
             stage_in.push(Arc::new(Mutex::new(StageIn {
@@ -529,7 +533,8 @@ pub(crate) struct TransmissionPipelineConsumer {
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
         loop {
-            let mut bo = u32::MAX;
+            // Calculate the backoff maximum
+            let mut bo = NanoSeconds::MAX;
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
                     Pull::Some(batch) => {
@@ -544,7 +549,7 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
-            // Wait
+            // Wait for the backoff to expire or for a new message
             let _ = self
                 .n_out_r
                 .recv_async()
@@ -657,7 +662,7 @@ mod tests {
             while msgs != num_msg {
                 let (batch, priority) = queue.pull().await.unwrap();
                 batches += 1;
-                bytes += batch.len();
+                bytes += batch.len() as usize;
                 // Create a ZBuf for deserialization starting from the batch
                 let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
@@ -890,7 +895,7 @@ mod tests {
         task::spawn(async move {
             loop {
                 let (batch, priority) = consumer.pull().await.unwrap();
-                c_count.fetch_add(batch.len(), Ordering::AcqRel);
+                c_count.fetch_add(batch.len() as usize, Ordering::AcqRel);
                 consumer.refill(batch, priority);
             }
         });
