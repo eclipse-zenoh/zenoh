@@ -239,15 +239,15 @@ impl Backoff {
 
     fn start(&mut self) {
         self.last_pull = Some(Instant::now());
+        self.retry_time = self.time_slot;
     }
 
     fn next(&mut self) {
         self.retry_time *= 2;
     }
 
-    fn reset(&mut self) {
+    fn stop(&mut self) {
         self.last_pull = None;
-        self.retry_time = self.time_slot;
     }
 }
 
@@ -262,7 +262,7 @@ impl StageOutIn {
     fn try_pull(&mut self) -> Pull {
         if let Some(mut batch) = self.s_out_r.pull() {
             batch.write_len();
-            self.backoff.reset();
+            self.backoff.stop();
             return Pull::Some(batch);
         }
         self.try_pull_deep()
@@ -294,13 +294,13 @@ impl StageOutIn {
             Ok(mut g) => match self.s_out_r.pull() {
                 Some(mut batch) => {
                     batch.write_len();
-                    self.backoff.reset();
+                    self.backoff.stop();
                     Pull::Some(batch)
                 }
                 None => match g.take() {
                     Some(mut batch) => {
                         batch.write_len();
-                        self.backoff.reset();
+                        self.backoff.stop();
                         Pull::Some(batch)
                     }
                     None => Pull::None,
