@@ -19,10 +19,10 @@ use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 
@@ -76,19 +76,23 @@ struct StageInOut {
     n_out_w: Sender<()>,
     s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
     bytes: Arc<AtomicUsize>,
+    backoff: Arc<AtomicBool>,
 }
 
 impl StageInOut {
     #[inline]
     fn notify(&self, bytes: usize) {
         self.bytes.store(bytes, Ordering::Release);
-        let _ = self.n_out_w.try_send(());
+        if !self.backoff.load(Ordering::Acquire) {
+            let _ = self.n_out_w.try_send(());
+        }
     }
 
     #[inline]
     fn move_batch(&mut self, batch: SerializationBatch) {
         let _ = self.s_out_w.push(batch).is_none();
-        self.notify(0);
+        self.bytes.store(0, Ordering::Release);
+        let _ = self.n_out_w.try_send(());
     }
 }
 
@@ -214,40 +218,41 @@ impl StageIn {
 enum Pull {
     Some(SerializationBatch),
     None,
-    Backoff(Duration),
+    Backoff(u32),
 }
 
 #[derive(Clone)]
 struct Backoff {
-    time_slot: Duration,
-    retry_time: Duration,
-    last_pull: Option<Instant>,
+    time_slot_nanos: u32,
+    retry_time_nanos: u32,
     last_bytes: usize,
     bytes: Arc<AtomicUsize>,
+    backoff: Arc<AtomicBool>,
 }
 
 impl Backoff {
-    fn new(time_slot: Duration, bytes: Arc<AtomicUsize>) -> Self {
+    fn new(time_slot_nanos: u32, bytes: Arc<AtomicUsize>, backoff: Arc<AtomicBool>) -> Self {
         Self {
-            time_slot,
-            last_pull: None,
-            retry_time: time_slot,
+            time_slot_nanos,
+            retry_time_nanos: 0,
             last_bytes: 0,
             bytes,
+            backoff,
         }
     }
 
-    fn start(&mut self) {
-        self.last_pull = Some(Instant::now());
-        self.retry_time = self.time_slot;
-    }
-
     fn next(&mut self) {
-        self.retry_time *= 2;
+        if self.retry_time_nanos == 0 {
+            self.retry_time_nanos = self.time_slot_nanos;
+            self.backoff.store(true, Ordering::Release);
+        } else {
+            self.retry_time_nanos *= 2;
+        }
     }
 
     fn stop(&mut self) {
-        self.last_pull = None;
+        self.retry_time_nanos = 0;
+        self.backoff.store(false, Ordering::Release);
     }
 }
 
@@ -265,52 +270,50 @@ impl StageOutIn {
             self.backoff.stop();
             return Pull::Some(batch);
         }
+
         self.try_pull_deep()
     }
 
     #[cold]
     fn try_pull_deep(&mut self) -> Pull {
-        let diff = match self.backoff.last_pull {
-            Some(lp) => Instant::now() - lp,
-            None => {
-                self.backoff.start();
-                Duration::from_nanos(0)
-            }
-        };
-
-        if diff < self.backoff.retry_time {
-            return Pull::Backoff(self.backoff.retry_time - diff);
-        }
-
         let new_bytes = self.backoff.bytes.load(Ordering::Acquire);
-        let last_bytes = self.backoff.last_bytes;
+        let old_bytes = self.backoff.last_bytes;
         self.backoff.last_bytes = new_bytes;
-        if last_bytes != new_bytes {
-            self.backoff.next();
-            return Pull::Backoff(self.backoff.retry_time);
-        }
 
-        match self.current.try_lock() {
-            Ok(mut g) => match self.s_out_r.pull() {
-                Some(mut batch) => {
+        if new_bytes == old_bytes {
+            // No new bytes have been written on the batch, try to pull
+            if let Ok(mut g) = self.current.try_lock() {
+                // First try to pull from stage OUT
+                if let Some(mut batch) = self.s_out_r.pull() {
                     batch.write_len();
                     self.backoff.stop();
-                    Pull::Some(batch)
+                    return Pull::Some(batch);
                 }
-                None => match g.take() {
+
+                // An incomplete (non-empty) batch is available in the state IN pipeline.
+                match g.take() {
                     Some(mut batch) => {
                         batch.write_len();
                         self.backoff.stop();
-                        Pull::Some(batch)
+                        return Pull::Some(batch);
                     }
-                    None => Pull::None,
-                },
-            },
-            Err(_) => {
-                self.backoff.next();
-                Pull::Backoff(self.backoff.retry_time)
+                    None => {
+                        self.backoff.stop();
+                        return Pull::None;
+                    }
+                }
+            }
+        } else if new_bytes < old_bytes {
+            // There should be a new batch in Stage OUT
+            if let Some(mut batch) = self.s_out_r.pull() {
+                batch.write_len();
+                self.backoff.stop();
+                return Pull::Some(batch);
             }
         }
+
+        self.backoff.next();
+        Pull::Backoff(self.backoff.retry_time_nanos)
     }
 }
 
@@ -441,6 +444,7 @@ impl TransmissionPipeline {
             let low_latency =
                 prio == Priority::Control as usize || prio == Priority::RealTime as usize;
             let bytes = Arc::new(AtomicUsize::new(0));
+            let backoff = Arc::new(AtomicBool::new(false));
 
             stage_in.push(Arc::new(Mutex::new(StageIn {
                 s_ref: StageInRefill { n_ref_r, s_ref_r },
@@ -448,6 +452,7 @@ impl TransmissionPipeline {
                     n_out_w: n_out_w.clone(),
                     s_out_w,
                     bytes: bytes.clone(),
+                    backoff: backoff.clone(),
                 },
                 mutex: StageInMutex {
                     current: current.clone(),
@@ -462,7 +467,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(Duration::from_nanos(100), bytes),
+                    backoff: Backoff::new(100, bytes, backoff),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
@@ -524,7 +529,7 @@ pub(crate) struct TransmissionPipelineConsumer {
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
         loop {
-            let mut bo = Duration::from_micros(u32::MAX as u64);
+            let mut bo = u32::MAX;
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
                 match queue.try_pull() {
                     Pull::Some(batch) => {
@@ -540,7 +545,11 @@ impl TransmissionPipelineConsumer {
             }
 
             // Wait
-            let _ = self.n_out_r.recv_async().timeout(bo).await;
+            let _ = self
+                .n_out_r
+                .recv_async()
+                .timeout(Duration::from_nanos(bo as u64))
+                .await;
         }
     }
 
