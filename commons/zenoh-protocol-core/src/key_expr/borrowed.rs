@@ -24,17 +24,18 @@ use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
-/// The exact key expression specification can be found [here](https://github.com/eclipse-zenoh/roadmap/discussions/24#discussioncomment-2766713). Here are the major lines:
-/// * Key expressions must be valid UTF8 strings.  
+/// The exact key expression specification can be found [here](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md). Here are the major lines:
+/// * Key expressions are conceptually a `/`-separated list of UTF-8 string typed chunks. These chunks are not allowed to be empty.
+/// * Key expressions must be valid UTF-8 strings.  
 ///   Be aware that Zenoh does not perform UTF normalization for you, so get familiar with that concept if your key expression contains glyphs that may have several unicode representation, such as accented characters.
 /// * Key expressions may never start or end with `'/'`, nor contain `"//"` or any of the following characters: `#$?`
 /// * Key expression must be in canon-form (this ensure that key expressions representing the same set are always the same string).  
 ///   Note that safe constructors will perform canonization for you if this can be done without extraneous allocations.
 ///
-/// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of intersection between such sets:
+/// Since Key Expressions define sets of keys, you may want to be aware of the hierarchy of [relations](keyexpr::relation_to) between such sets:
 /// * Trivially, two sets can have no elements in common: `a/**` and `b/**` for example define two disjoint sets of keys.
-/// * Two sets [`keyexpr::intersect()`](crate::key_expr::intersect) if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
-/// * One set A includes the other set B if all of B's elements are in A: `a/*/**` includes `a/b/**`
+/// * Two sets [intersect](keyexpr::intersects()) if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
+/// * One set A [includes](keyexpr::includes()) the other set B if all of B's elements are in A: `a/*/**` includes `a/b/**`
 /// * Two sets A and B are equal if all A includes B and B includes A. The Key Expression language is designed so that string equality is equivalent to set equality.
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
