@@ -107,12 +107,9 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Make the built QueryingSubscriber a [`HandlerQueryingSubscriber`](HandlerQueryingSubscriber).
+    /// Make the built QueryingSubscriber a [`QueryingSubscriber`](QueryingSubscriber).
     #[inline]
-    pub fn with<Handler, Receiver>(
-        self,
-        handler: Handler,
-    ) -> QueryingSubscriberBuilder<'a, 'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> QueryingSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: zenoh::prelude::IntoCallbackReceiverPair<'static, Sample>,
     {

@@ -373,7 +373,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::Handler).
+    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
     ///
     /// # Examples
     /// ```no_run
@@ -606,9 +606,9 @@ where
     }
 }
 
-/// A subscriber that provides data through a [`Handler`](crate::prelude::Handler).
+/// A subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
-/// HandlerSubscribers can be created from a zenoh [`Session`](crate::Session)
+/// Subscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::Session::declare_subscriber) function
 /// and the [`with`](SubscriberBuilder::with) function
 /// of the resulting builder.
@@ -640,11 +640,11 @@ pub struct Subscriber<'a, Receiver> {
     pub receiver: Receiver,
 }
 
-/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::Handler).
+/// A [`PullMode`] subscriber that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
-/// HandlerPullSubscribers only provide data when explicitely pulled by the
-/// application with the [`pull`](HandlerPullSubscriber::pull) function.
-/// HandlerPullSubscribers can be created from a zenoh [`Session`](crate::Session)
+/// PullSubscribers only provide data when explicitely pulled by the
+/// application with the [`pull`](PullSubscriber::pull) function.
+/// PullSubscribers can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_subscriber`](crate::Session::declare_subscriber) function,
 /// the [`with`](SubscriberBuilder::with) function
 /// and the [`pull_mode`](SubscriberBuilder::pull_mode) function
@@ -689,7 +689,7 @@ impl<'a, Receiver> DerefMut for PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> PullSubscriber<'a, Receiver> {
-    /// Pull available data for a [`HandlerPullSubscriber`].
+    /// Pull available data for a [`PullSubscriber`].
     ///
     /// # Examples
     /// ```
@@ -713,7 +713,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
-    /// Close a [`HandlerPullSubscriber`].
+    /// Close a [`PullSubscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Subscriber asynchronously.
@@ -736,7 +736,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
-    /// Close a [`HandlerSubscriber`].
+    /// Close a [`Subscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
     /// close the Subscriber asynchronously.
@@ -778,5 +778,5 @@ impl<Receiver> DerefMut for Subscriber<'_, Receiver> {
     }
 }
 
-/// A [`HandlerSubscriber`] that provides data through a `flume` channel.
+/// A [`Subscriber`] that provides data through a `flume` channel.
 pub type FlumeSubscriber<'a> = Subscriber<'a, flume::Receiver<Sample>>;

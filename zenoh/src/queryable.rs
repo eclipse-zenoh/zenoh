@@ -26,7 +26,7 @@ use std::task::{Context, Poll};
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
 use zenoh_protocol_core::WireExpr;
 
-/// Structs received by a [`Queryable`](HandlerQueryable).
+/// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
     /// The key_selector of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
@@ -250,7 +250,7 @@ impl Drop for CallbackQueryable<'_> {
     }
 }
 
-/// A builder for initializing a [`FlumeQueryable`].
+/// A builder for initializing a [`Queryable`].
 ///
 /// # Examples
 /// ```
@@ -344,7 +344,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::Handler).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
     ///
     /// # Examples
     /// ```no_run
@@ -393,9 +393,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
-/// A queryable that provides data through a [`Handler`](crate::prelude::Handler).
+/// A queryable that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
-/// HandlerQueryables can be created from a zenoh [`Session`](crate::Session)
+/// Queryables can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.

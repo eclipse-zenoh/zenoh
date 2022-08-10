@@ -670,8 +670,8 @@ pub(crate) mod common {
     /// Functions to create zenoh entities with `'static` lifetime.
     ///
     /// This trait contains functions to create zenoh entities like
-    /// [`Subscriber`](crate::subscriber::HandlerSubscriber), and
-    /// [`Queryable`](crate::queryable::HandlerQueryable) with a `'static` lifetime.
+    /// [`Subscriber`](crate::subscriber::Subscriber), and
+    /// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
     /// This is useful to move zenoh entities to several threads and tasks.
     ///
     /// This trait is implemented for `Arc<Session>`.
@@ -692,7 +692,7 @@ pub(crate) mod common {
     /// # })
     /// ```
     pub trait SessionDeclarations {
-        /// Create a [`Subscriber`](crate::subscriber::HandlerSubscriber) for the given key expression.
+        /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
         ///
         /// # Arguments
         ///
@@ -721,12 +721,12 @@ pub(crate) mod common {
             TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 
-        /// Create a [`Queryable`](crate::queryable::HandlerQueryable) for the given key expression.
+        /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
         ///
         /// # Arguments
         ///
         /// * `key_expr` - The key expression matching the queries the
-        /// [`Queryable`](crate::queryable::HandlerQueryable) will reply to
+        /// [`Queryable`](crate::queryable::Queryable) will reply to
         ///
         /// # Examples
         /// ```no_run
@@ -785,11 +785,14 @@ pub(crate) mod common {
     /// An immutable callback function.
     pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
 
-    /// A value-to-value conversion that consumes the input value and
-    /// transforms it into a [`Handler`].
+    /// A type that can be converted into a [`Callback`]-receiver pair.
+    ///
+    /// When Zenoh functions accept types that implement these, it intends to use the [`Callback`] as just that,
+    /// while granting you access to the receiver through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
+    ///
+    /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
     pub trait IntoCallbackReceiverPair<'a, T> {
         type Receiver;
-        /// Converts this type into a [`Handler`].
         fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver);
     }
     impl<'a, T, F> IntoCallbackReceiverPair<'a, T> for F

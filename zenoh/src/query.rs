@@ -26,7 +26,7 @@ use zenoh_collections::Timed;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
-/// The [`Queryable`](crate::queryable::HandlerQueryable)s that should be target of a [`get`](Session::get).
+/// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::QueryTarget;
 
 /// The kind of consolidation.
@@ -260,7 +260,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the replies for this query with a [`Handler`](crate::prelude::Handler).
+    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
     ///
     /// # Examples
     /// ```

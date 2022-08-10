@@ -114,7 +114,7 @@ impl ScoutBuilder<DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::Handler).
+    /// Receive the [`Hello`] messages from this scout with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
     ///
     /// # Examples
     /// ```no_run
@@ -133,7 +133,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    pub fn with<Handler, Receiver>(self, handler: Handler) -> ScoutBuilder<Handler>
+    pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
     {
@@ -228,7 +228,7 @@ impl fmt::Debug for ScoutInner {
     }
 }
 
-/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::Handler).
+/// A scout that returns [`Hello`] messages through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
 /// # Examples
 /// ```no_run
@@ -283,9 +283,6 @@ impl<Receiver> Scout<Receiver> {
         self.scout.stop()
     }
 }
-
-/// A [`HandlerScout`] that provides [`Hello`] messages through a `flume` channel.
-pub type FlumeScout = Scout<flume::Receiver<Hello>>;
 
 fn scout(
     what: WhatAmIMatcher,
