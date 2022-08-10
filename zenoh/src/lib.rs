@@ -155,7 +155,7 @@ pub mod scouting;
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`HandlerScout`](crate::scouting::HandlerScout) to stop the scouting task.
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
 ///
 /// # Arguments
 ///
@@ -177,12 +177,16 @@ pub mod scouting;
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
-) -> ScoutBuilder<I, TryIntoConfig>
+) -> ScoutBuilder<DefaultHandler>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: Into<zenoh_core::Error>,
 {
-    ScoutBuilder { what, config }
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler,
+    }
 }
 
 /// Open a zenoh [`Session`].

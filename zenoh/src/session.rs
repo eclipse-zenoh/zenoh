@@ -21,8 +21,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::sync::ValueSelector;
-use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
+use crate::prelude::{Callback, DefaultHandler, KeyExpr, SessionDeclarations, ValueSelector};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -346,8 +345,8 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also alows to create [`Subscriber`](HandlerSubscriber) and
-    /// [`Queryable`](HandlerQueryable) with static lifetime that can be moved to several
+    /// and tasks. It also alows to create [`Subscriber`](Subscriber) and
+    /// [`Queryable`](Queryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
     /// Note: the given zenoh `Session` will be closed when the last reference to
@@ -377,7 +376,7 @@ impl Session {
     /// the program's life. Dropping the returned reference will cause a memory
     /// leak.
     ///
-    /// This is useful to move entities (like [`Subscriber`](HandlerSubscriber)) which
+    /// This is useful to move entities (like [`Subscriber`](Subscriber)) which
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
@@ -497,7 +496,7 @@ impl Session {
         }
     }
 
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -519,7 +518,7 @@ impl Session {
     pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode>
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -530,15 +529,16 @@ impl Session {
             reliability: Reliability::default(),
             mode: PushMode,
             local: false,
+            handler: DefaultHandler,
         }
     }
 
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    /// Create a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
+    /// [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -559,7 +559,7 @@ impl Session {
     pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b>
+    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -569,6 +569,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             kind: zenoh_protocol_core::queryable::ALL_KINDS,
             complete: true,
+            handler: DefaultHandler,
         }
     }
 
@@ -748,7 +749,10 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
+    pub fn get<'a, 'b, IntoSelector>(
+        &'a self,
+        selector: IntoSelector,
+    ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
         IntoSelector: TryInto<Selector<'b>>,
         <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
@@ -761,6 +765,7 @@ impl Session {
             consolidation: QueryConsolidation::default(),
             local_routing: None,
             timeout: Duration::from_secs(10),
+            handler: DefaultHandler,
         }
     }
 }
@@ -925,7 +930,7 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        callback: Callback<Sample>,
+        callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -1010,7 +1015,7 @@ impl Session {
     pub(crate) fn declare_local_subscriber(
         &self,
         key_expr: &KeyExpr,
-        callback: Callback<Sample>,
+        callback: Callback<'static, Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
@@ -1119,7 +1124,7 @@ impl Session {
         key_expr: &WireExpr,
         kind: ZInt,
         complete: bool,
-        callback: Callback<Query>,
+        callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
@@ -1362,7 +1367,7 @@ impl Session {
         consolidation: QueryConsolidation,
         local_routing: Option<bool>,
         timeout: Duration,
-        callback: Callback<Reply>,
+        callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
@@ -1535,7 +1540,7 @@ impl Session {
 }
 
 impl SessionDeclarations for Arc<Session> {
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -1559,7 +1564,7 @@ impl SessionDeclarations for Arc<Session> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b, PushMode>
+    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1570,15 +1575,16 @@ impl SessionDeclarations for Arc<Session> {
             reliability: Reliability::default(),
             mode: PushMode,
             local: false,
+            handler: DefaultHandler,
         }
     }
 
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    /// Create a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
+    /// [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -1601,7 +1607,7 @@ impl SessionDeclarations for Arc<Session> {
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'static, 'b>
+    ) -> QueryableBuilder<'static, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1611,6 +1617,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             kind: zenoh_protocol_core::queryable::EVAL,
             complete: true,
+            handler: DefaultHandler,
         }
     }
 
