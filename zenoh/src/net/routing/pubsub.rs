@@ -646,7 +646,6 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable, // @TODO
         mode: SubMode::Push,
-        period: None,
     };
     match tables.whatami {
         WhatAmI::Router => {
@@ -779,7 +778,6 @@ pub(crate) fn pubsub_tree_change(
                             let sub_info = SubInfo {
                                 reliability: Reliability::Reliable, // @TODO
                                 mode: SubMode::Push,
-                                period: None,
                             };
                             send_sourced_subscription_to_net_childs(
                                 tables,

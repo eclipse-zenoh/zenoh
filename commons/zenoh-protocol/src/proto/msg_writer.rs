@@ -53,7 +53,7 @@ pub trait MessageWriter {
     fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool;
     fn write_declare(&mut self, declare: &Declare) -> bool;
     fn write_declaration(&mut self, declaration: &Declaration) -> bool;
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool;
+    fn write_submode(&mut self, mode: &SubMode) -> bool;
     fn write_unit(&mut self, unit: &Unit) -> bool;
     fn write_pull(&mut self, pull: &Pull) -> bool;
     fn write_query(&mut self, query: &Query) -> bool;
@@ -453,7 +453,7 @@ impl MessageWriter for WBuf {
                 zcheck!(self.write_byte(header).is_some());
                 zcheck!(self.write_key_expr(&s.key));
                 if imsg::has_flag(header, zmsg::flag::S) {
-                    zcheck!(self.write_submode(&s.info.mode, &s.info.period))
+                    zcheck!(self.write_submode(&s.info.mode))
                 }
                 true
             }
@@ -484,12 +484,8 @@ impl MessageWriter for WBuf {
         }
     }
 
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {
-        let period_mask: u8 = if period.is_some() {
-            zmsg::declaration::flag::PERIOD
-        } else {
-            0
-        };
+    fn write_submode(&mut self, mode: &SubMode) -> bool {
+        let period_mask: u8 = 0;
         zcheck!(match mode {
             SubMode::Push => self
                 .write_byte(zmsg::declaration::id::MODE_PUSH | period_mask)
@@ -498,11 +494,7 @@ impl MessageWriter for WBuf {
                 .write_byte(zmsg::declaration::id::MODE_PULL | period_mask)
                 .is_some(),
         });
-        if let Some(p) = period {
-            self.write_zint(p.origin) && self.write_zint(p.period) && self.write_zint(p.duration)
-        } else {
-            true
-        }
+        true
     }
 
     fn write_unit(&mut self, unit: &Unit) -> bool {

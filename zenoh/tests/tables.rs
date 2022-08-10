@@ -54,7 +54,6 @@ fn base_test() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
     declare_client_subscription(
         &mut tables,
@@ -231,7 +230,6 @@ fn clean_test() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
 
     declare_client_subscription(
@@ -508,7 +506,6 @@ fn client_test() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
 
     let primitives0 = Arc::new(ClientPrimitives::new());

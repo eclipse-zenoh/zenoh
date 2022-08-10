@@ -20,7 +20,7 @@ use std::time::Duration;
 use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{CallbackSubscriber, Reliability};
-use zenoh::time::{Period, Timestamp};
+use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
@@ -31,7 +31,6 @@ pub struct QueryingSubscriberBuilder<'a, 'b> {
     session: SessionRef<'a>,
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
-    period: Option<Period>,
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -54,7 +53,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             session,
             key_expr,
             reliability: Reliability::default(),
-            period: None,
             query_selector: None,
             query_target,
             query_consolidation,
@@ -128,13 +126,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
-        self
-    }
-
     /// Change the selector to be used for queries.
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
@@ -172,7 +163,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
-            period: self.period,
             query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
@@ -259,13 +249,6 @@ impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.builder.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder.period = period;
         self
     }
 
@@ -415,13 +398,11 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .period(conf.period)
                 .res_sync()?,
             SessionRef::Shared(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .period(conf.period)
                 .res_sync()?,
         };
 
@@ -593,14 +574,6 @@ impl<'a, 'b, Receiver> HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
         self.builder = self.builder.best_effort();
         self
     }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder = self.builder.period(period);
-        self
-    }
-
     /// Change the selector to be used for queries.
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self

@@ -432,19 +432,10 @@ impl Default for SubMode {
     }
 }
 
-/// A time period.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Period {
-    pub origin: ZInt,
-    pub period: ZInt,
-    pub duration: ZInt,
-}
-
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
-    pub period: Option<Period>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

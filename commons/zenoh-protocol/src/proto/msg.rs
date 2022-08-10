@@ -786,7 +786,7 @@ impl Header for Subscriber {
         if self.info.reliability == Reliability::Reliable {
             header |= zmsg::flag::R;
         }
-        if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
+        if self.info.mode != SubMode::Push {
             header |= zmsg::flag::S;
         }
         if self.key.has_suffix() {

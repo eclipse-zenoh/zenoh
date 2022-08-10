@@ -14,7 +14,6 @@
 
 //! Subscribing primitives.
 use crate::prelude::{locked, Callback, Id, KeyExpr, Sample};
-use crate::time::Period;
 use crate::{Result as ZResult, SessionRef};
 use crate::{Undeclarable, API_DATA_RECEPTION_CHANNEL_SIZE};
 use std::fmt;
@@ -296,7 +295,6 @@ pub struct SubscriberBuilder<'a, 'b, Mode> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: Mode,
-    pub(crate) period: Option<Period>,
     pub(crate) local: bool,
 }
 
@@ -420,13 +418,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode> {
         self
     }
 
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
-        self
-    }
-
     /// Make the subscription local only.
     #[inline]
     pub fn local(mut self) -> Self {
@@ -444,7 +435,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, PushMode> {
             key_expr,
             reliability,
             mode: _,
-            period,
             local,
         } = self;
         SubscriberBuilder {
@@ -452,7 +442,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, PushMode> {
             key_expr,
             reliability,
             mode: PullMode,
-            period,
             local,
         }
     }
@@ -466,7 +455,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, PullMode> {
             key_expr,
             reliability,
             mode: _,
-            period,
             local,
         } = self;
         SubscriberBuilder {
@@ -474,7 +462,6 @@ impl<'a, 'b> SubscriberBuilder<'a, 'b, PullMode> {
             key_expr,
             reliability,
             mode: PushMode,
-            period,
             local,
         }
     }
@@ -574,13 +561,6 @@ where
         self.builder = self.builder.best_effort();
         self
     }
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder = self.builder.period(period);
-        self
-    }
-
     /// Make the subscription local onlyu.
     #[inline]
     pub fn local(mut self) -> Self {
@@ -650,7 +630,6 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                     &SubInfo {
                         reliability: self.builder.reliability,
                         mode: self.builder.mode.into(),
-                        period: self.builder.period,
                     },
                 )
                 .map(|sub_state| CallbackSubscriber {
@@ -690,7 +669,6 @@ impl<F: Fn(Sample) + Send + Sync> SyncResolve for CallbackSubscriberBuilder<'_, 
                     &SubInfo {
                         reliability: self.builder.reliability,
                         mode: self.builder.mode.into(),
-                        period: self.builder.period,
                     },
                 )
                 .map(|sub_state| CallbackPullSubscriber {
@@ -763,12 +741,6 @@ where
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.builder = self.builder.best_effort();
-        self
-    }
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder = self.builder.period(period);
         self
     }
 

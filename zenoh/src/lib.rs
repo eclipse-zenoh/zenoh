@@ -120,9 +120,6 @@ pub mod time {
 
     pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
 
-    /// A time period.
-    pub use zenoh_protocol_core::Period;
-
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.

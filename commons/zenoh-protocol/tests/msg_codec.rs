@@ -118,7 +118,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Push,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -126,7 +125,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Pull,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -134,11 +132,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Pull,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -146,11 +139,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Push,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),

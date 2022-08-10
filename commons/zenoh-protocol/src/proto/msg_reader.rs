@@ -53,7 +53,7 @@ pub trait MessageReader {
     fn read_query(&mut self, header: u8) -> Option<ZenohBody>;
     fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody>;
     fn read_link_state(&mut self) -> Option<LinkState>;
-    fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)>;
+    fn read_submode(&mut self) -> Option<SubMode>;
     fn read_query_tak(&mut self) -> Option<QueryTAK>;
     fn read_query_target(&mut self) -> Option<QueryTarget>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
@@ -673,18 +673,14 @@ impl MessageReader for ZBufReader<'_> {
                     Reliability::BestEffort
                 };
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let (mode, period) = if imsg::has_flag(header, zmsg::flag::S) {
+                let mode = if imsg::has_flag(header, zmsg::flag::S) {
                     self.read_submode()?
                 } else {
-                    (SubMode::Push, None)
+                    SubMode::Push
                 };
                 Some(Declaration::Subscriber(Subscriber {
                     key,
-                    info: SubInfo {
-                        reliability,
-                        mode,
-                        period,
-                    },
+                    info: SubInfo { reliability, mode },
                 }))
             }
             FORGET_SUBSCRIBER => {
@@ -785,7 +781,7 @@ impl MessageReader for ZBufReader<'_> {
         })
     }
 
-    fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)> {
+    fn read_submode(&mut self) -> Option<SubMode> {
         use super::zmsg::declaration::flag::*;
         use super::zmsg::declaration::id::*;
 
@@ -798,16 +794,10 @@ impl MessageReader for ZBufReader<'_> {
                 return None;
             }
         };
-        let period = if imsg::has_flag(mode_flag, PERIOD) {
-            Some(Period {
-                origin: self.read_zint()?,
-                period: self.read_zint()?,
-                duration: self.read_zint()?,
-            })
-        } else {
-            None
-        };
-        Some((mode, period))
+        if imsg::has_flag(mode_flag, PERIOD) {
+            return None;
+        }
+        Some(mode)
     }
 
     fn read_query_tak(&mut self) -> Option<QueryTAK> {
