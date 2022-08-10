@@ -1,13 +1,13 @@
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
-use zenoh::{prelude::Sample, subscriber::HandlerSubscriber};
+use zenoh::{prelude::Sample, subscriber::Subscriber};
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
-pub trait HandlerSubscriberForward<'a, S> {
+pub trait SubscriberForward<'a, S> {
     type Output;
     fn forward(&'a mut self, sink: S) -> Self::Output;
 }
-impl<'a, S> HandlerSubscriberForward<'a, S> for HandlerSubscriber<'_, flume::Receiver<Sample>>
+impl<'a, S> SubscriberForward<'a, S> for Subscriber<'_, flume::Receiver<Sample>>
 where
     S: futures::sink::Sink<Sample>,
 {

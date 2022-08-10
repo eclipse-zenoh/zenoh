@@ -41,6 +41,7 @@ pub(crate) mod common {
     use crate::queryable::QueryableBuilder;
     use crate::subscriber::{PushMode, SubscriberBuilder};
     use crate::time::{new_reception_timestamp, Timestamp};
+    use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
     use std::borrow::Cow;
     use std::convert::{TryFrom, TryInto};
     use std::fmt;
@@ -715,7 +716,7 @@ pub(crate) mod common {
         fn declare_subscriber<'a, TryIntoKeyExpr>(
             &self,
             key_expr: TryIntoKeyExpr,
-        ) -> SubscriberBuilder<'static, 'a, PushMode>
+        ) -> SubscriberBuilder<'static, 'a, PushMode, DefaultHandler>
         where
             TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
@@ -748,7 +749,7 @@ pub(crate) mod common {
         fn declare_queryable<'a, TryIntoKeyExpr>(
             &self,
             key_expr: TryIntoKeyExpr,
-        ) -> QueryableBuilder<'static, 'a>
+        ) -> QueryableBuilder<'static, 'a, DefaultHandler>
         where
             TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
             <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
@@ -782,26 +783,63 @@ pub(crate) mod common {
     /// An alias for `Box<T>`.
     pub type Dyn<T> = std::boxed::Box<T>;
     /// An immutable callback function.
-    pub type Callback<T> = Dyn<dyn Fn(T) + Send + Sync>;
-    /// A mutable callback function.
-    pub type CallbackMut<T> = Dyn<dyn FnMut(T) + Send + Sync>;
-
-    /// A Handler is the combination of:
-    ///  - a callback which is called on
-    /// some events like reception of a Sample in a Subscriber or reception
-    /// of a Query in a Queryable
-    ///  - a receiver that allows to collect and access those events one way
-    /// or another.
-    ///
-    /// For example a flume channel can be transformed into a Handler by
-    /// implmenting the [`IntoHandler`] Trait.
-    pub type Handler<T, Receiver> = (Callback<T>, Receiver);
+    pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
 
     /// A value-to-value conversion that consumes the input value and
     /// transforms it into a [`Handler`].
-    pub trait IntoHandler<T, Receiver> {
+    pub trait IntoCallbackReceiverPair<'a, T> {
+        type Receiver;
         /// Converts this type into a [`Handler`].
-        fn into_handler(self) -> Handler<T, Receiver>;
+        fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver);
+    }
+    impl<'a, T, F> IntoCallbackReceiverPair<'a, T> for F
+    where
+        F: Fn(T) + Send + Sync + 'a,
+    {
+        type Receiver = ();
+        fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver) {
+            (Box::from(self), ())
+        }
+    }
+    impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
+        for (flume::Sender<T>, flume::Receiver<T>)
+    {
+        type Receiver = flume::Receiver<T>;
+
+        fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+            let (sender, receiver) = self;
+            (
+                Box::new(move |t| {
+                    if let Err(e) = sender.send(t) {
+                        log::error!("{}", e)
+                    }
+                }),
+                receiver,
+            )
+        }
+    }
+    pub struct DefaultHandler;
+    impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T> for DefaultHandler {
+        type Receiver = flume::Receiver<T>;
+        fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+            flume::bounded(*API_DATA_RECEPTION_CHANNEL_SIZE).into_cb_receiver_pair()
+        }
+    }
+    impl<T: Send + Sync + 'static> IntoCallbackReceiverPair<'static, T>
+        for (std::sync::mpsc::SyncSender<T>, std::sync::mpsc::Receiver<T>)
+    {
+        type Receiver = std::sync::mpsc::Receiver<T>;
+        fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
+            let (sender, receiver) = self;
+            (
+                Box::new(move |t| {
+                    if let Err(e) = sender.send(t) {
+                        log::error!("{}", e)
+                    }
+                }),
+                receiver,
+            )
+        }
     }
 
     /// A function that can transform a [`FnMut`]`(T)` to

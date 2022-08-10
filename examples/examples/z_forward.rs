@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
-use zenoh_ext::HandlerSubscriberForward;
+use zenoh_ext::SubscriberForward;
 
 #[async_std::main]
 async fn main() {

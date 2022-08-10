@@ -16,7 +16,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
-use zenoh::prelude::KeyExpr;
+use zenoh::prelude::{DefaultHandler, KeyExpr};
 use zenoh::Session;
 
 #[derive(Clone)]
@@ -78,7 +78,7 @@ pub trait SessionExt {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
@@ -96,7 +96,7 @@ impl SessionExt for Session {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -123,7 +123,7 @@ impl SessionExt for Arc<Session> {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
