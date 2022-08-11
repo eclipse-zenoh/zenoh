@@ -1105,7 +1105,7 @@ macro_rules! treat_timestamp {
 #[inline]
 fn get_data_route(
     tables: &Tables,
-    face: &Arc<FaceState>,
+    face: &FaceState,
     res: &Option<Arc<Resource>>,
     prefix: &Arc<Resource>,
     suffix: &str,
@@ -1318,8 +1318,8 @@ pub fn route_data(
 #[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
-    tables_ref: &Arc<RwLock<Tables>>,
-    face: &Arc<FaceState>,
+    tables_ref: &RwLock<Tables>,
+    face: &FaceState,
     expr: &WireExpr,
     channel: Channel,
     congestion_control: CongestionControl,
