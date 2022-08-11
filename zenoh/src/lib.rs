@@ -20,12 +20,12 @@
 //! started with it.
 //!
 //! # Examples
-//! Before delving into the examples, we need to introduce few **zenoh** concepts.
-//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a
+//! Before delving into the examples, we need to introduce few **Zenoh** concepts.
+//! First off, in Zenoh you will deal with **Resources**, where a resource is made up of a
 //! key and a value.  The other concept you'll have to familiarize yourself with are
-//! **key expressions**, such as ```/robot/sensor/temp```, ```/robot/sensor/*```, ```/robot/**```, etc.
-//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**```
-//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/```
+//! **key expressions**, such as ```robot/sensor/temp```, ```robot/sensor/*```, ```robot/**```, etc.
+//! As you can gather, the above key expression denotes set of keys, while the ```*``` and ```**```
+//! are wildcards representing respectively (1) an arbitrary string of characters, with the exclusion of the ```/```
 //! separator, and (2) an arbitrary sequence of characters including separators.
 //!
 //! ### Publishing Data
