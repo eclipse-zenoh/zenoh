@@ -315,7 +315,7 @@ pub struct Session {
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     /// Initialize a Session with an existing Runtime.
-    /// This operation is used by the plugins to share the same Runtime than the router.
+    /// This operation is used by the plugins to share the same Runtime as the router.
     #[doc(hidden)]
     pub fn init(
         runtime: Runtime,

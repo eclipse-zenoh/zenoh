@@ -3778,6 +3778,7 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
+ "zenoh-cfg-properties",
  "zenoh-core",
  "zenoh-plugin-trait",
  "zenoh-util",

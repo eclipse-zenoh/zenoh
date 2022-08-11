@@ -27,6 +27,7 @@ use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
+use zenoh_cfg_properties::Properties;
 use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
 mod config;
@@ -41,7 +42,7 @@ fn value_to_json(value: Value) -> String {
         }
         p if p.starts_with(KnownEncoding::AppProperties) => {
             // convert to Json string for special characters escaping
-            serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
+            serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
         p if p.starts_with(KnownEncoding::AppJson)
             || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded)
