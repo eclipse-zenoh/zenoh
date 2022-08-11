@@ -14,9 +14,11 @@
 
 //! Queryable primitives.
 
+use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
 use crate::SessionRef;
 use crate::Undeclarable;
+
 use futures::FutureExt;
 use std::fmt;
 use std::ops::Deref;

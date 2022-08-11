@@ -16,7 +16,9 @@ use std::convert::TryInto;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::*;
+
 use zenoh::query::{QueryConsolidation, QueryTarget};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;

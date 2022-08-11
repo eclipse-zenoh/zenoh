@@ -14,6 +14,7 @@
 
 use crate::config::Config;
 use crate::config::Notifier;
+use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::keyexpr;
 use crate::key_expr::KeyExprInner;
@@ -21,7 +22,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::{Callback, DefaultHandler, KeyExpr, SessionDeclarations, ValueSelector};
+use crate::prelude::{KeyExpr, ValueSelector};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -1917,4 +1918,117 @@ impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Session").field("id", &self.zid()).finish()
     }
+}
+
+/// Functions to create zenoh entities with `'static` lifetime.
+///
+/// This trait contains functions to create zenoh entities like
+/// [`Subscriber`](crate::subscriber::Subscriber), and
+/// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
+/// This is useful to move zenoh entities to several threads and tasks.
+///
+/// This trait is implemented for `Arc<Session>`.
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use r#async::AsyncResolve;
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+/// async_std::task::spawn(async move {
+///     while let Ok(sample) = subscriber.recv_async().await {
+///         println!("Received : {:?}", sample);
+///     }
+/// }).await;
+/// # })
+/// ```
+pub trait SessionDeclarations {
+    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn declare_subscriber<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'static, 'a, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Ok(query) = queryable.recv_async().await {
+    ///         query.reply(Ok(Sample::try_from(
+    ///             "key/expression",
+    ///             "value",
+    ///         ).unwrap())).res().await.unwrap();
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn declare_queryable<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> QueryableBuilder<'static, 'a, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
+    /// # })
+    /// ```
+    fn declare_publisher<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> PublisherBuilder<'static, 'a>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 }

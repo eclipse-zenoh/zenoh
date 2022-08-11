@@ -13,9 +13,9 @@
 //
 
 //! Subscribing primitives.
-use crate::prelude::{
-    locked, Callback, DefaultHandler, Id, IntoCallbackReceiverPair, KeyExpr, Sample,
-};
+use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
