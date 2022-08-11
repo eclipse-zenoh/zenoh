@@ -48,7 +48,9 @@ transport_quic = ["zenoh-transport/transport_quic"]
 transport_tcp = ["zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
-transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
+transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
+transport_serial = ["zenoh-transport/transport_serial"]
+transport_ws = ["zenoh-transport/transport_ws"]
 default = [
     "auth_pubkey",
     "auth_usrpwd",
