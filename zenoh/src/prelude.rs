@@ -34,8 +34,8 @@ pub mod r#async {
 pub use common::*;
 pub(crate) mod common {
     #[cfg(feature = "shared-memory")]
-    use crate::buf::SharedMemoryBuf;
-    use crate::buf::ZBuf;
+    use crate::buffers::SharedMemoryBuf;
+    use crate::buffers::ZBuf;
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     use crate::publication::PublisherBuilder;
     use crate::queryable::QueryableBuilder;

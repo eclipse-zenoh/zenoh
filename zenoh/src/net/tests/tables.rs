@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::net::routing::router::*;
+use crate::prelude::keyexpr;
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh::net::routing::router::*;
-use zenoh::prelude::keyexpr;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;

@@ -17,17 +17,13 @@ extern crate rand;
 
 use criterion::{black_box, Criterion};
 
-use zenoh::net::protocol::core::{
-    Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt,
-};
-use zenoh::net::protocol::io::{WBuf, ZBuf, ZSlice};
-use zenoh::net::protocol::proto::{
-    Attachment, Frame, FramePayload, TransportMessage, ZenohMessage,
-};
 use zenoh_buffers::buffer::CopyBuffer;
 use zenoh_buffers::reader::HasReader;
+use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
+use zenoh_protocol::io::{WBuf, ZBuf, ZSlice};
 use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::MessageWriter;
+use zenoh_protocol::proto::{Attachment, Frame, FramePayload, TransportMessage, ZenohMessage};
 
 fn _bench_zint_write((v, buf): (ZInt, &mut WBuf)) {
     buf.write_zint(v);

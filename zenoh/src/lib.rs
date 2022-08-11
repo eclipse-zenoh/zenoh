@@ -96,8 +96,8 @@ mod session;
 pub use session::*;
 
 pub mod key_expr;
-#[doc(hidden)]
-pub mod net;
+pub(crate) mod net;
+pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
@@ -112,7 +112,7 @@ pub mod utils;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
-pub use zenoh_buffers as buf;
+pub use zenoh_buffers as buffers;
 
 /// Time related types and functions.
 pub mod time {

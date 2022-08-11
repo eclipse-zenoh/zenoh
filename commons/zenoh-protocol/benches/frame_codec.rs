@@ -15,11 +15,11 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use zenoh::net::protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr};
-use zenoh::net::protocol::io::{WBuf, ZBuf};
-use zenoh::net::protocol::proto::defaults::BATCH_SIZE;
-use zenoh::net::protocol::proto::ZenohMessage;
 use zenoh_buffers::reader::HasReader;
+use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr};
+use zenoh_protocol::io::{WBuf, ZBuf};
+use zenoh_protocol::proto::defaults::BATCH_SIZE;
+use zenoh_protocol::proto::ZenohMessage;
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 fn criterion_benchmark(c: &mut Criterion) {

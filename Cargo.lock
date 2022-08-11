@@ -3468,7 +3468,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "base64 0.13.0",
- "criterion",
  "env_logger",
  "event-listener",
  "flume",
@@ -3821,6 +3820,7 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.6.0-dev.0"
 dependencies = [
+ "criterion",
  "log",
  "rand 0.8.5",
  "uhlc",
