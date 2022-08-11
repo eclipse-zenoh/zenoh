@@ -15,8 +15,8 @@
 mod unicast;
 
 use async_trait::async_trait;
+use std::path::Path;
 use std::str::FromStr;
-use std::{path::Path};
 pub use unicast::*;
 use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
