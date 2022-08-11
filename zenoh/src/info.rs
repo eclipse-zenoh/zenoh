@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Tools to access informations about the current zenoh [`Session`](crate::Session).
+//! Tools to access information about the current zenoh [`Session`](crate::Session).
 
 use crate::utils::ClosureResolve;
 use crate::SessionRef;
