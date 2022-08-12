@@ -64,7 +64,11 @@ impl<T> SingleOrVec<T> {
         matches!(&self.0, SingleOrVecInner::Vec(v) if v.is_empty())
     }
 }
-
+impl<T> Default for SingleOrVec<T> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<T> AsRef<[T]> for SingleOrVec<T> {
     fn as_ref(&self) -> &[T] {
         self.0.as_ref()
@@ -96,6 +100,13 @@ impl<T> IntoIterator for SingleOrVec<T> {
                     drain: it,
                 }
             }
+        }
+    }
+}
+impl<T> std::iter::Extend<T> for SingleOrVec<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for value in iter {
+            self.push(value)
         }
     }
 }

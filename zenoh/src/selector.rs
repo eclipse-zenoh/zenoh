@@ -94,7 +94,7 @@ impl<'a> Selector<'a> {
     }
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
-            key_expr: self.key_expr.borrowing_clone(),
+            key_expr: self.key_expr.clone(),
             value_selector: self.value_selector.as_ref().into(),
         }
     }
@@ -402,7 +402,7 @@ impl<'a> TryFrom<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key_expr: q.key_expr.borrowing_clone(),
+            key_expr: q.key_expr.clone(),
             value_selector: (&q.value_selector).into(),
         }
     }

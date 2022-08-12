@@ -50,6 +50,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use uhlc::HLC;
+use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
 use zenoh_core::AsyncResolve;
@@ -956,7 +957,7 @@ impl Session {
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
-                (!twin_sub).then(|| key_expr.borrowing_clone())
+                (!twin_sub).then(|| key_expr.clone())
             }
         };
 
@@ -1274,79 +1275,70 @@ impl Session {
         payload: ZBuf,
         local_routing: Option<bool>,
     ) {
-        let state = zread!(self.state);
-        let local_routing = local_routing.unwrap_or(state.local_routing);
-        if key_expr.suffix.is_empty() {
-            match state.get_res(&key_expr.scope, local) {
-                Some(Resource::Node(res)) => {
-                    if !local && res.subscribers.len() == 1 {
-                        let sub = res.subscribers.get(0).unwrap();
-                        (sub.callback)(Sample::with_info(
-                            res.key_expr.clone().into(),
-                            payload,
-                            info,
-                        ));
-                    } else {
+        let mut callbacks = SingleOrVec::default();
+        let sample = {
+            let state = zread!(self.state);
+            let local_routing = local_routing.unwrap_or(state.local_routing);
+            let sample = if key_expr.suffix.is_empty() {
+                match state.get_res(&key_expr.scope, local) {
+                    Some(Resource::Node(res)) => {
                         if !local || local_routing {
                             for sub in &res.subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
                         if local {
                             for sub in &res.local_subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
+                        Sample::with_info(res.key_expr.clone().into(), payload, info)
+                    }
+                    Some(Resource::Prefix { prefix }) => {
+                        log::error!(
+                            "Received Data for `{}`, which isn't a key expression",
+                            prefix
+                        );
+                        return;
+                    }
+                    None => {
+                        log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                        return;
                     }
                 }
-                Some(Resource::Prefix { prefix }) => {
-                    error!(
-                        "Received Data for `{}`, which isn't a key expression",
-                        prefix
-                    );
-                }
-                None => {
-                    error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                }
-            }
-        } else {
-            match state.wireexpr_to_keyexpr(key_expr, local) {
-                Ok(key_expr) => {
-                    if !local || local_routing {
-                        for sub in state.subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+            } else {
+                match state.wireexpr_to_keyexpr(key_expr, local) {
+                    Ok(key_expr) => {
+                        if !local || local_routing {
+                            for sub in state.subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
-                    }
-                    if local {
-                        for sub in state.local_subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                        if local {
+                            for sub in state.local_subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
+                        Sample::with_info(key_expr.clone().into_owned(), payload, info)
+                    }
+                    Err(err) => {
+                        log::error!("Received Data for unkown key_expr: {}", err);
+                        return;
                     }
                 }
-                Err(err) => {
-                    error!("Received Data for unkown key_expr: {}", err);
-                }
-            }
+            };
+            sample
+        };
+        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
+        for cb in drain {
+            cb(sample.clone());
+        }
+        if let Some(cb) = last {
+            cb(sample);
         }
     }
 
