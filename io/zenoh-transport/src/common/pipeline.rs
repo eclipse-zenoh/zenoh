@@ -33,35 +33,6 @@ type NanoSeconds = u32;
 const RBLEN: usize = 16;
 const TSLOT: NanoSeconds = 256;
 
-macro_rules! zgetbatch {
-    ($self:expr, $c_guard:expr, $droppable:expr) => {
-        loop {
-            match $c_guard.take() {
-                Some(batch) => break batch,
-                None => match $self.s_ref.pull() {
-                    Some(mut batch) => {
-                        batch.clear();
-                        break batch;
-                    }
-                    None => {
-                        drop($c_guard);
-                        if $droppable {
-                            thread::yield_now();
-                            return false;
-                        } else {
-                            if !$self.s_ref.wait() {
-                                return false;
-                            }
-                        }
-                        // Retry
-                        $c_guard = $self.mutex.current();
-                    }
-                },
-            }
-        }
-    };
-}
-
 struct StageInRefill {
     n_ref_r: Receiver<()>,
     s_ref_r: RingBufferReader<SerializationBatch, RBLEN>,
@@ -139,40 +110,70 @@ impl StageIn {
 
         // Check congestion control
         let is_droppable = msg.is_droppable();
+        let priority = msg.channel.priority;
+
+        macro_rules! zgetbatch {
+            () => {
+                loop {
+                    match c_guard.take() {
+                        Some(batch) => break batch,
+                        None => match self.s_ref.pull() {
+                            Some(mut batch) => {
+                                batch.clear();
+                                break batch;
+                            }
+                            None => {
+                                drop(c_guard);
+                                if is_droppable {
+                                    thread::yield_now();
+                                    return false;
+                                } else {
+                                    if !self.s_ref.wait() {
+                                        return false;
+                                    }
+                                }
+                                c_guard = self.mutex.current();
+                            }
+                        },
+                    }
+                }
+            };
+        }
 
         macro_rules! zserialize {
-            () => {{
-                // Get the current serialization batch. Drop the message
-                // if no batches are available
-                let mut batch = zgetbatch!(self, c_guard, is_droppable);
-                let prio = msg.channel.priority;
-                if batch.serialize_zenoh_message(&mut msg, prio, &mut channel.sn) {
+            ($batch:expr) => {{
+                if $batch.serialize_zenoh_message(&mut msg, priority, &mut channel.sn) {
                     if self.low_latency {
                         drop(c_guard);
-                        self.s_out.move_batch(batch);
+                        self.s_out.move_batch($batch);
                     } else {
-                        let bytes = batch.len();
-                        *c_guard = Some(batch);
+                        let bytes = $batch.len();
+                        *c_guard = Some($batch);
                         drop(c_guard);
                         self.s_out.notify(bytes);
                     }
                     return true;
                 }
-                batch
             }};
         }
 
+        // Get the current serialization batch.
+        let mut batch = zgetbatch!();
         // Attempt the serialization on the current batch
-        let batch = zserialize!();
+        zserialize!(batch);
 
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
-        self.s_out.move_batch(batch);
-
-        let mut batch = zserialize!();
+        if !batch.is_empty() {
+            self.s_out.move_batch(batch);
+            batch = zgetbatch!();
+            zserialize!(batch);
+        }
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
+        // Reinsert the current batch for fragmentation.
+        *c_guard = Some(batch);
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
@@ -182,6 +183,10 @@ impl StageIn {
         let mut to_write = self.fragbuf.len();
         let mut fragbuf_reader = self.fragbuf.reader();
         while to_write > 0 {
+            // Get the current serialization batch
+            // Treat all messages as non-droppable once we start fragmenting
+            batch = zgetbatch!();
+
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(
                 msg.channel.reliability,
@@ -199,16 +204,13 @@ impl StageIn {
                 // Move the serialization batch into the OUT pipeline
                 self.s_out.move_batch(batch);
             } else {
+                *c_guard = Some(batch);
                 log::warn!(
                     "Zenoh message dropped because it can not be fragmented: {:?}",
                     msg
                 );
                 break;
             }
-
-            // Get the current serialization batch
-            // Treat all messages as non-droppable once we start fragmenting
-            batch = zgetbatch!(self, c_guard, is_droppable);
         }
 
         true
@@ -326,7 +328,7 @@ struct StageOutRefill {
 
 impl StageOutRefill {
     fn refill(&mut self, batch: SerializationBatch) {
-        let _ = self.s_ref_w.push(batch);
+        assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.try_send(());
     }
 }
