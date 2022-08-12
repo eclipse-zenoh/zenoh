@@ -48,6 +48,10 @@ use zenoh_link_unixsock_stream::{
     LinkManagerUnicastUnixSocketStream, UNIXSOCKSTREAM_LOCATOR_PREFIX,
 };
 
+#[cfg(feature = "transport_serial")]
+pub use zenoh_link_serial as serial;
+#[cfg(feature = "transport_serial")]
+use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL_LOCATOR_PREFIX};
 #[cfg(feature = "transport_ws")]
 pub use zenoh_link_ws as ws;
 #[cfg(feature = "transport_ws")]
@@ -68,6 +72,8 @@ pub struct LocatorInspector {
     udp_inspector: UdpLocatorInspector,
     #[cfg(feature = "transport_ws")]
     ws_inspector: WsLocatorInspector,
+    #[cfg(feature = "transport_serial")]
+    serial_inspector: SerialLocatorInspector,
 }
 impl LocatorInspector {
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
@@ -87,6 +93,8 @@ impl LocatorInspector {
             UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(false),
             #[cfg(feature = "transport_ws")]
             WS_LOCATOR_PREFIX => self.ws_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_serial")]
+            SERIAL_LOCATOR_PREFIX => self.serial_inspector.is_multicast(locator).await,
             _ => bail!("Unsupported protocol: {}.", protocol),
         }
     }
@@ -158,6 +166,8 @@ impl LinkManagerBuilderUnicast {
             }
             #[cfg(feature = "transport_ws")]
             WS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastWs::new(_manager))),
+            #[cfg(feature = "transport_serial")]
+            SERIAL_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastSerial::new(_manager))),
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }
