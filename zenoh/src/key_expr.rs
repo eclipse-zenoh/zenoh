@@ -305,7 +305,7 @@ impl From<OwnedKeyExpr> for KeyExpr<'static> {
 }
 impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
     fn from(v: &'a OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Borrowed(&*v))
+        Self(KeyExprInner::Borrowed(v))
     }
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {

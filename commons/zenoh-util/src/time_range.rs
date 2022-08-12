@@ -49,7 +49,7 @@ const W_TO_SECS: f64 = D_TO_SECS * 7.0;
 /// The comparison step for instants is the nanosecond, which makes exclusive and inclusive bounds extremely close.
 /// The `[<start>..<end>[` pattern may however be useful to guarantee that a same timestamp never appears twice when
 /// iteratively getting values for `[t0..t1[`, `[t1..t2[`, `[t2..t3[`...
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TimeRange<T = TimeExpr>(pub TimeBound<T>, pub TimeBound<T>);
 impl TimeRange<TimeExpr> {
     /// Resolves the offset bounds in the range using `now` as reference.
@@ -189,7 +189,7 @@ impl FromStr for TimeRange<TimeExpr> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TimeBound<T> {
     Inclusive(T),
     Exclusive(T),

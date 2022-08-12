@@ -44,7 +44,7 @@ use std::{
 ///   this key to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
 #[non_exhaustive]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     pub key_expr: KeyExpr<'a>,

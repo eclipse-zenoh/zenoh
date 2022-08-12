@@ -654,7 +654,7 @@ impl Header for Unit {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Declaration {
     Resource(Resource),
     ForgetResource(ForgetResource),
@@ -893,7 +893,7 @@ impl Header for ForgetQueryable {
 /// ~ [Declaration] ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
@@ -962,7 +962,7 @@ impl Header for Pull {
 /// ~ consolidation ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     pub key: WireExpr<'static>,
     pub value_selector: String,
@@ -1001,7 +1001,7 @@ impl Header for Query {
 // +---------------+
 // ~    [links]    ~
 // +---------------+
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
@@ -1037,7 +1037,7 @@ impl Options for LinkState {
 // +-+-+-+---------+
 // ~ [link_states] ~
 // +---------------+
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkStateList {
     pub link_states: Vec<LinkState>,
 }
@@ -1277,7 +1277,7 @@ pub enum TransportMode {
 /// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Routers
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
     pub zid_request: bool,
@@ -1329,7 +1329,7 @@ impl Header for Scout {
 /// ~   [Locators]  ~ if L==1 -- Otherwise src-address is the locator
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hello {
     pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
@@ -1410,7 +1410,7 @@ impl fmt::Display for Hello {
 ///
 /// - if Q==1 then the initiator/responder support QoS.
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
@@ -1447,7 +1447,7 @@ impl Options for InitSyn {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
@@ -1512,7 +1512,7 @@ impl Options for InitAck {
 ///       InitSyn/InitAck message exchange
 /// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenSyn {
     pub lease: Duration,
     pub initial_sn: ZInt,
@@ -1530,7 +1530,7 @@ impl Header for OpenSyn {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenAck {
     pub lease: Duration,
     pub initial_sn: ZInt,
@@ -1586,7 +1586,7 @@ impl Header for OpenAck {
 ///       if Q==0 then only one sequence number is present.
 ///
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
@@ -1663,7 +1663,7 @@ impl Options for Join {
 ///           keep the whole transport open. NOTE: the transport will be automatically closed when
 ///           the transport's lease period expires.
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Close {
     pub zid: Option<ZenohId>,
     pub reason: u8,
@@ -1709,7 +1709,7 @@ impl Header for Close {
 ///
 /// - if R==1 then the SYNC concerns the reliable channel, otherwise the best-effort channel.
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sync {
     pub reliability: Reliability,
     pub sn: ZInt,
@@ -1751,7 +1751,7 @@ impl Header for Sync {
 /// ~     mask      ~ if M==1
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AckNack {
     pub sn: ZInt,
     pub mask: Option<ZInt>,
@@ -1787,7 +1787,7 @@ impl Header for AckNack {
 /// ~    peer_id    ~ if I==1 -- Peer ID of the KEEP_ALIVE sender.
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeepAlive {
     pub zid: Option<ZenohId>,
 }
@@ -1821,7 +1821,7 @@ impl Header for KeepAlive {
 ///
 /// - if P==1 then the message is Ping, otherwise is Pong.
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ping {
     pub hash: ZInt,
 }
@@ -1835,7 +1835,7 @@ impl Header for Ping {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pong {
     pub hash: ZInt,
 }

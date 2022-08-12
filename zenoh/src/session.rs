@@ -275,7 +275,7 @@ impl Deref for SessionRef<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             SessionRef::Borrow(b) => b,
-            SessionRef::Shared(s) => &*s,
+            SessionRef::Shared(s) => s,
         }
     }
 }
@@ -284,7 +284,7 @@ impl fmt::Debug for SessionRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SessionRef::Borrow(b) => Session::fmt(b, f),
-            SessionRef::Shared(s) => Session::fmt(&*s, f),
+            SessionRef::Shared(s) => Session::fmt(s, f),
         }
     }
 }
