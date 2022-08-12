@@ -26,7 +26,12 @@ use std::time::Duration;
 use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 
+// It's faster to work directly with nanoseconds.
+// Backoff will never last more the u32::MAX nanoseconds.
+type NanoSeconds = u32;
+
 const RBLEN: usize = 16;
+const TSLOT: NanoSeconds = 256;
 
 macro_rules! zgetbatch {
     ($self:expr, $c_guard:expr, $droppable:expr) => {
@@ -82,8 +87,8 @@ struct StageInOut {
 impl StageInOut {
     #[inline]
     fn notify(&self, bytes: u16) {
-        self.bytes.store(bytes, Ordering::Release);
-        if !self.backoff.load(Ordering::Acquire) {
+        self.bytes.store(bytes, Ordering::Relaxed);
+        if !self.backoff.load(Ordering::Relaxed) {
             let _ = self.n_out_w.try_send(());
         }
     }
@@ -91,7 +96,7 @@ impl StageInOut {
     #[inline]
     fn move_batch(&mut self, batch: SerializationBatch) {
         let _ = self.s_out_w.push(batch);
-        self.bytes.store(0, Ordering::Release);
+        self.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.try_send(());
     }
 }
@@ -215,10 +220,6 @@ impl StageIn {
     }
 }
 
-// It's faster to work directly with nanoseconds.
-// Backoff will never last more the u32::MAX nanoseconds.
-type NanoSeconds = u32;
-
 enum Pull {
     Some(SerializationBatch),
     None,
@@ -227,7 +228,6 @@ enum Pull {
 
 #[derive(Clone)]
 struct Backoff {
-    time_slot: NanoSeconds,
     retry_time: NanoSeconds,
     last_bytes: u16,
     bytes: Arc<AtomicU16>,
@@ -235,9 +235,8 @@ struct Backoff {
 }
 
 impl Backoff {
-    fn new(time_slot: NanoSeconds, bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
+    fn new(bytes: Arc<AtomicU16>, backoff: Arc<AtomicBool>) -> Self {
         Self {
-            time_slot,
             retry_time: 0,
             last_bytes: 0,
             bytes,
@@ -247,8 +246,8 @@ impl Backoff {
 
     fn next(&mut self) {
         if self.retry_time == 0 {
-            self.retry_time = self.time_slot;
-            self.backoff.store(true, Ordering::Release);
+            self.retry_time = TSLOT;
+            self.backoff.store(true, Ordering::Relaxed);
         } else {
             self.retry_time *= 2;
         }
@@ -256,7 +255,7 @@ impl Backoff {
 
     fn stop(&mut self) {
         self.retry_time = 0;
-        self.backoff.store(false, Ordering::Release);
+        self.backoff.store(false, Ordering::Relaxed);
     }
 }
 
@@ -279,7 +278,7 @@ impl StageOutIn {
     }
 
     fn try_pull_deep(&mut self) -> Pull {
-        let new_bytes = self.backoff.bytes.load(Ordering::Acquire);
+        let new_bytes = self.backoff.bytes.load(Ordering::Relaxed);
         let old_bytes = self.backoff.last_bytes;
         self.backoff.last_bytes = new_bytes;
 
@@ -470,7 +469,7 @@ impl TransmissionPipeline {
                 s_in: StageOutIn {
                     s_out_r,
                     current,
-                    backoff: Backoff::new(100, bytes, backoff),
+                    backoff: Backoff::new(bytes, backoff),
                 },
                 s_ref: StageOutRefill { n_ref_w, s_ref_w },
             });
