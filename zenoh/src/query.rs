@@ -14,6 +14,7 @@
 
 //! Query primitives.
 
+use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::Runtime;
 use crate::prelude::*;
 use crate::Session;

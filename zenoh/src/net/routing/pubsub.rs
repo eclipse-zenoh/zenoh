@@ -1105,7 +1105,7 @@ macro_rules! treat_timestamp {
 #[inline]
 fn get_data_route(
     tables: &Tables,
-    face: &Arc<FaceState>,
+    face: &FaceState,
     res: &Option<Arc<Resource>>,
     prefix: &Arc<Resource>,
     suffix: &str,
@@ -1257,69 +1257,10 @@ macro_rules! cache_data {
     };
 }
 
-#[inline]
-#[allow(clippy::too_many_arguments)]
-pub fn route_data(
-    tables: &Tables,
-    face: &Arc<FaceState>,
-    expr: &WireExpr,
-    channel: Channel,
-    congestion_control: CongestionControl,
-    info: Option<DataInfo>,
-    payload: ZBuf,
-    routing_context: Option<RoutingContext>,
-) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
-        Some(prefix) => {
-            log::trace!(
-                "Route data for res {}{}",
-                prefix.expr(),
-                expr.suffix.as_ref()
-            );
-
-            let res = Resource::get_resource(&prefix, expr.suffix.as_ref());
-            let route = get_data_route(
-                tables,
-                face,
-                &res,
-                &prefix,
-                expr.suffix.as_ref(),
-                routing_context,
-            );
-            let matching_pulls = get_matching_pulls(tables, &res, &prefix, expr.suffix.as_ref());
-
-            if !(route.is_empty() && matching_pulls.is_empty()) {
-                let data_info = treat_timestamp!(&tables.hlc, info, tables.drop_future_timestamp);
-
-                if route.len() == 1 && matching_pulls.len() == 0 {
-                    send_to_first!(route, face, payload, channel, congestion_control, data_info);
-                } else {
-                    if !matching_pulls.is_empty() {
-                        let lock = zlock!(tables.pull_caches_lock);
-                        cache_data!(
-                            matching_pulls,
-                            prefix,
-                            expr.suffix.as_ref(),
-                            payload,
-                            data_info
-                        );
-                        drop(lock);
-                    }
-                    send_to_all!(route, face, payload, channel, congestion_control, data_info);
-                }
-            }
-        }
-        None => {
-            log::error!("Route data with unknown scope {}!", expr.scope);
-        }
-    }
-}
-
-#[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
-    tables_ref: &Arc<RwLock<Tables>>,
-    face: &Arc<FaceState>,
+    tables_ref: &RwLock<Tables>,
+    face: &FaceState,
     expr: &WireExpr,
     channel: Channel,
     congestion_control: CongestionControl,

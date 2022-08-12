@@ -76,6 +76,7 @@
 #[macro_use]
 extern crate zenoh_core;
 
+use handlers::DefaultHandler;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 use git_version::git_version;
@@ -96,23 +97,26 @@ mod session;
 pub use session::*;
 
 pub mod key_expr;
-#[doc(hidden)]
-pub mod net;
+pub(crate) mod net;
+pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub mod handlers;
 pub mod info;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
+pub mod sample;
 pub mod subscriber;
 pub mod utils;
+pub mod value;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
-pub use zenoh_buffers as buf;
+pub use zenoh_buffers as buffers;
 
 /// Time related types and functions.
 pub mod time {

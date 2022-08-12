@@ -16,7 +16,8 @@ use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
-use zenoh::prelude::{DefaultHandler, KeyExpr};
+use zenoh::handlers::DefaultHandler;
+use zenoh::prelude::KeyExpr;
 use zenoh::Session;
 
 #[derive(Clone)]

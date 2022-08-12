@@ -16,8 +16,8 @@ use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
 use zenoh::config::{Config, EndPoint, ModeDependentValue, PluginLoad, ValidatedMap};
-use zenoh::net::runtime::{AdminSpace, Runtime};
 use zenoh::plugins::PluginsManager;
+use zenoh::runtime::{AdminSpace, Runtime};
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 

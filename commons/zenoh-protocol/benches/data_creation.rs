@@ -19,10 +19,10 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use zenoh_protocol_core::SampleKind;
 
-use zenoh::net::protocol::core::Encoding;
-use zenoh::net::protocol::core::{Channel, CongestionControl, WireExpr};
-use zenoh::net::protocol::io::ZBuf;
-use zenoh::net::protocol::proto::{DataInfo, ZenohMessage};
+use zenoh_protocol::core::Encoding;
+use zenoh_protocol::core::{Channel, CongestionControl, WireExpr};
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, ZenohMessage};
 
 fn consume_message(msg: ZenohMessage) {
     drop(msg);

@@ -11,10 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    net::runtime::{orchestrator::Loop, Runtime},
-    prelude::{locked, sync::DefaultHandler, Callback},
-};
+use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::net::runtime::{orchestrator::Loop, Runtime};
+
 use async_std::net::UdpSocket;
 use futures::StreamExt;
 use std::{fmt, ops::Deref, sync::Arc};
