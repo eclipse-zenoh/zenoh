@@ -1,7 +1,7 @@
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// An alias for `Box<T>`.
-pub type Dyn<T> = std::boxed::Box<T>;
+pub type Dyn<T> = std::sync::Arc<T>;
 /// An immutable callback function.
 pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
 
@@ -21,7 +21,7 @@ where
 {
     type Receiver = ();
     fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver) {
-        (Box::from(self), ())
+        (Dyn::from(self), ())
     }
 }
 impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
@@ -32,7 +32,7 @@ impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
     fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
         let (sender, receiver) = self;
         (
-            Box::new(move |t| {
+            Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
                     log::error!("{}", e)
                 }
@@ -55,7 +55,7 @@ impl<T: Send + Sync + 'static> IntoCallbackReceiverPair<'static, T>
     fn into_cb_receiver_pair(self) -> (Callback<'static, T>, Self::Receiver) {
         let (sender, receiver) = self;
         (
-            Box::new(move |t| {
+            Dyn::new(move |t| {
                 if let Err(e) = sender.send(t) {
                     log::error!("{}", e)
                 }

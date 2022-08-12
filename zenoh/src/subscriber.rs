@@ -514,7 +514,7 @@ where
         let session = self.session;
         let inner = if self.local {
             session
-                .declare_local_subscriber(&key_expr, Box::new(callback))
+                .declare_local_subscriber(&key_expr, callback)
                 .map(|sub_state| SubscriberInner {
                     session,
                     state: sub_state,
@@ -524,7 +524,7 @@ where
             session
                 .declare_subscriber_inner(
                     &key_expr,
-                    Box::new(callback),
+                    callback,
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode.into(),
@@ -563,7 +563,7 @@ where
         let session = self.session;
         let inner = if self.local {
             session
-                .declare_local_subscriber(&key_expr, Box::new(callback))
+                .declare_local_subscriber(&key_expr, callback)
                 .map(|sub_state| PullSubscriberInner {
                     inner: SubscriberInner {
                         session,
@@ -575,7 +575,7 @@ where
             session
                 .declare_subscriber_inner(
                     &key_expr,
-                    Box::new(callback),
+                    callback,
                     &SubInfo {
                         reliability: self.reliability,
                         mode: self.mode.into(),

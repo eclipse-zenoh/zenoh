@@ -1135,7 +1135,7 @@ impl Session {
             key_expr: key_expr.to_owned(),
             kind,
             complete,
-            callback: callback.into(),
+            callback,
         });
         #[cfg(feature = "complete_n")]
         {

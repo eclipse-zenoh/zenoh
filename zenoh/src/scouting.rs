@@ -175,7 +175,7 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
-        scout(self.what, self.config?, Box::new(callback)).map(|scout| Scout { scout, receiver })
+        scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
 }
 
@@ -306,7 +306,6 @@ fn scout(
         .interface()
         .as_ref()
         .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
-    let callback = Arc::from(callback);
     let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
