@@ -278,7 +278,6 @@ impl StageOutIn {
         self.try_pull_deep()
     }
 
-    #[cold]
     fn try_pull_deep(&mut self) -> Pull {
         let new_bytes = self.backoff.bytes.load(Ordering::Acquire);
         let old_bytes = self.backoff.last_bytes;
