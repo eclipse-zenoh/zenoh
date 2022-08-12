@@ -307,7 +307,7 @@ async fn transport_simultaneous(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPo
     task::sleep(SLEEP).await;
 }
 
-#[cfg(feature = "transport_tcp")]
+#[cfg(all(feature = "transport_tcp", target_family = "unix"))]
 #[test]
 fn transport_tcp_simultaneous() {
     task::block_on(async {
@@ -332,7 +332,7 @@ fn transport_tcp_simultaneous() {
     });
 }
 
-#[cfg(feature = "transport_ws")]
+#[cfg(all(feature = "transport_ws", target_family = "unix"))]
 #[test]
 fn transport_ws_simultaneous() {
     task::block_on(async {
