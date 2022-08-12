@@ -132,6 +132,7 @@ impl Timed for QueryTimeout {
     async fn run(&mut self) {
         let mut state = zwrite!(self.state);
         if let Some(query) = state.queries.remove(&self.qid) {
+            std::mem::drop(state);
             log::debug!("Timout on query {}! Send error and close.", self.qid);
             if query.reception_mode == ConsolidationMode::Full {
                 for (_, reply) in query.replies.unwrap().into_iter() {
@@ -149,7 +150,7 @@ impl Timed for QueryTimeout {
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) reception_mode: ConsolidationMode,
-    pub(crate) replies: Option<HashMap<String, Reply>>,
+    pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
 }
 

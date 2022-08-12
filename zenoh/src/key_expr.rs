@@ -121,38 +121,6 @@ impl<'a> KeyExpr<'a> {
         self
     }
 
-    /// Creates a `KeyExpr` that borrows `self`'s internals.
-    ///
-    /// This is only useful when you need to pass a `KeyExpr<'a>` by value.
-    pub fn borrowing_clone(&'a self) -> Self {
-        Self(match &self.0 {
-            KeyExprInner::Borrowed(key_expr) => KeyExprInner::Borrowed(key_expr),
-            KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id,
-                prefix_len,
-                session_id,
-            } => KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id: *expr_id,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            },
-            KeyExprInner::Owned(key_expr) => KeyExprInner::Borrowed(key_expr),
-            KeyExprInner::Wire {
-                key_expr,
-                expr_id,
-                prefix_len,
-                session_id,
-            } => KeyExprInner::BorrowedWire {
-                key_expr,
-                expr_id: *expr_id,
-                prefix_len: *prefix_len,
-                session_id: *session_id,
-            },
-        })
-    }
-
     /// Ensure's `self` owns all of its data, and informs rustc that it does.
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
@@ -305,7 +273,7 @@ impl From<OwnedKeyExpr> for KeyExpr<'static> {
 }
 impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
     fn from(v: &'a OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Borrowed(&*v))
+        Self(KeyExprInner::Borrowed(v))
     }
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {

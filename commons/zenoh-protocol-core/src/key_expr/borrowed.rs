@@ -436,7 +436,7 @@ impl std::ops::Deref for keyexpr {
 }
 impl AsRef<str> for keyexpr {
     fn as_ref(&self) -> &str {
-        &*self
+        self
     }
 }
 

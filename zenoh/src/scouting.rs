@@ -16,7 +16,7 @@ use crate::net::runtime::{orchestrator::Loop, Runtime};
 
 use async_std::net::UdpSocket;
 use futures::StreamExt;
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
@@ -175,7 +175,7 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
-        scout(self.what, self.config?, Box::new(callback)).map(|scout| Scout { scout, receiver })
+        scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
 }
 
@@ -306,7 +306,6 @@ fn scout(
         .interface()
         .as_ref()
         .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
-    let callback = Arc::from(callback);
     let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {
@@ -318,7 +317,7 @@ fn scout(
             async_std::task::spawn(async move {
                 let mut stop_receiver = stop_receiver.stream();
                 let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
-                    let callback = (&callback as &Arc<dyn Fn(Hello) + Send + Sync>).clone();
+                    let callback = callback.clone();
                     async move {
                         callback(hello);
                         Loop::Continue

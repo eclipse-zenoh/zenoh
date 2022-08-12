@@ -617,7 +617,7 @@ pub async fn plugins_status(
     key: &KeyExpr<'_>,
     args: &str,
 ) -> Vec<crate::plugins::Response> {
-    let selector = key.borrowing_clone().with_value_selector(args);
+    let selector = key.clone().with_value_selector(args);
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
     let mut responses = Vec::new();

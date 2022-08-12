@@ -326,7 +326,6 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
             merge_queue: MergeQueue::new(),
         }));
         let (callback, receiver) = conf.handler.into_cb_receiver_pair();
-        let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
 
         let sub_callback = {
             let state = state.clone();

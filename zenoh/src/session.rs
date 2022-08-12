@@ -50,6 +50,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use uhlc::HLC;
+use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
 use zenoh_core::AsyncResolve;
@@ -275,7 +276,7 @@ impl Deref for SessionRef<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             SessionRef::Borrow(b) => b,
-            SessionRef::Shared(s) => &*s,
+            SessionRef::Shared(s) => s,
         }
     }
 }
@@ -284,7 +285,7 @@ impl fmt::Debug for SessionRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SessionRef::Borrow(b) => Session::fmt(b, f),
-            SessionRef::Shared(s) => Session::fmt(&*s, f),
+            SessionRef::Shared(s) => Session::fmt(s, f),
         }
     }
 }
@@ -956,7 +957,7 @@ impl Session {
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
-                (!twin_sub).then(|| key_expr.borrowing_clone())
+                (!twin_sub).then(|| key_expr.clone())
             }
         };
 
@@ -1135,7 +1136,7 @@ impl Session {
             key_expr: key_expr.to_owned(),
             kind,
             complete,
-            callback: callback.into(),
+            callback,
         });
         #[cfg(feature = "complete_n")]
         {
@@ -1274,79 +1275,70 @@ impl Session {
         payload: ZBuf,
         local_routing: Option<bool>,
     ) {
-        let state = zread!(self.state);
-        let local_routing = local_routing.unwrap_or(state.local_routing);
-        if key_expr.suffix.is_empty() {
-            match state.get_res(&key_expr.scope, local) {
-                Some(Resource::Node(res)) => {
-                    if !local && res.subscribers.len() == 1 {
-                        let sub = res.subscribers.get(0).unwrap();
-                        (sub.callback)(Sample::with_info(
-                            res.key_expr.clone().into(),
-                            payload,
-                            info,
-                        ));
-                    } else {
+        let mut callbacks = SingleOrVec::default();
+        let sample = {
+            let state = zread!(self.state);
+            let local_routing = local_routing.unwrap_or(state.local_routing);
+            let sample = if key_expr.suffix.is_empty() {
+                match state.get_res(&key_expr.scope, local) {
+                    Some(Resource::Node(res)) => {
                         if !local || local_routing {
                             for sub in &res.subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
                         if local {
                             for sub in &res.local_subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
+                        Sample::with_info(res.key_expr.clone().into(), payload, info)
+                    }
+                    Some(Resource::Prefix { prefix }) => {
+                        log::error!(
+                            "Received Data for `{}`, which isn't a key expression",
+                            prefix
+                        );
+                        return;
+                    }
+                    None => {
+                        log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                        return;
                     }
                 }
-                Some(Resource::Prefix { prefix }) => {
-                    error!(
-                        "Received Data for `{}`, which isn't a key expression",
-                        prefix
-                    );
-                }
-                None => {
-                    error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                }
-            }
-        } else {
-            match state.wireexpr_to_keyexpr(key_expr, local) {
-                Ok(key_expr) => {
-                    if !local || local_routing {
-                        for sub in state.subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+            } else {
+                match state.wireexpr_to_keyexpr(key_expr, local) {
+                    Ok(key_expr) => {
+                        if !local || local_routing {
+                            for sub in state.subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
-                    }
-                    if local {
-                        for sub in state.local_subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                        if local {
+                            for sub in state.local_subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
+                        Sample::with_info(key_expr.clone().into_owned(), payload, info)
+                    }
+                    Err(err) => {
+                        log::error!("Received Data for unkown key_expr: {}", err);
+                        return;
                     }
                 }
-                Err(err) => {
-                    error!("Received Data for unkown key_expr: {}", err);
-                }
-            }
+            };
+            sample
+        };
+        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
+        for cb in drain {
+            cb(sample.clone());
+        }
+        if let Some(cb) = last {
+            cb(sample);
         }
     }
 
@@ -1785,7 +1777,7 @@ impl Primitives for Session {
             data_info,
             payload
         );
-        let state = &mut zwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let key_expr = match state.remote_key_to_expr(&key_expr) {
             Ok(key) => key.into_owned(),
             Err(e) => {
@@ -1799,34 +1791,34 @@ impl Primitives for Session {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
                 };
-                match query.reception_mode {
-                    ConsolidationMode::None => {
-                        (query.callback)(new_reply);
-                    }
+                let callback = match query.reception_mode {
+                    ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
                     ConsolidationMode::Lazy => {
                         match query
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                         new_reply.clone(),
                                     );
-                                    (query.callback)(new_reply);
+                                    Some((query.callback.clone(), new_reply))
+                                } else {
+                                    None
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                     new_reply.clone(),
                                 );
-                                (query.callback)(new_reply);
+                                Some((query.callback.clone(), new_reply))
                             }
                         }
                     }
@@ -1835,26 +1827,31 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                        new_reply.clone(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                        new_reply,
                                     );
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                    new_reply.clone(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                    new_reply,
                                 );
                             }
                         };
+                        None
                     }
+                };
+                std::mem::drop(state);
+                if let Some((callback, new_reply)) = callback {
+                    callback(new_reply);
                 }
             }
             None => {
@@ -1871,6 +1868,7 @@ impl Primitives for Session {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
+                    std::mem::drop(state);
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);

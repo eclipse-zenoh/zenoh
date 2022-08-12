@@ -15,15 +15,23 @@
 use crate::WireExpr;
 
 use super::{canon::Canonizable, keyexpr};
+use std::sync::Arc;
 use std::{convert::TryFrom, str::FromStr};
 
-/// A [`Box<str>`] newtype that is statically known to be a valid key expression.
+/// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
 /// See [`keyexpr`](super::borrowed::keyexpr).
-#[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize)]
 #[serde(try_from = "String")]
-#[serde(into = "Box<str>")]
-pub struct OwnedKeyExpr(pub(crate) Box<str>);
+pub struct OwnedKeyExpr(pub(crate) Arc<str>);
+impl serde::Serialize for OwnedKeyExpr {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
 
 impl OwnedKeyExpr {
     /// Equivalent to `<OwnedKeyExpr as TryFrom>::try_from(t)`.
@@ -63,17 +71,14 @@ impl OwnedKeyExpr {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
-        OwnedKeyExpr(s)
+        OwnedKeyExpr(s.into())
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
 impl std::ops::Div<&keyexpr> for OwnedKeyExpr {
     type Output = Self;
     fn div(self, rhs: &keyexpr) -> Self::Output {
-        let mut s: String = self.0.into();
-        s.push('/');
-        s += rhs.as_str();
-        Self::autocanonize(s).unwrap() // Joining 2 key expressions should always result in a canonizable string.
+        &self / rhs
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
@@ -129,22 +134,22 @@ impl TryFrom<String> for OwnedKeyExpr {
     type Error = zenoh_core::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         <&keyexpr as TryFrom<&str>>::try_from(value.as_str())?;
-        Ok(Self(value.into_boxed_str()))
+        Ok(Self(value.into()))
     }
 }
 impl<'a> From<&'a keyexpr> for OwnedKeyExpr {
     fn from(val: &'a keyexpr) -> Self {
-        OwnedKeyExpr(Box::from(val.as_str()))
+        OwnedKeyExpr(Arc::from(val.as_str()))
     }
 }
-impl From<OwnedKeyExpr> for Box<str> {
+impl From<OwnedKeyExpr> for Arc<str> {
     fn from(ke: OwnedKeyExpr) -> Self {
         ke.0
     }
 }
 impl From<OwnedKeyExpr> for String {
     fn from(ke: OwnedKeyExpr) -> Self {
-        ke.0.into()
+        ke.as_str().to_owned()
     }
 }
 

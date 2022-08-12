@@ -56,7 +56,7 @@ pub use locators::Locator;
 pub mod endpoints;
 pub use endpoints::EndPoint;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
@@ -353,13 +353,13 @@ impl Default for Reliability {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
@@ -397,7 +397,7 @@ impl fmt::Display for ConduitSnList {
 }
 
 /// The kind of reliability.
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
@@ -418,7 +418,7 @@ impl Default for CongestionControl {
 }
 
 /// The subscription mode.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SubMode {
     Push,
@@ -432,13 +432,13 @@ impl Default for SubMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryableInfo {
     pub complete: ZInt,
     pub distance: ZInt,

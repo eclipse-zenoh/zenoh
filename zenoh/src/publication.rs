@@ -351,7 +351,7 @@ impl SyncResolve for PublisherUndeclaration<'_> {
             session, key_expr, ..
         } = &self.publisher;
         session
-            .undeclare_publication_intent(key_expr.borrowing_clone())
+            .undeclare_publication_intent(key_expr.clone())
             .res_sync()?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
@@ -368,7 +368,7 @@ impl Drop for Publisher<'_> {
         if !self.key_expr.is_empty() {
             let _ = self
                 .session
-                .undeclare_publication_intent(self.key_expr.borrowing_clone())
+                .undeclare_publication_intent(self.key_expr.clone())
                 .res_sync();
         }
     }
@@ -563,7 +563,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             }
         }
         self.session
-            .declare_publication_intent(key_expr.borrowing_clone())
+            .declare_publication_intent(key_expr.clone())
             .res_sync()?;
         let publisher = Publisher {
             session: self.session,
