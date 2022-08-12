@@ -1777,7 +1777,7 @@ impl Primitives for Session {
             data_info,
             payload
         );
-        let state = &mut zwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let key_expr = match state.remote_key_to_expr(&key_expr) {
             Ok(key) => key.into_owned(),
             Err(e) => {
@@ -1791,34 +1791,34 @@ impl Primitives for Session {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
                 };
-                match query.reception_mode {
-                    ConsolidationMode::None => {
-                        (query.callback)(new_reply);
-                    }
+                let callback = match query.reception_mode {
+                    ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
                     ConsolidationMode::Lazy => {
                         match query
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                         new_reply.clone(),
                                     );
-                                    (query.callback)(new_reply);
+                                    Some((query.callback.clone(), new_reply))
+                                } else {
+                                    None
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                     new_reply.clone(),
                                 );
-                                (query.callback)(new_reply);
+                                Some((query.callback.clone(), new_reply))
                             }
                         }
                     }
@@ -1827,26 +1827,31 @@ impl Primitives for Session {
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                        new_reply.clone(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                        new_reply,
                                     );
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                    new_reply.clone(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                    new_reply,
                                 );
                             }
                         };
+                        None
                     }
+                };
+                std::mem::drop(state);
+                if let Some((callback, new_reply)) = callback {
+                    callback(new_reply);
                 }
             }
             None => {
@@ -1863,6 +1868,7 @@ impl Primitives for Session {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
+                    std::mem::drop(state);
                     if query.reception_mode == ConsolidationMode::Full {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);

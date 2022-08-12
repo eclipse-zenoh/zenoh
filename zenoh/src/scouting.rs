@@ -16,7 +16,7 @@ use crate::net::runtime::{orchestrator::Loop, Runtime};
 
 use async_std::net::UdpSocket;
 use futures::StreamExt;
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
@@ -317,7 +317,7 @@ fn scout(
             async_std::task::spawn(async move {
                 let mut stop_receiver = stop_receiver.stream();
                 let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
-                    let callback = (&callback as &Arc<dyn Fn(Hello) + Send + Sync>).clone();
+                    let callback = callback.clone();
                     async move {
                         callback(hello);
                         Loop::Continue
