@@ -396,12 +396,12 @@ impl Attachment {
 ///
 /// - if F==1 then the message is a REPLY_FINAL
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplierInfo {
     pub kind: ZInt,
     pub id: ZenohId,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
     pub qid: ZInt,
     pub replier: Option<ReplierInfo>,
@@ -444,7 +444,7 @@ impl ReplyContext {
 /// ~      tid      ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RoutingContext {
     pub tree_id: ZInt,
 }
@@ -526,7 +526,7 @@ impl Header for Priority {
 /// - if options & (1 << 5) then the payload is sliced
 ///
 /// ```
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
@@ -637,7 +637,7 @@ impl Header for Data {
 /// +-+-+-+---------+
 ///
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unit {
     pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
@@ -676,7 +676,7 @@ pub enum Declaration {
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resource {
     pub expr_id: ZInt,
     pub key: WireExpr<'static>,
@@ -701,7 +701,7 @@ impl Header for Resource {
 /// ~      RID      ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetResource {
     pub expr_id: ZInt,
 }
@@ -721,7 +721,7 @@ impl Header for ForgetResource {
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Publisher {
     pub key: WireExpr<'static>,
 }
@@ -745,7 +745,7 @@ impl Header for Publisher {
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetPublisher {
     pub key: WireExpr<'static>,
 }
@@ -773,7 +773,7 @@ impl Header for ForgetPublisher {
 /// ~    Period     ~ if P==1. Otherwise: None
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subscriber {
     pub key: WireExpr<'static>,
     pub info: SubInfo,
@@ -804,7 +804,7 @@ impl Header for Subscriber {
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetSubscriber {
     pub key: WireExpr<'static>,
 }
@@ -832,7 +832,7 @@ impl Header for ForgetSubscriber {
 /// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Queryable {
     pub key: WireExpr<'static>,
     pub kind: ZInt,
@@ -863,7 +863,7 @@ impl Header for Queryable {
 /// ~     Kind      ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetQueryable {
     pub key: WireExpr<'static>,
     pub kind: ZInt,
@@ -919,7 +919,7 @@ impl Header for Declare {
 /// ~  max_samples  ~ if N==1
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
     pub key: WireExpr<'static>,
     pub pull_id: ZInt,
