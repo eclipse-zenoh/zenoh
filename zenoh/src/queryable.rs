@@ -386,7 +386,8 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             handler,
         }
     }
-
+}
+impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {

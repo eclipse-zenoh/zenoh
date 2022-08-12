@@ -33,6 +33,7 @@ pub(crate) mod common {
     pub use crate::handlers::IntoCallbackReceiverPair;
     pub use crate::selector::{KeyValuePair, Selector, ValueSelector};
     pub use crate::session::{Session, SessionDeclarations};
+    pub use crate::Undeclarable;
 
     pub use crate::value::Value;
     /// The encoding of a zenoh [`Value`].
