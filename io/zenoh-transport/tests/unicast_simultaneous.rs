@@ -319,14 +319,12 @@ fn transport_tcp_simultaneous() {
         "tcp/127.0.0.1:15448".parse().unwrap(),
         "tcp/127.0.0.1:15449".parse().unwrap(),
         "tcp/127.0.0.1:15450".parse().unwrap(),
+    ];
+    let endpoint02: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:15451".parse().unwrap(),
         "tcp/127.0.0.1:15452".parse().unwrap(),
         "tcp/127.0.0.1:15453".parse().unwrap(),
-    ];
-    let endpoint02: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:15454".parse().unwrap(),
-        "tcp/127.0.0.1:15455".parse().unwrap(),
-        "tcp/127.0.0.1:15456".parse().unwrap(),
     ];
 
     task::block_on(async {
@@ -342,18 +340,16 @@ fn transport_ws_simultaneous() {
     });
 
     let endpoint01: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:16447".parse().unwrap(),
-        "ws/127.0.0.1:16448".parse().unwrap(),
-        "ws/127.0.0.1:16449".parse().unwrap(),
-        "ws/127.0.0.1:16450".parse().unwrap(),
-        "ws/127.0.0.1:16451".parse().unwrap(),
-        "ws/127.0.0.1:16452".parse().unwrap(),
-        "ws/127.0.0.1:16453".parse().unwrap(),
+        "ws/127.0.0.1:15547".parse().unwrap(),
+        "ws/127.0.0.1:15548".parse().unwrap(),
+        "ws/127.0.0.1:15549".parse().unwrap(),
+        "ws/127.0.0.1:15550".parse().unwrap(),
     ];
     let endpoint02: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:16454".parse().unwrap(),
-        "ws/127.0.0.1:16455".parse().unwrap(),
-        "ws/127.0.0.1:16456".parse().unwrap(),
+        "ws/127.0.0.1:15551".parse().unwrap(),
+        "ws/127.0.0.1:15552".parse().unwrap(),
+        "ws/127.0.0.1:15553".parse().unwrap(),
+        "ws/127.0.0.1:15554".parse().unwrap(),
     ];
 
     task::block_on(async {
