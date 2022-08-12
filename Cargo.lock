@@ -3,6 +3,27 @@
 version = 3
 
 [[package]]
+name = "CoreFoundation-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0e9889e6db118d49d88d84728d0e964d973a5680befb5f85f55141beea5c20b"
+dependencies = [
+ "libc",
+ "mach 0.1.2",
+]
+
+[[package]]
+name = "IOKit-sys"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99696c398cbaf669d2368076bdb3d627fb0ce51a26899d7c61228c5c0af3bf4a"
+dependencies = [
+ "CoreFoundation-sys",
+ "libc",
+ "mach 0.1.2",
+]
+
+[[package]]
 name = "aead"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -571,6 +592,12 @@ checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
+
+[[package]]
+name = "cobs"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
 name = "concurrent-queue"
@@ -1502,6 +1529,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fd13ee2dd61cc82833ba05ade5a30bb3d63f7ced605ef827063c63078302de9"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "mach"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b823e83b2affd8f40a9ee8c29dbc56404c1e34cd2710921f2801e2cf29527afa"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1538,6 +1583,19 @@ dependencies = [
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys",
+]
+
+[[package]]
+name = "mio-serial"
+version = "5.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531e0f6dc55a5aa7b8d320407c5c4ced464e23815c60f6a1e6d9e225d2b45905"
+dependencies = [
+ "log",
+ "mio",
+ "nix 0.23.1",
+ "serialport",
+ "winapi",
 ]
 
 [[package]]
@@ -2510,6 +2568,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "serialport"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab92efb5cf60ad310548bc3f16fa6b0d950019cb7ed8ff41968c3d03721cf12"
+dependencies = [
+ "CoreFoundation-sys",
+ "IOKit-sys",
+ "bitflags",
+ "cfg-if 1.0.0",
+ "mach 0.3.2",
+ "nix 0.24.2",
+ "regex",
+ "winapi",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2951,6 +3025,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "tokio-serial"
+version = "5.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5488e0c75c70e880823aebc3ad4ac0a6da6f48d95bc1b9a52bd3200d6f1e724"
+dependencies = [
+ "cfg-if 1.0.0",
+ "futures",
+ "log",
+ "mio-serial",
+ "tokio",
 ]
 
 [[package]]
@@ -3461,6 +3548,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "z-serial"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "180c414eaa898e11432db77b79a8f3a4f4fcb3862a75b4a7c48c3ef7074e1d58"
+dependencies = [
+ "cobs",
+ "futures",
+ "log",
+ "tokio",
+ "tokio-serial",
+]
+
+[[package]]
 name = "zenoh"
 version = "0.6.0-dev.0"
 dependencies = [
@@ -3623,6 +3723,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-link-quic",
+ "zenoh-link-serial",
  "zenoh-link-tcp",
  "zenoh-link-tls",
  "zenoh-link-udp",
@@ -3659,6 +3760,27 @@ dependencies = [
  "rustls-pemfile 1.0.0",
  "webpki 0.22.0",
  "zenoh-cfg-properties",
+ "zenoh-config",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol-core",
+ "zenoh-sync",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-link-serial"
+version = "0.6.0-dev.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "log",
+ "tokio",
+ "uuid",
+ "z-serial",
+ "zenoh-cfg-properties",
+ "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
