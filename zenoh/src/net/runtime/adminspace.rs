@@ -29,9 +29,10 @@ use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::OwnedKeyExpr;
+use zenoh_protocol_core::ConsolidationMode;
 use zenoh_protocol_core::{
-    queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding, KnownEncoding,
-    QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    queryable::EVAL, Channel, CongestionControl, Encoding, KnownEncoding, QueryTAK, QueryableInfo,
+    SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -367,7 +368,7 @@ impl Primitives for AdminSpace {
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(

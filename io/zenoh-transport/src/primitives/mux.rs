@@ -1,3 +1,5 @@
+use zenoh_protocol_core::ConsolidationMode;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,8 +15,7 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, SubInfo, WireExpr,
-    ZInt, ZenohId,
+    Channel, CongestionControl, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{
@@ -161,7 +162,7 @@ impl Primitives for Mux {
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
-        consolidation: ConsolidationStrategy,
+        consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     ) {
         let target_opt = if target == QueryTAK::default() {

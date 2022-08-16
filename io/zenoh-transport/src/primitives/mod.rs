@@ -16,13 +16,13 @@ mod mux;
 
 use super::protocol;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, SubInfo, WireExpr,
-    ZInt, ZenohId,
+    Channel, CongestionControl, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
+use zenoh_protocol_core::ConsolidationMode;
 
 pub trait Primitives: Send + Sync {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr);
@@ -69,7 +69,7 @@ pub trait Primitives: Send + Sync {
         value_selector: &str,
         qid: ZInt,
         target: QueryTAK,
-        consolidation: ConsolidationStrategy,
+        consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     );
 
@@ -153,7 +153,7 @@ impl Primitives for DummyPrimitives {
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
     }

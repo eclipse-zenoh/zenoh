@@ -57,7 +57,7 @@ pub trait MessageReader {
     fn read_query_tak(&mut self) -> Option<QueryTAK>;
     fn read_query_target(&mut self) -> Option<QueryTarget>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
-    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy>;
+    fn read_consolidation(&mut self) -> Option<ConsolidationMode>;
 }
 #[allow(deprecated)]
 impl MessageReader for ZBufReader<'_> {
@@ -836,12 +836,8 @@ impl MessageReader for ZBufReader<'_> {
         }
     }
 
-    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy> {
+    fn read_consolidation(&mut self) -> Option<ConsolidationMode> {
         let modes = self.read_zint()?;
-        Some(ConsolidationStrategy {
-            first_routers: ZBufReader::read_consolidation_mode((modes >> 4) & 0x03)?,
-            last_router: ZBufReader::read_consolidation_mode((modes >> 2) & 0x03)?,
-            reception: ZBufReader::read_consolidation_mode(modes & 0x03)?,
-        })
+        ZBufReader::read_consolidation_mode(modes & 0x03)
     }
 }

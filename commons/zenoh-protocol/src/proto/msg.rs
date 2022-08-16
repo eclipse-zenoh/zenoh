@@ -968,7 +968,7 @@ pub struct Query {
     pub value_selector: String,
     pub qid: ZInt,
     pub target: Option<QueryTAK>,
-    pub consolidation: ConsolidationStrategy,
+    pub consolidation: ConsolidationMode,
 }
 
 impl Header for Query {
@@ -1188,7 +1188,7 @@ impl ZenohMessage {
         value_selector: String,
         qid: ZInt,
         target: Option<QueryTAK>,
-        consolidation: ConsolidationStrategy,
+        consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {

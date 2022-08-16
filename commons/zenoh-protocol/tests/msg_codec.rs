@@ -216,14 +216,6 @@ fn gen_consolidation_mode() -> ConsolidationMode {
     cm[thread_rng().gen_range(0..cm.len())]
 }
 
-fn gen_consolidation() -> ConsolidationStrategy {
-    ConsolidationStrategy {
-        first_routers: gen_consolidation_mode(),
-        last_router: gen_consolidation_mode(),
-        reception: gen_consolidation_mode(),
-    }
-}
-
 fn gen_timestamp() -> Timestamp {
     Timestamp::new(uhlc::NTP64(gen!(u64)), uhlc::ID::from(uuid::Uuid::new_v4()))
 }
@@ -858,7 +850,7 @@ fn codec_query() {
                             p.clone(),
                             gen!(ZInt),
                             t.clone(),
-                            gen_consolidation(),
+                            gen_consolidation_mode(),
                             *roc,
                             a.clone(),
                         );
