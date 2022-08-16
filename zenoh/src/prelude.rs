@@ -31,7 +31,7 @@ pub(crate) mod common {
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;
-    pub use crate::selector::{KeyValuePair, Selector, ValueSelector};
+    pub use crate::selector::{Parameter, Selector, ValueSelector};
     pub use crate::session::{Session, SessionDeclarations};
     pub use crate::Undeclarable;
 
