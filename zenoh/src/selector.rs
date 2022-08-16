@@ -1,3 +1,19 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
+
 use zenoh_core::Result as ZResult;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
@@ -12,7 +28,7 @@ use std::{
 };
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
-/// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
+/// set of keys that are relevant to an operation, and a `value_selector`, a set of parameters
 /// with a few uses:
 /// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
 /// - filtering by value,
@@ -21,27 +37,27 @@ use std::{
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
 /// - the `value_selector` after the first `?` should be encoded like the query section of a URL:
-///     - key-value pairs are separated by `&`,
-///     - the key and value are separated by the first `=`,
-///     - in the absence of `=`, the value is considered to be the empty string,
-///     - both key and value should use percent-encoding to escape characters,
-///     - defining a value for the same key twice is considered undefined behavior.
+///     - parameters are separated by `&`,
+///     - the parameter name and value are separated by the first `=`,
+///     - in the absence of `=`, the parameter value is considered to be the empty string,
+///     - both name and value should use percent-encoding to escape characters,
+///     - defining a value for the same parameter name twice is considered undefined behavior.
 ///
-/// Zenoh intends to standardize the usage of a set of keys. To avoid conflicting with RPC parameters,
-/// the Zenoh team has settled on reserving the set of keys that start with non-alphanumeric characters.
+/// Zenoh intends to standardize the usage of a set of parameter names. To avoid conflicting with RPC parameters,
+/// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
 ///
-/// This document will summarize the standardized keys for which Zenoh provides helpers to facilitate
+/// This document will summarize the standardized parameter names for which Zenoh provides helpers to facilitate
 /// coherent behavior for some operations.
 ///
-/// Queryable implementers are encouraged to prefer these standardized keys when implementing their
-/// associated features, and to prefix their own keys to avoid having conflicting keys with other
+/// Queryable implementers are encouraged to prefer these standardized parameter names when implementing their
+/// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
-/// Here are the currently standardized keys for Zenoh:
+/// Here are the currently standardized parameters for Zenoh:
 /// - `_time`: used to express interest in only values dated within a certain time range, values for
-///   this key must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
+///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
-///   this key to be treated as a predicate that the value should fulfill before being returned.
+///   this parameter to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
@@ -58,20 +74,20 @@ impl<'a> Selector<'a> {
     pub fn value_selector(&self) -> &str {
         &self.value_selector
     }
-    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
+    /// Extracts the value selector's parameters into a hashmap, returning an error in case of duplicated parameter names.
     pub fn value_selector_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
         K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
-        ExtractedKey<'a, Self>: Into<K>,
+        ExtractedName<'a, Self>: Into<K>,
         ExtractedValue<'a, Self>: Into<V>,
     {
         self.decode_into_map()
     }
-    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
+    /// Extracts the value selector's name-value pairs into a hashmap, returning an error in case of duplicated parameters.
     pub fn value_selector_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
         self.decode_into_map()
     }
-    /// Extracts the value selector's key-value pairs into a hashmap, returning an error in case of duplicated keys.
+    /// Extracts the value selector's name-value pairs into a hashmap, returning an error in case of duplicated parameters.
     pub fn value_selector_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
         self.decode_into_map()
     }
@@ -122,14 +138,14 @@ impl<'a> Selector<'a> {
         self
     }
 
-    pub fn extend<'b, I, K, V>(&'b mut self, key_value_pairs: I)
+    pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
         I::Item: std::borrow::Borrow<(K, V)>,
         K: AsRef<str> + 'b,
         V: AsRef<str> + 'b,
     {
-        let it = key_value_pairs.into_iter();
+        let it = parameters.into_iter();
         let selector = self.value_selector_mut();
         let mut encoder = form_urlencoded::Serializer::new(selector);
         encoder.extend_pairs(it).finish();
@@ -190,32 +206,32 @@ fn selector_accessors() {
         );
     }
 }
-pub trait KeyValuePair: Sized {
-    type Key: AsRef<str> + Sized;
+pub trait Parameter: Sized {
+    type Name: AsRef<str> + Sized;
     type Value: AsRef<str> + Sized;
-    fn key(&self) -> &Self::Key;
+    fn name(&self) -> &Self::Name;
     fn value(&self) -> &Self::Value;
-    fn split(self) -> (Self::Key, Self::Value);
-    fn extract_key(self) -> Self::Key {
+    fn split(self) -> (Self::Name, Self::Value);
+    fn extract_name(self) -> Self::Name {
         self.split().0
     }
     fn extract_value(self) -> Self::Value {
         self.split().1
     }
 }
-impl<K: AsRef<str> + Sized, V: AsRef<str> + Sized> KeyValuePair for (K, V) {
-    type Key = K;
+impl<N: AsRef<str> + Sized, V: AsRef<str> + Sized> Parameter for (N, V) {
+    type Name = N;
     type Value = V;
-    fn key(&self) -> &K {
+    fn name(&self) -> &N {
         &self.0
     }
     fn value(&self) -> &V {
         &self.1
     }
-    fn split(self) -> (Self::Key, Self::Value) {
+    fn split(self) -> (Self::Name, Self::Value) {
         self
     }
-    fn extract_key(self) -> Self::Key {
+    fn extract_name(self) -> Self::Name {
         self.0
     }
     fn extract_value(self) -> Self::Value {
@@ -224,34 +240,34 @@ impl<K: AsRef<str> + Sized, V: AsRef<str> + Sized> KeyValuePair for (K, V) {
 }
 
 #[allow(type_alias_bounds)]
-type ExtractedKey<'a, VS: ValueSelector<'a>> =
-    <<VS::Decoder as Iterator>::Item as KeyValuePair>::Key;
+type ExtractedName<'a, VS: ValueSelector<'a>> =
+    <<VS::Decoder as Iterator>::Item as Parameter>::Name;
 #[allow(type_alias_bounds)]
 type ExtractedValue<'a, VS: ValueSelector<'a>> =
-    <<VS::Decoder as Iterator>::Item as KeyValuePair>::Value;
-/// A trait to help decode zenoh value selectors as a set of key-value pairs.
+    <<VS::Decoder as Iterator>::Item as Parameter>::Value;
+/// A trait to help decode zenoh value selectors as a set of parameters.
 ///
-/// Most methods will return an Error if duplicates of a same key are found, to avoid HTTP Parameter Pollution like vulnerabilities.
+/// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
 pub trait ValueSelector<'a> {
     type Decoder: Iterator + 'a;
-    /// Returns this value selector as an iterator of key-value pairs.
+    /// Returns this value selector as an iterator of parameters.
     fn decode(&'a self) -> Self::Decoder
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair;
+        <Self::Decoder as Iterator>::Item: Parameter;
 
-    /// Extracts all key-value pairs into a HashMap, returning an error if duplicate keys arrise.
-    fn decode_into_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
+    /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
+    fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair,
-        K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
-        ExtractedKey<'a, Self>: Into<K>,
+        <Self::Decoder as Iterator>::Item: Parameter,
+        N: AsRef<str> + std::hash::Hash + std::cmp::Eq,
+        ExtractedName<'a, Self>: Into<N>,
         ExtractedValue<'a, Self>: Into<V>,
     {
-        let mut result: HashMap<K, V> = HashMap::new();
-        for (key, value) in self.decode().map(KeyValuePair::split) {
-            match result.entry(key.into()) {
+        let mut result: HashMap<N, V> = HashMap::new();
+        for (name, value) in self.decode().map(Parameter::split) {
+            match result.entry(name.into()) {
                 std::collections::hash_map::Entry::Occupied(e) => {
-                    bail!("Duplicated key `{}` detected", e.key().as_ref())
+                    bail!("Duplicated parameter `{}` detected", e.key().as_ref())
                 }
                 std::collections::hash_map::Entry::Vacant(e) => {
                     e.insert(value.into());
@@ -261,15 +277,15 @@ pub trait ValueSelector<'a> {
         Ok(result)
     }
 
-    /// Extracts the requested arguments from the value selector.
+    /// Extracts the requested parameters from the value selector.
     ///
-    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested keys were present more than once.
+    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested parameters are present more than once.
     fn get_attrs<const N: usize>(
         &'a self,
-        keys: [&str; N],
+        names: [&str; N],
     ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair,
+        <Self::Decoder as Iterator>::Item: Parameter,
     {
         let mut result = unsafe {
             let mut result: std::mem::MaybeUninit<[Option<ExtractedValue<'a, Self>>; N]> =
@@ -280,10 +296,10 @@ pub trait ValueSelector<'a> {
             result.assume_init()
         };
         for pair in self.decode() {
-            if let Some(index) = keys.iter().position(|k| *k == pair.key().as_ref()) {
+            if let Some(index) = names.iter().position(|k| *k == pair.name().as_ref()) {
                 let slot = &mut result[index];
                 if slot.is_some() {
-                    bail!("Duplicated key `{}` detected.", keys[index])
+                    bail!("Duplicated parameter `{}` detected.", names[index])
                 }
                 *slot = Some(pair.extract_value())
             }
@@ -291,14 +307,14 @@ pub trait ValueSelector<'a> {
         Ok(result)
     }
 
-    /// Extracts the requested arguments from the value selector as booleans, following the Zenoh convention that if a key is present and has a value different from "false", its value is truthy.
+    /// Extracts the requested arguments from the value selector as booleans, following the Zenoh convention that if a parameter name is present and has a value different from "false", its value is truthy.
     ///
-    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested keys were present more than once.
-    fn get_bools<const N: usize>(&'a self, keys: [&str; N]) -> ZResult<[bool; N]>
+    /// The default implementation is done in a single pass through the value selector, returning an error if some of the requested parameters are present more than once.
+    fn get_bools<const N: usize>(&'a self, names: [&str; N]) -> ZResult<[bool; N]>
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair,
+        <Self::Decoder as Iterator>::Item: Parameter,
     {
-        Ok(self.get_attrs(keys)?.map(|v| match v {
+        Ok(self.get_attrs(names)?.map(|v| match v {
             None => false,
             Some(s) => s.as_ref() != "false",
         }))
@@ -309,7 +325,7 @@ pub trait ValueSelector<'a> {
     /// The default implementation still causes a complete pass through the value selector to ensure that there are no duplicates of the `_time` key.
     fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair,
+        <Self::Decoder as Iterator>::Item: Parameter,
     {
         Ok(match &self.get_attrs([TIME_RANGE_KEY])?[0] {
             Some(s) => Some(s.as_ref().parse()?),
@@ -337,13 +353,13 @@ impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a>
     }
     fn get_attrs<const N: usize>(
         &'a self,
-        keys: [&str; N],
+        names: [&str; N],
     ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
     where
-        <Self::Decoder as Iterator>::Item: KeyValuePair,
+        <Self::Decoder as Iterator>::Item: Parameter,
     {
-        // `Ok(keys.map(|key| self.get(key)))` would be very slightly faster, but doesn't compile for some reason :(
-        Ok(keys.map(|key| self.get_key_value(key).map(|kv| kv.extract_value())))
+        // `Ok(names.map(|key| self.get(key)))` would be very slightly faster, but doesn't compile for some reason :(
+        Ok(names.map(|key| self.get_key_value(key).map(|kv| kv.extract_value())))
     }
 }
 
