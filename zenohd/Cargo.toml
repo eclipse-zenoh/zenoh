@@ -32,28 +32,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-auth_pubkey = ["zenoh/auth_pubkey"]
-auth_usrpwd = ["zenoh/auth_usrpwd"]
-complete_n = ["zenoh/complete_n"]
 shared-memory = ["zenoh/shared-memory"]
-stats = ["zenoh/stats"]
-transport_quic = ["zenoh/transport_quic"]
-transport_tcp = ["zenoh/transport_tcp"]
-transport_tls = ["zenoh/transport_tls"]
-transport_udp = ["zenoh/transport_udp"]
-transport_unixsock-stream = ["zenoh/transport_unixsock-stream"]
-transport_serial = ["zenoh/transport_serial"]
-transport_ws = ["zenoh/transport_ws"]
-default = [
-    "auth_pubkey",
-    "auth_usrpwd",
-    "shared-memory",
-    "transport_quic",
-    "transport_tcp",
-    "transport_tls",
-    "transport_udp",
-    "transport_unixsock-stream",
-]
 
 [dependencies]
 zenoh = { path = "../zenoh/" , default-features = false}
