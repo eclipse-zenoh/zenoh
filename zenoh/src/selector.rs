@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Selector to issue queries
+//! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
 use zenoh_core::Result as ZResult;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
