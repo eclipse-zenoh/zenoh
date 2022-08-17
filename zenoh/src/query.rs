@@ -91,7 +91,7 @@ impl Timed for QueryTimeout {
         if let Some(query) = state.queries.remove(&self.qid) {
             std::mem::drop(state);
             log::debug!("Timout on query {}! Send error and close.", self.qid);
-            if query.reception_mode == ConsolidationMode::LatestValue {
+            if query.reception_mode == ConsolidationMode::Latest {
                 for (_, reply) in query.replies.unwrap().into_iter() {
                     let _ = (query.callback)(reply);
                 }

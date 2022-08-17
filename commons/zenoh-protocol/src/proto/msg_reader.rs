@@ -828,7 +828,7 @@ impl MessageReader for ZBufReader<'_> {
         match mode {
             0 => Some(ConsolidationMode::None),
             1 => Some(ConsolidationMode::Monotonic),
-            2 => Some(ConsolidationMode::LatestValue),
+            2 => Some(ConsolidationMode::Latest),
             unknown => {
                 log::trace!("Invalid consolidation mode: {}", unknown);
                 None

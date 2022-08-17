@@ -211,7 +211,7 @@ fn gen_consolidation_mode() -> ConsolidationMode {
     let cm = [
         ConsolidationMode::None,
         ConsolidationMode::Monotonic,
-        ConsolidationMode::LatestValue,
+        ConsolidationMode::Latest,
     ];
     cm[thread_rng().gen_range(0..cm.len())]
 }

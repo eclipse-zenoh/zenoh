@@ -576,7 +576,7 @@ impl MessageWriter for WBuf {
         match mode {
             ConsolidationMode::None => 0,
             ConsolidationMode::Monotonic => 1,
-            ConsolidationMode::LatestValue => 2,
+            ConsolidationMode::Latest => 2,
         }
     }
 

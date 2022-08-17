@@ -473,7 +473,7 @@ pub enum ConsolidationMode {
     /// been observed with the same key.
     Monotonic,
     /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
-    LatestValue,
+    Latest,
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
