@@ -47,12 +47,15 @@ impl QueryConsolidation {
     /// no consolidation is performed. Otherwise the [`reception`](QueryConsolidation::reception) strategy is used.
     pub const AUTO: Self = Self { mode: None };
 
-    /// No consolidation performed.
-    ///
-    /// This is useful when querying timeseries data bases or
-    /// when using quorums.
-    pub const fn from_mode(mode: ConsolidationMode) -> Self {
+    pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
         Self { mode: Some(mode) }
+    }
+
+    /// Returns the requested [`ConsolidationMode`].
+    ///
+    /// Returns `None` if the mode selection is left to automatic.
+    pub fn mode(&self) -> Option<ConsolidationMode> {
+        self.mode
     }
 }
 impl From<ConsolidationMode> for QueryConsolidation {

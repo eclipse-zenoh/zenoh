@@ -49,8 +49,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
 
         // By default no query consolidation, to receive more than 1 sample per-resource
         // (in history of publications is available)
-        let query_consolidation =
-            QueryConsolidation::from_mode(zenoh::query::ConsolidationMode::None);
+        let query_consolidation = QueryConsolidation::from(zenoh::query::ConsolidationMode::None);
 
         QueryingSubscriberBuilder {
             session,

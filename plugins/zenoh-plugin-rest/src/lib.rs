@@ -343,9 +343,9 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             key_expr.into()
         };
         let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
-            QueryConsolidation::from_mode(zenoh::query::ConsolidationMode::None)
+            QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
-            QueryConsolidation::from_mode(zenoh::query::ConsolidationMode::Latest)
+            QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
         match req
             .state()
