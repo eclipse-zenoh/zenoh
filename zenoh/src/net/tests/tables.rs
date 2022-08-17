@@ -22,8 +22,8 @@ use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, Reliability,
-    SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    Channel, CongestionControl, ConsolidationMode, QueryTAK, QueryableInfo, Reliability, SubInfo,
+    SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
@@ -465,7 +465,7 @@ impl Primitives for ClientPrimitives {
         _value_selector: &str,
         _qid: ZInt,
         _target: QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
     }

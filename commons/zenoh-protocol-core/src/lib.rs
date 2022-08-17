@@ -461,97 +461,19 @@ pub mod queryable {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-#[repr(u8)]
 pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
-    Lazy,
-    Full,
-}
-
-/// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
-/// at different stages of the reply process.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct ConsolidationStrategy {
-    pub first_routers: ConsolidationMode,
-    pub last_router: ConsolidationMode,
-    pub reception: ConsolidationMode,
-}
-
-impl ConsolidationStrategy {
-    /// No consolidation performed.
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
     ///
-    /// This is usefull when querying timeseries data bases or
-    /// when using quorums.
-    #[inline]
-    pub const fn none() -> Self {
-        Self {
-            first_routers: ConsolidationMode::None,
-            last_router: ConsolidationMode::None,
-            reception: ConsolidationMode::None,
-        }
-    }
-
-    /// Lazy consolidation performed at all stages.
+    /// This optimizes latency while potentially reducing bandwidth.
     ///
-    /// This strategy offers the best latency. Replies are directly
-    /// transmitted to the application when received without needing
-    /// to wait for all replies.
-    ///
-    /// This mode does not garantie that there will be no duplicates.
-    #[inline]
-    pub const fn lazy() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Lazy,
-            reception: ConsolidationMode::Lazy,
-        }
-    }
-
-    /// Full consolidation performed at reception.
-    ///
-    /// This is the default strategy. It offers the best latency while
-    /// garantying that there will be no duplicates.
-    #[inline]
-    pub const fn reception() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Lazy,
-            reception: ConsolidationMode::Full,
-        }
-    }
-
-    /// Full consolidation performed on last router and at reception.
-    ///
-    /// This mode offers a good latency while optimizing bandwidth on
-    /// the last transport link between the router and the application.
-    #[inline]
-    pub const fn last_router() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Full,
-            reception: ConsolidationMode::Full,
-        }
-    }
-
-    /// Full consolidation performed everywhere.
-    ///
-    /// This mode optimizes bandwidth on all links in the system
-    /// but will provide a very poor latency.
-    #[inline]
-    pub const fn full() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Full,
-            last_router: ConsolidationMode::Full,
-            reception: ConsolidationMode::Full,
-        }
-    }
-}
-
-impl Default for ConsolidationStrategy {
-    #[inline]
-    fn default() -> Self {
-        ConsolidationStrategy::reception()
-    }
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.

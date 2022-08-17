@@ -35,6 +35,8 @@ pub(crate) mod common {
     pub use crate::session::{Session, SessionDeclarations};
     pub use crate::Undeclarable;
 
+    pub use crate::query::{QueryConsolidation, QueryTarget};
+
     pub use crate::value::Value;
     /// The encoding of a zenoh [`Value`].
     pub use zenoh_protocol_core::{Encoding, KnownEncoding};
@@ -43,8 +45,7 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::SampleKind;
 
     pub use crate::publication::Priority;
-    pub use zenoh_protocol_core::CongestionControl;
-    pub use zenoh_protocol_core::Reliability;
+    pub use zenoh_protocol_core::{CongestionControl, ConsolidationMode, Reliability};
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol_core::Locator;

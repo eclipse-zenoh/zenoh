@@ -49,7 +49,8 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
 
         // By default no query consolidation, to receive more than 1 sample per-resource
         // (in history of publications is available)
-        let query_consolidation = QueryConsolidation::none();
+        let query_consolidation =
+            QueryConsolidation::from_mode(zenoh::query::ConsolidationMode::None);
 
         QueryingSubscriberBuilder {
             session,
@@ -179,8 +180,11 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
 
     /// Change the consolidation mode to be used for queries.
     #[inline]
-    pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
-        self.query_consolidation = query_consolidation;
+    pub fn query_consolidation<QC: Into<QueryConsolidation>>(
+        mut self,
+        query_consolidation: QC,
+    ) -> Self {
+        self.query_consolidation = query_consolidation.into();
         self
     }
 

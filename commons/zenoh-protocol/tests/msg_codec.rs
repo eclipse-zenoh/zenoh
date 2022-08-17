@@ -210,18 +210,10 @@ fn gen_target() -> QueryTarget {
 fn gen_consolidation_mode() -> ConsolidationMode {
     let cm = [
         ConsolidationMode::None,
-        ConsolidationMode::Lazy,
-        ConsolidationMode::Full,
+        ConsolidationMode::Monotonic,
+        ConsolidationMode::Latest,
     ];
     cm[thread_rng().gen_range(0..cm.len())]
-}
-
-fn gen_consolidation() -> ConsolidationStrategy {
-    ConsolidationStrategy {
-        first_routers: gen_consolidation_mode(),
-        last_router: gen_consolidation_mode(),
-        reception: gen_consolidation_mode(),
-    }
 }
 
 fn gen_timestamp() -> Timestamp {
@@ -858,7 +850,7 @@ fn codec_query() {
                             p.clone(),
                             gen!(ZInt),
                             t.clone(),
-                            gen_consolidation(),
+                            gen_consolidation_mode(),
                             *roc,
                             a.clone(),
                         );

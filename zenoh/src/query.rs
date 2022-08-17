@@ -33,15 +33,10 @@ pub use zenoh_protocol_core::QueryTarget;
 /// The kind of consolidation.
 pub use zenoh_protocol_core::ConsolidationMode;
 
-/// The kind of consolidation that should be applied on replies to a [`get`](Session::get)
-/// at different stages of the reply process.
-pub use zenoh_protocol_core::ConsolidationStrategy;
-
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QueryConsolidation {
-    Auto,
-    Manual(ConsolidationStrategy),
+pub struct QueryConsolidation {
+    pub(crate) mode: Option<ConsolidationMode>,
 }
 
 impl QueryConsolidation {
@@ -50,63 +45,25 @@ impl QueryConsolidation {
     /// A query consolidation strategy will automatically be selected depending
     /// the query selector. If the selector contains time range properties,
     /// no consolidation is performed. Otherwise the [`reception`](QueryConsolidation::reception) strategy is used.
-    #[inline]
-    pub const fn auto() -> Self {
-        QueryConsolidation::Auto
-    }
+    pub const AUTO: Self = Self { mode: None };
 
     /// No consolidation performed.
     ///
     /// This is useful when querying timeseries data bases or
     /// when using quorums.
-    #[inline]
-    pub const fn none() -> Self {
-        QueryConsolidation::Manual(ConsolidationStrategy::none())
+    pub const fn from_mode(mode: ConsolidationMode) -> Self {
+        Self { mode: Some(mode) }
     }
-
-    /// Lazy consolidation performed at all stages.
-    ///
-    /// This strategy offers the best latency. Replies are directly
-    /// transmitted to the application when received without needing
-    /// to wait for all replies.
-    ///
-    /// This mode does not guarantee that there will be no duplicates.
-    #[inline]
-    pub const fn lazy() -> Self {
-        QueryConsolidation::Manual(ConsolidationStrategy::lazy())
-    }
-
-    /// Full consolidation performed at reception.
-    ///
-    /// This is the default strategy. It offers the best latency while
-    /// guarantying that there will be no duplicates.
-    #[inline]
-    pub const fn reception() -> Self {
-        QueryConsolidation::Manual(ConsolidationStrategy::reception())
-    }
-
-    /// Full consolidation performed on last router and at reception.
-    ///
-    /// This mode offers a good latency while optimizing bandwidth on
-    /// the last transport link between the router and the application.
-    #[inline]
-    pub const fn last_router() -> Self {
-        QueryConsolidation::Manual(ConsolidationStrategy::last_router())
-    }
-
-    /// Full consolidation performed everywhere.
-    ///
-    /// This mode optimizes bandwidth on all links in the system
-    /// but will provide a very poor latency.
-    #[inline]
-    pub const fn full() -> Self {
-        QueryConsolidation::Manual(ConsolidationStrategy::full())
+}
+impl From<ConsolidationMode> for QueryConsolidation {
+    fn from(mode: ConsolidationMode) -> Self {
+        Self::from_mode(mode)
     }
 }
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::Auto
+        QueryConsolidation::AUTO
     }
 }
 
@@ -134,7 +91,7 @@ impl Timed for QueryTimeout {
         if let Some(query) = state.queries.remove(&self.qid) {
             std::mem::drop(state);
             log::debug!("Timout on query {}! Send error and close.", self.qid);
-            if query.reception_mode == ConsolidationMode::Full {
+            if query.reception_mode == ConsolidationMode::Latest {
                 for (_, reply) in query.replies.unwrap().into_iter() {
                     let _ = (query.callback)(reply);
                 }
@@ -167,7 +124,7 @@ pub(crate) struct QueryState {
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
-///     .consolidation(QueryConsolidation::none())
+///     .consolidation(ConsolidationMode::None)
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -317,8 +274,8 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Change the consolidation mode of the query.
     #[inline]
-    pub fn consolidation(mut self, consolidation: QueryConsolidation) -> Self {
-        self.consolidation = consolidation;
+    pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
+        self.consolidation = consolidation.into();
         self
     }
 

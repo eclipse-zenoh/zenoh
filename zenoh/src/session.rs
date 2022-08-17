@@ -59,8 +59,8 @@ use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
-        QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
+        queryable, AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo,
+        SubInfo, WireExpr, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -1364,15 +1364,15 @@ impl Session {
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
-        let consolidation = match consolidation {
-            QueryConsolidation::Auto => {
+        let consolidation = match consolidation.mode {
+            None => {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
-                    ConsolidationStrategy::none()
+                    ConsolidationMode::None
                 } else {
-                    ConsolidationStrategy::default()
+                    ConsolidationMode::Latest
                 }
             }
-            QueryConsolidation::Manual(strategy) => strategy,
+            Some(mode) => mode,
         };
         let local_routing = local_routing.unwrap_or(state.local_routing);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
@@ -1391,12 +1391,8 @@ impl Session {
             qid,
             QueryState {
                 nb_final,
-                reception_mode: consolidation.reception,
-                replies: if consolidation.reception != ConsolidationMode::None {
-                    Some(HashMap::new())
-                } else {
-                    None
-                },
+                reception_mode: consolidation,
+                replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
             },
         );
@@ -1438,7 +1434,7 @@ impl Session {
         value_selector: &str,
         qid: ZInt,
         target: zenoh_protocol_core::QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _consolidation: ConsolidationMode,
     ) {
         let (primitives, key_expr, kinds_and_senders) = {
             let state = zread!(self.state);
@@ -1746,7 +1742,7 @@ impl Primitives for Session {
         value_selector: &str,
         qid: ZInt,
         target: zenoh_protocol_core::QueryTAK,
-        consolidation: ConsolidationStrategy,
+        consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
@@ -1793,7 +1789,7 @@ impl Primitives for Session {
                 };
                 let callback = match query.reception_mode {
                     ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
-                    ConsolidationMode::Lazy => {
+                    ConsolidationMode::Monotonic => {
                         match query
                             .replies
                             .as_ref()
@@ -1822,7 +1818,7 @@ impl Primitives for Session {
                             }
                         }
                     }
-                    ConsolidationMode::Full => {
+                    ConsolidationMode::Latest => {
                         match query
                             .replies
                             .as_ref()
@@ -1869,7 +1865,7 @@ impl Primitives for Session {
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
                     std::mem::drop(state);
-                    if query.reception_mode == ConsolidationMode::Full {
+                    if query.reception_mode == ConsolidationMode::Latest {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);
                         }

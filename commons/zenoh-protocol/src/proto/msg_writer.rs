@@ -62,7 +62,7 @@ pub trait MessageWriter {
     fn write_query_tak(&mut self, target: &QueryTAK) -> bool;
     fn write_query_target(&mut self, target: &QueryTarget) -> bool;
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt;
-    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool;
+    fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool;
 }
 
 impl MessageWriter for WBuf {
@@ -523,7 +523,7 @@ impl MessageWriter for WBuf {
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_tak(t));
         }
-        self.write_consolidation(&query.consolidation)
+        self.write_consolidation(query.consolidation)
     }
 
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool {
@@ -575,16 +575,12 @@ impl MessageWriter for WBuf {
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt {
         match mode {
             ConsolidationMode::None => 0,
-            ConsolidationMode::Lazy => 1,
-            ConsolidationMode::Full => 2,
+            ConsolidationMode::Monotonic => 1,
+            ConsolidationMode::Latest => 2,
         }
     }
 
-    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool {
-        self.write_zint(
-            (WBuf::write_consolidation_mode(consolidation.first_routers) << 4)
-                | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)
-                | (WBuf::write_consolidation_mode(consolidation.reception)),
-        )
+    fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool {
+        self.write_zint(WBuf::write_consolidation_mode(consolidation))
     }
 }

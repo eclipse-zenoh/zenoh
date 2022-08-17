@@ -13,7 +13,7 @@ use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::sync::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::Publisher;
-use zenoh::query::QueryConsolidation;
+use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
 use zenoh::Session;
@@ -278,7 +278,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 );
                                 let qres = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, kae.mid);
                                 // @TODO: we could also send this member info
-                                let qc = QueryConsolidation::none();
+                                let qc = ConsolidationMode::None;
                                 log::trace!("Issuing Query for {}", &qres);
                                 let receiver =
                                     z.get(&qres).consolidation(qc).res_async().await.unwrap();
