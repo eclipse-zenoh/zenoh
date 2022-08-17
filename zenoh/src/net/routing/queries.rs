@@ -1115,7 +1115,7 @@ fn compute_query_route(
                     _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
                 } {
                     let key_expr = Resource::get_best_key(prefix, suffix, *sid);
-                    for qabl_info in context.qabl.iter() {
+                    if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {
                             direction: (context.face.clone(), key_expr.to_owned(), None),
                             complete: if complete { qabl_info.complete } else { 0 },
