@@ -1369,7 +1369,7 @@ impl Session {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
-                    ConsolidationMode::Full
+                    ConsolidationMode::LatestValue
                 }
             }
             Some(mode) => mode,
@@ -1789,7 +1789,7 @@ impl Primitives for Session {
                 };
                 let callback = match query.reception_mode {
                     ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
-                    ConsolidationMode::Lazy => {
+                    ConsolidationMode::Monotonic => {
                         match query
                             .replies
                             .as_ref()
@@ -1818,7 +1818,7 @@ impl Primitives for Session {
                             }
                         }
                     }
-                    ConsolidationMode::Full => {
+                    ConsolidationMode::LatestValue => {
                         match query
                             .replies
                             .as_ref()
@@ -1865,7 +1865,7 @@ impl Primitives for Session {
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
                     std::mem::drop(state);
-                    if query.reception_mode == ConsolidationMode::Full {
+                    if query.reception_mode == ConsolidationMode::LatestValue {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);
                         }

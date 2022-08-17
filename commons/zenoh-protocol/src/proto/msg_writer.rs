@@ -575,8 +575,8 @@ impl MessageWriter for WBuf {
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt {
         match mode {
             ConsolidationMode::None => 0,
-            ConsolidationMode::Lazy => 1,
-            ConsolidationMode::Full => 2,
+            ConsolidationMode::Monotonic => 1,
+            ConsolidationMode::LatestValue => 2,
         }
     }
 

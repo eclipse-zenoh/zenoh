@@ -463,8 +463,8 @@ pub mod queryable {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum ConsolidationMode {
     None,
-    Lazy,
-    Full,
+    Monotonic,
+    LatestValue,
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.

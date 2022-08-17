@@ -210,8 +210,8 @@ fn gen_target() -> QueryTarget {
 fn gen_consolidation_mode() -> ConsolidationMode {
     let cm = [
         ConsolidationMode::None,
-        ConsolidationMode::Lazy,
-        ConsolidationMode::Full,
+        ConsolidationMode::Monotonic,
+        ConsolidationMode::LatestValue,
     ];
     cm[thread_rng().gen_range(0..cm.len())]
 }

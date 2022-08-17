@@ -827,8 +827,8 @@ impl MessageReader for ZBufReader<'_> {
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode> {
         match mode {
             0 => Some(ConsolidationMode::None),
-            1 => Some(ConsolidationMode::Lazy),
-            2 => Some(ConsolidationMode::Full),
+            1 => Some(ConsolidationMode::Monotonic),
+            2 => Some(ConsolidationMode::LatestValue),
             unknown => {
                 log::trace!("Invalid consolidation mode: {}", unknown);
                 None
