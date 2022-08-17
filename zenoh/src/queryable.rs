@@ -34,11 +34,9 @@ pub struct Query {
     pub(crate) key_expr: KeyExpr<'static>,
     /// The value_selector of this Query.
     pub(crate) value_selector: String,
-
-    pub(crate) kind: ZInt,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
-    pub(crate) replies_sender: flume::Sender<(ZInt, Sample)>,
+    pub(crate) replies_sender: flume::Sender<Sample>,
 }
 
 impl Query {
@@ -109,7 +107,7 @@ impl SyncResolve for ReplyBuilder<'_> {
             Ok(sample) => self
                 .query
                 .replies_sender
-                .send((self.query.kind, sample))
+                .send(sample)
                 .map_err(|e| zerror!("{}", e).into()),
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
@@ -118,9 +116,7 @@ impl SyncResolve for ReplyBuilder<'_> {
 
 /// The future returned by a [`ReplyBuilder`] when using async.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct ReplyFuture<'a>(
-    Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
-);
+pub struct ReplyFuture<'a>(Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_core::Error>>);
 
 impl std::future::Future for ReplyFuture<'_> {
     type Output = zenoh_core::Result<()>;
@@ -138,10 +134,7 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
     fn res_async(self) -> Self::Future {
         ReplyFuture(match self.result {
-            Ok(sample) => Ok(self
-                .query
-                .replies_sender
-                .send_async((self.query.kind, sample))),
+            Ok(sample) => Ok(self.query.replies_sender.send_async(sample)),
             Err(_) => Err(Some(
                 zerror!("Replying errors is not yet supported!").into(),
             )),
@@ -152,7 +145,6 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) key_expr: WireExpr<'static>,
-    pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
 }
@@ -270,7 +262,6 @@ impl Drop for CallbackQueryable<'_> {
 pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) handler: Handler,
 }
@@ -301,14 +292,12 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         let QueryableBuilder {
             session,
             key_expr,
-            kind,
             complete,
             handler: _,
         } = self;
         QueryableBuilder {
             session,
             key_expr,
-            kind,
             complete,
             handler: callback,
         }
@@ -374,14 +363,12 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
         let QueryableBuilder {
             session,
             key_expr,
-            kind,
             complete,
             handler: _,
         } = self;
         QueryableBuilder {
             session,
             key_expr,
-            kind,
             complete,
             handler,
         }
@@ -469,12 +456,7 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
-            .declare_queryable_inner(
-                &self.key_expr?.to_wire(&session),
-                self.kind,
-                self.complete,
-                callback,
-            )
+            .declare_queryable_inner(&self.key_expr?.to_wire(&session), self.complete, callback)
             .map(|qable_state| Queryable {
                 queryable: CallbackQueryable {
                     session,

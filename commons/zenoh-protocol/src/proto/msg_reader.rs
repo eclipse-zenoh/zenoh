@@ -54,7 +54,6 @@ pub trait MessageReader {
     fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody>;
     fn read_link_state(&mut self) -> Option<LinkState>;
     fn read_submode(&mut self) -> Option<SubMode>;
-    fn read_query_tak(&mut self) -> Option<QueryTAK>;
     fn read_query_target(&mut self) -> Option<QueryTarget>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
     fn read_consolidation(&mut self) -> Option<ConsolidationMode>;
@@ -438,7 +437,6 @@ impl MessageReader for ZBufReader<'_> {
             None
         } else {
             Some(ReplierInfo {
-                kind: self.read_zint()?,
                 id: self.read_zid()?,
             })
         };
@@ -697,18 +695,16 @@ impl MessageReader for ZBufReader<'_> {
             }
             QUERYABLE => {
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = self.read_zint()?;
                 let info = if imsg::has_flag(header, zmsg::flag::Q) {
                     self.read_queryable_info()?
                 } else {
                     QueryableInfo::default()
                 };
-                Some(Declaration::Queryable(Queryable { key, kind, info }))
+                Some(Declaration::Queryable(Queryable { key, info }))
             }
             FORGET_QUERYABLE => {
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = self.read_zint()?;
-                Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
+                Some(Declaration::ForgetQueryable(ForgetQueryable { key }))
             }
             unknown => {
                 log::trace!("Invalid ID for Declaration: {}", unknown);
@@ -722,7 +718,7 @@ impl MessageReader for ZBufReader<'_> {
         let value_selector = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
-            Some(self.read_query_tak()?)
+            Some(self.read_query_target()?)
         } else {
             None
         };
@@ -798,12 +794,6 @@ impl MessageReader for ZBufReader<'_> {
             return None;
         }
         Some(mode)
-    }
-
-    fn read_query_tak(&mut self) -> Option<QueryTAK> {
-        let kind = self.read_zint()?;
-        let target = self.read_query_target()?;
-        Some(QueryTAK { kind, target })
     }
 
     fn read_query_target(&mut self) -> Option<QueryTarget> {
