@@ -16,10 +16,6 @@
 //! storage, queries and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
-//! Below are some examples that highlight the its key comcepts and show how easy it is to get
-//! started with it.
-//!
-//! # Examples
 //! Before delving into the examples, we need to introduce few **Zenoh** concepts.
 //! First off, in Zenoh you will deal with **Resources**, where a resource is made up of a
 //! key and a value.  The other concept you'll have to familiarize yourself with are
@@ -28,6 +24,10 @@
 //! are wildcards representing respectively (1) an arbitrary string of characters, with the exclusion of the ```/```
 //! separator, and (2) an arbitrary sequence of characters including separators.
 //!
+//! Below are some examples that highlight these key concepts and show how easy it is to get
+//! started with.
+//!
+//! # Examples
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
@@ -141,8 +141,8 @@ pub mod properties {
     pub use zenoh_cfg_properties::Properties;
 
     /// Convert a set of [`Properties`] into a [`Value`].  
-    /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
-    /// are converted into such Json: `{ "k1": "v1", "k2": "v2" }`
+    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
+    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()

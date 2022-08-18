@@ -48,7 +48,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
         let query_target = QueryTarget::All;
 
         // By default no query consolidation, to receive more than 1 sample per-resource
-        // (in history of publications is available)
+        // (if history of publications is available)
         let query_consolidation = QueryConsolidation::from(zenoh::query::ConsolidationMode::None);
 
         QueryingSubscriberBuilder {
@@ -63,7 +63,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    /// Add callback to QueryingSubscriber.
     #[inline]
     pub fn callback<Callback>(
         self,
@@ -94,7 +94,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
         }
     }
 
-    /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    /// Add callback to `QueryingSubscriber`.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
