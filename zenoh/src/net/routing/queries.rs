@@ -944,18 +944,16 @@ pub(crate) fn queries_tree_change(
                         WhatAmI::Router => &res.context().router_qabls,
                         _ => &res.context().peer_qabls,
                     };
-                    for (qabl, qabl_info) in qabls {
-                        if *qabl == tree_id {
-                            send_sourced_queryable_to_net_childs(
-                                tables,
-                                net,
-                                tree_childs,
-                                res,
-                                qabl_info,
-                                None,
-                                Some(RoutingContext::new(tree_sid as ZInt)),
-                            );
-                        }
+                    if let Some(qabl_info) = qabls.get(&tree_id) {
+                        send_sourced_queryable_to_net_childs(
+                            tables,
+                            net,
+                            tree_childs,
+                            res,
+                            qabl_info,
+                            None,
+                            Some(RoutingContext::new(tree_sid as ZInt)),
+                        );
                     }
                 }
             }
