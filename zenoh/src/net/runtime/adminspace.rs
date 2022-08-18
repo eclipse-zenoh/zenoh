@@ -31,8 +31,8 @@ use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::OwnedKeyExpr;
 use zenoh_protocol_core::ConsolidationMode;
 use zenoh_protocol_core::{
-    Channel, CongestionControl, Encoding, KnownEncoding, QueryTarget, QueryableInfo, SubInfo,
-    WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    queryable::EVAL, Channel, CongestionControl, Encoding, KnownEncoding, QueryTAK, QueryableInfo,
+    SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -209,6 +209,7 @@ impl AdminSpace {
 
         primitives.decl_queryable(
             &[&root_key, "/**"].concat().into(),
+            EVAL,
             &QueryableInfo {
                 complete: 0,
                 distance: 0,
@@ -279,13 +280,19 @@ impl Primitives for AdminSpace {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
+        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Queryable {:?}", _key_expr);
     }
 
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        _key_expr: &WireExpr,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
@@ -360,7 +367,7 @@ impl Primitives for AdminSpace {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: QueryTAK,
         _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -406,6 +413,7 @@ impl Primitives for AdminSpace {
 
                     primitives.send_reply_data(
                         qid,
+                        EVAL,
                         zid,
                         String::from(key).into(),
                         Some(data_info),
@@ -430,6 +438,7 @@ impl Primitives for AdminSpace {
 
                         primitives.send_reply_data(
                             qid,
+                            EVAL,
                             zid,
                             key.into(),
                             Some(data_info),
@@ -448,14 +457,16 @@ impl Primitives for AdminSpace {
     fn send_reply_data(
         &self,
         qid: ZInt,
+        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
+            "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
             qid,
+            replier_kind,
             replier_id,
             key_expr,
             info,

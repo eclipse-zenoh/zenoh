@@ -296,7 +296,7 @@ fn register_client_subscription(
                         local_expr_id: None,
                         remote_expr_id: None,
                         subs: Some(sub_info.clone()),
-                        qabl: None,
+                        qabl: HashMap::new(),
                         last_values: HashMap::new(),
                     }),
                 );

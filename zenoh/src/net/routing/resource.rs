@@ -32,6 +32,7 @@ pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::Que
 pub(super) type QueryRoute = Route;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
+    pub(super) kind: ZInt,
     pub(super) complete: ZInt,
     pub(super) distance: f64,
 }
@@ -43,15 +44,15 @@ pub(super) struct SessionContext {
     pub(super) local_expr_id: Option<ZInt>,
     pub(super) remote_expr_id: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    pub(super) qabl: Option<QueryableInfo>,
+    pub(super) qabl: HashMap<ZInt, QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<ZenohId>,
     pub(super) peer_subs: HashSet<ZenohId>,
-    pub(super) router_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
+    pub(super) router_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
+    pub(super) peer_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
@@ -374,7 +375,7 @@ impl Resource {
                             local_expr_id: None,
                             remote_expr_id: None,
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     });
@@ -585,7 +586,7 @@ pub fn register_expr(
                             local_expr_id: None,
                             remote_expr_id: Some(expr_id),
                             subs: None,
-                            qabl: None,
+                            qabl: HashMap::new(),
                             last_values: HashMap::new(),
                         })
                     })
@@ -619,6 +620,25 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
         None => log::error!("Undeclare unknown resource!"),
     }
 }
+
+// pub(super) struct QueryableRef {
+//     pub(super) res: Arc<Resource>,
+//     pub(super) kind: ZInt,
+// }
+
+// impl PartialEq for QueryableRef {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.res.eq(&other.res)
+//     }
+// }
+
+// impl Eq for QueryableRef {}
+
+// impl Hash for QueryableRef {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         self.res.hash(state)
+//     }
+// }
 
 #[inline]
 pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {
