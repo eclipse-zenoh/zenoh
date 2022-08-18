@@ -83,10 +83,7 @@ fn gen_routing_context() -> RoutingContext {
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
     let replier = if !is_final {
-        Some(ReplierInfo {
-            kind: thread_rng().gen_range(0..4),
-            id: gen_zid(),
-        })
+        Some(ReplierInfo { id: gen_zid() })
     } else {
         None
     };
@@ -144,7 +141,6 @@ fn gen_declarations() -> Vec<Declaration> {
         Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::ALL_KINDS,
             info: QueryableInfo {
                 complete: 1,
                 distance: 0,
@@ -152,7 +148,6 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::STORAGE,
             info: QueryableInfo {
                 complete: 0,
                 distance: 10,
@@ -160,24 +155,14 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::EVAL,
             info: QueryableInfo {
                 complete: 10,
                 distance: 0,
             },
         }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::ALL_KINDS,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::STORAGE,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::EVAL,
-        }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
     ]
 }
 
@@ -190,13 +175,7 @@ fn gen_key() -> WireExpr<'static> {
     key[thread_rng().gen_range(0..key.len())].clone()
 }
 
-fn gen_query_target() -> QueryTAK {
-    let kind: ZInt = thread_rng().gen_range(0..4);
-    let target = gen_target();
-    QueryTAK { kind, target }
-}
-
-fn gen_target() -> QueryTarget {
+fn gen_query_target() -> QueryTarget {
     let tgt = [
         QueryTarget::BestMatching,
         QueryTarget::All,
@@ -849,7 +828,7 @@ fn codec_query() {
                             gen_key(),
                             p.clone(),
                             gen!(ZInt),
-                            t.clone(),
+                            *t,
                             gen_consolidation_mode(),
                             *roc,
                             a.clone(),

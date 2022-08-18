@@ -16,7 +16,7 @@ mod mux;
 
 use super::protocol;
 use super::protocol::core::{
-    Channel, CongestionControl, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
+    Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
@@ -42,16 +42,10 @@ pub trait Primitives: Send + Sync {
     fn decl_queryable(
         &self,
         key_expr: &WireExpr,
-        kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     );
-    fn forget_queryable(
-        &self,
-        key_expr: &WireExpr,
-        kind: ZInt,
-        routing_context: Option<RoutingContext>,
-    );
+    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
 
     fn send_data(
         &self,
@@ -68,7 +62,7 @@ pub trait Primitives: Send + Sync {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTAK,
+        target: QueryTarget,
         consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     );
@@ -76,7 +70,6 @@ pub trait Primitives: Send + Sync {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -124,18 +117,11 @@ impl Primitives for DummyPrimitives {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
-        _kind: ZInt,
         _qable_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _kind: ZInt,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
+    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn send_data(
         &self,
@@ -152,7 +138,7 @@ impl Primitives for DummyPrimitives {
         _key_expr: &WireExpr,
         _value_selector: &str,
         _qid: ZInt,
-        _target: QueryTAK,
+        _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -160,7 +146,6 @@ impl Primitives for DummyPrimitives {
     fn send_reply_data(
         &self,
         _qid: ZInt,
-        _replier_kind: ZInt,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,

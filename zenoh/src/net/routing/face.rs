@@ -19,7 +19,7 @@ use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationMode, QueryTAK, QueryableInfo, SubInfo, WhatAmI,
+    Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo, WhatAmI,
     WireExpr, ZInt, ZenohId,
 };
 use zenoh_transport::Primitives;
@@ -34,8 +34,8 @@ pub struct FaceState {
     pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
-    pub(super) local_qabls: HashMap<(Arc<Resource>, ZInt), QueryableInfo>,
-    pub(super) remote_qabls: HashSet<(Arc<Resource>, ZInt)>,
+    pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
+    pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
 }
@@ -264,7 +264,6 @@ impl Primitives for Face {
     fn decl_queryable(
         &self,
         key_expr: &WireExpr,
-        kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
@@ -276,7 +275,6 @@ impl Primitives for Face {
                         &mut tables,
                         &mut self.state.clone(),
                         key_expr,
-                        kind,
                         qabl_info,
                         router,
                     )
@@ -291,7 +289,6 @@ impl Primitives for Face {
                             &mut tables,
                             &mut self.state.clone(),
                             key_expr,
-                            kind,
                             qabl_info,
                             peer,
                         )
@@ -301,38 +298,22 @@ impl Primitives for Face {
                         &mut tables,
                         &mut self.state.clone(),
                         key_expr,
-                        kind,
                         qabl_info,
                     )
                 }
             }
-            _ => declare_client_queryable(
-                &mut tables,
-                &mut self.state.clone(),
-                key_expr,
-                kind,
-                qabl_info,
-            ),
+            _ => {
+                declare_client_queryable(&mut tables, &mut self.state.clone(), key_expr, qabl_info)
+            }
         }
     }
 
-    fn forget_queryable(
-        &self,
-        key_expr: &WireExpr,
-        kind: ZInt,
-        routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let mut tables = zwrite!(self.tables);
         match (tables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 if let Some(router) = self.state.get_router(&tables, routing_context) {
-                    forget_router_queryable(
-                        &mut tables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        kind,
-                        &router,
-                    )
+                    forget_router_queryable(&mut tables, &mut self.state.clone(), key_expr, &router)
                 }
             }
             (WhatAmI::Router, WhatAmI::Peer)
@@ -340,19 +321,13 @@ impl Primitives for Face {
             | (WhatAmI::Peer, WhatAmI::Peer) => {
                 if tables.full_net(WhatAmI::Peer) {
                     if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                        forget_peer_queryable(
-                            &mut tables,
-                            &mut self.state.clone(),
-                            key_expr,
-                            kind,
-                            &peer,
-                        )
+                        forget_peer_queryable(&mut tables, &mut self.state.clone(), key_expr, &peer)
                     }
                 } else {
-                    forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr, kind)
+                    forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr)
                 }
             }
-            _ => forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr, kind),
+            _ => forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr),
         }
     }
 
@@ -382,7 +357,7 @@ impl Primitives for Face {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTAK,
+        target: QueryTarget,
         consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     ) {
@@ -401,7 +376,6 @@ impl Primitives for Face {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -412,7 +386,6 @@ impl Primitives for Face {
             &mut tables,
             &mut self.state.clone(),
             qid,
-            replier_kind,
             replier_id,
             key_expr,
             info,

@@ -59,7 +59,6 @@ pub trait MessageWriter {
     fn write_query(&mut self, query: &Query) -> bool;
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool;
     fn write_link_state(&mut self, link_state: &LinkState) -> bool;
-    fn write_query_tak(&mut self, target: &QueryTAK) -> bool;
     fn write_query_target(&mut self, target: &QueryTarget) -> bool;
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt;
     fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool;
@@ -91,7 +90,6 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_byte(reply_context.header()).is_some());
         zcheck!(self.write_zint(reply_context.qid));
         if let Some(replier) = reply_context.replier.as_ref() {
-            zcheck!(self.write_zint(replier.kind));
             zcheck!(self.write_zid(&replier.id));
         }
         true
@@ -470,16 +468,13 @@ impl MessageWriter for WBuf {
                 let header = q.header();
                 zcheck!(self.write_byte(header).is_some());
                 zcheck!(self.write_key_expr(&q.key));
-                zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
                     zcheck!(self.write_queryable_info(&q.info));
                 }
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                self.write_byte(fq.header()).is_some()
-                    && self.write_key_expr(&fq.key)
-                    && self.write_zint(fq.kind)
+                self.write_byte(fq.header()).is_some() && self.write_key_expr(&fq.key)
             }
         }
     }
@@ -521,7 +516,7 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_string(&query.value_selector));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
-            zcheck!(self.write_query_tak(t));
+            zcheck!(self.write_query_target(t));
         }
         self.write_consolidation(query.consolidation)
     }
@@ -554,10 +549,6 @@ impl MessageWriter for WBuf {
         }
 
         true
-    }
-
-    fn write_query_tak(&mut self, target: &QueryTAK) -> bool {
-        self.write_zint(target.kind) && self.write_query_target(&target.target)
     }
 
     fn write_query_target(&mut self, target: &QueryTarget) -> bool {

@@ -22,8 +22,8 @@ use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationMode, QueryTAK, QueryableInfo, Reliability, SubInfo,
-    SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, Reliability,
+    SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
@@ -434,18 +434,11 @@ impl Primitives for ClientPrimitives {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
-        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _kind: ZInt,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
+    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn send_data(
         &self,
@@ -464,7 +457,7 @@ impl Primitives for ClientPrimitives {
         _key_expr: &WireExpr,
         _value_selector: &str,
         _qid: ZInt,
-        _target: QueryTAK,
+        _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -473,7 +466,6 @@ impl Primitives for ClientPrimitives {
     fn send_reply_data(
         &self,
         _qid: ZInt,
-        _replier_kind: ZInt,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
