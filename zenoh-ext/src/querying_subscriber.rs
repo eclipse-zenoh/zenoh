@@ -409,17 +409,18 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
 
     /// Issue a new query on the specified selector.
     #[inline]
-    pub fn query_on<'c, IntoSelector>(
+    pub fn query_on<'c, IntoSelector, IntoQueryConsolidation>(
         &'c mut self,
         selector: IntoSelector,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: IntoQueryConsolidation,
         timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
+        IntoQueryConsolidation: Into<QueryConsolidation>,
     {
-        self.query_on_selector(selector.into(), target, consolidation, timeout)
+        self.query_on_selector(selector.into(), target, consolidation.into(), timeout)
     }
 
     #[inline]
