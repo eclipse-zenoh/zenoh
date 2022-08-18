@@ -54,7 +54,7 @@ pub use locators::Locator;
 pub mod endpoints;
 pub use endpoints::EndPoint;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
@@ -199,7 +199,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
@@ -212,13 +212,13 @@ impl Default for Reliability {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
@@ -256,14 +256,14 @@ impl fmt::Display for ConduitSnList {
 }
 
 /// The kind of reliability.
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
 }
 
 /// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
@@ -277,7 +277,7 @@ impl Default for CongestionControl {
 }
 
 /// The subscription mode.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SubMode {
     Push,
@@ -292,21 +292,21 @@ impl Default for SubMode {
 }
 
 /// A time period.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Period {
     pub origin: ZInt,
     pub period: ZInt,
     pub duration: ZInt,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
     pub period: Option<Period>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryableInfo {
     pub complete: ZInt,
     pub distance: ZInt,
@@ -328,7 +328,7 @@ pub mod queryable {
 }
 
 /// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
 #[repr(u8)]
 pub enum ConsolidationMode {
     None,
@@ -338,7 +338,7 @@ pub enum ConsolidationMode {
 
 /// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
 /// at different stages of the reply process.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsolidationStrategy {
     pub first_routers: ConsolidationMode,
     pub last_router: ConsolidationMode,
@@ -423,7 +423,7 @@ impl Default for ConsolidationStrategy {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     BestMatching,
     All,
@@ -440,7 +440,7 @@ impl Default for Target {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryTarget {
     pub kind: ZInt,
     pub target: Target,

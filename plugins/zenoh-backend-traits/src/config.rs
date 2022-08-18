@@ -25,7 +25,7 @@ pub struct VolumeConfig {
     #[as_mut]
     pub rest: Map<String, Value>,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageConfig {
     pub name: String,
     pub key_expr: String,

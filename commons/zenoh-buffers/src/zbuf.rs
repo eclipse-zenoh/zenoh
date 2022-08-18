@@ -30,7 +30,7 @@ use zenoh_core::Result as ZResult;
 /*************************************/
 /*           ZBUF POSITION           */
 /*************************************/
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ZBufPos {
     slice: usize, // The ZSlice index
     byte: usize,  // The byte in the ZSlice

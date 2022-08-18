@@ -24,7 +24,7 @@ fn cend(s: &[u8]) -> bool {
 
 #[inline(always)]
 fn cwild(s: &[u8]) -> bool {
-    s.get(0) == Some(&b'*')
+    s.first() == Some(&b'*')
 }
 
 #[inline(always)]

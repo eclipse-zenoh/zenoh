@@ -16,7 +16,7 @@ extern crate criterion;
 
 use criterion::Criterion;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
     BestMatching,
     All,
@@ -32,7 +32,7 @@ impl Default for Target {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct QueryTarget {
     pub storage: Target,
     pub eval: Target,

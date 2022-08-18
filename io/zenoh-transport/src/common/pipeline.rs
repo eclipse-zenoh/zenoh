@@ -176,7 +176,7 @@ impl StageRefill {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) is_streamed: bool,
     pub(crate) batch_size: u16,

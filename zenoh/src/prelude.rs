@@ -329,7 +329,7 @@ impl From<Option<DataInfo>> for SourceInfo {
 }
 
 /// The kind of a [`Sample`].
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
     /// if the [`Sample`] was caused by a `put` operation.
     Put = data_kind::PUT as isize,
@@ -493,7 +493,7 @@ impl fmt::Display for Sample {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Priority {
     RealTime = 1,
@@ -595,7 +595,7 @@ pub const PROP_STARTTIME: &str = "starttime";
 /// The "stoptime" property key for time-range selection
 pub const PROP_STOPTIME: &str = "stoptime";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// An expression identifying a selection of resources.
 ///
 /// A selector is the conjunction of an key expression identifying a set
