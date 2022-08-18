@@ -371,7 +371,11 @@ impl std::fmt::Debug for Selector<'_> {
 
 impl std::fmt::Display for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}?{}", self.key_expr, self.value_selector)
+        write!(f, "{}", self.key_expr)?;
+        if !self.value_selector.is_empty() {
+            write!(f, "?{}", self.value_selector)?;
+        }
+        Ok(())
     }
 }
 

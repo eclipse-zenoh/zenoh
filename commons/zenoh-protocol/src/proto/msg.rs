@@ -389,8 +389,6 @@ impl Attachment {
 /// +-+-+-+---------+
 /// ~      qid      ~
 /// +---------------+
-/// ~  replier_kind ~ if F==0
-/// +---------------+
 /// ~   replier_id  ~ if F==0
 /// +---------------+
 ///
@@ -398,7 +396,6 @@ impl Attachment {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplierInfo {
-    pub kind: ZInt,
     pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -827,15 +824,12 @@ impl Header for ForgetSubscriber {
 /// +---------------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~     Kind      ~
-/// +---------------+
 /// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Queryable {
     pub key: WireExpr<'static>,
-    pub kind: ZInt,
     pub info: QueryableInfo,
 }
 
@@ -860,22 +854,16 @@ impl Header for Queryable {
 /// +---------------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~     Kind      ~
-/// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetQueryable {
     pub key: WireExpr<'static>,
-    pub kind: ZInt,
 }
 
 impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
-        if self.kind != queryable::EVAL {
-            header |= zmsg::flag::Q
-        }
         if self.key.has_suffix() {
             header |= zmsg::flag::K
         }
@@ -967,7 +955,7 @@ pub struct Query {
     pub key: WireExpr<'static>,
     pub value_selector: String,
     pub qid: ZInt,
-    pub target: Option<QueryTAK>,
+    pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
 }
 
@@ -1187,7 +1175,7 @@ impl ZenohMessage {
         key: WireExpr<'static>,
         value_selector: String,
         qid: ZInt,
-        target: Option<QueryTAK>,
+        target: Option<QueryTarget>,
         consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
