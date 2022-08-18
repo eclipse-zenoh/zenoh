@@ -59,8 +59,8 @@ use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt,
+        queryable, AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo,
+        SubInfo, WireExpr, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -569,6 +569,7 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
+            kind: zenoh_protocol_core::queryable::ALL_KINDS,
             complete: true,
             handler: DefaultHandler,
         }
@@ -1123,6 +1124,7 @@ impl Session {
     pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
+        kind: ZInt,
         complete: bool,
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
@@ -1132,6 +1134,7 @@ impl Session {
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
+            kind,
             complete,
             callback,
         });
@@ -1141,19 +1144,20 @@ impl Session {
 
             if complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, key_expr);
+                let complete = Session::complete_twin_qabls(&state, key_expr, kind);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, &qabl_info, None);
+                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
             }
         }
         #[cfg(not(feature = "complete_n"))]
         {
-            let twin_qabl = Session::twin_qabl(&state, key_expr);
-            let complete_twin_qabl = twin_qabl && Session::complete_twin_qabl(&state, key_expr);
+            let twin_qabl = Session::twin_qabl(&state, key_expr, kind);
+            let complete_twin_qabl =
+                twin_qabl && Session::complete_twin_qabl(&state, key_expr, kind);
 
             state.queryables.insert(id, qable_state.clone());
 
@@ -1169,35 +1173,38 @@ impl Session {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, &qabl_info, None);
+                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
             }
         }
         Ok(qable_state)
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
+    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
-            state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                == state.local_wireexpr_to_expr(key).unwrap()
+            q.kind == kind
+                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
+                    == state.local_wireexpr_to_expr(key).unwrap()
         })
     }
 
     #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
+    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
         state.queryables.values().any(|q| {
             q.complete
+                && q.kind == kind
                 && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                     == state.local_wireexpr_to_expr(key).unwrap()
         })
     }
 
     #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> ZInt {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr, kind: ZInt) -> ZInt {
         state
             .queryables
             .values()
             .filter(|q| {
                 q.complete
+                    && q.kind == kind
                     && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                         == state.local_wireexpr_to_expr(key).unwrap()
             })
@@ -1206,37 +1213,54 @@ impl Session {
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
-            let primitives = state.primitives.as_ref().unwrap().clone();
             trace!("close_queryable({:?})", qable_state);
-            if Session::twin_qabl(&state, &qable_state.key_expr) {
+            if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
                 // There still exist Queryables on the same KeyExpr.
                 if qable_state.complete {
                     #[cfg(feature = "complete_n")]
                     {
-                        let complete = Session::complete_twin_qabls(&state, &qable_state.key_expr);
-                        drop(state);
+                        let complete = Session::complete_twin_qabls(
+                            &state,
+                            &qable_state.key_expr,
+                            qable_state.kind,
+                        );
+                        let primitives = state.primitives.as_ref().unwrap();
                         let qabl_info = QueryableInfo {
                             complete,
                             distance: 0,
                         };
-                        primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
+                        primitives.decl_queryable(
+                            &qable_state.key_expr,
+                            qable_state.kind,
+                            &qabl_info,
+                            None,
+                        );
                     }
                     #[cfg(not(feature = "complete_n"))]
                     {
-                        if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
-                            drop(state);
+                        if !Session::complete_twin_qabl(
+                            &state,
+                            &qable_state.key_expr,
+                            qable_state.kind,
+                        ) {
+                            let primitives = state.primitives.as_ref().unwrap();
                             let qabl_info = QueryableInfo {
                                 complete: 0,
                                 distance: 0,
                             };
-                            primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
+                            primitives.decl_queryable(
+                                &qable_state.key_expr,
+                                qable_state.kind,
+                                &qabl_info,
+                                None,
+                            );
                         }
                     }
                 }
             } else {
                 // There are no more Queryables on the same KeyExpr.
-                drop(state);
-                primitives.forget_queryable(&qable_state.key_expr, None);
+                let primitives = state.primitives.as_ref().unwrap();
+                primitives.forget_queryable(&qable_state.key_expr, qable_state.kind, None);
             }
             Ok(())
         } else {
@@ -1380,7 +1404,10 @@ impl Session {
             &selector.key_expr.to_wire(self),
             selector.value_selector(),
             qid,
-            target,
+            zenoh_protocol_core::QueryTAK {
+                kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                target,
+            },
             consolidation,
             None,
         );
@@ -1390,7 +1417,10 @@ impl Session {
                 &selector.key_expr.to_wire(self),
                 selector.value_selector(),
                 qid,
-                target,
+                zenoh_protocol_core::QueryTAK {
+                    kind: zenoh_protocol_core::queryable::ALL_KINDS,
+                    target,
+                },
                 consolidation,
             );
         }
@@ -1403,20 +1433,23 @@ impl Session {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        _target: QueryTarget,
+        target: zenoh_protocol_core::QueryTAK,
         _consolidation: ConsolidationMode,
     ) {
-        let (primitives, key_expr, senders) = {
+        let (primitives, key_expr, kinds_and_senders) = {
             let state = zread!(self.state);
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    let senders = state
+                    let kinds_and_senders = state
                         .queryables
                         .values()
                         .filter(
                             |queryable| match state.local_wireexpr_to_expr(&queryable.key_expr) {
                                 Ok(qablname) => {
                                     qablname.intersects(&key_expr)
+                                        && ((queryable.kind == queryable::ALL_KINDS
+                                            || target.kind == queryable::ALL_KINDS)
+                                            || (queryable.kind & target.kind != 0))
                                 }
                                 Err(err) => {
                                     error!(
@@ -1427,12 +1460,12 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| qable.callback.clone())
-                        .collect::<Vec<Arc<dyn Fn(Query) + Send + Sync>>>();
+                        .map(|qable| (qable.kind, qable.callback.clone()))
+                        .collect::<Vec<(ZInt, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
-                        senders,
+                        kinds_and_senders,
                     )
                 }
                 Err(err) => {
@@ -1447,10 +1480,11 @@ impl Session {
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
 
-        for req_sender in senders.iter() {
+        for (kind, req_sender) in kinds_and_senders {
             req_sender(Query {
                 key_expr: key_expr.clone().into_owned(),
                 value_selector: value_selector.clone(),
+                kind,
                 replies_sender: rep_sender.clone(),
             });
         }
@@ -1461,10 +1495,11 @@ impl Session {
         if local {
             let this = self.clone();
             task::spawn(async move {
-                while let Some(sample) = rep_receiver.stream().next().await {
+                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
                     this.send_reply_data(
                         qid,
+                        replier_kind,
                         zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
@@ -1476,10 +1511,11 @@ impl Session {
         } else {
             let this = self.clone();
             task::spawn(async move {
-                while let Some(sample) = rep_receiver.stream().next().await {
+                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
                     primitives.send_reply_data(
                         qid,
+                        replier_kind,
                         zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
@@ -1568,6 +1604,7 @@ impl SessionDeclarations for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
+            kind: zenoh_protocol_core::queryable::EVAL,
             complete: true,
             handler: DefaultHandler,
         }
@@ -1663,13 +1700,19 @@ impl Primitives for Session {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
+        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Decl Queryable {:?}", _key_expr);
     }
 
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        _key_expr: &WireExpr,
+        _kind: ZInt,
+        _routing_context: Option<RoutingContext>,
+    ) {
         trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
@@ -1698,7 +1741,7 @@ impl Primitives for Session {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: zenoh_protocol_core::QueryTAK,
         consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
@@ -1715,14 +1758,16 @@ impl Primitives for Session {
     fn send_reply_data(
         &self,
         qid: ZInt,
+        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
+            "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
             qid,
+            replier_kind,
             replier_id,
             key_expr,
             data_info,

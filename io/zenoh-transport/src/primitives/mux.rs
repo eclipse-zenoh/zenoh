@@ -15,7 +15,7 @@ use zenoh_protocol_core::ConsolidationMode;
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
+    Channel, CongestionControl, QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{
@@ -104,11 +104,13 @@ impl Primitives for Mux {
     fn decl_queryable(
         &self,
         key_expr: &WireExpr,
+        kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Queryable(Queryable {
             key: key_expr.to_owned(),
+            kind,
             info: qabl_info.clone(),
         });
         let decls = vec![d];
@@ -117,9 +119,15 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
+    fn forget_queryable(
+        &self,
+        key_expr: &WireExpr,
+        kind: ZInt,
+        routing_context: Option<RoutingContext>,
+    ) {
         let d = Declaration::ForgetQueryable(ForgetQueryable {
             key: key_expr.to_owned(),
+            kind,
         });
         let decls = vec![d];
         let _ =
@@ -153,11 +161,11 @@ impl Primitives for Mux {
         key_expr: &WireExpr,
         value_selector: &str,
         qid: ZInt,
-        target: QueryTarget,
+        target: QueryTAK,
         consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     ) {
-        let target_opt = if target == QueryTarget::default() {
+        let target_opt = if target == QueryTAK::default() {
             None
         } else {
             Some(target)
@@ -176,6 +184,7 @@ impl Primitives for Mux {
     fn send_reply_data(
         &self,
         qid: ZInt,
+        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -188,7 +197,13 @@ impl Primitives for Mux {
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
-            Some(ReplyContext::new(qid, Some(ReplierInfo { id: replier_id }))),
+            Some(ReplyContext::new(
+                qid,
+                Some(ReplierInfo {
+                    kind: replier_kind,
+                    id: replier_id,
+                }),
+            )),
             None,
         ));
     }

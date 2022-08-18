@@ -438,7 +438,7 @@ pub struct SubInfo {
     pub mode: SubMode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryableInfo {
     pub complete: ZInt,
     pub distance: ZInt,
@@ -451,6 +451,12 @@ impl Default for QueryableInfo {
             distance: 0,
         }
     }
+}
+
+pub mod queryable {
+    pub const ALL_KINDS: super::ZInt = 0x01;
+    pub const STORAGE: super::ZInt = 0x02;
+    pub const EVAL: super::ZInt = 0x04;
 }
 
 /// The kind of consolidation.
@@ -483,6 +489,22 @@ pub enum QueryTarget {
 impl Default for QueryTarget {
     fn default() -> Self {
         QueryTarget::BestMatching
+    }
+}
+
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryTAK {
+    pub kind: ZInt,
+    pub target: QueryTarget,
+}
+
+impl Default for QueryTAK {
+    fn default() -> Self {
+        QueryTAK {
+            kind: queryable::ALL_KINDS,
+            target: QueryTarget::default(),
+        }
     }
 }
 
