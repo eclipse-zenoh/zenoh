@@ -1206,6 +1206,7 @@ impl Session {
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
             trace!("close_queryable({:?})", qable_state);
             if Session::twin_qabl(&state, &qable_state.key_expr) {
                 // There still exist Queryables on the same KeyExpr.
@@ -1213,7 +1214,7 @@ impl Session {
                     #[cfg(feature = "complete_n")]
                     {
                         let complete = Session::complete_twin_qabls(&state, &qable_state.key_expr);
-                        let primitives = state.primitives.as_ref().unwrap();
+                        drop(state);
                         let qabl_info = QueryableInfo {
                             complete,
                             distance: 0,
@@ -1223,7 +1224,7 @@ impl Session {
                     #[cfg(not(feature = "complete_n"))]
                     {
                         if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
-                            let primitives = state.primitives.as_ref().unwrap();
+                            drop(state);
                             let qabl_info = QueryableInfo {
                                 complete: 0,
                                 distance: 0,
@@ -1234,7 +1235,7 @@ impl Session {
                 }
             } else {
                 // There are no more Queryables on the same KeyExpr.
-                let primitives = state.primitives.as_ref().unwrap();
+                drop(state);
                 primitives.forget_queryable(&qable_state.key_expr, None);
             }
             Ok(())

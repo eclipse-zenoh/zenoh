@@ -19,8 +19,6 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
-// use std::time::Instant;
-// use zenoh_collections::{Timed, TimedEvent};
 use zenoh_collections::Timed;
 use zenoh_sync::get_mut_unchecked;
 
@@ -736,6 +734,7 @@ pub(crate) fn undeclare_client_queryable(
 ) {
     log::debug!("Unregister client queryable {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
+        get_mut_unchecked(ctx).qabl = None;
         if ctx.qabl.is_none() {
             get_mut_unchecked(face).remote_qabls.remove(res);
         }
