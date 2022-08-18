@@ -30,9 +30,9 @@ use zenoh_protocol_core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
-    /// The key_selector of this Query.
+    /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
-    /// The value_selector of this Query.
+    /// The value selector of this Query.
     pub(crate) value_selector: String,
 
     pub(crate) kind: ZInt,

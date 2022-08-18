@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! Sample primitives
 use std::convert::TryInto;
 
 use zenoh_protocol::proto::DataInfo;
@@ -67,6 +69,7 @@ impl Sample {
         })
     }
 
+    /// Creates a new Sample with optional data info.
     #[inline]
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,

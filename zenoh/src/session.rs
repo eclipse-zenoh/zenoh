@@ -448,7 +448,7 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`] can be used to read the current
+    /// The returned configuration [`Notifier`](Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
     /// modify the zenoh configuration through the `insert`,
     /// or `insert_json5` funtion.
@@ -502,7 +502,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -669,7 +669,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression matching resources to put
+    /// * `key_expr` - Key expression matching the resources to put
     /// * `value` - The value to put
     ///
     /// # Examples
@@ -708,7 +708,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression matching resources to delete
+    /// * `key_expr` - Key expression matching the resources to delete
     ///
     /// # Examples
     /// ```

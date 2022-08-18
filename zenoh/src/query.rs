@@ -41,10 +41,6 @@ pub struct QueryConsolidation {
 
 impl QueryConsolidation {
     /// Automatic query consolidation strategy selection.
-    ///
-    /// A query consolidation strategy will automatically be selected depending
-    /// the query selector. If the selector contains time range properties,
-    /// no consolidation is performed. Otherwise the [`reception`](QueryConsolidation::reception) strategy is used.
     pub const AUTO: Self = Self { mode: None };
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {

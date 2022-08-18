@@ -13,7 +13,7 @@
 //
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
-/// An alias for `Box<T>`.
+/// An alias for `Arc<T>`.
 pub type Dyn<T> = std::sync::Arc<T>;
 /// An immutable callback function.
 pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
