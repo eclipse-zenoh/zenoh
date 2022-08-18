@@ -13,7 +13,7 @@
 //
 
 //! To manage groups and group memeberships
- 
+
 use async_std::sync::Mutex;
 use async_std::task::JoinHandle;
 use flume::{Receiver, Sender};
