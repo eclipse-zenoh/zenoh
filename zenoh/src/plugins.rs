@@ -12,18 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Zenoh router plugins.
+//! Zenohd plugins.
 
-use crate::net::runtime::Runtime;
 use crate::prelude::Selector;
-use crate::Result as ZResult;
+pub use crate::runtime::Runtime;
+pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
 }
 
-/// Zenoh plugins should implement this trait to ensure type-safety event if the starting arguments and expected plugin types change.
+/// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
 pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin> {}
 
 /// A zenoh plugin receives a reference to a value of this type when started.
@@ -33,6 +33,7 @@ pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 
 #[non_exhaustive]
 #[derive(serde::Serialize, Debug, Clone)]
+/// A Response for the administration space.
 pub struct Response {
     pub key: String,
     pub value: serde_json::Value,
@@ -45,7 +46,20 @@ impl Response {
 }
 
 pub trait RunningPluginTrait: Send + Sync + std::any::Any {
+    /// Returns a function that will be called when configuration relevant to the plugin is about to change.
+    ///
+    /// This function is called with 3 arguments:
+    /// * `path`, the relative path from the plugin's configuration root to the changed value.
+    /// * `current`, the current configuration of the plugin (from its root).
+    /// * `new`, the proposed new configuration of the plugin.
+    ///
+    /// It may return one of 3 cases:
+    /// * `Err` indicates that the plugin refuses this configuration change, cancelling it altogether.
+    ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
+    /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
+    /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
     fn config_checker(&self) -> ValidationFunction;
+    /// Used to request your plugin's status for the administration space.
     fn adminspace_getter<'a>(
         &'a self,
         selector: &'a Selector<'a>,
