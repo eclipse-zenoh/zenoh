@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::unicast::establishment::open::OResult;
 use crate::unicast::establishment::{attachment_from_properties, properties_from_attachment};
 use crate::unicast::establishment::{
@@ -23,6 +22,9 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::io::ZSlice;
 use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
+
+#[cfg(feature = "shared-memory")]
+use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 
 /*************************************/
 /*              OPEN                 */
@@ -111,9 +113,11 @@ pub(super) async fn recv(
         None => EstablishmentProperties::new(),
     };
 
+    #[allow(unused_mut)]
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
+        #[allow(unused_mut)]
         let mut att = pa
             .handle_init_ack(
                 auth_link,
