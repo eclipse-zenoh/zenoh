@@ -28,7 +28,7 @@ pub use zenoh_protocol_core::WhatAmI;
 /// A zenoh Hello message.
 pub use zenoh_protocol::proto::Hello;
 
-/// A builder for initializing a [`FlumeScout`].
+/// A builder for initializing a [`Scout`].
 ///
 /// # Examples
 /// ```no_run
