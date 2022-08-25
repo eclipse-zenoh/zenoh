@@ -34,7 +34,7 @@ pub struct ReplicationService {
 
 pub struct StorageService {
     session: Arc<Session>,
-    key_expr: KeyExpr<'static>,
+    key_expr: OwnedKeyExpr,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
@@ -45,7 +45,7 @@ pub struct StorageService {
 impl StorageService {
     pub async fn start(
         session: Arc<Session>,
-        key_expr: KeyExpr<'static>,
+        key_expr: OwnedKeyExpr,
         name: &str,
         storage: Box<dyn zenoh_backend_traits::Storage>,
         in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,

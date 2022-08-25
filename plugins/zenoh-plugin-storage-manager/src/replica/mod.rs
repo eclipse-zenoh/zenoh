@@ -65,7 +65,7 @@ pub struct Replica {
     // TODO: Discuss if we need to add -<storage_type> for uniqueness
     name: String, // name of replica  -- UUID(zenoh)-<storage_name>
     session: Arc<Session>,
-    key_expr: KeyExpr<'static>,
+    key_expr: OwnedKeyExpr,
     replica_config: ReplicaConfig,
     digests_published: RwLock<HashSet<u64>>, // checksum of all digests generated and published by this replica
 }
@@ -78,7 +78,7 @@ impl Replica {
         storage: Box<dyn zenoh_backend_traits::Storage>,
         in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
         out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-        key_expr: KeyExpr<'static>,
+        key_expr: OwnedKeyExpr,
         name: &str,
     ) -> ZResult<Sender<crate::StorageMessage>> {
         trace!("[REPLICA]Opening session...");
@@ -185,7 +185,8 @@ impl Replica {
                 self.key_expr.clone(),
                 self.replica_config.align_prefix.to_string(),
             )
-            .len()..];
+            .len()
+                + 1..];
             trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
@@ -280,8 +281,11 @@ impl Replica {
         true
     }
 
-    fn get_digest_key(key_expr: KeyExpr<'static>, align_prefix: String) -> KeyExpr<'static> {
+    fn get_digest_key(key_expr: OwnedKeyExpr, align_prefix: String) -> OwnedKeyExpr {
         let key_expr = encode(&key_expr).to_string();
-        KeyExpr::from_str(&format!("{}/{}", align_prefix, key_expr)).unwrap()
+        OwnedKeyExpr::from_str(&align_prefix)
+            .unwrap()
+            .join(&key_expr)
+            .unwrap()
     }
 }

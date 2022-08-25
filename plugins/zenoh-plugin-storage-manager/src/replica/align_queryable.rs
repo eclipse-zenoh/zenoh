@@ -27,7 +27,7 @@ use zenoh::Session;
 
 pub struct AlignQueryable {
     session: Arc<Session>,
-    digest_key: KeyExpr<'static>,
+    digest_key: OwnedKeyExpr,
     snapshotter: Arc<Snapshotter>,
 }
 
@@ -49,7 +49,7 @@ enum AlignData {
 impl AlignQueryable {
     pub async fn start_align_queryable(
         session: Arc<Session>,
-        digest_key: KeyExpr<'static>,
+        digest_key: OwnedKeyExpr,
         replica_name: &str,
         snapshotter: Arc<Snapshotter>,
     ) -> Self {

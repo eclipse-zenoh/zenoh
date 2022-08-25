@@ -19,16 +19,17 @@ use flume::{Receiver, Sender};
 use log::{error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
+use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::Sample;
-use zenoh::prelude::{KeyExpr, Value};
+use zenoh::prelude::Value;
 use zenoh::query::QueryConsolidation;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
 pub struct Aligner {
     session: Arc<Session>,
-    digest_key: KeyExpr<'static>,
+    digest_key: OwnedKeyExpr,
     snapshotter: Arc<Snapshotter>,
     rx_digest: Receiver<(String, super::Digest)>,
     tx_sample: Sender<Sample>,
@@ -38,7 +39,7 @@ pub struct Aligner {
 impl Aligner {
     pub async fn start_aligner(
         session: Arc<Session>,
-        digest_key: KeyExpr<'static>,
+        digest_key: OwnedKeyExpr,
         rx_digest: Receiver<(String, super::Digest)>,
         tx_sample: Sender<Sample>,
         snapshotter: Arc<Snapshotter>,
@@ -114,10 +115,10 @@ impl Aligner {
         missing_content: &[Timestamp],
         timestamp: Timestamp,
         from: &str,
-    ) -> HashMap<KeyExpr<'static>, (Timestamp, Value)> {
+    ) -> HashMap<OwnedKeyExpr, (Timestamp, Value)> {
         let mut result = HashMap::new();
         let properties = format!(
-            "timestamp={};{}={}",
+            "timestamp={}&{}={}",
             timestamp,
             super::CONTENTS,
             serde_json::to_string(missing_content).unwrap()
@@ -127,7 +128,10 @@ impl Aligner {
             .await;
 
         for sample in replies {
-            result.insert(sample.key_expr, (sample.timestamp.unwrap(), sample.value));
+            result.insert(
+                sample.key_expr.into(),
+                (sample.timestamp.unwrap(), sample.value),
+            );
         }
         result
     }
@@ -173,7 +177,7 @@ impl Aligner {
         other_rep: String,
         timestamp: Timestamp,
     ) -> Vec<Timestamp> {
-        let properties = format!("timestamp={};{}=cold", timestamp, super::ERA);
+        let properties = format!("timestamp={}&{}=cold", timestamp, super::ERA);
         // expecting sample.value to be a vec of intervals with their checksum
         let reply_content = self.perform_query(other_rep.to_string(), properties).await;
         let mut other_intervals: HashMap<u64, u64> = HashMap::new();
@@ -189,7 +193,7 @@ impl Aligner {
                 diff_string.push(each_int.to_string());
             }
             let properties = format!(
-                "timestamp={};{}=[{}]",
+                "timestamp={}&{}=[{}]",
                 timestamp,
                 super::INTERVALS,
                 diff_string.join(",")
@@ -213,7 +217,7 @@ impl Aligner {
                     diff_string.push(each_sub.to_string());
                 }
                 let properties = format!(
-                    "timestamp={};{}=[{}]",
+                    "timestamp={}&{}=[{}]",
                     timestamp,
                     super::SUBINTERVALS,
                     diff_string.join(",")
@@ -235,7 +239,7 @@ impl Aligner {
     }
 
     async fn perform_query(&self, from: String, properties: String) -> Vec<Sample> {
-        let selector = format!("{}?({})", self.digest_key.join(&from).unwrap(), properties);
+        let selector = format!("{}?{}", self.digest_key.join(&from).unwrap(), properties);
         trace!("[ALIGNER]Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self
@@ -282,7 +286,7 @@ impl Aligner {
                 diff_string.push(each_int.to_string());
             }
             let properties = format!(
-                "timestamp={};{}=[{}]",
+                "timestamp={}&{}=[{}]",
                 other.timestamp,
                 super::INTERVALS,
                 diff_string.join(",")
@@ -303,7 +307,7 @@ impl Aligner {
                     diff_string.push(each_sub.to_string());
                 }
                 let properties = format!(
-                    "timestamp={};{}=[{}]",
+                    "timestamp={}&{}=[{}]",
                     other.timestamp,
                     super::SUBINTERVALS,
                     diff_string.join(",")
@@ -347,7 +351,7 @@ impl Aligner {
                 diff_string.push(each_sub.to_string());
             }
             let properties = format!(
-                "timestamp={};{}=[{}]",
+                "timestamp={}&{}=[{}]",
                 other.timestamp,
                 super::SUBINTERVALS,
                 diff_string.join(",")
