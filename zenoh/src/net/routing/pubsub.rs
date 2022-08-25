@@ -926,11 +926,9 @@ fn compute_data_route(
             );
         }
 
-        // println!("compute data route for {}{}", prefix.expr(), suffix);
         if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
             for (sid, context) in &mres.session_ctxs {
                 if let Some(subinfo) = &context.subs {
-                    // println!("compute data route for {}{} ({} {} {})", prefix.expr(), suffix, tables.whatami, source_type, context.face.whatami);
                     if match tables.whatami {
                         WhatAmI::Router => {
                             (source_type != WhatAmI::Peer || context.face.whatami != WhatAmI::Peer)
@@ -942,7 +940,6 @@ fn compute_data_route(
                         }
                     } && subinfo.mode == SubMode::Push
                     {
-                        // println!("compute data route for {}{} add entry", prefix.expr(), suffix);
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(prefix, suffix, *sid);
                             (context.face.clone(), key_expr.to_owned(), None)
