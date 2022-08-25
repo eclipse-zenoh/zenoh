@@ -805,7 +805,9 @@ pub fn forget_client_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, e
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     match tables.whatami {
         WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client {
+            if face.whatami == WhatAmI::Client
+                || (face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
+            {
                 for qabl in tables.router_qabls.iter() {
                     if qabl.context.is_some() {
                         let info = local_qabl_info(

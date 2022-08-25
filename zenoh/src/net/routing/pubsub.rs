@@ -649,7 +649,9 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     };
     match tables.whatami {
         WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client {
+            if face.whatami == WhatAmI::Client
+                || (face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
+            {
                 for sub in &tables.router_subs {
                     get_mut_unchecked(face).local_subs.insert(sub.clone());
                     let key_expr = Resource::decl_key(sub, face);
