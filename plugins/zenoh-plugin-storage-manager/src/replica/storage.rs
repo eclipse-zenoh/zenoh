@@ -65,6 +65,7 @@ impl StorageService {
     }
 
     async fn start_storage_queryable_subscriber(&self) -> ZResult<Sender<StorageMessage>> {
+        self.initialize_if_empty().await;
         let (tx, rx) = flume::bounded(1);
 
         // subscribe on key_expr
@@ -210,5 +211,41 @@ impl StorageService {
             );
         }
         drop(storage);
+    }
+
+    async fn initialize_if_empty(&self) {
+        let storage = self.storage.lock().await;
+        let startup_entries = storage.get_all_entries().await.unwrap();
+        drop(storage);
+
+        if startup_entries.is_empty() {
+            // align with other storages, querying them on key_expr,
+            // with `_time=[..]` to get historical data (in case of time-series)
+            let replies = match self
+                .session
+                .get(KeyExpr::from(&self.key_expr).with_value_selector("_time=[..]"))
+                .target(QueryTarget::All)
+                .consolidation(ConsolidationMode::None)
+                .res_async()
+                .await
+            {
+                Ok(replies) => replies,
+                Err(e) => {
+                    error!("Error aligning storage {} : {}", self.name, e);
+                    return;
+                }
+            };
+            while let Ok(reply) = replies.recv_async().await {
+                match reply.sample {
+                    Ok(sample) => {
+                        self.process_sample(sample).await;
+                    }
+                    Err(e) => warn!(
+                        "Storage {} received an error to align query: {}",
+                        self.name, e
+                    ),
+                }
+            }
+        }
     }
 }

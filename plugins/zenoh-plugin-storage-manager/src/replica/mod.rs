@@ -84,8 +84,6 @@ impl Replica {
         trace!("[REPLICA]Opening session...");
         let startup_entries = storage.get_all_entries().await?;
 
-        // TODO: if no startup_entries, it means it is a new storage. Query zenoh to populate the storage. This is cheaper then normal alignment
-
         let replica = Replica {
             name: name.to_string(),
             session,
