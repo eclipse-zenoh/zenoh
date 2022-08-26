@@ -19,7 +19,7 @@ use flume::{Receiver, Sender};
 use log::{error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
-use zenoh::key_expr::OwnedKeyExpr;
+use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::Sample;
 use zenoh::prelude::Value;
@@ -239,7 +239,10 @@ impl Aligner {
     }
 
     async fn perform_query(&self, from: String, properties: String) -> Vec<Sample> {
-        let selector = format!("{}?{}", self.digest_key.join(&from).unwrap(), properties);
+        let selector = KeyExpr::from(&self.digest_key)
+            .join(&from)
+            .unwrap()
+            .with_value_selector(&properties);
         trace!("[ALIGNER]Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self
