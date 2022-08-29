@@ -28,6 +28,7 @@ use zenoh_backend_traits::{Query, StorageInsertionResult};
 use zenoh_core::Result as ZResult;
 
 pub struct ReplicationService {
+    pub empty_start: bool,
     pub aligner_updates: Receiver<Sample>,
     pub log_propagation: Sender<(OwnedKeyExpr, Timestamp)>,
 }
@@ -214,11 +215,7 @@ impl StorageService {
     }
 
     async fn initialize_if_empty(&self) {
-        let storage = self.storage.lock().await;
-        let startup_entries = storage.get_all_entries().await.unwrap();
-        drop(storage);
-
-        if startup_entries.is_empty() {
+        if self.replication.is_some() && self.replication.as_ref().unwrap().empty_start {
             // align with other storages, querying them on key_expr,
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
