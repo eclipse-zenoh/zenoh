@@ -444,9 +444,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         self.local = true;
         self
     }
-}
 
-impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, PushMode, Handler> {
     /// Change the subscription mode to Pull.
     #[inline]
     pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
@@ -467,8 +465,7 @@ impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, PushMode, Handler> {
             handler,
         }
     }
-}
-impl<'a, 'b, Handler> SubscriberBuilder<'a, 'b, PullMode, Handler> {
+
     /// Change the subscription mode to Push.
     #[inline]
     pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
