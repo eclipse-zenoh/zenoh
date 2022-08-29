@@ -129,7 +129,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
     pub fn stop(&mut self, plugin: &str) -> bool {
         let result = self.running_plugins.remove(plugin).is_some();
         self.plugin_starters
-            .retain(|p| p.name() == plugin || !p.deletable());
+            .retain(|p| p.name() != plugin || !p.deletable());
         result
     }
 
