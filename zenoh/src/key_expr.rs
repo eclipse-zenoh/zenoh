@@ -311,7 +311,32 @@ impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
     fn from(val: &'a KeyExpr<'a>) -> Self {
-        Self::from(val.as_keyexpr())
+        match &val.0 {
+            KeyExprInner::Borrowed(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => Self(KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
+            KeyExprInner::Owned(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => Self(KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
+        }
     }
 }
 impl<'a> From<KeyExpr<'a>> for String {
