@@ -102,7 +102,8 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, startup_entries.clone(), config.clone()).await);
+        let snapshotter =
+            Arc::new(Snapshotter::new(rx_log, startup_entries.clone(), config.clone()).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest);
         // queryable for alignment
