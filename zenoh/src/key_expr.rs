@@ -476,7 +476,21 @@ impl<'a> KeyExpr<'a> {
         matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     }
     pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
-        matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
+        match &self.0 {
+            KeyExprInner::Wire {
+                key_expr,
+                session_id,
+                prefix_len,
+                ..
+            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                session_id,
+                prefix_len,
+                ..
+            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            _ => false,
+        }
     }
     pub(crate) fn to_wire(&'a self, session: &crate::Session) -> zenoh_protocol_core::WireExpr<'a> {
         match &self.0 {
