@@ -1025,9 +1025,13 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                     compute_data_route(tables, res, "", Some(idx.index()), WhatAmI::Peer);
             }
         }
-        if tables.whatami == WhatAmI::Client
-            || (tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
-        {
+        if tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+            res_mut.context_mut().client_data_route =
+                Some(compute_data_route(tables, res, "", None, WhatAmI::Client));
+            res_mut.context_mut().peer_data_route =
+                Some(compute_data_route(tables, res, "", None, WhatAmI::Peer));
+        }
+        if tables.whatami == WhatAmI::Client {
             res_mut.context_mut().client_data_route =
                 Some(compute_data_route(tables, res, "", None, WhatAmI::Client));
         }
@@ -1177,7 +1181,7 @@ fn get_data_route(
                 }
             } else {
                 res.as_ref()
-                    .and_then(|res| res.client_data_route())
+                    .and_then(|res| res.client_data_route(face.whatami))
                     .unwrap_or_else(|| {
                         compute_data_route(tables, prefix, suffix, None, face.whatami)
                     })
@@ -1185,7 +1189,7 @@ fn get_data_route(
         }
         _ => res
             .as_ref()
-            .and_then(|res| res.client_data_route())
+            .and_then(|res| res.client_data_route(face.whatami))
             .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, face.whatami)),
     }
 }

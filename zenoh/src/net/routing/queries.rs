@@ -1173,9 +1173,13 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                     compute_query_route(tables, res, "", Some(idx.index()), WhatAmI::Peer);
             }
         }
-        if tables.whatami == WhatAmI::Client
-            || (tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
-        {
+        if tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+            res_mut.context_mut().client_query_route =
+                Some(compute_query_route(tables, res, "", None, WhatAmI::Client));
+            res_mut.context_mut().peer_query_route =
+                Some(compute_query_route(tables, res, "", None, WhatAmI::Peer));
+        }
+        if tables.whatami == WhatAmI::Client {
             res_mut.context_mut().client_query_route =
                 Some(compute_query_route(tables, res, "", None, WhatAmI::Client));
         }
@@ -1378,7 +1382,7 @@ pub fn route_query(
                                 })
                         } else {
                             Resource::get_resource(prefix, expr.suffix.as_ref())
-                                .and_then(|res| res.client_query_route())
+                                .and_then(|res| res.client_query_route(face.whatami))
                                 .unwrap_or_else(|| {
                                     compute_query_route(
                                         &tables,
@@ -1391,7 +1395,7 @@ pub fn route_query(
                         }
                     }
                     _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .and_then(|res| res.client_query_route())
+                        .and_then(|res| res.client_query_route(face.whatami))
                         .unwrap_or_else(|| {
                             compute_query_route(
                                 &tables,
@@ -1437,7 +1441,7 @@ pub fn route_query(
                         }
                     } else {
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .and_then(|res| res.client_query_route())
+                            .and_then(|res| res.client_query_route(face.whatami))
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
@@ -1450,7 +1454,7 @@ pub fn route_query(
                     }
                 }
                 _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                    .and_then(|res| res.client_query_route())
+                    .and_then(|res| res.client_query_route(face.whatami))
                     .unwrap_or_else(|| {
                         compute_query_route(
                             &tables,
