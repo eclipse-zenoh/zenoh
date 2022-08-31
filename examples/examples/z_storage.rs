@@ -18,7 +18,6 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -50,7 +49,7 @@ async fn main() {
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
+                    sample.kind, sample.key_expr.as_str(), sample.value);
                 if sample.kind == SampleKind::Delete {
                     stored.remove(&sample.key_expr.to_string());
                 } else {

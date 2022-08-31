@@ -15,7 +15,6 @@ use async_std::prelude::FutureExt;
 use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::AsyncResolve;
@@ -48,7 +47,7 @@ async fn main() {
                 ">> [Subscriber] Received {} ('{}': '{}')",
                 sample.kind,
                 sample.key_expr.as_str(),
-                String::try_from(&sample.value).unwrap()
+                sample.value,
             );
         }
     };
