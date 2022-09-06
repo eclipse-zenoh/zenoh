@@ -455,7 +455,7 @@ impl Primitives for ClientPrimitives {
     fn send_query(
         &self,
         _key_expr: &WireExpr,
-        _value_selector: &str,
+        _parameters: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,

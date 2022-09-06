@@ -33,7 +33,7 @@ pub struct Query {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
-    pub(crate) selector_parameters: String,
+    pub(crate) parameters: String,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
     pub(crate) replies_sender: flume::Sender<Sample>,
@@ -45,7 +45,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_expr: self.key_expr.clone(),
-            parameters: (&self.selector_parameters).into(),
+            parameters: (&self.parameters).into(),
         }
     }
 
@@ -57,8 +57,8 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn selector_parameters(&self) -> &str {
-        &self.selector_parameters
+    pub fn parameters(&self) -> &str {
+        &self.parameters
     }
 
     /// Sends a reply to this Query.
@@ -75,7 +75,7 @@ impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
             .field("key_selector", &self.key_expr)
-            .field("selector_parameters", &self.selector_parameters)
+            .field("parameters", &self.parameters)
             .finish()
     }
 }
@@ -85,7 +85,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_expr, &self.selector_parameters),
+                &format!("{}{}", &self.key_expr, &self.parameters),
             )
             .finish()
     }

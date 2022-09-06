@@ -223,8 +223,8 @@ impl Query {
 
     /// This Query's selector parameters.
     #[inline(always)]
-    pub fn selector_parameters(&self) -> &str {
-        self.q.selector_parameters()
+    pub fn parameters(&self) -> &str {
+        self.q.parameters()
     }
 
     /// Sends a Sample as a reply to this Query

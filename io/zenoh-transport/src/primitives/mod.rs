@@ -60,7 +60,7 @@ pub trait Primitives: Send + Sync {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        selector_parameters: &str,
+        parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
@@ -136,7 +136,7 @@ impl Primitives for DummyPrimitives {
     fn send_query(
         &self,
         _key_expr: &WireExpr,
-        _selector_parameters: &str,
+        _parameters: &str,
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,

@@ -715,7 +715,7 @@ impl MessageReader for ZBufReader<'_> {
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
         let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-        let value_selector = self.read_string()?;
+        let parameters = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
             Some(self.read_query_target()?)
@@ -726,7 +726,7 @@ impl MessageReader for ZBufReader<'_> {
 
         Some(ZenohBody::Query(Query {
             key,
-            selector_parameters: value_selector,
+            parameters,
             qid,
             target,
             consolidation,

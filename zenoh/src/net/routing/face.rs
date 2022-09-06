@@ -355,7 +355,7 @@ impl Primitives for Face {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        selector_parameters: &str,
+        parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
@@ -365,7 +365,7 @@ impl Primitives for Face {
             &self.tables,
             &self.state,
             key_expr,
-            selector_parameters,
+            parameters,
             qid,
             target,
             consolidation,

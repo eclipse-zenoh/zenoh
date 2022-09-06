@@ -423,7 +423,7 @@ impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
             key_expr: q.key_expr.clone(),
-            parameters: (&q.selector_parameters).into(),
+            parameters: (&q.parameters).into(),
         }
     }
 }

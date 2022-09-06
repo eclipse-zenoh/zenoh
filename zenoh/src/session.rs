@@ -1401,7 +1401,7 @@ impl Session {
         &self,
         local: bool,
         key_expr: &WireExpr,
-        selector_parameters: &str,
+        parameters: &str,
         qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
@@ -1442,7 +1442,7 @@ impl Session {
             }
         };
 
-        let selector_parameters = selector_parameters.to_owned();
+        let parameters = parameters.to_owned();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
@@ -1450,7 +1450,7 @@ impl Session {
         for req_sender in senders.iter() {
             req_sender(Query {
                 key_expr: key_expr.clone().into_owned(),
-                selector_parameters: selector_parameters.clone(),
+                parameters: parameters.clone(),
                 replies_sender: rep_sender.clone(),
             });
         }
@@ -1696,7 +1696,7 @@ impl Primitives for Session {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        selector_parameters: &str,
+        parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
@@ -1705,18 +1705,11 @@ impl Primitives for Session {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             key_expr,
-            selector_parameters,
+            parameters,
             target,
             consolidation
         );
-        self.handle_query(
-            false,
-            key_expr,
-            selector_parameters,
-            qid,
-            target,
-            consolidation,
-        )
+        self.handle_query(false, key_expr, parameters, qid, target, consolidation)
     }
 
     fn send_reply_data(
