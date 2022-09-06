@@ -218,7 +218,63 @@ impl StageIn {
 
     #[inline]
     fn push_transport_message(&mut self, mut msg: TransportMessage) -> bool {
-        true
+        // Lock the current serialization batch.
+        let mut c_guard = self.mutex.current();
+
+        macro_rules! zgetbatch {
+            () => {
+                loop {
+                    match c_guard.take() {
+                        Some(batch) => break batch,
+                        None => match self.s_ref.pull() {
+                            Some(mut batch) => {
+                                batch.clear();
+                                break batch;
+                            }
+                            None => {
+                                drop(c_guard);
+                                if !self.s_ref.wait() {
+                                    return false;
+                                }
+                                c_guard = self.mutex.current();
+                            }
+                        },
+                    }
+                }
+            };
+        }
+
+        macro_rules! zserialize {
+            ($batch:expr) => {{
+                if $batch.serialize_transport_message(&mut msg) {
+                    if self.low_latency {
+                        drop(c_guard);
+                        self.s_out.move_batch($batch);
+                    } else {
+                        let bytes = $batch.len();
+                        *c_guard = Some($batch);
+                        drop(c_guard);
+                        self.s_out.notify(bytes);
+                    }
+                    return true;
+                }
+            }};
+        }
+
+        // Get the current serialization batch.
+        let mut batch = zgetbatch!();
+        // Attempt the serialization on the current batch
+        zserialize!(batch);
+
+        // The first serialization attempt has failed. This means that the current
+        // batch is full. Therefore, we move the current batch to stage out.
+        if !batch.is_empty() {
+            self.s_out.move_batch(batch);
+            batch = zgetbatch!();
+            zserialize!(batch);
+        }
+
+        false
     }
 }
 
@@ -511,12 +567,16 @@ impl TransmissionPipelineProducer {
     }
 
     #[inline]
-    pub(crate) fn push_transport_message(
-        &self,
-        mut message: TransportMessage,
-        priority: Priority,
-    ) -> bool {
-        false
+    pub(crate) fn push_transport_message(&self, msg: TransportMessage, priority: Priority) -> bool {
+        // If the queue is not QoS, it means that we only have one priority with index 0.
+        let priority = if self.stage_in.len() > 1 {
+            priority as usize
+        } else {
+            0
+        };
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut queue = zlock!(self.stage_in[priority]);
+        queue.push_transport_message(msg)
     }
 
     pub(crate) fn disable(&mut self) {
