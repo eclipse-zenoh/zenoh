@@ -121,7 +121,7 @@
 //!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
 //!         //  - if yes: get all the samples with key matching key_selector and call for each: query.reply(sample.clone()).await;
 //!         //
-//!         // NOTE: in case query.selector_params() is not empty something smarter should be done with returned samples...
+//!         // NOTE: in case query.parameters() is not empty something smarter should be done with returned samples...
 //!         Ok(())
 //!     }
 //!
