@@ -45,7 +45,10 @@ pub(super) async fn recv(
     _input: super::init_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an InitAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
+    let mut messages = link
+        .read_transport_message()
+        .await
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     if messages.len() != 1 {
         return Err((
             zerror!(
@@ -65,7 +68,7 @@ pub(super) async fn recv(
             return Err((
                 zerror!(
                     "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    reason,
+                    tmsg::close_reason_to_str(reason),
                     link,
                 )
                 .into(),
@@ -153,7 +156,7 @@ pub(super) async fn recv(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
 
