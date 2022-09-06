@@ -62,7 +62,7 @@ pub(super) async fn recv(
         TransportBody::Close(Close { reason, .. }) => {
             let e = zerror!(
                 "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
-                reason,
+                tmsg::close_reason_to_str(reason),
                 link,
             );
             return Err((e.into(), None));

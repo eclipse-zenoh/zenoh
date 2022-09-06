@@ -56,7 +56,7 @@ pub(super) async fn recv(
             return Err((
                 zerror!(
                     "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                    reason,
+                    tmsg::close_reason_to_str(reason),
                     link,
                 )
                 .into(),

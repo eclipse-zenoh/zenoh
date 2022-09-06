@@ -145,6 +145,18 @@ pub mod tmsg {
         pub const EXPIRED: u8 = 0x05;
     }
 
+    pub fn close_reason_to_str(reason: u8) -> &'static str {
+        match reason {
+            close_reason::GENERIC => "GENERIC",
+            close_reason::UNSUPPORTED => "UNSUPPORTED",
+            close_reason::INVALID => "INVALID",
+            close_reason::MAX_SESSIONS => "MAX_SESSIONS",
+            close_reason::MAX_LINKS => "MAX_LINKS",
+            close_reason::EXPIRED => "EXPIRED",
+            _ => "UNKNOWN",
+        }
+    }
+
     pub mod conduit {
         use super::{imsg, Priority};
 

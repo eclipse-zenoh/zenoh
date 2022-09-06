@@ -16,7 +16,7 @@ use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
 #[cfg(feature = "stats")]
 use super::protocol::proto::ZenohBody;
 use super::protocol::proto::{
-    Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
+    tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
 };
 use super::transport::TransportUnicastInner;
 use async_std::task;
@@ -90,7 +90,7 @@ impl TransportUnicastInner {
                     "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
                     link,
                     zid,
-                    reason
+                    tmsg::close_reason_to_str(reason),
                 );
                 return Ok(());
             }

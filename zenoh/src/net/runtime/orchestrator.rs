@@ -481,24 +481,29 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            if let Ok(transport) = self.manager().open_transport(endpoint).await {
-                log::debug!("Successfully connected to configured peer {}", peer);
-                if let Some(orch_transport) = transport
-                    .get_callback()
-                    .unwrap()
-                    .unwrap()
-                    .as_any()
-                    .downcast_ref::<super::RuntimeSession>()
-                {
-                    *zwrite!(orch_transport.endpoint) = Some(peer);
+            match self.manager().open_transport(endpoint).await {
+                Ok(transport) => {
+                    log::debug!("Successfully connected to configured peer {}", peer);
+                    if let Some(orch_transport) = transport
+                        .get_callback()
+                        .unwrap()
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        *zwrite!(orch_transport.endpoint) = Some(peer);
+                    }
+                    break;
                 }
-                break;
+                Err(e) => {
+                    log::debug!(
+                        "Unable to connect to configured peer {}! {}. Retry in {} ms.",
+                        peer,
+                        e,
+                        delay
+                    );
+                }
             }
-            log::debug!(
-                "Unable to connect to configured peer {}. Retry in {} ms.",
-                peer,
-                delay
-            );
             async_std::task::sleep(Duration::from_millis(delay)).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
             if delay > CONNECTION_RETRY_MAX_PERIOD {
@@ -594,7 +599,7 @@ impl Runtime {
             let endpoint = locator.clone().into();
             match self.manager().open_transport(endpoint).await {
                 Ok(transport) => return Some(transport),
-                Err(e) => log::trace!("Failed to connect to {} : {}", locator, e),
+                Err(e) => log::trace!("Unable to connect to {}! {}", locator, e),
             }
         }
         None
