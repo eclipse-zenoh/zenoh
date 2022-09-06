@@ -338,7 +338,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         };
         let query_part = url.query();
         let selector = if let Some(q) = query_part {
-            Selector::from(key_expr).with_value_selector(q)
+            Selector::from(key_expr).with_parameters(q)
         } else {
             key_expr.into()
         };

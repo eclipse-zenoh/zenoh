@@ -941,7 +941,7 @@ impl Header for Pull {
 /// +-+-+-+---------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~ value_selector~
+/// ~selector_params~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
@@ -953,7 +953,7 @@ impl Header for Pull {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     pub key: WireExpr<'static>,
-    pub value_selector: String,
+    pub selector_parameters: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
@@ -1183,7 +1183,7 @@ impl ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
                 key,
-                value_selector,
+                selector_parameters: value_selector,
                 qid,
                 target,
                 consolidation,

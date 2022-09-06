@@ -151,7 +151,7 @@ impl Primitives for Mux {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        selector_parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
@@ -164,7 +164,7 @@ impl Primitives for Mux {
         };
         let _ = self.handler.handle_message(ZenohMessage::make_query(
             key_expr.to_owned(),
-            value_selector.to_string(),
+            selector_parameters.to_owned(),
             qid,
             target_opt,
             consolidation,

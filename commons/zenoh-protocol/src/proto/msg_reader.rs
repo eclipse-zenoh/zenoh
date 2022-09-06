@@ -726,7 +726,7 @@ impl MessageReader for ZBufReader<'_> {
 
         Some(ZenohBody::Query(Query {
             key,
-            value_selector,
+            selector_parameters: value_selector,
             qid,
             target,
             consolidation,
