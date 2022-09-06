@@ -43,7 +43,10 @@ pub(super) async fn recv(
     input: super::init_ack::Output,
 ) -> AResult<Output> {
     // Wait to read an OpenSyn
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
+    let mut messages = link
+        .read_transport_message()
+        .await
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     if messages.len() != 1 {
         let e = zerror!(
             "Received multiple messages instead of a single OpenSyn on {}: {:?}",
@@ -133,7 +136,7 @@ pub(super) async fn recv(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
 

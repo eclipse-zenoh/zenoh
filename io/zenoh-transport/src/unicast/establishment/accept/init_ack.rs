@@ -78,7 +78,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
         // Add state in the cookie if avaiable
         if let Some(cke) = cke.take() {
@@ -87,7 +87,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: cke,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
     let attachment = attachment_from_properties(&ps_attachment).ok();
@@ -114,7 +114,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&mut message)
         .await
-        .map_err(|e| (e, None))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     let output = Output { cookie_hash };
     Ok(output)

@@ -37,7 +37,10 @@ pub(super) async fn recv(
     auth_link: &mut AuthenticatedPeerLink,
 ) -> AResult<Output> {
     // Wait to read an InitSyn
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
+    let mut messages = link
+        .read_transport_message()
+        .await
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     if messages.len() != 1 {
         let e = zerror!(
             "Received multiple messages instead of a single InitSyn on {}: {:?}",
