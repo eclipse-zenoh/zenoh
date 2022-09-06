@@ -107,7 +107,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
 
             ZenohBody::Query(Query {
                 key,
-                value_selector,
+                parameters,
                 qid,
                 target,
                 consolidation,
@@ -115,7 +115,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
             }) => {
                 self.primitives.send_query(
                     &key,
-                    &value_selector,
+                    &parameters,
                     qid,
                     target.unwrap_or_default(),
                     consolidation,

@@ -22,7 +22,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::{KeyExpr, ValueSelector};
+use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -1378,7 +1378,7 @@ impl Session {
         drop(state);
         primitives.send_query(
             &selector.key_expr.to_wire(self),
-            selector.value_selector(),
+            selector.parameters(),
             qid,
             target,
             consolidation,
@@ -1388,7 +1388,7 @@ impl Session {
             self.handle_query(
                 true,
                 &selector.key_expr.to_wire(self),
-                selector.value_selector(),
+                selector.parameters(),
                 qid,
                 target,
                 consolidation,
@@ -1401,7 +1401,7 @@ impl Session {
         &self,
         local: bool,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
@@ -1442,7 +1442,7 @@ impl Session {
             }
         };
 
-        let value_selector = value_selector.to_string();
+        let parameters = parameters.to_owned();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
@@ -1450,7 +1450,7 @@ impl Session {
         for req_sender in senders.iter() {
             req_sender(Query {
                 key_expr: key_expr.clone().into_owned(),
-                value_selector: value_selector.clone(),
+                parameters: parameters.clone(),
                 replies_sender: rep_sender.clone(),
             });
         }
@@ -1696,7 +1696,7 @@ impl Primitives for Session {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
@@ -1705,11 +1705,11 @@ impl Primitives for Session {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             key_expr,
-            value_selector,
+            parameters,
             target,
             consolidation
         );
-        self.handle_query(false, key_expr, value_selector, qid, target, consolidation)
+        self.handle_query(false, key_expr, parameters, qid, target, consolidation)
     }
 
     fn send_reply_data(

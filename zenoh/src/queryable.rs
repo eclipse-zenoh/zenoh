@@ -32,8 +32,8 @@ use zenoh_protocol_core::WireExpr;
 pub struct Query {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
-    /// The value selector of this Query.
-    pub(crate) value_selector: String,
+    /// This Query's selector parameters.
+    pub(crate) parameters: String,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
     pub(crate) replies_sender: flume::Sender<Sample>,
@@ -45,7 +45,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_expr: self.key_expr.clone(),
-            value_selector: (&self.value_selector).into(),
+            parameters: (&self.parameters).into(),
         }
     }
 
@@ -55,10 +55,10 @@ impl Query {
         &self.key_expr
     }
 
-    /// The value selector part of this Query.
+    /// This Query's selector parameters.
     #[inline(always)]
-    pub fn value_selector(&self) -> &str {
-        &self.value_selector
+    pub fn parameters(&self) -> &str {
+        &self.parameters
     }
 
     /// Sends a reply to this Query.
@@ -75,7 +75,7 @@ impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
             .field("key_selector", &self.key_expr)
-            .field("value_selector", &self.value_selector)
+            .field("parameters", &self.parameters)
             .finish()
     }
 }
@@ -85,7 +85,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_expr, &self.value_selector),
+                &format!("{}{}", &self.key_expr, &self.parameters),
             )
             .finish()
     }

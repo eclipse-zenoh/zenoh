@@ -513,7 +513,7 @@ impl MessageWriter for WBuf {
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write_byte(query.header()).is_some());
         zcheck!(self.write_key_expr(&query.key));
-        zcheck!(self.write_string(&query.value_selector));
+        zcheck!(self.write_string(&query.parameters));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));

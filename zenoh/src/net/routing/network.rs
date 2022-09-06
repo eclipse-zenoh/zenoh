@@ -241,13 +241,13 @@ impl Network {
         }
     }
 
-    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut value_selector: P)
+    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut parameters: P)
     where
         P: FnMut(&Link) -> bool,
     {
         let msg = self.make_msg(idxs);
         for link in self.links.values() {
-            if value_selector(link) {
+            if parameters(link) {
                 log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
                 if let Err(e) = link.transport.handle_message(msg.clone()) {
                     log::debug!("{} Error sending LinkStateList: {}", self.name, e);

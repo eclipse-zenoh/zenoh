@@ -1327,7 +1327,7 @@ pub fn route_query(
     tables_ref: &Arc<RwLock<Tables>>,
     face: &Arc<FaceState>,
     expr: &WireExpr,
-    value_selector: &str,
+    parameters: &str,
     qid: ZInt,
     target: QueryTarget,
     consolidation: ConsolidationMode,
@@ -1500,7 +1500,7 @@ pub fn route_query(
 
                     outface.primitives.send_query(
                         key_expr,
-                        value_selector,
+                        parameters,
                         qid,
                         *t,
                         consolidation,
@@ -1528,7 +1528,7 @@ pub fn route_query(
 
                     outface.primitives.send_query(
                         key_expr,
-                        value_selector,
+                        parameters,
                         qid,
                         target,
                         consolidation,

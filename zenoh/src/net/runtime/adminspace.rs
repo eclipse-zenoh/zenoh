@@ -358,7 +358,7 @@ impl Primitives for AdminSpace {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
@@ -367,7 +367,7 @@ impl Primitives for AdminSpace {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             key_expr,
-            value_selector,
+            parameters,
             target,
             _consolidation
         );
@@ -393,14 +393,14 @@ impl Primitives for AdminSpace {
         };
 
         let key_expr = key_expr.to_owned();
-        let value_selector = value_selector.to_string();
+        let parameters = parameters.to_owned();
 
         // router is not re-entrant
         task::spawn(async move {
             let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
                 |(key, handler)| async {
                     let handler = handler;
-                    let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
+                    let (payload, encoding) = handler(&context, &key_expr, &parameters).await;
                     let mut data_info = DataInfo::new();
                     data_info.encoding = Some(encoding);
 
@@ -420,7 +420,7 @@ impl Primitives for AdminSpace {
                     } else {
                         unreachable!("An unresolved WireExpr ({:?}) reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.", key_expr)
                     };
-                    let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
+                    let plugin_status = plugins_status(&context, &key_expr, &parameters).await;
                     for status in plugin_status {
                         let crate::plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
@@ -529,7 +529,7 @@ pub async fn router_data(
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::ValueSelector::decode(selector)
+            let stats = crate::prelude::Parameters::decode(selector)
                 .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
@@ -607,7 +607,7 @@ pub async fn plugins_status(
     key: &KeyExpr<'_>,
     args: &str,
 ) -> Vec<crate::plugins::Response> {
-    let selector = key.clone().with_value_selector(args);
+    let selector = key.clone().with_parameters(args);
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
     let mut responses = Vec::new();

@@ -298,7 +298,7 @@ struct InnerState {
 pub struct QueryingSubscriber<'a, Receiver> {
     session: SessionRef<'a>,
     query_key_expr: KeyExpr<'a>,
-    query_value_selector: String,
+    query_parameters: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     query_timeout: Duration,
@@ -348,10 +348,10 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         };
 
         let key_expr = conf.key_expr?;
-        let (key_selector, value_selector) = match conf.query_selector {
+        let (key_selector, parameters) = match conf.query_selector {
             Some(Ok(s)) => s,
             Some(Err(e)) => return Err(e),
-            None => key_expr.clone().with_value_selector(""),
+            None => key_expr.clone().with_parameters(""),
         }
         .split();
 
@@ -372,7 +372,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         let mut query_subscriber = QueryingSubscriber {
             session: conf.session,
             query_key_expr: key_selector,
-            query_value_selector: value_selector.into_owned(),
+            query_parameters: parameters.into_owned(),
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
             query_timeout: conf.query_timeout,
@@ -400,7 +400,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         self.query_on_selector(
             self.query_key_expr
                 .clone()
-                .with_owned_value_selector(self.query_value_selector.to_owned()),
+                .with_owned_parameters(self.query_parameters.to_owned()),
             self.query_target,
             self.query_consolidation,
             self.query_timeout,

@@ -815,12 +815,12 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let value_selector = [String::default(), "my_value_selector".to_string()];
+        let parameters = [String::default(), "my_params".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in value_selector.iter() {
+        for p in parameters.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {

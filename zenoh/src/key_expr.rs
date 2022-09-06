@@ -253,17 +253,17 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    pub fn with_value_selector(self, selector: &'a str) -> Selector<'a> {
+    pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
         Selector {
             key_expr: self,
-            value_selector: selector.into(),
+            parameters: selector.into(),
         }
     }
 
-    pub fn with_owned_value_selector(self, selector: String) -> Selector<'a> {
+    pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
         Selector {
             key_expr: self,
-            value_selector: selector.into(),
+            parameters: selector.into(),
         }
     }
 }
