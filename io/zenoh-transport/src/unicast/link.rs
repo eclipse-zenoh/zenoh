@@ -86,7 +86,7 @@ impl TransportLinkUnicast {
                 backoff: self.transport.config.manager.config.queue_backoff,
             };
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::new(config, conduit_tx);
+            let (producer, consumer) = TransmissionPipeline::make(config, conduit_tx);
             self.pipeline = Some(producer);
 
             // Spawn the TX task

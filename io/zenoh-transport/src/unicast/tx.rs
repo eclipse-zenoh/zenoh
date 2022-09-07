@@ -34,13 +34,17 @@ impl TransportUnicastInner {
 
         let guard = zread!(self.links);
         // First try to find the best match between msg and link reliability
-        for pl in guard.iter().filter_map(|tl| {
-            if msg.is_reliable() == tl.link.is_reliable() {
-                tl.pipeline.as_ref()
-            } else {
-                None
-            }
-        }) {
+        if let Some(pl) = guard
+            .iter()
+            .filter_map(|tl| {
+                if msg.is_reliable() == tl.link.is_reliable() {
+                    tl.pipeline.as_ref()
+                } else {
+                    None
+                }
+            })
+            .next()
+        {
             zpush!(guard, pl, msg);
         }
 

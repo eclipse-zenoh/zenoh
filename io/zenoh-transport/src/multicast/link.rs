@@ -99,7 +99,7 @@ impl TransportLinkMulticast {
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::new(tpc, &conduit_tx);
+            let (producer, consumer) = TransmissionPipeline::make(tpc, &conduit_tx);
             self.pipeline = Some(producer);
 
             // Spawn the TX task

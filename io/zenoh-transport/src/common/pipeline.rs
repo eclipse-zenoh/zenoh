@@ -340,38 +340,47 @@ impl StageOutIn {
         let old_bytes = self.backoff.last_bytes;
         self.backoff.last_bytes = new_bytes;
 
-        if new_bytes == old_bytes {
-            // No new bytes have been written on the batch, try to pull
-            if let Ok(mut g) = self.current.try_lock() {
-                // First try to pull from stage OUT
+        match new_bytes.cmp(&old_bytes) {
+            std::cmp::Ordering::Equal => {
+                // No new bytes have been written on the batch, try to pull
+                if let Ok(mut g) = self.current.try_lock() {
+                    // First try to pull from stage OUT
+                    if let Some(mut batch) = self.s_out_r.pull() {
+                        batch.write_len();
+                        self.backoff.stop();
+                        return Pull::Some(batch);
+                    }
+
+                    // An incomplete (non-empty) batch is available in the state IN pipeline.
+                    match g.take() {
+                        Some(mut batch) => {
+                            batch.write_len();
+                            self.backoff.stop();
+                            return Pull::Some(batch);
+                        }
+                        None => {
+                            self.backoff.stop();
+                            return Pull::None;
+                        }
+                    }
+                }
+                // Go to backoff
+            }
+            std::cmp::Ordering::Less => {
+                // There should be a new batch in Stage OUT
                 if let Some(mut batch) = self.s_out_r.pull() {
                     batch.write_len();
                     self.backoff.stop();
                     return Pull::Some(batch);
                 }
-
-                // An incomplete (non-empty) batch is available in the state IN pipeline.
-                match g.take() {
-                    Some(mut batch) => {
-                        batch.write_len();
-                        self.backoff.stop();
-                        return Pull::Some(batch);
-                    }
-                    None => {
-                        self.backoff.stop();
-                        return Pull::None;
-                    }
-                }
+                // Go to backoff
             }
-        } else if new_bytes < old_bytes {
-            // There should be a new batch in Stage OUT
-            if let Some(mut batch) = self.s_out_r.pull() {
-                batch.write_len();
-                self.backoff.stop();
-                return Pull::Some(batch);
+            std::cmp::Ordering::Greater => {
+                // Go to backoff
             }
         }
 
+        // Do backoff
         self.backoff.next();
         Pull::Backoff(self.backoff.retry_time)
     }
@@ -445,7 +454,7 @@ impl Default for TransmissionPipelineConf {
 pub(crate) struct TransmissionPipeline;
 impl TransmissionPipeline {
     // A MPSC pipeline
-    pub(crate) fn new(
+    pub(crate) fn make(
         config: TransmissionPipelineConf,
         conduit: &[TransportConduitTx],
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
@@ -775,7 +784,7 @@ mod tests {
                 // Compute the number of messages to send
                 let num_msg = max_msgs.min(bytes / ps);
 
-                let (producer, consumer) = TransmissionPipeline::new(
+                let (producer, consumer) = TransmissionPipeline::make(
                     TransmissionPipelineConf::default(),
                     conduits.as_slice(),
                 );
@@ -850,7 +859,7 @@ mod tests {
         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) =
-            TransmissionPipeline::new(TransmissionPipelineConf::default(), conduits.as_slice());
+            TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -901,7 +910,7 @@ mod tests {
         // Queue
         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
         let conduits = vec![tct];
-        let (producer, mut consumer) = TransmissionPipeline::new(CONFIG, conduits.as_slice());
+        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 
