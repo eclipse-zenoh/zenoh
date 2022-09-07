@@ -20,7 +20,7 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::pin::Pin;
 use zenoh::prelude::*;
-use zenoh::queryable::{HandlerQueryable, Query};
+use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
 use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
@@ -89,7 +89,7 @@ impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
 
 pub struct PublicationCache<'a> {
     _local_sub: FlumeSubscriber<'a>,
-    _queryable: HandlerQueryable<'a, flume::Receiver<Query>>,
+    _queryable: Queryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
 

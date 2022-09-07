@@ -14,70 +14,87 @@
 use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::convert::TryInto;
 use std::mem::swap;
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::*;
+
 use zenoh::query::{QueryConsolidation, QueryTarget};
-use zenoh::subscriber::{CallbackSubscriber, Reliability};
-use zenoh::time::{Period, Timestamp};
+use zenoh::subscriber::{Reliability, Subscriber};
+use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
-pub struct QueryingSubscriberBuilder<'a, 'b> {
+pub struct QueryingSubscriberBuilder<'a, 'b, Handler> {
     session: SessionRef<'a>,
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
-    period: Option<Period>,
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     query_timeout: Duration,
+    handler: Handler,
 }
 
-impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
+impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
     pub(crate) fn new(
         session: SessionRef<'a>,
         key_expr: ZResult<KeyExpr<'b>>,
-    ) -> QueryingSubscriberBuilder<'a, 'b> {
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
         // By default query all matching publication caches and storages
         let query_target = QueryTarget::All;
 
         // By default no query consolidation, to receive more than 1 sample per-resource
-        // (in history of publications is available)
-        let query_consolidation = QueryConsolidation::none();
+        // (if history of publications is available)
+        let query_consolidation = QueryConsolidation::from(zenoh::query::ConsolidationMode::None);
 
         QueryingSubscriberBuilder {
             session,
             key_expr,
             reliability: Reliability::default(),
-            period: None,
             query_selector: None,
             query_target,
             query_consolidation,
             query_timeout: Duration::from_secs(10),
+            handler: DefaultHandler,
         }
     }
 
-    /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    /// Add callback to QueryingSubscriber.
     #[inline]
     pub fn callback<Callback>(
         self,
         callback: Callback,
-    ) -> CallbackQueryingSubscriberBuilder<'a, 'b, Callback>
+    ) -> QueryingSubscriberBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        CallbackQueryingSubscriberBuilder {
-            builder: self,
-            callback,
+        let QueryingSubscriberBuilder {
+            session,
+            key_expr,
+            reliability,
+            query_selector,
+            query_target,
+            query_consolidation,
+            query_timeout,
+            handler: _,
+        } = self;
+        QueryingSubscriberBuilder {
+            session,
+            key_expr,
+            reliability,
+            query_selector,
+            query_target,
+            query_consolidation,
+            query_timeout,
+            handler: callback,
         }
     }
 
-    /// Make the built QueryingSubscriber a [`CallbackQueryingSubscriber`](CallbackQueryingSubscriber).
+    /// Add callback to `QueryingSubscriber`.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
     /// If your callback is also accepted by the [`callback`](QueryingSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
@@ -85,28 +102,42 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> CallbackQueryingSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    ) -> QueryingSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
 
-    /// Make the built QueryingSubscriber a [`HandlerQueryingSubscriber`](HandlerQueryingSubscriber).
+    /// Make the built QueryingSubscriber a [`QueryingSubscriber`](QueryingSubscriber).
     #[inline]
-    pub fn with<IntoHandler, Receiver>(
-        self,
-        handler: IntoHandler,
-    ) -> HandlerQueryingSubscriberBuilder<'a, 'b, Receiver>
+    pub fn with<Handler>(self, handler: Handler) -> QueryingSubscriberBuilder<'a, 'b, Handler>
     where
-        IntoHandler: zenoh::prelude::IntoHandler<Sample, Receiver>,
+        Handler: zenoh::prelude::IntoCallbackReceiverPair<'static, Sample>,
     {
-        HandlerQueryingSubscriberBuilder {
-            builder: self,
-            handler: handler.into_handler(),
+        let QueryingSubscriberBuilder {
+            session,
+            key_expr,
+            reliability,
+            query_selector,
+            query_target,
+            query_consolidation,
+            query_timeout,
+            handler: _,
+        } = self;
+        QueryingSubscriberBuilder {
+            session,
+            key_expr,
+            reliability,
+            query_selector,
+            query_target,
+            query_consolidation,
+            query_timeout,
+            handler,
         }
     }
-
+}
+impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -125,13 +156,6 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.period = period;
         self
     }
 
@@ -155,8 +179,11 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
 
     /// Change the consolidation mode to be used for queries.
     #[inline]
-    pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
-        self.query_consolidation = query_consolidation;
+    pub fn query_consolidation<QC: Into<QueryConsolidation>>(
+        mut self,
+        query_consolidation: QC,
+    ) -> Self {
+        self.query_consolidation = query_consolidation.into();
         self
     }
 
@@ -167,137 +194,44 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b> {
         self
     }
 
-    fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static> {
+    fn with_static_keys(self) -> QueryingSubscriberBuilder<'a, 'static, Handler> {
         QueryingSubscriberBuilder {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
-            period: self.period,
             query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,
-            query_timeout: Duration::from_secs(10),
+            query_timeout: self.query_timeout,
+            handler: self.handler,
         }
     }
 }
 
-impl<'a, 'b> Resolvable for QueryingSubscriberBuilder<'a, 'b> {
-    type Output = ZResult<HandlerQueryingSubscriber<'a, flume::Receiver<Sample>>>;
+impl<'a, 'b, Handler: IntoCallbackReceiverPair<'static, Sample>> Resolvable
+    for QueryingSubscriberBuilder<'a, 'b, Handler>
+{
+    type Output = ZResult<QueryingSubscriber<'a, Handler::Receiver>>;
 }
 
-impl AsyncResolve for QueryingSubscriberBuilder<'_, '_> {
+impl<Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve
+    for QueryingSubscriberBuilder<'_, '_, Handler>
+where
+    Handler::Receiver: Send,
+{
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
     }
 }
 
-impl SyncResolve for QueryingSubscriberBuilder<'_, '_> {
-    #[inline]
+impl<Handler: IntoCallbackReceiverPair<'static, Sample>> SyncResolve
+    for QueryingSubscriberBuilder<'_, '_, Handler>
+where
+    Handler::Receiver: Send,
+{
     fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = flume::bounded(256).into_handler();
-        CallbackQueryingSubscriber::new(self.with_static_keys(), callback).map(|subscriber| {
-            HandlerQueryingSubscriber {
-                subscriber,
-                receiver,
-            }
-        })
-    }
-}
-
-/// The builder of QueryingSubscriber, allowing to configure it.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
-    builder: QueryingSubscriberBuilder<'a, 'b>,
-    callback: Callback,
-}
-
-impl<'a, 'b, Callback> Resolvable for CallbackQueryingSubscriberBuilder<'a, 'b, Callback>
-where
-    Callback: Fn(Sample) + Unpin + Send + Sync + 'static,
-{
-    type Output = ZResult<CallbackQueryingSubscriber<'a>>;
-}
-
-impl<Callback> AsyncResolve for CallbackQueryingSubscriberBuilder<'_, '_, Callback>
-where
-    Callback: 'static + Fn(Sample) + Send + Sync + Unpin,
-{
-    type Future = futures::future::Ready<Self::Output>;
-
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
-}
-
-impl<Callback> SyncResolve for CallbackQueryingSubscriberBuilder<'_, '_, Callback>
-where
-    Callback: Fn(Sample) + Unpin + Send + Sync + 'static,
-{
-    #[inline]
-    fn res_sync(self) -> Self::Output {
-        CallbackQueryingSubscriber::new(self.builder.with_static_keys(), Box::new(self.callback))
-    }
-}
-
-impl<'a, 'b, Callback> CallbackQueryingSubscriberBuilder<'a, 'b, Callback> {
-    /// Change the subscription reliability.
-    #[inline]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.builder.reliability = reliability;
-        self
-    }
-
-    /// Change the subscription reliability to Reliable.
-    #[inline]
-    pub fn reliable(mut self) -> Self {
-        self.builder.reliability = Reliability::Reliable;
-        self
-    }
-
-    /// Change the subscription reliability to BestEffort.
-    #[inline]
-    pub fn best_effort(mut self) -> Self {
-        self.builder.reliability = Reliability::BestEffort;
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder.period = period;
-        self
-    }
-
-    /// Change the selector to be used for queries.
-    #[inline]
-    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
-    where
-        IntoSelector: Into<Selector<'b>>,
-    {
-        self.builder = self.builder.query_selector(query_selector);
-        self
-    }
-
-    /// Change the target to be used for queries.
-    #[inline]
-    pub fn query_target(mut self, query_target: QueryTarget) -> Self {
-        self.builder = self.builder.query_target(query_target);
-        self
-    }
-
-    /// Change the consolidation mode to be used for queries.
-    #[inline]
-    pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
-        self.builder = self.builder.query_consolidation(query_consolidation);
-        self
-    }
-
-    /// Change the timeout to be used for queries.
-    #[inline]
-    pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
-        self.builder = self.builder.query_timeout(query_timeout);
-        self
+        QueryingSubscriber::new(self.with_static_keys())
     }
 }
 
@@ -361,28 +295,40 @@ struct InnerState {
     merge_queue: MergeQueue,
 }
 
-pub struct CallbackQueryingSubscriber<'a> {
+pub struct QueryingSubscriber<'a, Receiver> {
     session: SessionRef<'a>,
     query_key_expr: KeyExpr<'a>,
-    query_value_selector: String,
+    query_parameters: String,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     query_timeout: Duration,
-    _subscriber: CallbackSubscriber<'a>,
-    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+    _subscriber: Subscriber<'a, ()>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
+    receiver: Receiver,
+}
+impl<Receiver> std::ops::Deref for QueryingSubscriber<'_, Receiver> {
+    type Target = Receiver;
+    fn deref(&self) -> &Self::Target {
+        &self.receiver
+    }
+}
+impl<Receiver> std::ops::DerefMut for QueryingSubscriber<'_, Receiver> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.receiver
+    }
 }
 
-impl<'a> CallbackQueryingSubscriber<'a> {
-    fn new(
-        conf: QueryingSubscriberBuilder<'a, 'a>,
-        callback: Callback<Sample>,
-    ) -> ZResult<CallbackQueryingSubscriber<'a>> {
+impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
+    fn new<Handler>(conf: QueryingSubscriberBuilder<'a, 'a, Handler>) -> ZResult<Self>
+    where
+        Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver>,
+    {
         let state = Arc::new(Mutex::new(InnerState {
             pending_queries: 0,
             merge_queue: MergeQueue::new(),
         }));
-        let callback: Arc<dyn Fn(Sample) + Send + Sync> = callback.into();
+        let (callback, receiver) = conf.handler.into_cb_receiver_pair();
 
         let sub_callback = {
             let state = state.clone();
@@ -402,10 +348,10 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         };
 
         let key_expr = conf.key_expr?;
-        let (key_selector, value_selector) = match conf.query_selector {
+        let (key_selector, parameters) = match conf.query_selector {
             Some(Ok(s)) => s,
             Some(Err(e)) => return Err(e),
-            None => key_expr.clone().with_value_selector(""),
+            None => key_expr.clone().with_parameters(""),
         }
         .split();
 
@@ -415,26 +361,25 @@ impl<'a> CallbackQueryingSubscriber<'a> {
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .period(conf.period)
                 .res_sync()?,
             SessionRef::Shared(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
-                .period(conf.period)
                 .res_sync()?,
         };
 
-        let mut query_subscriber = CallbackQueryingSubscriber {
+        let mut query_subscriber = QueryingSubscriber {
             session: conf.session,
             query_key_expr: key_selector,
-            query_value_selector: value_selector.into_owned(),
+            query_parameters: parameters.into_owned(),
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
             query_timeout: conf.query_timeout,
             _subscriber: subscriber,
             callback,
             state,
+            receiver,
         };
 
         // start query
@@ -455,7 +400,7 @@ impl<'a> CallbackQueryingSubscriber<'a> {
         self.query_on_selector(
             self.query_key_expr
                 .clone()
-                .with_owned_value_selector(self.query_value_selector.to_owned()),
+                .with_owned_parameters(self.query_parameters.to_owned()),
             self.query_target,
             self.query_consolidation,
             self.query_timeout,
@@ -464,17 +409,18 @@ impl<'a> CallbackQueryingSubscriber<'a> {
 
     /// Issue a new query on the specified selector.
     #[inline]
-    pub fn query_on<'c, IntoSelector>(
+    pub fn query_on<'c, IntoSelector, IntoQueryConsolidation>(
         &'c mut self,
         selector: IntoSelector,
         target: QueryTarget,
-        consolidation: QueryConsolidation,
+        consolidation: IntoQueryConsolidation,
         timeout: Duration,
     ) -> impl Resolve<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
+        IntoQueryConsolidation: Into<QueryConsolidation>,
     {
-        self.query_on_selector(selector.into(), target, consolidation, timeout)
+        self.query_on_selector(selector.into(), target, consolidation.into(), timeout)
     }
 
     #[inline]
@@ -533,153 +479,5 @@ impl Drop for RepliesHandler {
                 (self.callback)(s);
             }
         }
-    }
-}
-
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
-    builder: QueryingSubscriberBuilder<'a, 'b>,
-    handler: zenoh::prelude::Handler<Sample, Receiver>,
-}
-
-impl<'a, 'b, Receiver> Resolvable for HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
-    type Output = ZResult<HandlerQueryingSubscriber<'a, Receiver>>;
-}
-
-impl<Receiver> AsyncResolve for HandlerQueryingSubscriberBuilder<'_, '_, Receiver>
-where
-    Receiver: Send,
-{
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
-}
-
-impl<'a, 'b, Receiver> SyncResolve for HandlerQueryingSubscriberBuilder<'a, 'b, Receiver>
-where
-    Receiver: Send,
-{
-    #[inline]
-    fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = self.handler;
-        CallbackQueryingSubscriber::new(self.builder.with_static_keys(), callback).map(
-            |subscriber| HandlerQueryingSubscriber {
-                subscriber,
-                receiver,
-            },
-        )
-    }
-}
-
-impl<'a, 'b, Receiver> HandlerQueryingSubscriberBuilder<'a, 'b, Receiver> {
-    /// Change the subscription reliability.
-    #[inline]
-    pub fn reliability(mut self, reliability: Reliability) -> Self {
-        self.builder = self.builder.reliability(reliability);
-        self
-    }
-
-    /// Change the subscription reliability to `Reliable`.
-    #[inline]
-    pub fn reliable(mut self) -> Self {
-        self.builder = self.builder.reliable();
-        self
-    }
-
-    /// Change the subscription reliability to `BestEffort`.
-    #[inline]
-    pub fn best_effort(mut self) -> Self {
-        self.builder = self.builder.best_effort();
-        self
-    }
-
-    /// Change the subscription period.
-    #[inline]
-    pub fn period(mut self, period: Option<Period>) -> Self {
-        self.builder = self.builder.period(period);
-        self
-    }
-
-    /// Change the selector to be used for queries.
-    #[inline]
-    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
-    where
-        IntoSelector: Into<Selector<'b>>,
-    {
-        self.builder = self.builder.query_selector(query_selector);
-        self
-    }
-
-    /// Change the target to be used for queries.
-    #[inline]
-    pub fn query_target(mut self, query_target: QueryTarget) -> Self {
-        self.builder = self.builder.query_target(query_target);
-        self
-    }
-
-    /// Change the consolidation mode to be used for queries.
-    #[inline]
-    pub fn query_consolidation(mut self, query_consolidation: QueryConsolidation) -> Self {
-        self.builder = self.builder.query_consolidation(query_consolidation);
-        self
-    }
-}
-
-pub struct HandlerQueryingSubscriber<'a, Receiver> {
-    pub subscriber: CallbackQueryingSubscriber<'a>,
-    pub receiver: Receiver,
-}
-
-impl<'a, Receiver> HandlerQueryingSubscriber<'a, Receiver> {
-    /// Close a [`HandlerQueryingSubscriber`](HandlerQueryingSubscriber)
-    #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self.subscriber.close()
-    }
-
-    /// Issue a new query using the configured selector.
-    #[inline]
-    pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
-        self.subscriber.query()
-    }
-
-    /// Issue a new query on the specified selector.
-    #[inline]
-    pub fn query_on<'c, IntoSelector>(
-        &'c mut self,
-        selector: IntoSelector,
-        target: QueryTarget,
-        consolidation: QueryConsolidation,
-        timeout: Duration,
-    ) -> impl Resolve<ZResult<()>> + 'c
-    where
-        IntoSelector: Into<Selector<'c>> + 'c,
-    {
-        self.subscriber
-            .query_on(selector, target, consolidation, timeout)
-    }
-}
-
-impl<Receiver> Deref for HandlerQueryingSubscriber<'_, Receiver> {
-    type Target = Receiver;
-
-    fn deref(&self) -> &Self::Target {
-        &self.receiver
-    }
-}
-
-impl HandlerQueryingSubscriber<'_, flume::Receiver<Sample>> {
-    pub fn forward<'s, E: 's, S>(
-        &'s mut self,
-        sink: S,
-    ) -> futures::stream::Forward<
-        impl futures::TryStream<Ok = Sample, Error = E, Item = Result<Sample, E>> + 's,
-        S,
-    >
-    where
-        S: futures::sink::Sink<Sample, Error = E>,
-    {
-        futures::StreamExt::forward(futures::StreamExt::map(self.receiver.stream(), Ok), sink)
     }
 }

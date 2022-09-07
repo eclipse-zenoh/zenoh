@@ -16,7 +16,7 @@ use super::AResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::{Attachment, TransportMessage};
+use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
 
 /*************************************/
 /*             ACCEPT                */
@@ -44,7 +44,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&mut message)
         .await
-        .map_err(|e| (e, None))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     Ok(())
 }

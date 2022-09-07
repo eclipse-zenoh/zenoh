@@ -18,7 +18,7 @@ use crate::TransportManager;
 use zenoh_core::zasyncread;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::Property;
-use zenoh_protocol::proto::TransportMessage;
+use zenoh_protocol::proto::{tmsg, TransportMessage};
 
 /*************************************/
 /*              OPEN                 */
@@ -35,14 +35,14 @@ pub(super) async fn send(
         let mut att = pa
             .get_init_syn_properties(auth_link, &manager.config.zid)
             .await
-            .map_err(|e| (e, None))?;
+            .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
 
@@ -58,7 +58,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&mut message)
         .await
-        .map_err(|e| (e, None))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     let output = Output;
     Ok(output)

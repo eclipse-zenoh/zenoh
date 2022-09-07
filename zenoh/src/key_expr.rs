@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Key expression types and utils.
+//! [Key expression](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md) types and utils.
 
 use std::{
     convert::{TryFrom, TryInto},
@@ -96,36 +96,11 @@ impl<'a> KeyExpr<'a> {
         Self::try_from(t)
     }
 
-    /// Canonizes the passed value before returning it as a `KeyExpr`.
+    /// Constructs a new [`KeyExpr`] aliasing `self`.
     ///
-    /// Will return Err if the passed value isn't a valid key expression despite canonization.
-    pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
-    where
-        Self: TryFrom<T, Error = E>,
-        T: Canonizable,
-    {
-        t.canonize();
-        Self::new(t)
-    }
-
-    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
-    /// # Safety
-    /// Key Expressions must follow some rules to be accepted by a Zenoh network.
-    /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
-        keyexpr::from_str_unchecked(s).into()
-    }
-
-    /// Returns the borrowed version of `self`
-    pub fn as_keyexpr(&self) -> &keyexpr {
-        self
-    }
-
-    /// Creates a `KeyExpr` that borrows `self`'s internals.
-    ///
-    /// This is only useful when you need to pass a `KeyExpr<'a>` by value.
+    /// Note that [`KeyExpr`] (as well as [`OwnedKeyExpr`]) use reference counters internally, so you're probably better off using clone.
     pub fn borrowing_clone(&'a self) -> Self {
-        Self(match &self.0 {
+        let inner = match &self.0 {
             KeyExprInner::Borrowed(key_expr) => KeyExprInner::Borrowed(key_expr),
             KeyExprInner::BorrowedWire {
                 key_expr,
@@ -150,7 +125,33 @@ impl<'a> KeyExpr<'a> {
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             },
-        })
+        };
+        Self(inner)
+    }
+
+    /// Canonizes the passed value before returning it as a `KeyExpr`.
+    ///
+    /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
+    where
+        Self: TryFrom<T, Error = E>,
+        T: Canonizable,
+    {
+        t.canonize();
+        Self::new(t)
+    }
+
+    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// # Safety
+    /// Key Expressions must follow some rules to be accepted by a Zenoh network.
+    /// Messages addressed with invalid key expressions will be dropped.
+    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
+        keyexpr::from_str_unchecked(s).into()
+    }
+
+    /// Returns the borrowed version of `self`
+    pub fn as_keyexpr(&self) -> &keyexpr {
+        self
     }
 
     /// Ensure's `self` owns all of its data, and informs rustc that it does.
@@ -252,17 +253,17 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    pub fn with_value_selector(self, selector: &'a str) -> Selector<'a> {
+    pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
         Selector {
             key_expr: self,
-            value_selector: selector.into(),
+            parameters: selector.into(),
         }
     }
 
-    pub fn with_owned_value_selector(self, selector: String) -> Selector<'a> {
+    pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
         Selector {
             key_expr: self,
-            value_selector: selector.into(),
+            parameters: selector.into(),
         }
     }
 }
@@ -305,12 +306,37 @@ impl From<OwnedKeyExpr> for KeyExpr<'static> {
 }
 impl<'a> From<&'a OwnedKeyExpr> for KeyExpr<'a> {
     fn from(v: &'a OwnedKeyExpr) -> Self {
-        Self(KeyExprInner::Borrowed(&*v))
+        Self(KeyExprInner::Borrowed(v))
     }
 }
 impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
     fn from(val: &'a KeyExpr<'a>) -> Self {
-        Self::from(val.as_keyexpr())
+        match &val.0 {
+            KeyExprInner::Borrowed(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => Self(KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
+            KeyExprInner::Owned(key_expr) => Self(KeyExprInner::Borrowed(key_expr)),
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => Self(KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            }),
+        }
     }
 }
 impl<'a> From<KeyExpr<'a>> for String {
@@ -450,7 +476,21 @@ impl<'a> KeyExpr<'a> {
         matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
     }
     pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
-        matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
+        match &self.0 {
+            KeyExprInner::Wire {
+                key_expr,
+                session_id,
+                prefix_len,
+                ..
+            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                session_id,
+                prefix_len,
+                ..
+            } if session.id == *session_id && key_expr.len() as u32 == *prefix_len => true,
+            _ => false,
+        }
     }
     pub(crate) fn to_wire(&'a self, session: &crate::Session) -> zenoh_protocol_core::WireExpr<'a> {
         match &self.0 {

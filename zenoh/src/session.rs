@@ -14,6 +14,7 @@
 
 use crate::config::Config;
 use crate::config::Notifier;
+use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::keyexpr;
 use crate::key_expr::KeyExprInner;
@@ -21,8 +22,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
-use crate::prelude::sync::ValueSelector;
-use crate::prelude::{Callback, KeyExpr, SessionDeclarations};
+use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
@@ -50,6 +50,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use uhlc::HLC;
+use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
 use zenoh_core::AsyncResolve;
@@ -58,8 +59,8 @@ use zenoh_core::SyncResolve;
 use zenoh_core::{zconfigurable, zread, Result as ZResult};
 use zenoh_protocol::{
     core::{
-        queryable, AtomicZInt, Channel, CongestionControl, ConsolidationStrategy, ExprId,
-        QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
+        AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
+        WireExpr, ZInt,
     },
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
@@ -275,7 +276,7 @@ impl Deref for SessionRef<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             SessionRef::Borrow(b) => b,
-            SessionRef::Shared(s) => &*s,
+            SessionRef::Shared(s) => s,
         }
     }
 }
@@ -284,7 +285,7 @@ impl fmt::Debug for SessionRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SessionRef::Borrow(b) => Session::fmt(b, f),
-            SessionRef::Shared(s) => Session::fmt(&*s, f),
+            SessionRef::Shared(s) => Session::fmt(s, f),
         }
     }
 }
@@ -315,7 +316,7 @@ pub struct Session {
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     /// Initialize a Session with an existing Runtime.
-    /// This operation is used by the plugins to share the same Runtime than the router.
+    /// This operation is used by the plugins to share the same Runtime as the router.
     #[doc(hidden)]
     pub fn init(
         runtime: Runtime,
@@ -346,8 +347,8 @@ impl Session {
     /// pointer to it (`Arc<Session>`). This is equivalent to `Arc::new(session)`.
     ///
     /// This is useful to share ownership of the `Session` between several threads
-    /// and tasks. It also alows to create [`Subscriber`](HandlerSubscriber) and
-    /// [`Queryable`](HandlerQueryable) with static lifetime that can be moved to several
+    /// and tasks. It also alows to create [`Subscriber`](Subscriber) and
+    /// [`Queryable`](Queryable) with static lifetime that can be moved to several
     /// threads and tasks
     ///
     /// Note: the given zenoh `Session` will be closed when the last reference to
@@ -377,7 +378,7 @@ impl Session {
     /// the program's life. Dropping the returned reference will cause a memory
     /// leak.
     ///
-    /// This is useful to move entities (like [`Subscriber`](HandlerSubscriber)) which
+    /// This is useful to move entities (like [`Subscriber`](Subscriber)) which
     /// lifetimes are bound to the session lifetime in several threads or tasks.
     ///
     /// Note: the given zenoh `Session` cannot be closed any more. At process
@@ -447,7 +448,7 @@ impl Session {
 
     /// Get the current configuration of the zenoh [`Session`](Session).
     ///
-    /// The returned configuration [`Notifier`] can be used to read the current
+    /// The returned configuration [`Notifier`](Notifier) can be used to read the current
     /// zenoh configuration through the `get` function or
     /// modify the zenoh configuration through the `insert`,
     /// or `insert_json5` funtion.
@@ -497,11 +498,11 @@ impl Session {
         }
     }
 
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The resourkey expression to subscribe to
+    /// * `key_expr` - The key expression to subscribe to
     ///
     /// # Examples
     /// ```no_run
@@ -519,7 +520,7 @@ impl Session {
     pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode>
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -529,17 +530,17 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            period: None,
             local: false,
+            handler: DefaultHandler,
         }
     }
 
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    /// Create a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
+    /// [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -560,7 +561,7 @@ impl Session {
     pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'a, 'b>
+    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -568,8 +569,8 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
-            kind: zenoh_protocol_core::queryable::ALL_KINDS,
             complete: true,
+            handler: DefaultHandler,
         }
     }
 
@@ -667,7 +668,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression matching resources to put
+    /// * `key_expr` - Key expression matching the resources to put
     /// * `value` - The value to put
     ///
     /// # Examples
@@ -706,7 +707,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `key_expr` - The key expression matching resources to delete
+    /// * `key_expr` - Key expression matching the resources to delete
     ///
     /// # Examples
     /// ```
@@ -749,7 +750,10 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoSelector>(&'a self, selector: IntoSelector) -> GetBuilder<'a, 'b>
+    pub fn get<'a, 'b, IntoSelector>(
+        &'a self,
+        selector: IntoSelector,
+    ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
         IntoSelector: TryInto<Selector<'b>>,
         <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
@@ -762,6 +766,7 @@ impl Session {
             consolidation: QueryConsolidation::default(),
             local_routing: None,
             timeout: Duration::from_secs(10),
+            handler: DefaultHandler,
         }
     }
 }
@@ -926,7 +931,7 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        callback: Callback<Sample>,
+        callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
@@ -951,7 +956,7 @@ impl Session {
             }
             None => {
                 let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
-                (!twin_sub).then(|| key_expr.borrowing_clone())
+                (!twin_sub).then(|| key_expr.clone())
             }
         };
 
@@ -1011,7 +1016,7 @@ impl Session {
     pub(crate) fn declare_local_subscriber(
         &self,
         key_expr: &KeyExpr,
-        callback: Callback<Sample>,
+        callback: Callback<'static, Sample>,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
@@ -1118,9 +1123,8 @@ impl Session {
     pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
-        kind: ZInt,
         complete: bool,
-        callback: Callback<Query>,
+        callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
@@ -1128,9 +1132,8 @@ impl Session {
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
-            kind,
             complete,
-            callback: callback.into(),
+            callback,
         });
         #[cfg(feature = "complete_n")]
         {
@@ -1138,20 +1141,19 @@ impl Session {
 
             if complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, key_expr, kind);
+                let complete = Session::complete_twin_qabls(&state, key_expr);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
+                primitives.decl_queryable(key_expr, &qabl_info, None);
             }
         }
         #[cfg(not(feature = "complete_n"))]
         {
-            let twin_qabl = Session::twin_qabl(&state, key_expr, kind);
-            let complete_twin_qabl =
-                twin_qabl && Session::complete_twin_qabl(&state, key_expr, kind);
+            let twin_qabl = Session::twin_qabl(&state, key_expr);
+            let complete_twin_qabl = twin_qabl && Session::complete_twin_qabl(&state, key_expr);
 
             state.queryables.insert(id, qable_state.clone());
 
@@ -1167,38 +1169,35 @@ impl Session {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, kind, &qabl_info, None);
+                primitives.decl_queryable(key_expr, &qabl_info, None);
             }
         }
         Ok(qable_state)
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
+    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
         state.queryables.values().any(|q| {
-            q.kind == kind
-                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                    == state.local_wireexpr_to_expr(key).unwrap()
+            state.local_wireexpr_to_expr(&q.key_expr).unwrap()
+                == state.local_wireexpr_to_expr(key).unwrap()
         })
     }
 
     #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr, kind: ZInt) -> bool {
+    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
         state.queryables.values().any(|q| {
             q.complete
-                && q.kind == kind
                 && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                     == state.local_wireexpr_to_expr(key).unwrap()
         })
     }
 
     #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr, kind: ZInt) -> ZInt {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> ZInt {
         state
             .queryables
             .values()
             .filter(|q| {
                 q.complete
-                    && q.kind == kind
                     && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                         == state.local_wireexpr_to_expr(key).unwrap()
             })
@@ -1207,54 +1206,37 @@ impl Session {
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
+            let primitives = state.primitives.as_ref().unwrap().clone();
             trace!("close_queryable({:?})", qable_state);
-            if Session::twin_qabl(&state, &qable_state.key_expr, qable_state.kind) {
+            if Session::twin_qabl(&state, &qable_state.key_expr) {
                 // There still exist Queryables on the same KeyExpr.
                 if qable_state.complete {
                     #[cfg(feature = "complete_n")]
                     {
-                        let complete = Session::complete_twin_qabls(
-                            &state,
-                            &qable_state.key_expr,
-                            qable_state.kind,
-                        );
-                        let primitives = state.primitives.as_ref().unwrap();
+                        let complete = Session::complete_twin_qabls(&state, &qable_state.key_expr);
+                        drop(state);
                         let qabl_info = QueryableInfo {
                             complete,
                             distance: 0,
                         };
-                        primitives.decl_queryable(
-                            &qable_state.key_expr,
-                            qable_state.kind,
-                            &qabl_info,
-                            None,
-                        );
+                        primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
                     }
                     #[cfg(not(feature = "complete_n"))]
                     {
-                        if !Session::complete_twin_qabl(
-                            &state,
-                            &qable_state.key_expr,
-                            qable_state.kind,
-                        ) {
-                            let primitives = state.primitives.as_ref().unwrap();
+                        if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
+                            drop(state);
                             let qabl_info = QueryableInfo {
                                 complete: 0,
                                 distance: 0,
                             };
-                            primitives.decl_queryable(
-                                &qable_state.key_expr,
-                                qable_state.kind,
-                                &qabl_info,
-                                None,
-                            );
+                            primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
                         }
                     }
                 }
             } else {
                 // There are no more Queryables on the same KeyExpr.
-                let primitives = state.primitives.as_ref().unwrap();
-                primitives.forget_queryable(&qable_state.key_expr, qable_state.kind, None);
+                drop(state);
+                primitives.forget_queryable(&qable_state.key_expr, None);
             }
             Ok(())
         } else {
@@ -1269,79 +1251,70 @@ impl Session {
         payload: ZBuf,
         local_routing: Option<bool>,
     ) {
-        let state = zread!(self.state);
-        let local_routing = local_routing.unwrap_or(state.local_routing);
-        if key_expr.suffix.is_empty() {
-            match state.get_res(&key_expr.scope, local) {
-                Some(Resource::Node(res)) => {
-                    if !local && res.subscribers.len() == 1 {
-                        let sub = res.subscribers.get(0).unwrap();
-                        (sub.callback)(Sample::with_info(
-                            res.key_expr.clone().into(),
-                            payload,
-                            info,
-                        ));
-                    } else {
+        let mut callbacks = SingleOrVec::default();
+        let sample = {
+            let state = zread!(self.state);
+            let local_routing = local_routing.unwrap_or(state.local_routing);
+            let sample = if key_expr.suffix.is_empty() {
+                match state.get_res(&key_expr.scope, local) {
+                    Some(Resource::Node(res)) => {
                         if !local || local_routing {
                             for sub in &res.subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
                         if local {
                             for sub in &res.local_subscribers {
-                                (sub.callback)(Sample::with_info(
-                                    res.key_expr.clone().into(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                                callbacks.push(sub.callback.clone());
                             }
                         }
+                        Sample::with_info(res.key_expr.clone().into(), payload, info)
+                    }
+                    Some(Resource::Prefix { prefix }) => {
+                        log::error!(
+                            "Received Data for `{}`, which isn't a key expression",
+                            prefix
+                        );
+                        return;
+                    }
+                    None => {
+                        log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                        return;
                     }
                 }
-                Some(Resource::Prefix { prefix }) => {
-                    error!(
-                        "Received Data for `{}`, which isn't a key expression",
-                        prefix
-                    );
-                }
-                None => {
-                    error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                }
-            }
-        } else {
-            match state.wireexpr_to_keyexpr(key_expr, local) {
-                Ok(key_expr) => {
-                    if !local || local_routing {
-                        for sub in state.subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+            } else {
+                match state.wireexpr_to_keyexpr(key_expr, local) {
+                    Ok(key_expr) => {
+                        if !local || local_routing {
+                            for sub in state.subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
-                    }
-                    if local {
-                        for sub in state.local_subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
-                                (sub.callback)(Sample::with_info(
-                                    key_expr.clone().into_owned(),
-                                    payload.clone(),
-                                    info.clone(),
-                                ));
+                        if local {
+                            for sub in state.local_subscribers.values() {
+                                if key_expr.intersects(&*sub.key_expr) {
+                                    callbacks.push(sub.callback.clone());
+                                }
                             }
                         }
+                        Sample::with_info(key_expr.clone().into_owned(), payload, info)
+                    }
+                    Err(err) => {
+                        log::error!("Received Data for unkown key_expr: {}", err);
+                        return;
                     }
                 }
-                Err(err) => {
-                    error!("Received Data for unkown key_expr: {}", err);
-                }
-            }
+            };
+            sample
+        };
+        let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
+        for cb in drain {
+            cb(sample.clone());
+        }
+        if let Some(cb) = last {
+            cb(sample);
         }
     }
 
@@ -1363,19 +1336,19 @@ impl Session {
         consolidation: QueryConsolidation,
         local_routing: Option<bool>,
         timeout: Duration,
-        callback: Callback<Reply>,
+        callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
-        let consolidation = match consolidation {
-            QueryConsolidation::Auto => {
+        let consolidation = match consolidation.mode {
+            None => {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
-                    ConsolidationStrategy::none()
+                    ConsolidationMode::None
                 } else {
-                    ConsolidationStrategy::default()
+                    ConsolidationMode::Latest
                 }
             }
-            QueryConsolidation::Manual(strategy) => strategy,
+            Some(mode) => mode,
         };
         let local_routing = local_routing.unwrap_or(state.local_routing);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
@@ -1394,12 +1367,8 @@ impl Session {
             qid,
             QueryState {
                 nb_final,
-                reception_mode: consolidation.reception,
-                replies: if consolidation.reception != ConsolidationMode::None {
-                    Some(HashMap::new())
-                } else {
-                    None
-                },
+                reception_mode: consolidation,
+                replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
             },
         );
@@ -1409,12 +1378,9 @@ impl Session {
         drop(state);
         primitives.send_query(
             &selector.key_expr.to_wire(self),
-            selector.value_selector(),
+            selector.parameters(),
             qid,
-            zenoh_protocol_core::QueryTAK {
-                kind: zenoh_protocol_core::queryable::ALL_KINDS,
-                target,
-            },
+            target,
             consolidation,
             None,
         );
@@ -1422,12 +1388,9 @@ impl Session {
             self.handle_query(
                 true,
                 &selector.key_expr.to_wire(self),
-                selector.value_selector(),
+                selector.parameters(),
                 qid,
-                zenoh_protocol_core::QueryTAK {
-                    kind: zenoh_protocol_core::queryable::ALL_KINDS,
-                    target,
-                },
+                target,
                 consolidation,
             );
         }
@@ -1438,25 +1401,22 @@ impl Session {
         &self,
         local: bool,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
-        target: zenoh_protocol_core::QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _target: QueryTarget,
+        _consolidation: ConsolidationMode,
     ) {
-        let (primitives, key_expr, kinds_and_senders) = {
+        let (primitives, key_expr, senders) = {
             let state = zread!(self.state);
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    let kinds_and_senders = state
+                    let senders = state
                         .queryables
                         .values()
                         .filter(
                             |queryable| match state.local_wireexpr_to_expr(&queryable.key_expr) {
                                 Ok(qablname) => {
                                     qablname.intersects(&key_expr)
-                                        && ((queryable.kind == queryable::ALL_KINDS
-                                            || target.kind == queryable::ALL_KINDS)
-                                            || (queryable.kind & target.kind != 0))
                                 }
                                 Err(err) => {
                                     error!(
@@ -1467,12 +1427,12 @@ impl Session {
                                 }
                             },
                         )
-                        .map(|qable| (qable.kind, qable.callback.clone()))
-                        .collect::<Vec<(ZInt, Arc<dyn Fn(Query) + Send + Sync>)>>();
+                        .map(|qable| qable.callback.clone())
+                        .collect::<Vec<Arc<dyn Fn(Query) + Send + Sync>>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
-                        kinds_and_senders,
+                        senders,
                     )
                 }
                 Err(err) => {
@@ -1482,16 +1442,15 @@ impl Session {
             }
         };
 
-        let value_selector = value_selector.to_string();
+        let parameters = parameters.to_owned();
         let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
 
-        for (kind, req_sender) in kinds_and_senders {
+        for req_sender in senders.iter() {
             req_sender(Query {
                 key_expr: key_expr.clone().into_owned(),
-                value_selector: value_selector.clone(),
-                kind,
+                parameters: parameters.clone(),
                 replies_sender: rep_sender.clone(),
             });
         }
@@ -1502,11 +1461,10 @@ impl Session {
         if local {
             let this = self.clone();
             task::spawn(async move {
-                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
+                while let Some(sample) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
                     this.send_reply_data(
                         qid,
-                        replier_kind,
                         zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
@@ -1518,11 +1476,10 @@ impl Session {
         } else {
             let this = self.clone();
             task::spawn(async move {
-                while let Some((replier_kind, sample)) = rep_receiver.stream().next().await {
+                while let Some(sample) = rep_receiver.stream().next().await {
                     let (key_expr, payload, data_info) = sample.split();
                     primitives.send_reply_data(
                         qid,
-                        replier_kind,
                         zid,
                         key_expr.to_wire(&this).to_owned(),
                         Some(data_info),
@@ -1536,7 +1493,7 @@ impl Session {
 }
 
 impl SessionDeclarations for Arc<Session> {
-    /// Create a [`Subscriber`](HandlerSubscriber) for the given key expression.
+    /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
     ///
@@ -1560,7 +1517,7 @@ impl SessionDeclarations for Arc<Session> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'static, 'b, PushMode>
+    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1570,17 +1527,17 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            period: None,
             local: false,
+            handler: DefaultHandler,
         }
     }
 
-    /// Create a [`Queryable`](HandlerQueryable) for the given key expression.
+    /// Create a [`Queryable`](Queryable) for the given key expression.
     ///
     /// # Arguments
     ///
     /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](HandlerQueryable) will reply to
+    /// [`Queryable`](Queryable) will reply to
     ///
     /// # Examples
     /// ```no_run
@@ -1603,7 +1560,7 @@ impl SessionDeclarations for Arc<Session> {
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'static, 'b>
+    ) -> QueryableBuilder<'static, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -1611,8 +1568,8 @@ impl SessionDeclarations for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            kind: zenoh_protocol_core::queryable::EVAL,
             complete: true,
+            handler: DefaultHandler,
         }
     }
 
@@ -1706,19 +1663,13 @@ impl Primitives for Session {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
-        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Decl Queryable {:?}", _key_expr);
     }
 
-    fn forget_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _kind: ZInt,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
@@ -1745,41 +1696,39 @@ impl Primitives for Session {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
-        target: zenoh_protocol_core::QueryTAK,
-        consolidation: ConsolidationStrategy,
+        target: QueryTarget,
+        consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             key_expr,
-            value_selector,
+            parameters,
             target,
             consolidation
         );
-        self.handle_query(false, key_expr, value_selector, qid, target, consolidation)
+        self.handle_query(false, key_expr, parameters, qid, target, consolidation)
     }
 
     fn send_reply_data(
         &self,
         qid: ZInt,
-        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
+            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
             qid,
-            replier_kind,
             replier_id,
             key_expr,
             data_info,
             payload
         );
-        let state = &mut zwrite!(self.state);
+        let mut state = zwrite!(self.state);
         let key_expr = match state.remote_key_to_expr(&key_expr) {
             Ok(key) => key.into_owned(),
             Err(e) => {
@@ -1793,62 +1742,67 @@ impl Primitives for Session {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
                 };
-                match query.reception_mode {
-                    ConsolidationMode::None => {
-                        (query.callback)(new_reply);
-                    }
-                    ConsolidationMode::Lazy => {
+                let callback = match query.reception_mode {
+                    ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
+                    ConsolidationMode::Monotonic => {
                         match query
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                         new_reply.clone(),
                                     );
-                                    (query.callback)(new_reply);
+                                    Some((query.callback.clone(), new_reply))
+                                } else {
+                                    None
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                     new_reply.clone(),
                                 );
-                                (query.callback)(new_reply);
+                                Some((query.callback.clone(), new_reply))
                             }
                         }
                     }
-                    ConsolidationMode::Full => {
+                    ConsolidationMode::Latest => {
                         match query
                             .replies
                             .as_ref()
                             .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_str())
+                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
                         {
                             Some(reply) => {
                                 if new_reply.sample.as_ref().unwrap().timestamp
                                     > reply.sample.as_ref().unwrap().timestamp
                                 {
                                     query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                        new_reply.clone(),
+                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                        new_reply,
                                     );
                                 }
                             }
                             None => {
                                 query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.to_string(),
-                                    new_reply.clone(),
+                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
+                                    new_reply,
                                 );
                             }
                         };
+                        None
                     }
+                };
+                std::mem::drop(state);
+                if let Some((callback, new_reply)) = callback {
+                    callback(new_reply);
                 }
             }
             None => {
@@ -1865,7 +1819,8 @@ impl Primitives for Session {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();
-                    if query.reception_mode == ConsolidationMode::Full {
+                    std::mem::drop(state);
+                    if query.reception_mode == ConsolidationMode::Latest {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);
                         }
@@ -1912,4 +1867,117 @@ impl fmt::Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Session").field("id", &self.zid()).finish()
     }
+}
+
+/// Functions to create zenoh entities with `'static` lifetime.
+///
+/// This trait contains functions to create zenoh entities like
+/// [`Subscriber`](crate::subscriber::Subscriber), and
+/// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
+/// This is useful to move zenoh entities to several threads and tasks.
+///
+/// This trait is implemented for `Arc<Session>`.
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use r#async::AsyncResolve;
+/// use zenoh::prelude::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+/// async_std::task::spawn(async move {
+///     while let Ok(sample) = subscriber.recv_async().await {
+///         println!("Received : {:?}", sample);
+///     }
+/// }).await;
+/// # })
+/// ```
+pub trait SessionDeclarations {
+    /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The resourkey expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Ok(sample) = subscriber.recv_async().await {
+    ///         println!("Received : {:?}", sample);
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn declare_subscriber<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'static, 'a, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching the queries the
+    /// [`Queryable`](crate::queryable::Queryable) will reply to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     while let Ok(query) = queryable.recv_async().await {
+    ///         query.reply(Ok(Sample::try_from(
+    ///             "key/expression",
+    ///             "value",
+    ///         ).unwrap())).res().await.unwrap();
+    ///     }
+    /// }).await;
+    /// # })
+    /// ```
+    fn declare_queryable<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> QueryableBuilder<'static, 'a, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching resources to write
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
+    /// # })
+    /// ```
+    fn declare_publisher<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> PublisherBuilder<'static, 'a>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
 }

@@ -1,3 +1,19 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! To manage groups and group memeberships
+
 use async_std::sync::Mutex;
 use async_std::task::JoinHandle;
 use flume::{Receiver, Sender};
@@ -13,7 +29,7 @@ use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::sync::SyncResolve;
 use zenoh::prelude::*;
 use zenoh::publication::Publisher;
-use zenoh::query::QueryConsolidation;
+use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
 use zenoh::Session;
@@ -278,7 +294,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 );
                                 let qres = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, kae.mid);
                                 // @TODO: we could also send this member info
-                                let qc = QueryConsolidation::none();
+                                let qc = ConsolidationMode::None;
                                 log::trace!("Issuing Query for {}", &qres);
                                 let receiver =
                                     z.get(&qres).consolidation(qc).res_async().await.unwrap();
@@ -414,7 +430,7 @@ impl Group {
         ms
     }
 
-    /// Wait for a view size to be established or times out. The resulting value_selector
+    /// Wait for a view size to be established or times out. The resulting selector parameters
     /// indicates whether the desired view size has been established.
     pub async fn wait_for_view_size(&self, size: usize, timeout: Duration) -> bool {
         if self.state.members.lock().await.len() + 1 >= size {

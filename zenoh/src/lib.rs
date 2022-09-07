@@ -16,18 +16,18 @@
 //! storage, queries and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
-//! Below are some examples that highlight the its key comcepts and show how easy it is to get
-//! started with it.
-//!
-//! # Examples
-//! Before delving into the examples, we need to introduce few **zenoh** concepts.
-//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a
+//! Before delving into the examples, we need to introduce few **Zenoh** concepts.
+//! First off, in Zenoh you will deal with **Resources**, where a resource is made up of a
 //! key and a value.  The other concept you'll have to familiarize yourself with are
-//! **key expressions**, such as ```/robot/sensor/temp```, ```/robot/sensor/*```, ```/robot/**```, etc.
-//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**```
-//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/```
+//! **key expressions**, such as ```robot/sensor/temp```, ```robot/sensor/*```, ```robot/**```, etc.
+//! As you can gather, the above key expression denotes set of keys, while the ```*``` and ```**```
+//! are wildcards representing respectively (1) an arbitrary string of characters, with the exclusion of the ```/```
 //! separator, and (2) an arbitrary sequence of characters including separators.
 //!
+//! Below are some examples that highlight these key concepts and show how easy it is to get
+//! started with.
+//!
+//! # Examples
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
@@ -76,6 +76,7 @@
 #[macro_use]
 extern crate zenoh_core;
 
+use handlers::DefaultHandler;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 use git_version::git_version;
@@ -96,32 +97,32 @@ mod session;
 pub use session::*;
 
 pub mod key_expr;
-#[doc(hidden)]
-pub mod net;
+pub(crate) mod net;
+pub use net::runtime;
 pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub mod handlers;
 pub mod info;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
+pub mod sample;
 pub mod subscriber;
 pub mod utils;
+pub mod value;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
-pub use zenoh_buffers as buf;
+pub use zenoh_buffers as buffers;
 
 /// Time related types and functions.
 pub mod time {
     use std::convert::TryFrom;
 
     pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
-
-    /// A time period.
-    pub use zenoh_protocol_core::Period;
 
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
@@ -140,8 +141,8 @@ pub mod properties {
     pub use zenoh_cfg_properties::Properties;
 
     /// Convert a set of [`Properties`] into a [`Value`].  
-    /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
-    /// are converted into such Json: `{ "k1": "v1", "k2": "v2" }`
+    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
+    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()
@@ -158,7 +159,7 @@ pub mod scouting;
 ///
 /// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`HandlerScout`](crate::scouting::HandlerScout) to stop the scouting task.
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
 ///
 /// # Arguments
 ///
@@ -180,12 +181,16 @@ pub mod scouting;
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
-) -> ScoutBuilder<I, TryIntoConfig>
+) -> ScoutBuilder<DefaultHandler>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: Into<zenoh_core::Error>,
 {
-    ScoutBuilder { what, config }
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler,
+    }
 }
 
 /// Open a zenoh [`Session`].

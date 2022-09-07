@@ -18,7 +18,7 @@ use futures::FutureExt;
 use log::{debug, error, trace, warn};
 use std::sync::Arc;
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, QueryTarget};
+use zenoh::query::{ConsolidationMode, QueryTarget};
 use zenoh::Session;
 use zenoh_backend_traits::Query;
 use zenoh_core::{AsyncResolve, Result as ZResult, SyncResolve};
@@ -52,9 +52,9 @@ pub(crate) async fn start_storage(
         // align with other storages, querying them on key_expr,
         // with `_time=[..]` to get historical data (in case of time-series)
         let replies = match zenoh
-            .get(KeyExpr::from(&key_expr).with_value_selector("_time=[..]"))
+            .get(KeyExpr::from(&key_expr).with_parameters("_time=[..]"))
             .target(QueryTarget::All)
-            .consolidation(QueryConsolidation::none())
+            .consolidation(ConsolidationMode::None)
             .res_async()
             .await
         {

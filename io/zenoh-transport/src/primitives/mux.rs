@@ -1,3 +1,5 @@
+use zenoh_protocol_core::ConsolidationMode;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,8 +15,7 @@
 //
 use super::super::TransportUnicast;
 use super::protocol::core::{
-    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, SubInfo, WireExpr,
-    ZInt, ZenohId,
+    Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
 };
 use super::protocol::io::ZBuf;
 use super::protocol::proto::{
@@ -103,13 +104,11 @@ impl Primitives for Mux {
     fn decl_queryable(
         &self,
         key_expr: &WireExpr,
-        kind: ZInt,
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
         let d = Declaration::Queryable(Queryable {
             key: key_expr.to_owned(),
-            kind,
             info: qabl_info.clone(),
         });
         let decls = vec![d];
@@ -118,15 +117,9 @@ impl Primitives for Mux {
                 .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
     }
 
-    fn forget_queryable(
-        &self,
-        key_expr: &WireExpr,
-        kind: ZInt,
-        routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
         let d = Declaration::ForgetQueryable(ForgetQueryable {
             key: key_expr.to_owned(),
-            kind,
         });
         let decls = vec![d];
         let _ =
@@ -158,20 +151,20 @@ impl Primitives for Mux {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
-        target: QueryTAK,
-        consolidation: ConsolidationStrategy,
+        target: QueryTarget,
+        consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
     ) {
-        let target_opt = if target == QueryTAK::default() {
+        let target_opt = if target == QueryTarget::default() {
             None
         } else {
             Some(target)
         };
         let _ = self.handler.handle_message(ZenohMessage::make_query(
             key_expr.to_owned(),
-            value_selector.to_string(),
+            parameters.to_owned(),
             qid,
             target_opt,
             consolidation,
@@ -183,7 +176,6 @@ impl Primitives for Mux {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -196,13 +188,7 @@ impl Primitives for Mux {
             zmsg::default_congestion_control::REPLY,
             data_info,
             None,
-            Some(ReplyContext::new(
-                qid,
-                Some(ReplierInfo {
-                    kind: replier_kind,
-                    id: replier_id,
-                }),
-            )),
+            Some(ReplyContext::new(qid, Some(ReplierInfo { id: replier_id }))),
             None,
         ));
     }

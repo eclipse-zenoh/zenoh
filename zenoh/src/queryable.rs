@@ -14,13 +14,13 @@
 
 //! Queryable primitives.
 
+use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
 use crate::SessionRef;
 use crate::Undeclarable;
-use crate::API_QUERY_RECEPTION_CHANNEL_SIZE;
+
 use futures::FutureExt;
 use std::fmt;
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -28,17 +28,15 @@ use std::task::{Context, Poll};
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
 use zenoh_protocol_core::WireExpr;
 
-/// Structs received by a [`Queryable`](HandlerQueryable).
+/// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
-    /// The key_selector of this Query.
+    /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
-    /// The value_selector of this Query.
-    pub(crate) value_selector: String,
-
-    pub(crate) kind: ZInt,
+    /// This Query's selector parameters.
+    pub(crate) parameters: String,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
-    pub(crate) replies_sender: flume::Sender<(ZInt, Sample)>,
+    pub(crate) replies_sender: flume::Sender<Sample>,
 }
 
 impl Query {
@@ -47,7 +45,7 @@ impl Query {
     pub fn selector(&self) -> Selector<'_> {
         Selector {
             key_expr: self.key_expr.clone(),
-            value_selector: (&self.value_selector).into(),
+            parameters: (&self.parameters).into(),
         }
     }
 
@@ -57,10 +55,10 @@ impl Query {
         &self.key_expr
     }
 
-    /// The value selector part of this Query.
+    /// This Query's selector parameters.
     #[inline(always)]
-    pub fn value_selector(&self) -> &str {
-        &self.value_selector
+    pub fn parameters(&self) -> &str {
+        &self.parameters
     }
 
     /// Sends a reply to this Query.
@@ -77,7 +75,7 @@ impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
             .field("key_selector", &self.key_expr)
-            .field("value_selector", &self.value_selector)
+            .field("parameters", &self.parameters)
             .finish()
     }
 }
@@ -87,7 +85,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_expr, &self.value_selector),
+                &format!("{}{}", &self.key_expr, &self.parameters),
             )
             .finish()
     }
@@ -109,7 +107,7 @@ impl SyncResolve for ReplyBuilder<'_> {
             Ok(sample) => self
                 .query
                 .replies_sender
-                .send((self.query.kind, sample))
+                .send(sample)
                 .map_err(|e| zerror!("{}", e).into()),
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
@@ -118,9 +116,7 @@ impl SyncResolve for ReplyBuilder<'_> {
 
 /// The future returned by a [`ReplyBuilder`] when using async.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct ReplyFuture<'a>(
-    Result<flume::r#async::SendFut<'a, (ZInt, Sample)>, Option<zenoh_core::Error>>,
-);
+pub struct ReplyFuture<'a>(Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_core::Error>>);
 
 impl std::future::Future for ReplyFuture<'_> {
     type Output = zenoh_core::Result<()>;
@@ -138,10 +134,7 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
     fn res_async(self) -> Self::Future {
         ReplyFuture(match self.result {
-            Ok(sample) => Ok(self
-                .query
-                .replies_sender
-                .send_async((self.query.kind, sample))),
+            Ok(sample) => Ok(self.query.replies_sender.send_async(sample)),
             Err(_) => Err(Some(
                 zerror!("Replying errors is not yet supported!").into(),
             )),
@@ -152,7 +145,6 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) key_expr: WireExpr<'static>,
-    pub(crate) kind: ZInt,
     pub(crate) complete: bool,
     pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
 }
@@ -192,34 +184,12 @@ impl fmt::Debug for QueryableState {
 /// # })
 /// ```
 #[derive(Debug)]
-pub struct CallbackQueryable<'a> {
+pub(crate) struct CallbackQueryable<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<QueryableState>,
     pub(crate) alive: bool,
 }
 
-impl<'a> CallbackQueryable<'a> {
-    /// Close a [`CallbackQueryable`](CallbackQueryable) previously created with [`declare_queryable`](crate::Session::declare_queryable).
-    ///
-    /// Queryables are automatically closed when dropped, but you may want to use this function to handle errors or
-    /// close the Queryable asynchronously.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-    /// queryable.undeclare().res().await.unwrap();
-    /// # })
-    /// ```
-    #[inline]
-    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
-        Undeclarable::undeclare(self, ())
-    }
-}
 impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
     type Output = ZResult<()>;
     type Undeclaration = QueryableUndeclaration<'a>;
@@ -274,7 +244,7 @@ impl Drop for CallbackQueryable<'_> {
     }
 }
 
-/// A builder for initializing a [`FlumeQueryable`].
+/// A builder for initializing a [`Queryable`].
 ///
 /// # Examples
 /// ```
@@ -289,27 +259,14 @@ impl Drop for CallbackQueryable<'_> {
 /// ```
 #[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct QueryableBuilder<'a, 'b> {
+pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) kind: ZInt,
     pub(crate) complete: bool,
-}
-impl<'a, 'b> Clone for QueryableBuilder<'a, 'b> {
-    fn clone(&self) -> Self {
-        Self {
-            session: self.session.clone(),
-            key_expr: match &self.key_expr {
-                Ok(k) => Ok(k.clone()),
-                Err(e) => Err(zerror!("Cloned KE error: {}", e).into()),
-            },
-            kind: self.kind,
-            complete: self.complete,
-        }
-    }
+    pub(crate) handler: Handler,
 }
 
-impl<'a, 'b> QueryableBuilder<'a, 'b> {
+impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// Receive the queries for this Queryable with a callback.
     ///
     /// # Examples
@@ -328,16 +285,21 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     /// # })
     /// ```
     #[inline]
-    pub fn callback<Callback>(
-        self,
-        callback: Callback,
-    ) -> CallbackQueryableBuilder<'a, 'b, Callback>
+    pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
     where
         Callback: Fn(Query) + Send + Sync + 'static,
     {
-        CallbackQueryableBuilder {
-            builder: self,
-            callback,
+        let QueryableBuilder {
+            session,
+            key_expr,
+            complete,
+            handler: _,
+        } = self;
+        QueryableBuilder {
+            session,
+            key_expr,
+            complete,
+            handler: callback,
         }
     }
 
@@ -366,14 +328,14 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> CallbackQueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
+    ) -> QueryableBuilder<'a, 'b, impl Fn(Query) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Query) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
 
-    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::Handler).
+    /// Receive the queries for this Queryable with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
     ///
     /// # Examples
     /// ```no_run
@@ -394,20 +356,25 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     /// # })
     /// ```
     #[inline]
-    pub fn with<IntoHandler, Receiver>(
-        self,
-        handler: IntoHandler,
-    ) -> HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
+    pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
-        IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
     {
-        HandlerQueryableBuilder {
-            builder: self,
+        let QueryableBuilder {
+            session,
+            key_expr,
+            complete,
+            handler: _,
+        } = self;
+        QueryableBuilder {
+            session,
+            key_expr,
+            complete,
             handler,
-            receiver: PhantomData,
         }
     }
-
+}
+impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     /// Change queryable completeness.
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
@@ -416,100 +383,9 @@ impl<'a, 'b> QueryableBuilder<'a, 'b> {
     }
 }
 
-impl<'a> Resolvable for QueryableBuilder<'a, '_> {
-    type Output = crate::Result<HandlerQueryable<'a, flume::Receiver<Query>>>;
-}
-impl SyncResolve for QueryableBuilder<'_, '_> {
-    fn res_sync(self) -> Self::Output {
-        self.with(flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE))
-            .res_sync()
-    }
-}
-impl AsyncResolve for QueryableBuilder<'_, '_> {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        self.with(flume::bounded(*API_QUERY_RECEPTION_CHANNEL_SIZE))
-            .res_async()
-    }
-}
-
-/// A builder for initializing a [`Queryable`](CallbackQueryable).
+/// A queryable that provides data through a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
 ///
-/// # Examples
-/// ```
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
-/// use zenoh::queryable;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-/// # })
-/// ```
-#[derive(Debug, Clone)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct CallbackQueryableBuilder<'a, 'b, Callback>
-where
-    Callback: Fn(Query) + Send + Sync + 'static,
-{
-    pub(crate) builder: QueryableBuilder<'a, 'b>,
-    pub(crate) callback: Callback,
-}
-
-impl<'a, 'b, Callback> CallbackQueryableBuilder<'a, 'b, Callback>
-where
-    Callback: Fn(Query) + Send + Sync + 'static,
-{
-    /// Change queryable completeness.
-    #[inline]
-    pub fn complete(mut self, complete: bool) -> Self {
-        self.builder = self.builder.complete(complete);
-        self
-    }
-}
-
-impl<'a, Callback> Resolvable for CallbackQueryableBuilder<'a, '_, Callback>
-where
-    Callback: Fn(Query) + Send + Sync + 'static,
-{
-    type Output = crate::Result<CallbackQueryable<'a>>;
-}
-
-impl<Callback> AsyncResolve for CallbackQueryableBuilder<'_, '_, Callback>
-where
-    Callback: Fn(Query) + Send + Sync + 'static,
-{
-    type Future = futures::future::Ready<Self::Output>;
-
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
-}
-
-impl<Callback> SyncResolve for CallbackQueryableBuilder<'_, '_, Callback>
-where
-    Callback: Fn(Query) + Send + Sync + 'static,
-{
-    fn res_sync(self) -> Self::Output {
-        let session = self.builder.session;
-        session
-            .declare_queryable_inner(
-                &self.builder.key_expr?.to_wire(&session),
-                self.builder.kind,
-                self.builder.complete,
-                Box::new(self.callback),
-            )
-            .map(move |qable_state| CallbackQueryable {
-                session,
-                state: qable_state,
-                alive: true,
-            })
-    }
-}
-
-/// A queryable that provides data through a [`Handler`](crate::prelude::Handler).
-///
-/// HandlerQueryables can be created from a zenoh [`Session`](crate::Session)
+/// Queryables can be created from a zenoh [`Session`](crate::Session)
 /// with the [`declare_queryable`](crate::Session::declare_queryable) function
 /// and the [`with`](QueryableBuilder::with) function
 /// of the resulting builder.
@@ -537,26 +413,26 @@ where
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct HandlerQueryable<'a, Receiver> {
-    pub queryable: CallbackQueryable<'a>,
+pub struct Queryable<'a, Receiver> {
+    pub(crate) queryable: CallbackQueryable<'a>,
     pub receiver: Receiver,
 }
 
-impl<'a, Receiver> HandlerQueryable<'a, Receiver> {
+impl<'a, Receiver> Queryable<'a, Receiver> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
         Undeclarable::undeclare(self, ())
     }
 }
-impl<'a, T> Undeclarable<()> for HandlerQueryable<'a, T> {
-    type Output = <CallbackQueryable<'a> as Undeclarable<()>>::Output;
-    type Undeclaration = <CallbackQueryable<'a> as Undeclarable<()>>::Undeclaration;
+impl<'a, T> Undeclarable<()> for Queryable<'a, T> {
+    type Output = ZResult<()>;
+    type Undeclaration = QueryableUndeclaration<'a>;
     fn undeclare(self, _: ()) -> Self::Undeclaration {
         Undeclarable::undeclare(self.queryable, ())
     }
 }
 
-impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
+impl<Receiver> Deref for Queryable<'_, Receiver> {
     type Target = Receiver;
 
     fn deref(&self) -> &Self::Target {
@@ -564,71 +440,24 @@ impl<Receiver> Deref for HandlerQueryable<'_, Receiver> {
     }
 }
 
-/// A builder for initializing a [`HandlerQueryable`].
-///
-/// # Examples
-/// ```
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
-/// use zenoh::queryable;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let queryable = session
-///     .declare_queryable("key/expression")
-///     .with(flume::bounded(32))
-///     .res()
-///     .await
-///     .unwrap();
-/// # })
-/// ```
-#[derive(Debug, Clone)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-pub struct HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
+impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
 where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
 {
-    pub(crate) builder: QueryableBuilder<'a, 'b>,
-    pub(crate) handler: IntoHandler,
-    pub(crate) receiver: PhantomData<Receiver>,
+    type Output = crate::Result<Queryable<'a, Handler::Receiver>>;
 }
 
-impl<'a, 'b, IntoHandler, Receiver> HandlerQueryableBuilder<'a, 'b, IntoHandler, Receiver>
+impl<'a, Handler> SyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
-{
-    /// Change queryable completeness.
-    #[inline]
-    pub fn complete(mut self, complete: bool) -> Self {
-        self.builder = self.builder.complete(complete);
-        self
-    }
-}
-
-impl<'a, IntoHandler, Receiver> Resolvable
-    for HandlerQueryableBuilder<'a, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
-{
-    type Output = crate::Result<HandlerQueryable<'a, Receiver>>;
-}
-
-impl<'a, IntoHandler, Receiver: Send> SyncResolve
-    for HandlerQueryableBuilder<'a, '_, IntoHandler, Receiver>
-where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+    Handler::Receiver: Send,
 {
     fn res_sync(self) -> Self::Output {
-        let session = self.builder.session;
-        let (callback, receiver) = self.handler.into_handler();
+        let session = self.session;
+        let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
-            .declare_queryable_inner(
-                &self.builder.key_expr?.to_wire(&session),
-                self.builder.kind,
-                self.builder.complete,
-                callback,
-            )
-            .map(|qable_state| HandlerQueryable {
+            .declare_queryable_inner(&self.key_expr?.to_wire(&session), self.complete, callback)
+            .map(|qable_state| Queryable {
                 queryable: CallbackQueryable {
                     session,
                     state: qable_state,
@@ -638,32 +467,13 @@ where
             })
     }
 }
-impl<IntoHandler, Receiver: Send> AsyncResolve
-    for HandlerQueryableBuilder<'_, '_, IntoHandler, Receiver>
+impl<Handler> AsyncResolve for QueryableBuilder<'_, '_, Handler>
 where
-    IntoHandler: crate::prelude::IntoHandler<Query, Receiver>,
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+    Handler::Receiver: Send,
 {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
     }
 }
-
-impl crate::prelude::IntoHandler<Query, flume::Receiver<Query>>
-    for (flume::Sender<Query>, flume::Receiver<Query>)
-{
-    fn into_handler(self) -> crate::prelude::Handler<Query, flume::Receiver<Query>> {
-        let (sender, receiver) = self;
-        (
-            Box::new(move |s| {
-                if let Err(e) = sender.send(s) {
-                    log::warn!("Error sending query into flume channel: {}", e)
-                }
-            }),
-            receiver,
-        )
-    }
-}
-
-/// A [`HandlerQueryable`] that provides queries through a `flume` channel.
-pub type FlumeQueryable<'a> = HandlerQueryable<'a, flume::Receiver<Query>>;

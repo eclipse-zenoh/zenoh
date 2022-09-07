@@ -36,7 +36,7 @@ flume = "0.10.7"
 futures = "0.3.12"
 log = "0.4"
 serde = "1.0.126"
-zenoh = { path = "../zenoh" }
+zenoh = { path = "../zenoh", default-features= false }
 zenoh-util = { path = "../commons/zenoh-util" }
 zenoh-sync = { path = "../commons/zenoh-sync" }
 zenoh-core = { path = "../commons/zenoh-core/" }

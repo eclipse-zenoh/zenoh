@@ -72,6 +72,15 @@
   /// Whether local writes/queries should reach local subscribers/queryables
   local_routing: true,
 
+  /// The routing strategy to use and it's configuration.
+  routing: {
+      /// The routing strategy to use in peers and it's configuration.
+      peer: {
+          /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+          mode: "linkstate",
+      },
+  },
+
   /// The declarations aggregation strategy.
   aggregation: {
       /// A list of key-expressions for which all included subscribers will be aggregated into.

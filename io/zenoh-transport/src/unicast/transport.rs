@@ -433,7 +433,7 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) -> bool {
+    pub(crate) fn schedule(&self, #[allow(unused_mut)] mut message: ZenohMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {

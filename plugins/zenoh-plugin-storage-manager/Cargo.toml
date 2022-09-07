@@ -46,7 +46,7 @@ git-version = "0.3.5"
 libloading = "0.7.0"
 log = "0.4.14"
 serde_json = "1.0"
-zenoh = { path = "../../zenoh" }
+zenoh = { path = "../../zenoh/" , default-features = false }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-core = { path = "../../commons/zenoh-core/" }

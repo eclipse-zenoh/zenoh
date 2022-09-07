@@ -1,3 +1,19 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+//! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
+
 use zenoh_core::Result as ZResult;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
@@ -12,104 +28,98 @@ use std::{
 };
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
-/// set of keys that are relevant to an operation, and a `value_selector`, a set of key-value pairs
-/// with a few uses:
+/// set of keys that are relevant to an operation, and a set of parameters
+/// with a few intendend uses:
 /// - specifying arguments to a queryable, allowing the passing of Remote Procedure Call parameters
 /// - filtering by value,
 /// - filtering by metadata, such as the timestamp of a value,
+/// - specifying arguments to zenoh when using the REST API.
 ///
 /// When in string form, selectors look a lot like a URI, with similar semantics:
 /// - the `key_expr` before the first `?` must be a valid key expression.
-/// - the `value_selector` after the first `?` should be encoded like the query section of a URL:
-///     - key-value pairs are separated by `&`,
-///     - the key and value are separated by the first `=`,
-///     - in the absence of `=`, the value is considered to be the empty string,
-///     - both key and value should use percent-encoding to escape characters,
-///     - defining a value for the same key twice is considered undefined behavior.
+/// - the `parameters` after the first `?` should be encoded like the query section of a URL:
+///     - parameters are separated by `&`,
+///     - the parameter name and value are separated by the first `=`,
+///     - in the absence of `=`, the parameter value is considered to be the empty string,
+///     - both name and value should use percent-encoding to escape characters,
+///     - defining a value for the same parameter name twice is considered undefined behavior,
+///       with the encouraged behaviour being to reject operations when a duplicate parameter is detected.
 ///
-/// Zenoh intends to standardize the usage of a set of keys. To avoid conflicting with RPC parameters,
-/// the Zenoh team has settled on reserving the set of keys that start with non-alphanumeric characters.
+/// Zenoh intends to standardize the usage of a set of parameter names. To avoid conflicting with RPC parameters,
+/// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
 ///
-/// This document will summarize the standardized keys for which Zenoh provides helpers to facilitate
-/// coherent behavior for some operations.
+/// The full specification for selectors is available [here](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors),
+/// it includes standardized parameters.
 ///
-/// Queryable implementers are encouraged to prefer these standardized keys when implementing their
-/// associated features, and to prefix their own keys to avoid having conflicting keys with other
+/// Queryable implementers are encouraged to prefer these standardized parameter names when implementing their
+/// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
-/// Here are the currently standardized keys for Zenoh:
+/// Here are the currently standardized parameters for Zenoh (check the specification page for the exhaustive list):
 /// - `_time`: used to express interest in only values dated within a certain time range, values for
-///   this key must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
+///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
-///   this key to be treated as a predicate that the value should fulfill before being returned.
+///   this parameter to be treated as a predicate that the value should fulfill before being returned.
 ///   A DSL will be designed by the Zenoh team to express these predicates.
 #[non_exhaustive]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     pub key_expr: KeyExpr<'a>,
     /// the part of this selector identifying which values should be part of the selection.
-    pub(crate) value_selector: Cow<'a, str>,
+    pub(crate) parameters: Cow<'a, str>,
 }
 
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
-    /// Gets the value selector as a raw string.
-    pub fn value_selector(&self) -> &str {
-        &self.value_selector
+    /// Gets the parameters as a raw string.
+    pub fn parameters(&self) -> &str {
+        &self.parameters
     }
-    pub fn value_selector_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
+    /// Extracts the selector parameters into a hashmap, returning an error in case of duplicated parameter names.
+    pub fn parameters_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
-        K: Eq + Hash + std::fmt::Debug,
-        Cow<'a, str>: Into<K> + Into<V>,
+        K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
+        ExtractedName<'a, Self>: Into<K>,
+        ExtractedValue<'a, Self>: Into<V>,
     {
-        let mut result = HashMap::new();
-        for (k, v) in self.decode() {
-            let k = k.into();
-            match result.entry(k) {
-                std::collections::hash_map::Entry::Occupied(entry) => {
-                    bail!("Duplicated selector key: {:?}", entry.key())
-                }
-                std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(v.into());
-                }
-            }
-        }
-        Ok(result)
+        self.decode_into_map()
     }
-    pub fn value_selector_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
-        self.value_selector_map()
+    /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    pub fn parameters_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
+        self.decode_into_map()
     }
-    pub fn value_selector_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
-        self.value_selector_map()
+    /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    pub fn parameters_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
+        self.decode_into_map()
     }
-    /// Gets a mutable reference to the value_selector as a String.
+    /// Gets a mutable reference to the parameters as a String.
     ///
-    /// Note that calling this function may cause an allocation and copy if the value selector wasn't
-    /// already owned by `self`. `self` owns its value selector as soon as this function returns.
-    pub fn value_selector_mut(&mut self) -> &mut String {
-        if let Cow::Borrowed(s) = self.value_selector {
-            self.value_selector = Cow::Owned(s.to_owned())
+    /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
+    /// already owned by `self`. `self` owns its parameters as soon as this function returns.
+    pub fn parameters_mut(&mut self) -> &mut String {
+        if let Cow::Borrowed(s) = self.parameters {
+            self.parameters = Cow::Owned(s.to_owned())
         }
-        if let Cow::Owned(s) = &mut self.value_selector {
+        if let Cow::Owned(s) = &mut self.parameters {
             s
         } else {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
-    pub fn set_value_selector(&mut self, selector: impl Into<Cow<'a, str>>) {
-        self.value_selector = selector.into();
+    pub fn set_parameters(&mut self, selector: impl Into<Cow<'a, str>>) {
+        self.parameters = selector.into();
     }
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
-            key_expr: self.key_expr.borrowing_clone(),
-            value_selector: self.value_selector.as_ref().into(),
+            key_expr: self.key_expr.clone(),
+            parameters: self.parameters.as_ref().into(),
         }
     }
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
-            value_selector: self.value_selector.into_owned().into(),
+            parameters: self.parameters.into_owned().into(),
         }
     }
 
@@ -120,25 +130,25 @@ impl<'a> Selector<'a> {
 
     /// Returns this selectors components as a tuple.
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
-        (self.key_expr, self.value_selector)
+        (self.key_expr, self.parameters)
     }
 
-    /// Sets the `value_selector` part of this `Selector`.
+    /// Sets the `parameters` part of this `Selector`.
     #[inline(always)]
-    pub fn with_value_selector(mut self, value_selector: &'a str) -> Self {
-        self.value_selector = value_selector.into();
+    pub fn with_parameters(mut self, parameters: &'a str) -> Self {
+        self.parameters = parameters.into();
         self
     }
 
-    pub fn extend<'b, I, K, V>(&'b mut self, key_value_pairs: I)
+    pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
         I::Item: std::borrow::Borrow<(K, V)>,
         K: AsRef<str> + 'b,
         V: AsRef<str> + 'b,
     {
-        let it = key_value_pairs.into_iter();
-        let selector = self.value_selector_mut();
+        let it = parameters.into_iter();
+        let selector = self.parameters_mut();
         let mut encoder = form_urlencoded::Serializer::new(selector);
         encoder.extend_pairs(it).finish();
     }
@@ -146,7 +156,7 @@ impl<'a> Selector<'a> {
     /// Sets the time range targeted by the selector.
     pub fn with_time_range(&mut self, time_range: TimeRange) {
         self.remove_time_range();
-        let selector = self.value_selector_mut();
+        let selector = self.parameters_mut();
         if !selector.is_empty() {
             selector.push('&')
         }
@@ -155,7 +165,7 @@ impl<'a> Selector<'a> {
     }
 
     pub fn remove_time_range(&mut self) {
-        let selector = self.value_selector_mut();
+        let selector = self.parameters_mut();
 
         let mut splice_start = 0;
         let mut splice_end = 0;
@@ -190,89 +200,166 @@ fn selector_accessors() {
         let mut selector = Selector::try_from(selector).unwrap();
         selector.with_time_range(time_range);
         assert_eq!(selector.time_range().unwrap().unwrap(), time_range);
-        assert!(dbg!(selector.value_selector()).contains("_time=[now(-2s)..now(2s)]"));
-        let map_selector = selector.value_selector_cowmap().unwrap();
+        assert!(dbg!(selector.parameters()).contains("_time=[now(-2s)..now(2s)]"));
+        let map_selector = selector.parameters_cowmap().unwrap();
         assert_eq!(
             selector.time_range().unwrap(),
             map_selector.time_range().unwrap()
         );
     }
 }
-pub trait ValueSelectorProperty {
-    fn key(&self) -> &str;
-    fn value(&self) -> &str;
+pub trait Parameter: Sized {
+    type Name: AsRef<str> + Sized;
+    type Value: AsRef<str> + Sized;
+    fn name(&self) -> &Self::Name;
+    fn value(&self) -> &Self::Value;
+    fn split(self) -> (Self::Name, Self::Value);
+    fn extract_name(self) -> Self::Name {
+        self.split().0
+    }
+    fn extract_value(self) -> Self::Value {
+        self.split().1
+    }
 }
-impl ValueSelectorProperty for (&str, &str) {
-    fn key(&self) -> &str {
+impl<N: AsRef<str> + Sized, V: AsRef<str> + Sized> Parameter for (N, V) {
+    type Name = N;
+    type Value = V;
+    fn name(&self) -> &N {
+        &self.0
+    }
+    fn value(&self) -> &V {
+        &self.1
+    }
+    fn split(self) -> (Self::Name, Self::Value) {
+        self
+    }
+    fn extract_name(self) -> Self::Name {
         self.0
     }
-    fn value(&self) -> &str {
+    fn extract_value(self) -> Self::Value {
         self.1
     }
 }
-impl ValueSelectorProperty for (Cow<'_, str>, Cow<'_, str>) {
-    fn key(&self) -> &str {
-        self.0.borrow()
-    }
-    fn value(&self) -> &str {
-        self.1.borrow()
-    }
-}
-impl ValueSelectorProperty for (&Cow<'_, str>, &Cow<'_, str>) {
-    fn key(&self) -> &str {
-        self.0.borrow()
-    }
-    fn value(&self) -> &str {
-        self.1.borrow()
-    }
-}
-/// A trait to help decode zenoh value selectors as properties.
-pub trait ValueSelector<'a> {
-    type Decoder: Iterator + 'a;
 
-    /// Returns this value selector as properties.
+#[allow(type_alias_bounds)]
+type ExtractedName<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item as Parameter>::Name;
+#[allow(type_alias_bounds)]
+type ExtractedValue<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item as Parameter>::Value;
+/// A trait to help decode zenoh selector parameters.
+///
+/// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
+pub trait Parameters<'a> {
+    type Decoder: Iterator + 'a;
+    /// Returns this selector's parameters as an iterator.
     fn decode(&'a self) -> Self::Decoder
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty;
-    ///
-    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+        <Self::Decoder as Iterator>::Item: Parameter;
+
+    /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
+    fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+        <Self::Decoder as Iterator>::Item: Parameter,
+        N: AsRef<str> + std::hash::Hash + std::cmp::Eq,
+        ExtractedName<'a, Self>: Into<N>,
+        ExtractedValue<'a, Self>: Into<V>,
     {
-        for prop in self.decode() {
-            if prop.key() == TIME_RANGE_KEY {
-                return Ok(Some(prop.value().parse()?));
+        let mut result: HashMap<N, V> = HashMap::new();
+        for (name, value) in self.decode().map(Parameter::split) {
+            match result.entry(name.into()) {
+                std::collections::hash_map::Entry::Occupied(e) => {
+                    bail!("Duplicated parameter `{}` detected", e.key().as_ref())
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(value.into());
+                }
             }
         }
-        Ok(None)
+        Ok(result)
+    }
+
+    /// Extracts the requested parameters from the selector parameters.
+    ///
+    /// The default implementation is done in a single pass through the selector parameters, returning an error if any of the requested parameters are present more than once.
+    fn get_parameters<const N: usize>(
+        &'a self,
+        names: [&str; N],
+    ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
+    where
+        <Self::Decoder as Iterator>::Item: Parameter,
+    {
+        let mut result = unsafe {
+            let mut result: std::mem::MaybeUninit<[Option<ExtractedValue<'a, Self>>; N]> =
+                std::mem::MaybeUninit::uninit();
+            for slot in result.assume_init_mut() {
+                std::ptr::write(slot, None);
+            }
+            result.assume_init()
+        };
+        for pair in self.decode() {
+            if let Some(index) = names.iter().position(|k| *k == pair.name().as_ref()) {
+                let slot = &mut result[index];
+                if slot.is_some() {
+                    bail!("Duplicated parameter `{}` detected.", names[index])
+                }
+                *slot = Some(pair.extract_value())
+            }
+        }
+        Ok(result)
+    }
+
+    /// Extracts the requested arguments from the selector parameters as booleans, following the Zenoh convention that if a parameter name is present and has a value different from "false", its value is truthy.
+    ///
+    /// The default implementation is done in a single pass through the selector parameters, returning an error if some of the requested parameters are present more than once.
+    fn get_bools<const N: usize>(&'a self, names: [&str; N]) -> ZResult<[bool; N]>
+    where
+        <Self::Decoder as Iterator>::Item: Parameter,
+    {
+        Ok(self.get_parameters(names)?.map(|v| match v {
+            None => false,
+            Some(s) => s.as_ref() != "false",
+        }))
+    }
+
+    /// Extracts the standardized `_time` argument from the selector parameters.
+    ///
+    /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
+    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+    where
+        <Self::Decoder as Iterator>::Item: Parameter,
+    {
+        Ok(match &self.get_parameters([TIME_RANGE_KEY])?[0] {
+            Some(s) => Some(s.as_ref().parse()?),
+            None => None,
+        })
     }
 }
-impl<'a> ValueSelector<'a> for Selector<'a> {
-    type Decoder = <str as ValueSelector<'a>>::Decoder;
+impl<'a> Parameters<'a> for Selector<'a> {
+    type Decoder = <str as Parameters<'a>>::Decoder;
     fn decode(&'a self) -> Self::Decoder {
-        self.value_selector().decode()
+        self.parameters().decode()
     }
 }
-impl<'a> ValueSelector<'a> for str {
+impl<'a> Parameters<'a> for str {
     type Decoder = form_urlencoded::Parse<'a>;
     fn decode(&'a self) -> Self::Decoder {
         form_urlencoded::parse(self.as_bytes())
     }
 }
 
-impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> ValueSelector<'a> for HashMap<K, V> {
+impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> Parameters<'a> for HashMap<K, V> {
     type Decoder = std::collections::hash_map::Iter<'a, K, V>;
     fn decode(&'a self) -> Self::Decoder {
         self.iter()
     }
-    fn time_range(&'a self) -> ZResult<Option<TimeRange>>
+    fn get_parameters<const N: usize>(
+        &'a self,
+        names: [&str; N],
+    ) -> ZResult<[Option<ExtractedValue<'a, Self>>; N]>
     where
-        <Self::Decoder as Iterator>::Item: ValueSelectorProperty,
+        <Self::Decoder as Iterator>::Item: Parameter,
     {
-        match self.get::<str>(TIME_RANGE_KEY) {
-            Some(s) => Ok(Some(s.borrow().parse()?)),
-            None => Ok(None),
-        }
+        // `Ok(names.map(|key| self.get(key)))` would be very slightly faster, but doesn't compile for some reason :(
+        Ok(names.map(|key| self.get_key_value(key).map(|kv| kv.extract_value())))
     }
 }
 
@@ -284,7 +371,11 @@ impl std::fmt::Debug for Selector<'_> {
 
 impl std::fmt::Display for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}?{}", self.key_expr, self.value_selector)
+        write!(f, "{}", self.key_expr)?;
+        if !self.parameters.is_empty() {
+            write!(f, "?{}", self.parameters)?;
+        }
+        Ok(())
     }
 }
 
@@ -299,9 +390,9 @@ impl TryFrom<String> for Selector<'_> {
     fn try_from(mut s: String) -> Result<Self, Self::Error> {
         match s.find('?') {
             Some(qmark_position) => {
-                let value_selector = s[qmark_position + 1..].to_owned();
+                let parameters = s[qmark_position + 1..].to_owned();
                 s.truncate(qmark_position);
-                Ok(KeyExpr::try_from(s)?.with_owned_value_selector(value_selector))
+                Ok(KeyExpr::try_from(s)?.with_owned_parameters(parameters))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
@@ -313,8 +404,8 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         match s.find('?') {
             Some(qmark_position) => {
-                let value_selector = &s[qmark_position + 1..];
-                Ok(KeyExpr::try_from(&s[..qmark_position])?.with_value_selector(value_selector))
+                let params = &s[qmark_position + 1..];
+                Ok(KeyExpr::try_from(&s[..qmark_position])?.with_parameters(params))
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
@@ -331,8 +422,8 @@ impl<'a> TryFrom<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key_expr: q.key_expr.borrowing_clone(),
-            value_selector: (&q.value_selector).into(),
+            key_expr: q.key_expr.clone(),
+            parameters: (&q.parameters).into(),
         }
     }
 }
@@ -341,7 +432,7 @@ impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
             key_expr: key_selector.clone(),
-            value_selector: "".into(),
+            parameters: "".into(),
         }
     }
 }
@@ -350,7 +441,7 @@ impl<'a> From<&'a keyexpr> for Selector<'a> {
     fn from(key_selector: &'a keyexpr) -> Self {
         Self {
             key_expr: key_selector.into(),
-            value_selector: "".into(),
+            parameters: "".into(),
         }
     }
 }
@@ -359,7 +450,7 @@ impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
     fn from(key_selector: &'a OwnedKeyExpr) -> Self {
         Self {
             key_expr: key_selector.into(),
-            value_selector: "".into(),
+            parameters: "".into(),
         }
     }
 }
@@ -368,7 +459,7 @@ impl From<OwnedKeyExpr> for Selector<'static> {
     fn from(key_selector: OwnedKeyExpr) -> Self {
         Self {
             key_expr: key_selector.into(),
-            value_selector: "".into(),
+            parameters: "".into(),
         }
     }
 }
@@ -377,7 +468,7 @@ impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {
             key_expr: key_selector,
-            value_selector: "".into(),
+            parameters: "".into(),
         }
     }
 }

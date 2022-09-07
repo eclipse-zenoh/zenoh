@@ -142,6 +142,7 @@ pub struct PeerAuthenticator(Arc<dyn PeerAuthenticatorTrait>);
 
 impl PeerAuthenticator {
     pub async fn from_config(_config: &Config) -> ZResult<HashSet<PeerAuthenticator>> {
+        #[allow(unused_mut)]
         let mut pas = HashSet::new();
 
         #[cfg(feature = "auth_pubkey")]

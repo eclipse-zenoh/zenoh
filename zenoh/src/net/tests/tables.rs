@@ -11,18 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::net::routing::router::*;
+use crate::prelude::keyexpr;
 use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh::net::routing::router::*;
-use zenoh::prelude::keyexpr;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationStrategy, QueryTAK, QueryableInfo, Reliability,
+    Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, Reliability,
     SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
@@ -54,7 +54,6 @@ fn base_test() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
     declare_client_subscription(
         &mut tables,
@@ -231,7 +230,6 @@ fn clean_test() {
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
 
     declare_client_subscription(
@@ -436,18 +434,11 @@ impl Primitives for ClientPrimitives {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
-        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
     }
-    fn forget_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _kind: ZInt,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
+    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
 
     fn send_data(
         &self,
@@ -464,10 +455,10 @@ impl Primitives for ClientPrimitives {
     fn send_query(
         &self,
         _key_expr: &WireExpr,
-        _value_selector: &str,
+        _parameters: &str,
         _qid: ZInt,
-        _target: QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        _target: QueryTarget,
+        _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
     }
@@ -475,7 +466,6 @@ impl Primitives for ClientPrimitives {
     fn send_reply_data(
         &self,
         _qid: ZInt,
-        _replier_kind: ZInt,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
@@ -498,40 +488,42 @@ impl Primitives for ClientPrimitives {
 
 #[test]
 fn client_test() {
-    let mut tables = Tables::new(
+    let mut tables = RwLock::new(Tables::new(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
-    );
+    ));
+
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
         mode: SubMode::Push,
-        period: None,
     };
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = tables.open_face(
+
+    let tables_mutref = tables.get_mut().unwrap();
+    let face0 = tables_mutref.open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives0.clone(),
     );
     register_expr(
-        &mut tables,
+        tables_mutref,
         &mut face0.upgrade().unwrap(),
         11,
         &"test/client".into(),
     );
     primitives0.decl_resource(11, &"test/client".into());
     declare_client_subscription(
-        &mut tables,
+        tables_mutref,
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
-        &mut tables,
+        tables_mutref,
         &mut face0.upgrade().unwrap(),
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
@@ -539,26 +531,26 @@ fn client_test() {
     primitives0.decl_resource(12, &WireExpr::from(11).with_suffix("/z1_pub1"));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = tables.open_face(
+    let face1 = tables_mutref.open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives1.clone(),
     );
     register_expr(
-        &mut tables,
+        tables_mutref,
         &mut face1.upgrade().unwrap(),
         21,
         &"test/client".into(),
     );
     primitives1.decl_resource(21, &"test/client".into());
     declare_client_subscription(
-        &mut tables,
+        tables_mutref,
         &mut face1.upgrade().unwrap(),
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
-        &mut tables,
+        tables_mutref,
         &mut face1.upgrade().unwrap(),
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
@@ -566,20 +558,20 @@ fn client_test() {
     primitives1.decl_resource(22, &WireExpr::from(21).with_suffix("/z2_pub1"));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = tables.open_face(
+    let face2 = tables_mutref.open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives2.clone(),
     );
     register_expr(
-        &mut tables,
+        tables_mutref,
         &mut face2.upgrade().unwrap(),
         31,
         &"test/client".into(),
     );
     primitives2.decl_resource(31, &"test/client".into());
     declare_client_subscription(
-        &mut tables,
+        tables_mutref,
         &mut face2.upgrade().unwrap(),
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
@@ -588,7 +580,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
+    full_reentrant_route_data(
         &tables,
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
@@ -614,7 +606,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
+    full_reentrant_route_data(
         &tables,
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
@@ -640,7 +632,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
+    full_reentrant_route_data(
         &tables,
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
@@ -666,7 +658,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
+    full_reentrant_route_data(
         &tables,
         &face0.upgrade().unwrap(),
         &12.into(),
@@ -692,7 +684,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_data(
+    full_reentrant_route_data(
         &tables,
         &face1.upgrade().unwrap(),
         &22.into(),

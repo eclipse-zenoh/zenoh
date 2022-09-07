@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! This module defines the wire representation of Key Expressions.
+
 use crate::ExprId;
 use core::fmt;
 use std::{borrow::Cow, convert::TryInto};

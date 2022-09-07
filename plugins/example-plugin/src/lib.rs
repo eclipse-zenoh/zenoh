@@ -21,9 +21,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
+use zenoh::runtime::Runtime;
 use zenoh_core::AsyncResolve;
 use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};

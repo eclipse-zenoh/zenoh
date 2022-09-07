@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::keyexpr;
@@ -32,7 +33,6 @@ pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::Que
 pub(super) type QueryRoute = Route;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) kind: ZInt,
     pub(super) complete: ZInt,
     pub(super) distance: f64,
 }
@@ -44,22 +44,24 @@ pub(super) struct SessionContext {
     pub(super) local_expr_id: Option<ZInt>,
     pub(super) remote_expr_id: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    pub(super) qabl: HashMap<ZInt, QueryableInfo>,
+    pub(super) qabl: Option<QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<ZenohId>,
     pub(super) peer_subs: HashSet<ZenohId>,
-    pub(super) router_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
-    pub(super) peer_qabls: HashMap<(ZenohId, ZInt), QueryableInfo>,
+    pub(super) router_qabls: HashMap<ZenohId, QueryableInfo>,
+    pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
     pub(super) peers_data_routes: Vec<Arc<Route>>,
+    pub(super) peer_data_route: Option<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
     pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
     pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
     pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
 }
 
@@ -74,9 +76,11 @@ impl ResourceContext {
             matching_pulls: Arc::new(Vec::new()),
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
+            peer_data_route: None,
             client_data_route: None,
             routers_query_routes: Vec::new(),
             peers_query_routes: Vec::new(),
+            peer_query_route: None,
             client_query_route: None,
         }
     }
@@ -176,9 +180,12 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn client_data_route(&self) -> Option<Arc<Route>> {
+    pub fn client_data_route(&self, source_type: WhatAmI) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => ctx.client_data_route.clone(),
+            Some(ctx) => match source_type {
+                WhatAmI::Client => ctx.client_data_route.clone(),
+                _ => ctx.peer_data_route.clone(),
+            },
             None => None,
         }
     }
@@ -202,9 +209,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+    pub(super) fn client_query_route(
+        &self,
+        source_type: WhatAmI,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => ctx.client_query_route.clone(),
+            Some(ctx) => match source_type {
+                WhatAmI::Client => ctx.client_query_route.clone(),
+                _ => ctx.peer_query_route.clone(),
+            },
             None => None,
         }
     }
@@ -375,7 +388,7 @@ impl Resource {
                             local_expr_id: None,
                             remote_expr_id: None,
                             subs: None,
-                            qabl: HashMap::new(),
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     });
@@ -586,7 +599,7 @@ pub fn register_expr(
                             local_expr_id: None,
                             remote_expr_id: Some(expr_id),
                             subs: None,
-                            qabl: HashMap::new(),
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     })
@@ -620,25 +633,6 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
         None => log::error!("Undeclare unknown resource!"),
     }
 }
-
-// pub(super) struct QueryableRef {
-//     pub(super) res: Arc<Resource>,
-//     pub(super) kind: ZInt,
-// }
-
-// impl PartialEq for QueryableRef {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.res.eq(&other.res)
-//     }
-// }
-
-// impl Eq for QueryableRef {}
-
-// impl Hash for QueryableRef {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.res.hash(state)
-//     }
-// }
 
 #[inline]
 pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {

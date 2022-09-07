@@ -16,6 +16,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
+use zenoh::handlers::DefaultHandler;
 use zenoh::prelude::KeyExpr;
 use zenoh::Session;
 
@@ -31,7 +32,7 @@ impl Deref for SessionRef<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             SessionRef::Borrow(b) => b,
-            SessionRef::Shared(s) => &*s,
+            SessionRef::Shared(s) => s,
         }
     }
 }
@@ -40,26 +41,26 @@ impl fmt::Debug for SessionRef<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SessionRef::Borrow(b) => Session::fmt(b, f),
-            SessionRef::Shared(s) => Session::fmt(&*s, f),
+            SessionRef::Shared(s) => Session::fmt(s, f),
         }
     }
 }
 
 /// Some extensions to the [zenoh::Session](zenoh::Session)
 pub trait SessionExt {
-    /// Create a [QueryingSubscriber](super::HandlerQueryingSubscriber) with the given key expression.
+    /// Create a [QueryingSubscriber](super::QueryingSubscriber) with the given key expression.
     ///
-    /// This operation returns a [QueryingSubscriberBuilder](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
-    /// As soon as built (calling `.wait()` or `.await` on the QueryingSubscriberBuilder), the QueryingSubscriber
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `QueryingSubscriber`
     /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
-    /// Later on, new queries can be issued again, calling [QueryingSubscriber::query()](super::HandlerQueryingSubscriber::query()) or
-    /// [QueryingSubscriber::query_on()](super::HandlerQueryingSubscriber::query_on()).
+    /// Later on, new queries can be issued again, calling [`QueryingSubscriber::query()`](super::QueryingSubscriber::query()) or
+    /// [`QueryingSubscriber::query_on()`](super::QueryingSubscriber::query_on()).
     ///
-    /// A typical usage of the QueryingSubscriber is to retrieve publications that were made in the past, but stored in some zenoh Storage.
+    /// A typical usage of the `QueryingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
     /// # Arguments
-    /// * `sub_key_expr` - The key expression to subscribe on (and to query on if not changed via the [QueryingSubscriberBuilder](QueryingSubscriberBuilder))
+    /// * `sub_key_expr` - The key expression to subscribe on (and to query on if not changed via the [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder))
     ///
     /// # Examples
     /// ```no_run
@@ -78,7 +79,7 @@ pub trait SessionExt {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
@@ -96,7 +97,7 @@ impl SessionExt for Session {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -123,7 +124,7 @@ impl SessionExt for Arc<Session> {
     fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
-    ) -> QueryingSubscriberBuilder<'a, 'b>
+    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,

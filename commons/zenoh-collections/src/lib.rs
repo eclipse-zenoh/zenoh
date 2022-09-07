@@ -29,3 +29,6 @@ pub(crate) use stack_buffer::*;
 
 pub mod timer;
 pub use timer::*;
+
+pub mod single_or_vec;
+pub use single_or_vec::*;

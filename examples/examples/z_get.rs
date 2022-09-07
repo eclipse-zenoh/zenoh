@@ -41,7 +41,7 @@ async fn main() {
             Ok(sample) => println!(
                 ">> Received ('{}': '{}')",
                 sample.key_expr.as_str(),
-                String::try_from(&sample.value).unwrap()
+                sample.value,
             ),
             Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
         }

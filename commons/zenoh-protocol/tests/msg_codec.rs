@@ -83,10 +83,7 @@ fn gen_routing_context() -> RoutingContext {
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
     let replier = if !is_final {
-        Some(ReplierInfo {
-            kind: thread_rng().gen_range(0..4),
-            id: gen_zid(),
-        })
+        Some(ReplierInfo { id: gen_zid() })
     } else {
         None
     };
@@ -118,7 +115,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Push,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -126,7 +122,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Pull,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -134,11 +129,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Pull,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -146,17 +136,11 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Push,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::ALL_KINDS,
             info: QueryableInfo {
                 complete: 1,
                 distance: 0,
@@ -164,7 +148,6 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::STORAGE,
             info: QueryableInfo {
                 complete: 0,
                 distance: 10,
@@ -172,24 +155,14 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::EVAL,
             info: QueryableInfo {
                 complete: 10,
                 distance: 0,
             },
         }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::ALL_KINDS,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::STORAGE,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::EVAL,
-        }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
     ]
 }
 
@@ -202,13 +175,7 @@ fn gen_key() -> WireExpr<'static> {
     key[thread_rng().gen_range(0..key.len())].clone()
 }
 
-fn gen_query_target() -> QueryTAK {
-    let kind: ZInt = thread_rng().gen_range(0..4);
-    let target = gen_target();
-    QueryTAK { kind, target }
-}
-
-fn gen_target() -> QueryTarget {
+fn gen_query_target() -> QueryTarget {
     let tgt = [
         QueryTarget::BestMatching,
         QueryTarget::All,
@@ -222,18 +189,10 @@ fn gen_target() -> QueryTarget {
 fn gen_consolidation_mode() -> ConsolidationMode {
     let cm = [
         ConsolidationMode::None,
-        ConsolidationMode::Lazy,
-        ConsolidationMode::Full,
+        ConsolidationMode::Monotonic,
+        ConsolidationMode::Latest,
     ];
     cm[thread_rng().gen_range(0..cm.len())]
-}
-
-fn gen_consolidation() -> ConsolidationStrategy {
-    ConsolidationStrategy {
-        first_routers: gen_consolidation_mode(),
-        last_router: gen_consolidation_mode(),
-        reception: gen_consolidation_mode(),
-    }
 }
 
 fn gen_timestamp() -> Timestamp {
@@ -856,12 +815,12 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let value_selector = [String::default(), "my_value_selector".to_string()];
+        let parameters = [String::default(), "my_params".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in value_selector.iter() {
+        for p in parameters.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {
@@ -869,8 +828,8 @@ fn codec_query() {
                             gen_key(),
                             p.clone(),
                             gen!(ZInt),
-                            t.clone(),
-                            gen_consolidation(),
+                            *t,
+                            gen_consolidation_mode(),
                             *roc,
                             a.clone(),
                         );

@@ -167,6 +167,7 @@ impl AsyncResolve for PutBuilder<'_, '_> {
 }
 
 use futures::Sink;
+use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -350,7 +351,7 @@ impl SyncResolve for PublisherUndeclaration<'_> {
             session, key_expr, ..
         } = &self.publisher;
         session
-            .undeclare_publication_intent(key_expr.borrowing_clone())
+            .undeclare_publication_intent(key_expr.clone())
             .res_sync()?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
@@ -367,7 +368,7 @@ impl Drop for Publisher<'_> {
         if !self.key_expr.is_empty() {
             let _ = self
                 .session
-                .undeclare_publication_intent(self.key_expr.borrowing_clone())
+                .undeclare_publication_intent(self.key_expr.clone())
                 .res_sync();
         }
     }
@@ -562,7 +563,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             }
         }
         self.session
-            .declare_publication_intent(key_expr.borrowing_clone())
+            .declare_publication_intent(key_expr.clone())
             .res_sync()?;
         let publisher = Publisher {
             session: self.session,
@@ -581,5 +582,103 @@ impl<'a> AsyncResolve for PublisherBuilder<'a, '_> {
 
     fn res_async(self) -> Self::Future {
         futures::future::ready(self.res_sync())
+    }
+}
+
+/// The Priority of zenoh messages.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Priority {
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
+    DataLow = 6,
+    Background = 7,
+}
+
+impl Priority {
+    /// The lowest Priority
+    pub const MIN: Self = Self::Background;
+    /// The highest Priority
+    pub const MAX: Self = Self::RealTime;
+    /// The number of available priorities
+    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
+}
+
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Data
+    }
+}
+
+impl TryFrom<u8> for Priority {
+    type Error = zenoh_core::Error;
+
+    /// A Priority is identified by a numeric value.
+    /// Lower the value, higher the priority.
+    /// Higher the value, lower the priority.
+    ///
+    /// Admitted values are: 1-7.
+    ///
+    /// Highest priority: 1
+    /// Lowest priority: 7
+    fn try_from(priority: u8) -> Result<Self, Self::Error> {
+        match priority {
+            1 => Ok(Priority::RealTime),
+            2 => Ok(Priority::InteractiveHigh),
+            3 => Ok(Priority::InteractiveLow),
+            4 => Ok(Priority::DataHigh),
+            5 => Ok(Priority::Data),
+            6 => Ok(Priority::DataLow),
+            7 => Ok(Priority::Background),
+            unknown => bail!(
+                "{} is not a valid priority value. Admitted values are: [{}-{}].",
+                unknown,
+                Self::MAX as u8,
+                Self::MIN as u8
+            ),
+        }
+    }
+}
+
+impl From<Priority> for crate::net::protocol::core::Priority {
+    fn from(prio: Priority) -> Self {
+        // The Priority in the prelude differs from the Priority in the core protocol only from
+        // the missing Control priority. The Control priority is reserved for zenoh internal use
+        // and as such it is not exposed by the zenoh API. Nevertheless, the values of the
+        // priorities which are common to the internal and public Priority enums are the same. Therefore,
+        // it is possible to safely transmute from the public Priority enum toward the internal
+        // Priority enum without risking to be in an invalid state.
+        // For better robusteness, the correctness of the unsafe transmute operation is covered
+        // by the unit test below.
+        unsafe { std::mem::transmute::<Priority, crate::net::protocol::core::Priority>(prio) }
+    }
+}
+
+mod tests {
+    #[test]
+    fn priority_from() {
+        use super::Priority as APrio;
+        use crate::net::protocol::core::Priority as TPrio;
+        use std::convert::TryInto;
+
+        for i in APrio::MAX as u8..=APrio::MIN as u8 {
+            let p: APrio = i.try_into().unwrap();
+
+            match p {
+                APrio::RealTime => assert_eq!(p as u8, TPrio::RealTime as u8),
+                APrio::InteractiveHigh => assert_eq!(p as u8, TPrio::InteractiveHigh as u8),
+                APrio::InteractiveLow => assert_eq!(p as u8, TPrio::InteractiveLow as u8),
+                APrio::DataHigh => assert_eq!(p as u8, TPrio::DataHigh as u8),
+                APrio::Data => assert_eq!(p as u8, TPrio::Data as u8),
+                APrio::DataLow => assert_eq!(p as u8, TPrio::DataLow as u8),
+                APrio::Background => assert_eq!(p as u8, TPrio::Background as u8),
+            }
+
+            let t: TPrio = p.into();
+            assert_eq!(p as u8, t as u8);
+        }
     }
 }

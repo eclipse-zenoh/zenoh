@@ -29,9 +29,10 @@ use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::OwnedKeyExpr;
+use zenoh_protocol_core::ConsolidationMode;
 use zenoh_protocol_core::{
-    queryable::EVAL, Channel, CongestionControl, ConsolidationStrategy, Encoding, KnownEncoding,
-    QueryTAK, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    Channel, CongestionControl, Encoding, KnownEncoding, QueryTarget, QueryableInfo, SubInfo,
+    WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -208,7 +209,6 @@ impl AdminSpace {
 
         primitives.decl_queryable(
             &[&root_key, "/**"].concat().into(),
-            EVAL,
             &QueryableInfo {
                 complete: 0,
                 distance: 0,
@@ -279,19 +279,13 @@ impl Primitives for AdminSpace {
     fn decl_queryable(
         &self,
         _key_expr: &WireExpr,
-        _kind: ZInt,
         _qabl_info: &QueryableInfo,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Queryable {:?}", _key_expr);
     }
 
-    fn forget_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _kind: ZInt,
-        _routing_context: Option<RoutingContext>,
-    ) {
+    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Queryable {:?}", _key_expr);
     }
 
@@ -364,16 +358,16 @@ impl Primitives for AdminSpace {
     fn send_query(
         &self,
         key_expr: &WireExpr,
-        value_selector: &str,
+        parameters: &str,
         qid: ZInt,
-        target: QueryTAK,
-        _consolidation: ConsolidationStrategy,
+        target: QueryTarget,
+        _consolidation: ConsolidationMode,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
             "recv Query {:?} {:?} {:?} {:?}",
             key_expr,
-            value_selector,
+            parameters,
             target,
             _consolidation
         );
@@ -399,20 +393,19 @@ impl Primitives for AdminSpace {
         };
 
         let key_expr = key_expr.to_owned();
-        let value_selector = value_selector.to_string();
+        let parameters = parameters.to_owned();
 
         // router is not re-entrant
         task::spawn(async move {
             let handler_tasks = futures::future::join_all(matching_handlers.into_iter().map(
                 |(key, handler)| async {
                     let handler = handler;
-                    let (payload, encoding) = handler(&context, &key_expr, &value_selector).await;
+                    let (payload, encoding) = handler(&context, &key_expr, &parameters).await;
                     let mut data_info = DataInfo::new();
                     data_info.encoding = Some(encoding);
 
                     primitives.send_reply_data(
                         qid,
-                        EVAL,
                         zid,
                         String::from(key).into(),
                         Some(data_info),
@@ -427,7 +420,7 @@ impl Primitives for AdminSpace {
                     } else {
                         unreachable!("An unresolved WireExpr ({:?}) reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.", key_expr)
                     };
-                    let plugin_status = plugins_status(&context, &key_expr, &value_selector).await;
+                    let plugin_status = plugins_status(&context, &key_expr, &parameters).await;
                     for status in plugin_status {
                         let crate::plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
@@ -437,7 +430,6 @@ impl Primitives for AdminSpace {
 
                         primitives.send_reply_data(
                             qid,
-                            EVAL,
                             zid,
                             key.into(),
                             Some(data_info),
@@ -456,16 +448,14 @@ impl Primitives for AdminSpace {
     fn send_reply_data(
         &self,
         qid: ZInt,
-        replier_kind: ZInt,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
         trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?} {:?}",
+            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
             qid,
-            replier_kind,
             replier_id,
             key_expr,
             info,
@@ -539,7 +529,7 @@ pub async fn router_data(
         });
         #[cfg(feature = "stats")]
         {
-            let stats = crate::prelude::ValueSelector::decode(selector)
+            let stats = crate::prelude::Parameters::decode(selector)
                 .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
             if stats {
                 json.as_object_mut().unwrap().insert(
@@ -617,7 +607,7 @@ pub async fn plugins_status(
     key: &KeyExpr<'_>,
     args: &str,
 ) -> Vec<crate::plugins::Response> {
-    let selector = key.borrowing_clone().with_value_selector(args);
+    let selector = key.clone().with_parameters(args);
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
     let mut responses = Vec::new();

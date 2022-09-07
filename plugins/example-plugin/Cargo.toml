@@ -40,7 +40,7 @@ clap = "3.2.10"
 env_logger = "0.9.0"
 futures = "0.3.12"
 log = "0.4.14"
-zenoh = { path = "../../zenoh" }
+zenoh = { path = "../../zenoh", default-features = false}
 zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait" }

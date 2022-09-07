@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 use crate::unicast::establishment::open::OResult;
 use crate::unicast::establishment::{attachment_from_properties, properties_from_attachment};
 use crate::unicast::establishment::{
@@ -23,6 +22,9 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::io::ZSlice;
 use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
+
+#[cfg(feature = "shared-memory")]
+use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 
 /*************************************/
 /*              OPEN                 */
@@ -43,7 +45,10 @@ pub(super) async fn recv(
     _input: super::init_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an InitAck
-    let mut messages = link.read_transport_message().await.map_err(|e| (e, None))?;
+    let mut messages = link
+        .read_transport_message()
+        .await
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
     if messages.len() != 1 {
         return Err((
             zerror!(
@@ -63,7 +68,7 @@ pub(super) async fn recv(
             return Err((
                 zerror!(
                     "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    reason,
+                    tmsg::close_reason_to_str(reason),
                     link,
                 )
                 .into(),
@@ -111,9 +116,11 @@ pub(super) async fn recv(
         None => EstablishmentProperties::new(),
     };
 
+    #[allow(unused_mut)]
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
+        #[allow(unused_mut)]
         let mut att = pa
             .handle_init_ack(
                 auth_link,
@@ -149,7 +156,7 @@ pub(super) async fn recv(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
 
