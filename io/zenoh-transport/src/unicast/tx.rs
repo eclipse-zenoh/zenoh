@@ -45,7 +45,7 @@ impl TransportUnicastInner {
         }
 
         // No best match found, take the first available link
-        for pl in guard.iter().filter_map(|tl| tl.pipeline.as_ref()) {
+        if let Some(pl) = guard.iter().filter_map(|tl| tl.pipeline.as_ref()).next() {
             zpush!(guard, pl, msg);
         }
 
