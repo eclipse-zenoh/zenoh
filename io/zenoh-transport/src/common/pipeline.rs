@@ -31,7 +31,7 @@ use zenoh_protocol::proto::MessageWriter;
 type NanoSeconds = u32;
 
 const RBLEN: usize = 16;
-const TSLOT: NanoSeconds = 256;
+const TSLOT: NanoSeconds = 100;
 
 struct StageInRefill {
     n_ref_r: Receiver<()>,

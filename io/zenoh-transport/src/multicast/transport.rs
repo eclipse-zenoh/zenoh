@@ -222,7 +222,7 @@ impl TransportMulticastInner {
         let attachment = None; // No attachment here
         let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
-        // pipeline.push_transport_message(msg, Priority::Background);
+        pipeline.push_transport_message(msg, Priority::Background);
 
         // Terminate and clean up the transport
         self.delete().await

@@ -16,7 +16,9 @@ use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::common::batch::SerializationBatch;
-use crate::common::pipeline::TransmissionPipelineConf;
+use crate::common::pipeline::{
+    TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
+};
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -50,7 +52,7 @@ pub(super) struct TransportLinkMulticast {
     // The underlying link
     pub(super) link: LinkMulticast,
     // The transmission pipeline
-    pub(super) pipeline: Option<Arc<TransmissionPipeline>>,
+    pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
@@ -90,45 +92,44 @@ impl TransportLinkMulticast {
             .collect();
 
         if self.handle_tx.is_none() {
-            // let tpc = TransmissionPipelineConf {
-            //     is_streamed: false,
-            //     batch_size: config.batch_size.min(self.link.get_mtu()),
-            //     queue_size: self.transport.manager.config.queue_size,
-            //     backoff: self.transport.manager.config.queue_backoff,
-            // };
-            // // The pipeline
-            // let pipeline = Arc::new(TransmissionPipeline::new(tpc, conduit_tx));
-            // self.pipeline = Some(pipeline.clone());
+            let tpc = TransmissionPipelineConf {
+                is_streamed: false,
+                batch_size: config.batch_size.min(self.link.get_mtu()),
+                queue_size: self.transport.manager.config.queue_size,
+                backoff: self.transport.manager.config.queue_backoff,
+            };
+            // The pipeline
+            let (producer, consumer) = TransmissionPipeline::new(tpc, &conduit_tx);
+            self.pipeline = Some(producer);
 
-            // // Spawn the TX task
-            // let c_link = self.link.clone();
-            // let c_transport = self.transport.clone();
-            // let handle = task::spawn(async move {
-            //     let res = tx_task(
-            //         pipeline.clone(),
-            //         c_link.clone(),
-            //         config,
-            //         initial_sns,
-            //         #[cfg(feature = "stats")]
-            //         c_transport.stats.clone(),
-            //     )
-            //     .await;
-            //     pipeline.disable();
-            //     if let Err(e) = res {
-            //         log::debug!("{}", e);
-            //         // Spawn a task to avoid a deadlock waiting for this same task
-            //         // to finish in the close() joining its handle
-            //         task::spawn(async move { c_transport.delete().await });
-            //     }
-            // });
-            // self.handle_tx = Some(Arc::new(handle));
+            // Spawn the TX task
+            let c_link = self.link.clone();
+            let c_transport = self.transport.clone();
+            let handle = task::spawn(async move {
+                let res = tx_task(
+                    consumer,
+                    c_link.clone(),
+                    config,
+                    initial_sns,
+                    #[cfg(feature = "stats")]
+                    c_transport.stats.clone(),
+                )
+                .await;
+                if let Err(e) = res {
+                    log::debug!("{}", e);
+                    // Spawn a task to avoid a deadlock waiting for this same task
+                    // to finish in the close() joining its handle
+                    task::spawn(async move { c_transport.delete().await });
+                }
+            });
+            self.handle_tx = Some(Arc::new(handle));
         }
     }
 
     pub(super) fn stop_tx(&mut self) {
-        // if let Some(pipeline) = self.pipeline.take() {
-        //     pipeline.disable();
-        // }
+        if let Some(pipeline) = self.pipeline.as_ref() {
+            pipeline.disable();
+        }
     }
 
     pub(super) fn start_rx(&mut self) {
@@ -188,132 +189,132 @@ impl TransportLinkMulticast {
 /*              TASKS                */
 /*************************************/
 async fn tx_task(
-    pipeline: Arc<TransmissionPipeline>,
+    mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
     mut next_sns: Vec<ConduitSn>,
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
-    // enum Action {
-    //     Pull((SerializationBatch, usize)),
-    //     Join,
-    //     KeepAlive,
-    //     Stop,
-    // }
+    enum Action {
+        Pull((SerializationBatch, usize)),
+        Join,
+        KeepAlive,
+        Stop,
+    }
 
-    // async fn pull(pipeline: &TransmissionPipeline, keep_alive: Duration) -> Action {
-    //     match pipeline.pull().timeout(keep_alive).await {
-    //         Ok(res) => match res {
-    //             Some(sb) => Action::Pull(sb),
-    //             None => Action::Stop,
-    //         },
-    //         Err(_) => Action::KeepAlive,
-    //     }
-    // }
+    async fn pull(pipeline: &mut TransmissionPipelineConsumer, keep_alive: Duration) -> Action {
+        match pipeline.pull().timeout(keep_alive).await {
+            Ok(res) => match res {
+                Some(sb) => Action::Pull(sb),
+                None => Action::Stop,
+            },
+            Err(_) => Action::KeepAlive,
+        }
+    }
 
-    // async fn join(last_join: Instant, join_interval: Duration) -> Action {
-    //     let now = Instant::now();
-    //     let target = last_join + join_interval;
-    //     if now < target {
-    //         let left = target - now;
-    //         task::sleep(left).await;
-    //     }
-    //     Action::Join
-    // }
+    async fn join(last_join: Instant, join_interval: Duration) -> Action {
+        let now = Instant::now();
+        let target = last_join + join_interval;
+        if now < target {
+            let left = target - now;
+            task::sleep(left).await;
+        }
+        Action::Join
+    }
 
-    // let keep_alive = config.join_interval / config.keep_alive as u32;
-    // let mut last_join = Instant::now() - config.join_interval;
-    // loop {
-    //     match pull(&pipeline, keep_alive)
-    //         .race(join(last_join, config.join_interval))
-    //         .await
-    //     {
-    //         Action::Pull((batch, priority)) => {
-    //             // Send the buffer on the link
-    //             let bytes = batch.as_bytes();
-    //             link.write_all(bytes).await?;
-    //             // Keep track of next SNs
-    //             if let Some(sn) = batch.sn.reliable {
-    //                 next_sns[priority].reliable = sn.next;
-    //             }
-    //             if let Some(sn) = batch.sn.best_effort {
-    //                 next_sns[priority].best_effort = sn.next;
-    //             }
-    //             #[cfg(feature = "stats")]
-    //             {
-    //                 stats.inc_tx_t_msgs(batch.stats.t_msgs);
-    //                 stats.inc_tx_bytes(bytes.len());
-    //             }
-    //             // Reinsert the batch into the queue
-    //             pipeline.refill(batch, priority);
-    //         }
-    //         Action::Join => {
-    //             let attachment = None;
-    //             let initial_sns = if next_sns.len() == Priority::NUM {
-    //                 let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
-    //                 ConduitSnList::QoS(tmp.into())
-    //             } else {
-    //                 assert_eq!(next_sns.len(), 1);
-    //                 ConduitSnList::Plain(next_sns[0])
-    //             };
-    //             let mut message = TransportMessage::make_join(
-    //                 config.version,
-    //                 config.whatami,
-    //                 config.zid,
-    //                 config.lease,
-    //                 config.sn_resolution,
-    //                 initial_sns,
-    //                 attachment,
-    //             );
+    let keep_alive = config.join_interval / config.keep_alive as u32;
+    let mut last_join = Instant::now() - config.join_interval;
+    loop {
+        match pull(&mut pipeline, keep_alive)
+            .race(join(last_join, config.join_interval))
+            .await
+        {
+            Action::Pull((batch, priority)) => {
+                // Send the buffer on the link
+                let bytes = batch.as_bytes();
+                link.write_all(bytes).await?;
+                // Keep track of next SNs
+                if let Some(sn) = batch.sn.reliable {
+                    next_sns[priority].reliable = sn.next;
+                }
+                if let Some(sn) = batch.sn.best_effort {
+                    next_sns[priority].best_effort = sn.next;
+                }
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(batch.stats.t_msgs);
+                    stats.inc_tx_bytes(bytes.len());
+                }
+                // Reinsert the batch into the queue
+                pipeline.refill(batch, priority);
+            }
+            Action::Join => {
+                let attachment = None;
+                let initial_sns = if next_sns.len() == Priority::NUM {
+                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                    ConduitSnList::QoS(tmp.into())
+                } else {
+                    assert_eq!(next_sns.len(), 1);
+                    ConduitSnList::Plain(next_sns[0])
+                };
+                let mut message = TransportMessage::make_join(
+                    config.version,
+                    config.whatami,
+                    config.zid,
+                    config.lease,
+                    config.sn_resolution,
+                    initial_sns,
+                    attachment,
+                );
 
-    //             #[allow(unused_variables)] // Used when stats feature is enabled
-    //             let n = link.write_transport_message(&mut message).await?;
-    //             #[cfg(feature = "stats")]
-    //             {
-    //                 stats.inc_tx_t_msgs(1);
-    //                 stats.inc_tx_bytes(n);
-    //             }
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.write_transport_message(&mut message).await?;
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(1);
+                    stats.inc_tx_bytes(n);
+                }
 
-    //             last_join = Instant::now();
-    //         }
-    //         Action::KeepAlive => {
-    //             let zid = Some(config.zid);
-    //             let attachment = None;
-    //             let mut message = TransportMessage::make_keep_alive(zid, attachment);
+                last_join = Instant::now();
+            }
+            Action::KeepAlive => {
+                let zid = Some(config.zid);
+                let attachment = None;
+                let mut message = TransportMessage::make_keep_alive(zid, attachment);
 
-    //             #[allow(unused_variables)] // Used when stats feature is enabled
-    //             let n = link.write_transport_message(&mut message).await?;
-    //             #[cfg(feature = "stats")]
-    //             {
-    //                 stats.inc_tx_t_msgs(1);
-    //                 stats.inc_tx_bytes(n);
-    //             }
-    //         }
-    //         Action::Stop => {
-    //             // Drain the transmission pipeline and write remaining bytes on the wire
-    //             let mut batches = pipeline.drain();
-    //             for (b, _) in batches.drain(..) {
-    //                 link.write_all(b.as_bytes())
-    //                     .timeout(config.join_interval)
-    //                     .await
-    //                     .map_err(|_| {
-    //                         zerror!(
-    //                             "{}: flush failed after {} ms",
-    //                             link,
-    //                             config.join_interval.as_millis()
-    //                         )
-    //                     })??;
+                #[allow(unused_variables)] // Used when stats feature is enabled
+                let n = link.write_transport_message(&mut message).await?;
+                #[cfg(feature = "stats")]
+                {
+                    stats.inc_tx_t_msgs(1);
+                    stats.inc_tx_bytes(n);
+                }
+            }
+            Action::Stop => {
+                // Drain the transmission pipeline and write remaining bytes on the wire
+                let mut batches = pipeline.drain();
+                for (b, _) in batches.drain(..) {
+                    link.write_all(b.as_bytes())
+                        .timeout(config.join_interval)
+                        .await
+                        .map_err(|_| {
+                            zerror!(
+                                "{}: flush failed after {} ms",
+                                link,
+                                config.join_interval.as_millis()
+                            )
+                        })??;
 
-    //                 #[cfg(feature = "stats")]
-    //                 {
-    //                     stats.inc_tx_t_msgs(b.stats.t_msgs);
-    //                     stats.inc_tx_bytes(b.len());
-    //                 }
-    //             }
-    //             break;
-    //         }
-    //     }
-    // }
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_tx_t_msgs(b.stats.t_msgs);
+                        stats.inc_tx_bytes(b.len());
+                    }
+                }
+                break;
+            }
+        }
+    }
 
     Ok(())
 }
