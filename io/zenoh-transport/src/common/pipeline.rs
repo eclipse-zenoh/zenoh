@@ -113,7 +113,7 @@ impl StageIn {
         let priority = msg.channel.priority;
 
         macro_rules! zgetbatch {
-            () => {
+            ($fragment:expr) => {
                 loop {
                     match c_guard.take() {
                         Some(batch) => break batch,
@@ -124,7 +124,7 @@ impl StageIn {
                             }
                             None => {
                                 drop(c_guard);
-                                if is_droppable {
+                                if !$fragment && is_droppable {
                                     thread::yield_now();
                                     return false;
                                 } else {
@@ -158,7 +158,7 @@ impl StageIn {
         }
 
         // Get the current serialization batch.
-        let mut batch = zgetbatch!();
+        let mut batch = zgetbatch!(false);
         // Attempt the serialization on the current batch
         zserialize!(batch);
 
@@ -166,7 +166,7 @@ impl StageIn {
         // batch is full. Therefore, we move the current batch to stage out.
         if !batch.is_empty() {
             self.s_out.move_batch(batch);
-            batch = zgetbatch!();
+            batch = zgetbatch!(false);
             zserialize!(batch);
         }
 
@@ -185,7 +185,7 @@ impl StageIn {
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
-            batch = zgetbatch!();
+            batch = zgetbatch!(true);
 
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(
@@ -463,19 +463,6 @@ impl TransmissionPipeline {
         // This is a MPSC channel
         let (n_out_w, n_out_r) = bounded(1);
 
-        // @TODO: remove this workaround
-        if conduit.len() == 0 {
-            let producer = TransmissionPipelineProducer {
-                stage_in: stage_in.into_boxed_slice().into(),
-            };
-            let consumer = TransmissionPipelineConsumer {
-                stage_out: stage_out.into_boxed_slice(),
-                n_out_r,
-            };
-
-            return (producer, consumer);
-        }
-
         for (prio, num) in size_iter.enumerate() {
             // Create the refill ring buffer
             // This is a SPSC ring buffer
@@ -501,12 +488,12 @@ impl TransmissionPipeline {
             let current = Arc::new(Mutex::new(None));
 
             // The stage in for this priority
-            let low_latency =
-                prio == Priority::Control as usize || prio == Priority::RealTime as usize;
+            let low_latency = false;
+            // prio == Priority::Control as usize || prio == Priority::RealTime as usize;
             let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
 
-            stage_in.push(Arc::new(Mutex::new(StageIn {
+            stage_in.push(Mutex::new(StageIn {
                 s_ref: StageInRefill { n_ref_r, s_ref_r },
                 s_out: StageInOut {
                     n_out_w: n_out_w.clone(),
@@ -520,7 +507,7 @@ impl TransmissionPipeline {
                 },
                 low_latency,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
-            })));
+            }));
 
             // The stage out for this priority
             stage_out.push(StageOut {
@@ -533,12 +520,15 @@ impl TransmissionPipeline {
             });
         }
 
+        let active = Arc::new(AtomicBool::new(true));
         let producer = TransmissionPipelineProducer {
             stage_in: stage_in.into_boxed_slice().into(),
+            active: active.clone(),
         };
         let consumer = TransmissionPipelineConsumer {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r,
+            active,
         };
 
         (producer, consumer)
@@ -548,7 +538,8 @@ impl TransmissionPipeline {
 #[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
-    stage_in: Arc<[Arc<Mutex<StageIn>>]>,
+    stage_in: Arc<[Mutex<StageIn>]>,
+    active: Arc<AtomicBool>,
 }
 
 impl TransmissionPipelineProducer {
@@ -579,8 +570,18 @@ impl TransmissionPipelineProducer {
         queue.push_transport_message(msg)
     }
 
-    pub(crate) fn disable(&mut self) {
-        self.stage_in = vec![].into_boxed_slice().into();
+    pub(crate) fn disable(&self) {
+        self.active.store(false, Ordering::Relaxed);
+
+        // Acquire all the locks, in_guard first, out_guard later
+        // Use the same locking order as in drain to avoid deadlocks
+        let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
+            self.stage_in.iter().map(|x| zlock!(x)).collect();
+
+        // Unblock waiting pullers
+        for ig in in_guards.iter_mut() {
+            ig.s_out.notify(u16::MAX);
+        }
     }
 }
 
@@ -588,11 +589,12 @@ pub(crate) struct TransmissionPipelineConsumer {
     // A single Mutex for all the priority queues
     stage_out: Box<[StageOut]>,
     n_out_r: Receiver<()>,
+    active: Arc<AtomicBool>,
 }
 
 impl TransmissionPipelineConsumer {
     pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
-        loop {
+        while self.active.load(Ordering::Relaxed) {
             // Calculate the backoff maximum
             let mut bo = NanoSeconds::MAX;
             for (prio, queue) in self.stage_out.iter_mut().enumerate() {
@@ -616,14 +618,11 @@ impl TransmissionPipelineConsumer {
                 .timeout(Duration::from_nanos(bo as u64))
                 .await;
         }
+        None
     }
 
     pub(crate) fn refill(&mut self, batch: SerializationBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
-    }
-
-    pub(crate) fn disable(&mut self) {
-        self.stage_out = vec![].into()
     }
 
     pub(crate) fn drain(&mut self) -> Vec<(SerializationBatch, usize)> {
@@ -881,8 +880,6 @@ mod tests {
 
             // Disable and drain the queue
             task::spawn_blocking(move || {
-                println!("Pipeline Blocking [---]: disabling the queue");
-                consumer.disable();
                 println!("Pipeline Blocking [---]: draining the queue");
                 let _ = consumer.drain();
             })
@@ -899,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    // #[ignore]
+    #[ignore]
     fn tx_pipeline_thr() {
         // Queue
         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();

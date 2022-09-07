@@ -43,7 +43,7 @@ pub(super) struct TransportLinkUnicast {
     // The underlying link
     pub(super) link: LinkUnicast,
     // The transmission pipeline
-    pub(super) pipeline: TransmissionPipelineProducer,
+    pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
     transport: TransportUnicastInner,
     // The signals to stop TX/RX tasks
@@ -58,12 +58,11 @@ impl TransportLinkUnicast {
         link: LinkUnicast,
         direction: LinkUnicastDirection,
     ) -> TransportLinkUnicast {
-        let (producer, _) = TransmissionPipeline::new(TransmissionPipelineConf::default(), &[]);
         TransportLinkUnicast {
             direction,
             transport,
             link,
-            pipeline: producer,
+            pipeline: None,
             handle_tx: None,
             signal_rx: Signal::new(),
             handle_rx: None,
@@ -88,7 +87,7 @@ impl TransportLinkUnicast {
             };
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::new(config, conduit_tx);
-            self.pipeline = producer;
+            self.pipeline = Some(producer);
 
             // Spawn the TX task
             let c_link = self.link.clone();
@@ -114,7 +113,9 @@ impl TransportLinkUnicast {
     }
 
     pub(super) fn stop_tx(&mut self) {
-        self.pipeline.disable();
+        if let Some(pl) = self.pipeline.as_ref() {
+            pl.disable();
+        }
     }
 
     pub(super) fn start_rx(&mut self, lease: Duration) {
