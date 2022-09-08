@@ -97,7 +97,7 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    low_latency: bool,
+    batching: bool,
     fragbuf: WBuf,
 }
 
@@ -143,7 +143,7 @@ impl StageIn {
         macro_rules! zserialize {
             ($batch:expr) => {{
                 if $batch.serialize_zenoh_message(&mut msg, priority, &mut channel.sn) {
-                    if self.low_latency {
+                    if !self.batching {
                         drop(c_guard);
                         self.s_out.move_batch($batch);
                     } else {
@@ -247,7 +247,7 @@ impl StageIn {
         macro_rules! zserialize {
             ($batch:expr) => {{
                 if $batch.serialize_transport_message(&mut msg) {
-                    if self.low_latency {
+                    if !self.batching {
                         drop(c_guard);
                         self.s_out.move_batch($batch);
                     } else {
@@ -497,7 +497,7 @@ impl TransmissionPipeline {
             let current = Arc::new(Mutex::new(None));
 
             // The stage in for this priority
-            let low_latency = false;
+            let batching = true;
             // prio == Priority::Control as usize || prio == Priority::RealTime as usize;
             let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
@@ -514,7 +514,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                low_latency,
+                batching,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             }));
 
