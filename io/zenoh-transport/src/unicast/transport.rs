@@ -410,9 +410,9 @@ impl TransportUnicastInner {
 
         let mut pipelines = zread!(self.links)
             .iter()
-            .map(|sl| sl.pipeline.clone())
+            .filter_map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
-        for p in pipelines.drain(..).filter_map(|mut x| x.take()) {
+        for p in pipelines.drain(..) {
             // Close message to be sent on all the links
             let peer_id = Some(self.config.manager.zid());
             let reason_id = reason;
