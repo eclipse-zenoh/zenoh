@@ -14,7 +14,7 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::storages_mgt::StorageMessage;
+use crate::storages_mgt::{StorageMessage, StoreIntercept};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
@@ -27,7 +27,6 @@ use std::str::FromStr;
 use std::time::SystemTime;
 use urlencoding::encode;
 use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::prelude::Sample;
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
@@ -75,15 +74,13 @@ impl Replica {
     pub async fn start(
         config: ReplicaConfig,
         session: Arc<Session>,
-        storage: Box<dyn zenoh_backend_traits::Storage>,
-        in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-        out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+        store_intercept: StoreIntercept,
         key_expr: OwnedKeyExpr,
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
         trace!("[REPLICA]Opening session...");
-        let startup_entries = match storage.get_all_entries().await {
+        let startup_entries = match store_intercept.storage.get_all_entries().await {
             Ok(entries) => entries,
             Err(e) => {
                 error!("Error fetching entries from storage: {}", e);
@@ -148,9 +145,7 @@ impl Replica {
             replica.session.clone(),
             replica.key_expr.clone(),
             &replica.name,
-            storage,
-            in_interceptor,
-            out_interceptor,
+            store_intercept,
             rx,
             Some(replication),
         )

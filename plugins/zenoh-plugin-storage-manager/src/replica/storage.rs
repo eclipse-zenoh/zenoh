@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::storages_mgt::StorageMessage;
+use crate::storages_mgt::{StorageMessage, StoreIntercept};
 use async_std::sync::Arc;
 use async_std::sync::Mutex;
 use flume::{Receiver, Sender};
@@ -47,9 +47,7 @@ impl StorageService {
         session: Arc<Session>,
         key_expr: OwnedKeyExpr,
         name: &str,
-        storage: Box<dyn zenoh_backend_traits::Storage>,
-        in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-        out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+        store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
         replication: Option<ReplicationService>,
     ) {
@@ -57,9 +55,9 @@ impl StorageService {
             session,
             key_expr,
             name: name.to_string(),
-            storage: Mutex::new(storage),
-            in_interceptor,
-            out_interceptor,
+            storage: Mutex::new(store_intercept.storage),
+            in_interceptor: store_intercept.in_interceptor,
+            out_interceptor: store_intercept.out_interceptor,
             replication,
         };
         storage_service.start_storage_queryable_subscriber(rx).await

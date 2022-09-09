@@ -25,6 +25,12 @@ pub enum StorageMessage {
     GetStatus(async_std::channel::Sender<serde_json::Value>),
 }
 
+pub struct StoreIntercept {
+    pub storage: Box<dyn zenoh_backend_traits::Storage>,
+    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+}
+
 pub(crate) async fn start_storage(
     storage: Box<dyn zenoh_backend_traits::Storage>,
     config: Option<ReplicaConfig>,
@@ -45,32 +51,26 @@ pub(crate) async fn start_storage(
     let (tx, rx) = flume::bounded(1);
 
     async_std::task::spawn(async move {
+        let store_intercept = StoreIntercept {
+            storage,
+            in_interceptor,
+            out_interceptor,
+        };
+
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
         if config.is_some() {
             Replica::start(
                 config.unwrap(),
                 zenoh.clone(),
-                storage,
-                in_interceptor,
-                out_interceptor,
+                store_intercept,
                 key_expr,
                 &name,
                 rx,
             )
             .await;
         } else {
-            StorageService::start(
-                zenoh.clone(),
-                key_expr,
-                &name,
-                storage,
-                in_interceptor,
-                out_interceptor,
-                rx,
-                None,
-            )
-            .await;
+            StorageService::start(zenoh.clone(), key_expr, &name, store_intercept, rx, None).await;
         }
     });
 
