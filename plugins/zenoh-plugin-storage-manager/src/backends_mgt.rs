@@ -30,10 +30,11 @@ pub(crate) async fn create_and_start_storage(
 ) -> ZResult<Sender<StorageMessage>> {
     trace!("Create storage {}", &admin_key);
     let key_expr = config.key_expr.clone();
-    let storage = backend.create_storage(config.clone()).await?;
+    let replica_config = config.replica_config.clone();
+    let storage = backend.create_storage(config).await?;
     start_storage(
         storage,
-        config.replica_config,
+        replica_config,
         admin_key,
         key_expr,
         in_interceptor,
