@@ -52,7 +52,7 @@ impl AlignQueryable {
         digest_key: OwnedKeyExpr,
         replica_name: &str,
         snapshotter: Arc<Snapshotter>,
-    ) -> Self {
+    ) {
         let digest_key = digest_key.join(replica_name).unwrap().join("**").unwrap();
 
         let align_queryable = AlignQueryable {
@@ -61,7 +61,7 @@ impl AlignQueryable {
             snapshotter,
         };
 
-        align_queryable.start().await
+        align_queryable.start().await;
     }
 
     async fn start(&self) -> Self {

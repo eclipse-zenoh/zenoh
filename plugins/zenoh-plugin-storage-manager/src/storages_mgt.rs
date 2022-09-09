@@ -34,7 +34,7 @@ pub(crate) async fn start_storage(
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
-    // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/memory needed????)
+    // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
     let parts: Vec<&str> = admin_key.split('/').collect();
     let uuid = parts[2];
     let storage_name = parts[7];
@@ -42,45 +42,37 @@ pub(crate) async fn start_storage(
 
     trace!("Start storage {} on {}", name, key_expr);
 
-    // If a configuration for replica is present, we initialize a replica, else only a storage service
-    // A replica contains a storage service and all metadata required for anti-entropy
-    if config.is_some() {
-        Replica::start(
-            config.unwrap(),
-            zenoh.clone(),
-            storage,
-            in_interceptor,
-            out_interceptor,
-            key_expr,
-            &name,
-        )
-        .await
-    } else {
-        StorageService::start(
-            zenoh.clone(),
-            key_expr,
-            &name,
-            storage,
-            in_interceptor,
-            out_interceptor,
-            None,
-        )
-        .await
-    }
+    let (tx, rx) = flume::bounded(1);
 
-    // // align with other storages, querying them on key_expr,
-    // // with `_time=[..]` to get historical data (in case of time-series)
-    // let replies = match zenoh
-    //     .get(KeyExpr::from(&key_expr).with_value_selector("_time=[..]"))
-    //     .target(QueryTarget::All)
-    //     .consolidation(ConsolidationMode::None)
-    //     .res_async()
-    //     .await
-    // {
-    //     Ok(replies) => replies,
-    //     Err(e) => {
-    //         error!("Error aligning storage {} : {}", admin_key, e);
-    //         return;
-    //     }
-    // };
+    async_std::task::spawn(async move {
+        // If a configuration for replica is present, we initialize a replica, else only a storage service
+        // A replica contains a storage service and all metadata required for anti-entropy
+        if config.is_some() {
+            Replica::start(
+                config.unwrap(),
+                zenoh.clone(),
+                storage,
+                in_interceptor,
+                out_interceptor,
+                key_expr,
+                &name,
+                rx,
+            )
+            .await;
+        } else {
+            StorageService::start(
+                zenoh.clone(),
+                key_expr,
+                &name,
+                storage,
+                in_interceptor,
+                out_interceptor,
+                rx,
+                None,
+            )
+            .await;
+        }
+    });
+
+    Ok(tx)
 }

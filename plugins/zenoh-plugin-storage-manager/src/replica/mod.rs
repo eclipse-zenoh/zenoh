@@ -14,11 +14,12 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
+use crate::storages_mgt::StorageMessage;
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
-use flume::Sender;
-use futures::join;
+use flume::{Receiver, Sender};
+use futures::{pin_mut, select, FutureExt};
 use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -31,7 +32,6 @@ use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::config::ReplicaConfig;
-use zenoh_core::Result as ZResult;
 
 pub mod align_queryable;
 pub mod aligner;
@@ -80,9 +80,16 @@ impl Replica {
         out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
         key_expr: OwnedKeyExpr,
         name: &str,
-    ) -> ZResult<Sender<crate::StorageMessage>> {
+        rx: Receiver<StorageMessage>,
+    ) {
         trace!("[REPLICA]Opening session...");
-        let startup_entries = storage.get_all_entries().await?;
+        let startup_entries = match storage.get_all_entries().await {
+            Ok(entries) => entries,
+            Err(e) => {
+                error!("Error fetching entries from storage: {}", e);
+                return;
+            }
+        };
 
         let replica = Replica {
             name: name.to_string(),
@@ -105,15 +112,16 @@ impl Replica {
         let snapshotter =
             Arc::new(Snapshotter::new(rx_log, startup_entries.clone(), config.clone()).await);
         // digest sub
-        let digest_sub = replica.start_digest_sub(tx_digest);
+        let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
         let digest_key = Replica::get_digest_key(replica.key_expr.clone(), config.align_prefix);
-        let align_queryable = AlignQueryable::start_align_queryable(
+        let align_q = AlignQueryable::start_align_queryable(
             replica.session.clone(),
             digest_key.clone(),
             &replica.name,
             snapshotter.clone(),
-        );
+        )
+        .fuse();
         // aligner
         let aligner = Aligner::start_aligner(
             replica.session.clone(),
@@ -121,12 +129,13 @@ impl Replica {
             rx_digest,
             tx_sample,
             snapshotter.clone(),
-        );
+        )
+        .fuse();
         // digest pub
-        let digest_pub = replica.start_digest_pub(snapshotter.clone());
+        let digest_pub = replica.start_digest_pub(snapshotter.clone()).fuse();
 
         //updating snapshot time
-        let snapshot_task = snapshotter.start();
+        let snapshot_task = snapshotter.start().fuse();
 
         //actual storage
         let replication = ReplicationService {
@@ -134,6 +143,7 @@ impl Replica {
             aligner_updates: rx_sample,
             log_propagation: tx_log,
         };
+        // channel to pipe the receiver to storage
         let storage_task = StorageService::start(
             replica.session.clone(),
             replica.key_expr.clone(),
@@ -141,19 +151,28 @@ impl Replica {
             storage,
             in_interceptor,
             out_interceptor,
+            rx,
             Some(replication),
-        );
+        )
+        .fuse();
 
-        let result = join!(
+        pin_mut!(
             digest_sub,
-            align_queryable,
+            align_q,
             aligner,
             digest_pub,
             snapshot_task,
-            storage_task,
+            storage_task
         );
 
-        result.5
+        select!(
+            () = digest_sub => trace!("[Replica] Exiting digest subscriber"),
+            () = align_q => trace!("[Replica] Exiting align queryable"),
+            () = aligner => trace!("[Replica] Exiting aligner"),
+            () = digest_pub => trace!("[Replica] Exiting digest publisher"),
+            () = snapshot_task => trace!("[Replica] Exiting snapshot task"),
+            () = storage_task => trace!("[Replica] Exiting storage task"),
+        )
     }
 
     // Create a subscriber to get digests of remote replicas
@@ -222,9 +241,6 @@ impl Replica {
         )
         .join(&self.name)
         .unwrap();
-
-        // let expr_id = self.session.declare_keyexpr(&digest_key).res().await.unwrap();
-        // debug!("[DIGEST_PUB] => ExprId {}", expr_id);
 
         debug!("[DIGEST_PUB] Declaring publication on '{}'...", digest_key);
         let publisher = self

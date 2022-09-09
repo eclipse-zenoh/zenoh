@@ -25,7 +25,6 @@ use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::{Query, StorageInsertionResult};
-use zenoh_core::Result as ZResult;
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -51,8 +50,9 @@ impl StorageService {
         storage: Box<dyn zenoh_backend_traits::Storage>,
         in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
         out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+        rx: Receiver<StorageMessage>,
         replication: Option<ReplicationService>,
-    ) -> ZResult<Sender<StorageMessage>> {
+    ) {
         let storage_service = StorageService {
             session,
             key_expr,
@@ -62,12 +62,11 @@ impl StorageService {
             out_interceptor,
             replication,
         };
-        storage_service.start_storage_queryable_subscriber().await
+        storage_service.start_storage_queryable_subscriber(rx).await
     }
 
-    async fn start_storage_queryable_subscriber(&self) -> ZResult<Sender<StorageMessage>> {
+    async fn start_storage_queryable_subscriber(&self, rx: Receiver<StorageMessage>) {
         self.initialize_if_empty().await;
-        let (tx, rx) = flume::bounded(1);
 
         // subscribe on key_expr
         let storage_sub = match self
@@ -79,7 +78,7 @@ impl StorageService {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", self.name, e);
-                return Err(e);
+                return;
             }
         };
 
@@ -88,7 +87,7 @@ impl StorageService {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", self.name, e);
-                return Err(e);
+                return;
             }
         };
 
@@ -110,7 +109,6 @@ impl StorageService {
                             Ok(sample) => self.process_sample(sample).await,
                             Err(e) => {
                                 error!("Error in receiving aligner update: {}", e);
-                                return Err(e.into());
                             }
                         }
                     },
@@ -119,7 +117,7 @@ impl StorageService {
                         match message {
                             Ok(StorageMessage::Stop) => {
                                 trace!("Dropping storage {}", self.name);
-                                return Ok(tx);
+                                return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
                                 let storage = self.storage.lock().await;
@@ -128,7 +126,6 @@ impl StorageService {
                             }
                             Err(e) => {
                                 error!("Storage Message Channel Error: {}", e);
-                                return Err(e.into());
                             },
                         };
                     }
@@ -150,7 +147,7 @@ impl StorageService {
                         match message {
                             Ok(StorageMessage::Stop) => {
                                 trace!("Dropping storage {}", self.name);
-                                return Ok(tx);
+                                return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
                                 let storage = self.storage.lock().await;
@@ -159,7 +156,6 @@ impl StorageService {
                             }
                             Err(e) => {
                                 error!("Storage Message Channel Error: {}", e);
-                                return Err(e.into());
                             },
                         };
                     },
