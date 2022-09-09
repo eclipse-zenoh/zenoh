@@ -390,14 +390,15 @@ impl TransportUnicastInner {
         let mut pipeline = zlinkget!(zread!(self.links), link)
             .map(|l| l.pipeline.clone())
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
-        // Close message to be sent on the target link
-        let peer_id = Some(self.config.manager.zid());
-        let reason_id = reason;
-        let link_only = true; // This is should always be true when closing a link
-        let attachment = None; // No attachment here
-        let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
 
         if let Some(p) = pipeline.take() {
+            // Close message to be sent on the target link
+            let peer_id = Some(self.config.manager.zid());
+            let reason_id = reason;
+            let link_only = true; // This is should always be true when closing a link
+            let attachment = None; // No attachment here
+            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+
             p.push_transport_message(msg, Priority::Background);
         }
 

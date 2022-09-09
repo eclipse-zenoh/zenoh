@@ -112,7 +112,7 @@ impl StageIn {
         let is_droppable = msg.is_droppable();
         let priority = msg.channel.priority;
 
-        macro_rules! zgetbatch {
+        macro_rules! zgetbatch_rets {
             ($fragment:expr) => {
                 loop {
                     match c_guard.take() {
@@ -125,6 +125,9 @@ impl StageIn {
                             None => {
                                 drop(c_guard);
                                 if !$fragment && is_droppable {
+                                    // We are in the congestion scenario
+                                    // The yield is to avoid the writing task to spin
+                                    // indefinitely and monopolize the CPU usage.
                                     thread::yield_now();
                                     return false;
                                 } else {
@@ -140,7 +143,7 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize {
+        macro_rules! zserialize_rets {
             ($batch:expr) => {{
                 if $batch.serialize_zenoh_message(&mut msg, priority, &mut channel.sn) {
                     if !self.batching {
@@ -158,16 +161,16 @@ impl StageIn {
         }
 
         // Get the current serialization batch.
-        let mut batch = zgetbatch!(false);
+        let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
-        zserialize!(batch);
+        zserialize_rets!(batch);
 
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
         if !batch.is_empty() {
             self.s_out.move_batch(batch);
-            batch = zgetbatch!(false);
-            zserialize!(batch);
+            batch = zgetbatch_rets!(false);
+            zserialize_rets!(batch);
         }
 
         // The second serialization attempt has failed. This means that the message is
@@ -185,7 +188,7 @@ impl StageIn {
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
-            batch = zgetbatch!(true);
+            batch = zgetbatch_rets!(true);
 
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(
@@ -221,7 +224,7 @@ impl StageIn {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
-        macro_rules! zgetbatch {
+        macro_rules! zgetbatch_rets {
             () => {
                 loop {
                     match c_guard.take() {
@@ -244,7 +247,7 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize {
+        macro_rules! zserialize_rets {
             ($batch:expr) => {{
                 if $batch.serialize_transport_message(&mut msg) {
                     if !self.batching {
@@ -262,16 +265,16 @@ impl StageIn {
         }
 
         // Get the current serialization batch.
-        let mut batch = zgetbatch!();
+        let mut batch = zgetbatch_rets!();
         // Attempt the serialization on the current batch
-        zserialize!(batch);
+        zserialize_rets!(batch);
 
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
         if !batch.is_empty() {
             self.s_out.move_batch(batch);
-            batch = zgetbatch!();
-            zserialize!(batch);
+            batch = zgetbatch_rets!();
+            zserialize_rets!(batch);
         }
 
         false
