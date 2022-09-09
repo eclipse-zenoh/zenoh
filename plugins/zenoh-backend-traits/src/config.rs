@@ -55,21 +55,14 @@ pub struct StorageConfig {
 // Note: All parameters should be same for replicas, else will result on huge overhead
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicaConfig {
-    pub align_prefix: String,
     pub publication_interval: Duration,
     pub propagation_delay: Duration,
     pub delta: Duration,
-    pub subintervals: usize,
-    pub hot: usize,
-    pub warm: usize,
 }
 
 impl Default for ReplicaConfig {
     fn default() -> Self {
         Self {
-            // This is the prefix that is used by the alignment protocol
-            // TODO: discuss if this needs to be configurable
-            align_prefix: String::from("@-digest"),
             // Publication interval indicates the frequency of digest publications
             // This will determine the time upto which replicas might be diverged
             // This can be different for each replica if not used to compute hot and warm
@@ -79,18 +72,8 @@ impl Default for ReplicaConfig {
             propagation_delay: Duration::from_millis(200),
             // This is the chunk that you would like your data to be divide into in time.
             // Higher the frequency of updates, lower the delta should be chosen
-            // To be efficient, delta should be greater than twice the propagation delay
+            // To be efficient, delta should be the time containing no more than 100,000 samples
             delta: Duration::from_millis(1000),
-            // The number of chunks an interval is divided into
-            // Ideally this number should be such that the numbr of entries in the chunk is less than 10000
-            subintervals: 10,
-            // This is number of intervals that are known not to have been yet considerd for alignment
-            // Result of publication_interval/delta
-            // TODO: Discuss if we need to expose this. Can be computed
-            hot: 5,
-            // This is the number of intervals that might have been aligned in the previous round, but a temporarily disconnected replica might have missed
-            // TODO: Discuss if it follows the same principle as hot
-            warm: 10,
         }
     }
 }
@@ -394,13 +377,6 @@ impl StorageConfig {
             Some(s) => {
                 let mut replica_config = ReplicaConfig::default();
                 // TODO: Discuss what to do in case of wrong configuration - exit or use default
-                match s.get("align_prefix") {
-                    Some(Value::String(p)) => {
-                        replica_config.align_prefix = p.to_string()
-                    },
-                    None => (),
-                    _ => bail!("Invalid type for field `align_prefix` in `replica_config` of storage `{}`. Only string is accepted.", storage_name)
-                };
                 match s.get("publication_interval") {
                     Some(p) => {
                         let p = p.to_string().parse::<u64>();
@@ -430,39 +406,6 @@ impl StorageConfig {
                             replica_config.delta = Duration::from_millis(d)
                         } else {
                             bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
-                    }
-                    None => (),
-                };
-                match s.get("subintervals") {
-                    Some(i) => {
-                        let i = i.to_string().parse::<usize>();
-                        if let Ok(i) = i {
-                            replica_config.subintervals = i
-                        } else {
-                            bail!("Invalid type for field `subintervals` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
-                    }
-                    None => (),
-                };
-                match s.get("hot") {
-                    Some(h) => {
-                        let h = h.to_string().parse::<usize>();
-                        if let Ok(h) = h {
-                            replica_config.hot = h
-                        } else {
-                            bail!("Invalid type for field `hot` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
-                    }
-                    None => (),
-                };
-                match s.get("warm") {
-                    Some(w) => {
-                        let w = w.to_string().parse::<usize>();
-                        if let Ok(w) = w {
-                            replica_config.warm = w
-                        } else {
-                            bail!("Invalid type for field `warm` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                         }
                     }
                     None => (),

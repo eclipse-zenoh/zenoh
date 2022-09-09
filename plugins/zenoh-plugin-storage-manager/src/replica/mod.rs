@@ -24,7 +24,7 @@ use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use urlencoding::encode;
 use zenoh::prelude::r#async::AsyncResolve;
 use zenoh::prelude::*;
@@ -49,6 +49,9 @@ const INTERVALS: &str = "intervals";
 const SUBINTERVALS: &str = "subintervals";
 const CONTENTS: &str = "contents";
 pub const EPOCH_START: SystemTime = SystemTime::UNIX_EPOCH;
+
+pub const ALIGN_PREFIX: &str = "@-digest";
+pub const SUBINTERVAL_CHUNKS: usize = 10;
 
 // A replica consists of a storage service and services required for anti-entropy
 // To perform anti-entropy, we need a `Digest` that contains the state of the datastore
@@ -111,7 +114,8 @@ impl Replica {
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
-        let digest_key = Replica::get_digest_key(replica.key_expr.clone(), config.align_prefix);
+        let digest_key =
+            Replica::get_digest_key(replica.key_expr.clone(), ALIGN_PREFIX.to_string());
         let align_q = AlignQueryable::start_align_queryable(
             replica.session.clone(),
             digest_key.clone(),
@@ -175,12 +179,9 @@ impl Replica {
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
-        let digest_key = Replica::get_digest_key(
-            self.key_expr.clone(),
-            self.replica_config.align_prefix.to_string(),
-        )
-        .join("**")
-        .unwrap();
+        let digest_key = Replica::get_digest_key(self.key_expr.clone(), ALIGN_PREFIX.to_string())
+            .join("**")
+            .unwrap();
 
         debug!(
             "[DIGEST_SUB] Creating Subscriber named {} on '{}'",
@@ -197,7 +198,7 @@ impl Replica {
             let sample = sample.unwrap();
             let from = &sample.key_expr.as_str()[Replica::get_digest_key(
                 self.key_expr.clone(),
-                self.replica_config.align_prefix.to_string(),
+                ALIGN_PREFIX.to_string(),
             )
             .len()
                 + 1..];
@@ -230,12 +231,9 @@ impl Replica {
     // Create a publisher to periodically publish digests from the snapshotter
     // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
-        let digest_key = Replica::get_digest_key(
-            self.key_expr.clone(),
-            self.replica_config.align_prefix.to_string(),
-        )
-        .join(&self.name)
-        .unwrap();
+        let digest_key = Replica::get_digest_key(self.key_expr.clone(), ALIGN_PREFIX.to_string())
+            .join(&self.name)
+            .unwrap();
 
         debug!("[DIGEST_PUB] Declaring publication on '{}'...", digest_key);
         let publisher = self
@@ -282,9 +280,11 @@ impl Replica {
         }
         // TODO: test this part
         if config.delta != self.replica_config.delta
-            || config.sub_intervals != self.replica_config.subintervals
-            || config.hot != self.replica_config.hot
-            || config.warm != self.replica_config.warm
+            || config.hot
+                != Replica::get_hot_interval_number(
+                    self.replica_config.publication_interval,
+                    self.replica_config.delta,
+                )
         {
             error!("[DIGEST_SUB] mismatching digest configs, cannot be aligned");
             return false;
@@ -298,5 +298,13 @@ impl Replica {
             .unwrap()
             .join(&key_expr)
             .unwrap()
+    }
+
+    pub fn get_hot_interval_number(publication_interval: Duration, delta: Duration) -> usize {
+        ((publication_interval.as_nanos() / delta.as_nanos()) as usize) + 1
+    }
+
+    pub fn get_warm_interval_number(publication_interval: Duration, delta: Duration) -> usize {
+        Replica::get_hot_interval_number(publication_interval, delta) * 5
     }
 }

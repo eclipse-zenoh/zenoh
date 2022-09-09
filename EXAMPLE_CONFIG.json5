@@ -154,25 +154,14 @@
           /// In the absence of this configuration, a normal storage is initialized
           replica_config: {
             /// Specifying the parameters is optional, by default the values provided will be used.
-            /// Prefix on which data for anti-entropy protocol should be published
-            align_prefix: "@-digest",
             /// Time interval between different synchronization attempts in seconds
             publication_interval: 5,
             /// Expected propagation delay of the network in milliseconds
             propagation_delay: 200,
             /// This is the chunk that you would like your data to be divide into in time, in milliseconds.
             /// Higher the frequency of updates, lower the delta should be chosen
-            /// To be efficient, delta should be at least greater than twice the propagation delay 
+            /// To be efficient, delta should be the time containing no more than 100,000 samples
             delta: 1000,
-            /// The number of chunks an interval is divided into
-            /// Ideally this number should be such that the numbr of entries in the chunk is less than 10000
-            subintervals: 10,
-            /// This is number of intervals that are known not to have been yet considerd for alignment
-            /// Should be greater than publication_interval/delta
-            hot: 5,
-            /// This is the number of intervals that might have been aligned in the previous round, 
-            /// but a temporarily disconnected replica might have missed
-            warm: 10
           }        
         },
         influx_demo: {

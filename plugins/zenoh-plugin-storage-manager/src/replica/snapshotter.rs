@@ -74,9 +74,15 @@ impl Snapshotter {
                     last_snapshot_time,
                     DigestConfig {
                         delta: replica_config.delta,
-                        sub_intervals: replica_config.subintervals,
-                        hot: replica_config.hot,
-                        warm: replica_config.warm,
+                        sub_intervals: super::SUBINTERVAL_CHUNKS,
+                        hot: super::Replica::get_hot_interval_number(
+                            replica_config.publication_interval,
+                            replica_config.delta,
+                        ),
+                        warm: super::Replica::get_warm_interval_number(
+                            replica_config.publication_interval,
+                            replica_config.delta,
+                        ),
                     },
                     Vec::new(),
                     last_interval,
@@ -195,9 +201,15 @@ impl Snapshotter {
             now,
             super::DigestConfig {
                 delta: self.replica_config.delta,
-                sub_intervals: self.replica_config.subintervals,
-                hot: self.replica_config.hot,
-                warm: self.replica_config.warm,
+                sub_intervals: super::SUBINTERVAL_CHUNKS,
+                hot: super::Replica::get_hot_interval_number(
+                    self.replica_config.publication_interval,
+                    self.replica_config.delta,
+                ),
+                warm: super::Replica::get_warm_interval_number(
+                    self.replica_config.publication_interval,
+                    self.replica_config.delta,
+                ),
             },
             (*log_locked).values().copied().collect(),
             *latest_interval,
