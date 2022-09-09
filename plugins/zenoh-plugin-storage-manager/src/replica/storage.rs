@@ -216,7 +216,7 @@ impl StorageService {
             // with `_time=[..]` to get historical data (in case of time-series)
             let replies = match self
                 .session
-                .get(KeyExpr::from(&self.key_expr).with_value_selector("_time=[..]"))
+                .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
                 .res_async()

@@ -242,7 +242,7 @@ impl Aligner {
         let selector = KeyExpr::from(&self.digest_key)
             .join(&from)
             .unwrap()
-            .with_value_selector(&properties);
+            .with_parameters(&properties);
         trace!("[ALIGNER]Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self
