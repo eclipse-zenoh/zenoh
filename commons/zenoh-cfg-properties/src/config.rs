@@ -74,10 +74,10 @@ pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = ZN_AUTO;
 /// The multicast IPv4 address and ports to use for multicast scouting.
 /// String key : `"multicast_ipv4_address"`.
 /// Accepted values : `<ipv4 address>:<port>`.
-/// Default value : `"224.0.0.224:7447"`.
+/// Default value : `"224.0.0.224:7446"`.
 pub const ZN_MULTICAST_IPV4_ADDRESS_KEY: u64 = 0x47;
 pub const ZN_MULTICAST_IPV4_ADDRESS_STR: &str = "multicast_ipv4_address";
-pub const ZN_MULTICAST_IPV4_ADDRESS_DEFAULT: &str = "224.0.0.224:7447";
+pub const ZN_MULTICAST_IPV4_ADDRESS_DEFAULT: &str = "224.0.0.224:7446";
 
 /// In client mode, the period dedicated to scouting a router before failing.
 /// String key : `"scouting_timeout"`.
@@ -301,10 +301,10 @@ pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "65535";
 /// The multicast IPv6 address and ports to use for multicast scouting.
 /// String key : `"multicast_ipv6_address"`.
 /// Accepted values : `<ipv6 address>:<port>`.
-/// Default value : `"[ff24::224]:7447"`.
+/// Default value : `"[ff24::224]:7446"`.
 pub const ZN_MULTICAST_IPV6_ADDRESS_KEY: u64 = 0x77;
 pub const ZN_MULTICAST_IPV6_ADDRESS_STR: &str = "multicast_ipv6_address";
-pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7447";
+pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7446";
 
 /// The public RSA key.
 /// String key : `"auth_rsa_public_key_pem"`.
