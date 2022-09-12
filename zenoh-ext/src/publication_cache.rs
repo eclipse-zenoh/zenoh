@@ -125,7 +125,7 @@ impl<'a> PublicationCache<'a> {
         let local_sub = conf
             .session
             .declare_subscriber(&key_expr)
-            .local()
+            .allowed_origin(Locality::SessionLocal)
             .res_sync()?;
 
         // declare the queryable that will answer to queries on cache

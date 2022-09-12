@@ -98,12 +98,14 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    /// Enable or disable local routing.
+    /// Restrict the matching subscribers that will receive the published data
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.publisher = self.publisher.local_routing(local_routing);
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.publisher = self.publisher.allowed_destination(destination);
         self
     }
+
     pub fn kind(mut self, kind: SampleKind) -> Self {
         self.kind = kind;
         self
@@ -125,6 +127,9 @@ impl SyncResolve for PutBuilder<'_, '_> {
         let key_expr = publisher.key_expr?;
         log::trace!("write({:?}, [...])", &key_expr);
         let state = zread!(publisher.session.state);
+        let destination = publisher
+            .destination
+            .unwrap_or(state.publications_destination);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
 
@@ -138,24 +143,27 @@ impl SyncResolve for PutBuilder<'_, '_> {
         info.timestamp = publisher.session.runtime.new_timestamp();
         let data_info = if info.has_options() { Some(info) } else { None };
 
-        primitives.send_data(
-            &key_expr.to_wire(&publisher.session),
-            value.payload.clone(),
-            Channel {
-                priority: publisher.priority.into(),
-                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-            },
-            publisher.congestion_control,
-            data_info.clone(),
-            None,
-        );
-        publisher.session.handle_data(
-            true,
-            &key_expr.to_wire(&publisher.session),
-            data_info,
-            value.payload,
-            publisher.local_routing,
-        );
+        if destination != Locality::SessionLocal {
+            primitives.send_data(
+                &key_expr.to_wire(&publisher.session),
+                value.payload.clone(),
+                Channel {
+                    priority: publisher.priority.into(),
+                    reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+                },
+                publisher.congestion_control,
+                data_info.clone(),
+                None,
+            );
+        }
+        if destination != Locality::Remote {
+            publisher.session.handle_data(
+                true,
+                &key_expr.to_wire(&publisher.session),
+                data_info,
+                value.payload,
+            );
+        }
         Ok(())
     }
 }
@@ -209,7 +217,7 @@ pub struct Publisher<'a> {
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) local_routing: Option<bool>,
+    pub(crate) destination: Option<Locality>,
 }
 
 impl<'a> Publisher<'a> {
@@ -231,12 +239,14 @@ impl<'a> Publisher<'a> {
         self
     }
 
-    /// Enable or disable local routing.
+    /// Restrict the matching subscribers that will receive the published data
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.destination = Some(destination);
         self
     }
+
     fn _write(&self, kind: SampleKind, value: Value) -> Publication {
         Publication {
             publisher: self,
@@ -399,6 +409,9 @@ impl SyncResolve for Publication<'_> {
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
         let state = zread!(publisher.session.state);
+        let destination = publisher
+            .destination
+            .unwrap_or(state.publications_destination);
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
 
@@ -412,24 +425,27 @@ impl SyncResolve for Publication<'_> {
         info.timestamp = publisher.session.runtime.new_timestamp();
         let data_info = if info.has_options() { Some(info) } else { None };
 
-        primitives.send_data(
-            &publisher.key_expr.to_wire(&publisher.session),
-            value.payload.clone(),
-            Channel {
-                priority: publisher.priority.into(),
-                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-            },
-            publisher.congestion_control,
-            data_info.clone(),
-            None,
-        );
-        publisher.session.handle_data(
-            true,
-            &publisher.key_expr.to_wire(&publisher.session),
-            data_info,
-            value.payload,
-            publisher.local_routing,
-        );
+        if destination != Locality::SessionLocal {
+            primitives.send_data(
+                &publisher.key_expr.to_wire(&publisher.session),
+                value.payload.clone(),
+                Channel {
+                    priority: publisher.priority.into(),
+                    reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+                },
+                publisher.congestion_control,
+                data_info.clone(),
+                None,
+            );
+        }
+        if destination != Locality::Remote {
+            publisher.session.handle_data(
+                true,
+                &publisher.key_expr.to_wire(&publisher.session),
+                data_info,
+                value.payload,
+            );
+        }
         Ok(())
     }
 }
@@ -485,7 +501,7 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) local_routing: Option<bool>,
+    pub(crate) destination: Option<Locality>,
 }
 
 impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
@@ -498,7 +514,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             },
             congestion_control: self.congestion_control,
             priority: self.priority,
-            local_routing: self.local_routing,
+            destination: self.destination,
         }
     }
 }
@@ -518,10 +534,11 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    /// Enable or disable local routing.
+    /// Restrict the matching subscribers that will receive the published data
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.destination = Some(destination);
         self
     }
 }
@@ -570,7 +587,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
-            local_routing: self.local_routing,
+            destination: self.destination,
         };
         log::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)

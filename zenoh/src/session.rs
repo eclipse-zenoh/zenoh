@@ -22,6 +22,7 @@ use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
+use crate::prelude::sync::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
@@ -85,10 +86,12 @@ pub(crate) struct SessionState {
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
-    pub(crate) local_subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
-    pub(crate) local_routing: bool,
+    pub(crate) publications_destination: Locality,
+    pub(crate) subscribers_origin: Locality,
+    pub(crate) queries_destination: Locality,
+    pub(crate) queryables_origin: Locality,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) timer: Timer,
@@ -96,7 +99,10 @@ pub(crate) struct SessionState {
 
 impl SessionState {
     pub(crate) fn new(
-        local_routing: bool,
+        publications_destination: Locality,
+        subscribers_origin: Locality,
+        queries_destination: Locality,
+        queryables_origin: Locality,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
@@ -109,10 +115,12 @@ impl SessionState {
             remote_resources: HashMap::new(),
             publications: Vec::new(),
             subscribers: HashMap::new(),
-            local_subscribers: HashMap::new(),
             queryables: HashMap::new(),
             queries: HashMap::new(),
-            local_routing,
+            publications_destination,
+            subscribers_origin,
+            queries_destination,
+            queryables_origin,
             aggregated_subscribers,
             aggregated_publishers,
             timer: Timer::new(true),
@@ -228,7 +236,6 @@ impl fmt::Debug for SessionState {
 pub(crate) struct ResourceNode {
     pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) subscribers: Vec<Arc<SubscriberState>>,
-    pub(crate) local_subscribers: Vec<Arc<SubscriberState>>,
 }
 pub(crate) enum Resource {
     Prefix { prefix: Box<str> },
@@ -247,7 +254,6 @@ impl Resource {
         Self::Node(ResourceNode {
             key_expr,
             subscribers: Vec::new(),
-            local_subscribers: Vec::new(),
         })
     }
     pub(crate) fn name(&self) -> &str {
@@ -315,19 +321,22 @@ pub struct Session {
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
-    /// Initialize a Session with an existing Runtime.
-    /// This operation is used by the plugins to share the same Runtime as the router.
-    #[doc(hidden)]
-    pub fn init(
+    pub(crate) fn init(
         runtime: Runtime,
-        local_routing: bool,
+        publications_destination: Locality,
+        subscribers_origin: Locality,
+        queries_destination: Locality,
+        queryables_origin: Locality,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ClosureResolve(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
-                local_routing,
+                publications_destination,
+                subscribers_origin,
+                queries_destination,
+                queryables_origin,
                 aggregated_subscribers,
                 aggregated_publishers,
             )));
@@ -530,7 +539,7 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            local: false,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -570,6 +579,7 @@ impl Session {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -603,7 +613,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            local_routing: None,
+            destination: None,
         }
     }
 
@@ -764,7 +774,7 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            local_routing: None,
+            destination: None,
             timeout: Duration::from_secs(10),
             handler: DefaultHandler,
         }
@@ -782,17 +792,25 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
-        FutureResolve(async {
+    pub(super) fn new(
+        config: Config,
+        publications_destination: Locality,
+        subscribers_origin: Locality,
+        queries_destination: Locality,
+        queryables_origin: Locality,
+    ) -> impl Resolve<ZResult<Session>> {
+        FutureResolve(async move {
             log::debug!("Config: {:?}", &config);
-            let local_routing = config.local_routing().unwrap_or(true);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
-                        local_routing,
+                        publications_destination,
+                        subscribers_origin,
+                        queries_destination,
+                        queryables_origin,
                         aggregated_subscribers,
                         aggregated_publishers,
                     )
@@ -931,34 +949,42 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
+        origin: Option<Locality>,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let origin = origin.unwrap_or(state.subscribers_origin);
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
+            origin,
             callback,
         });
-        let declared_sub = match state
-            .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
-            .iter()
-            .find(|s| s.includes( key_expr))
-        {
-            Some(join_sub) => {
-                let joined_sub = state
-                    .subscribers
-                    .values()
-                    .any(|s| join_sub.includes(&s.key_expr));
-                (!joined_sub).then(|| join_sub.clone().into())
-            }
-            None => {
-                let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
-                (!twin_sub).then(|| key_expr.clone())
-            }
-        };
+
+        let declared_sub = (origin != Locality::SessionLocal)
+            .then(|| {
+                match state
+                .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
+                .iter()
+                .find(|s| s.includes( key_expr))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| join_sub.includes(&s.key_expr));
+                        (!joined_sub).then(|| join_sub.clone().into())
+                    }
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                        (!twin_sub).then(|| key_expr.clone())
+                    }
+                }
+            })
+            .flatten();
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state
@@ -1013,43 +1039,6 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn declare_local_subscriber(
-        &self,
-        key_expr: &KeyExpr,
-        callback: Callback<'static, Sample>,
-    ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.state);
-        log::trace!("subscribe({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let sub_state = Arc::new(SubscriberState {
-            id,
-            key_expr: key_expr.clone().into_owned(),
-            callback,
-        });
-        state
-            .local_subscribers
-            .insert(sub_state.id, sub_state.clone());
-        for res in state
-            .local_resources
-            .values_mut()
-            .filter_map(Resource::as_node_mut)
-        {
-            if key_expr.intersects(&res.key_expr) {
-                res.local_subscribers.push(sub_state.clone());
-            }
-        }
-        for res in state
-            .remote_resources
-            .values_mut()
-            .filter_map(Resource::as_node_mut)
-        {
-            if key_expr.intersects(&res.key_expr) {
-                res.local_subscribers.push(sub_state.clone());
-            }
-        }
-
-        Ok(sub_state)
-    }
     pub(crate) fn unsubscribe(&self, sid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
@@ -1069,77 +1058,66 @@ impl Session {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
-            // Note: there might be several Subscribers on the same KeyExpr.
-            // Before calling forget_subscriber(key_expr), check if this was the last one.
-            let key_expr = &sub_state.key_expr;
-            match state
-                .aggregated_subscribers
-                .iter()
-                .find(|s| s.includes(key_expr))
-            {
-                Some(join_sub) => {
-                    let joined_sub = state
-                        .subscribers
-                        .values()
-                        .any(|s| join_sub.includes(&s.key_expr));
-                    if !joined_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        let key_expr = WireExpr::from(join_sub).to_owned();
-                        drop(state);
-                        primitives.forget_subscriber(&key_expr, None);
+            if sub_state.origin != Locality::SessionLocal {
+                // Note: there might be several Subscribers on the same KeyExpr.
+                // Before calling forget_subscriber(key_expr), check if this was the last one.
+                let key_expr = &sub_state.key_expr;
+                match state
+                    .aggregated_subscribers
+                    .iter()
+                    .find(|s| s.includes(key_expr))
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| join_sub.includes(&s.key_expr));
+                        if !joined_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            let key_expr = WireExpr::from(join_sub).to_owned();
+                            drop(state);
+                            primitives.forget_subscriber(&key_expr, None);
+                        }
                     }
-                }
-                None => {
-                    let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
-                    if !twin_sub {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_subscriber(&key_expr.to_wire(self), None);
+                    None => {
+                        let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                        if !twin_sub {
+                            let primitives = state.primitives.as_ref().unwrap().clone();
+                            drop(state);
+                            primitives.forget_subscriber(&key_expr.to_wire(self), None);
+                        }
                     }
-                }
-            };
-            Ok(())
-        } else if let Some(sub_state) = state.local_subscribers.remove(&sid) {
-            trace!("unsubscribe({:?})", sub_state);
-            for res in state
-                .local_resources
-                .values_mut()
-                .filter_map(Resource::as_node_mut)
-            {
-                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
-            }
-            for res in state
-                .remote_resources
-                .values_mut()
-                .filter_map(Resource::as_node_mut)
-            {
-                res.local_subscribers.retain(|sub| sub.id != sub_state.id);
+                };
             }
             Ok(())
         } else {
             Err(zerror!("Unable to find subscriber").into())
         }
     }
+
     pub(crate) fn declare_queryable_inner(
         &self,
         key_expr: &WireExpr,
         complete: bool,
+        origin: Option<Locality>,
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let origin = origin.unwrap_or(state.queryables_origin);
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
             complete,
+            origin,
             callback,
         });
         #[cfg(feature = "complete_n")]
         {
             state.queryables.insert(id, qable_state.clone());
 
-            if complete {
+            if origin != Locality::SessionLocal && complete {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 let complete = Session::complete_twin_qabls(&state, key_expr);
                 drop(state);
@@ -1157,7 +1135,8 @@ impl Session {
 
             state.queryables.insert(id, qable_state.clone());
 
-            if !twin_qabl || (!complete_twin_qabl && complete) {
+            if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
+            {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 let complete = if !complete_twin_qabl && complete {
                     1
@@ -1206,37 +1185,40 @@ impl Session {
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
-            let primitives = state.primitives.as_ref().unwrap().clone();
             trace!("close_queryable({:?})", qable_state);
-            if Session::twin_qabl(&state, &qable_state.key_expr) {
-                // There still exist Queryables on the same KeyExpr.
-                if qable_state.complete {
-                    #[cfg(feature = "complete_n")]
-                    {
-                        let complete = Session::complete_twin_qabls(&state, &qable_state.key_expr);
-                        drop(state);
-                        let qabl_info = QueryableInfo {
-                            complete,
-                            distance: 0,
-                        };
-                        primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
-                    }
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
+            if qable_state.origin != Locality::SessionLocal {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                if Session::twin_qabl(&state, &qable_state.key_expr) {
+                    // There still exist Queryables on the same KeyExpr.
+                    if qable_state.complete {
+                        #[cfg(feature = "complete_n")]
+                        {
+                            let complete =
+                                Session::complete_twin_qabls(&state, &qable_state.key_expr);
                             drop(state);
                             let qabl_info = QueryableInfo {
-                                complete: 0,
+                                complete,
                                 distance: 0,
                             };
                             primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
                         }
+                        #[cfg(not(feature = "complete_n"))]
+                        {
+                            if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
+                                drop(state);
+                                let qabl_info = QueryableInfo {
+                                    complete: 0,
+                                    distance: 0,
+                                };
+                                primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
+                            }
+                        }
                     }
+                } else {
+                    // There are no more Queryables on the same KeyExpr.
+                    drop(state);
+                    primitives.forget_queryable(&qable_state.key_expr, None);
                 }
-            } else {
-                // There are no more Queryables on the same KeyExpr.
-                drop(state);
-                primitives.forget_queryable(&qable_state.key_expr, None);
             }
             Ok(())
         } else {
@@ -1249,22 +1231,17 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        local_routing: Option<bool>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let sample = {
             let state = zread!(self.state);
-            let local_routing = local_routing.unwrap_or(state.local_routing);
             let sample = if key_expr.suffix.is_empty() {
                 match state.get_res(&key_expr.scope, local) {
                     Some(Resource::Node(res)) => {
-                        if !local || local_routing {
-                            for sub in &res.subscribers {
-                                callbacks.push(sub.callback.clone());
-                            }
-                        }
-                        if local {
-                            for sub in &res.local_subscribers {
+                        for sub in &res.subscribers {
+                            if sub.origin == Locality::Any
+                                || (local == (sub.origin == Locality::SessionLocal))
+                            {
                                 callbacks.push(sub.callback.clone());
                             }
                         }
@@ -1285,18 +1262,12 @@ impl Session {
             } else {
                 match state.wireexpr_to_keyexpr(key_expr, local) {
                     Ok(key_expr) => {
-                        if !local || local_routing {
-                            for sub in state.subscribers.values() {
-                                if key_expr.intersects(&*sub.key_expr) {
-                                    callbacks.push(sub.callback.clone());
-                                }
-                            }
-                        }
-                        if local {
-                            for sub in state.local_subscribers.values() {
-                                if key_expr.intersects(&*sub.key_expr) {
-                                    callbacks.push(sub.callback.clone());
-                                }
+                        for sub in state.subscribers.values() {
+                            if (sub.origin == Locality::Any
+                                || (local == (sub.origin == Locality::SessionLocal)))
+                                && key_expr.intersects(&*sub.key_expr)
+                            {
+                                callbacks.push(sub.callback.clone());
                             }
                         }
                         Sample::with_info(key_expr.clone().into_owned(), payload, info)
@@ -1334,7 +1305,7 @@ impl Session {
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-        local_routing: Option<bool>,
+        destination: Option<Locality>,
         timeout: Duration,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1350,9 +1321,12 @@ impl Session {
             }
             Some(mode) => mode,
         };
-        let local_routing = local_routing.unwrap_or(state.local_routing);
+        let destination = destination.unwrap_or(state.queries_destination);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let nb_final = if local_routing { 2 } else { 1 };
+        let nb_final = match destination {
+            Locality::Any => 2,
+            _ => 1,
+        };
         let timeout = TimedEvent::once(
             Instant::now() + timeout,
             QueryTimeout {
@@ -1376,15 +1350,17 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
-        primitives.send_query(
-            &selector.key_expr.to_wire(self),
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-            None,
-        );
-        if local_routing {
+        if destination != Locality::SessionLocal {
+            primitives.send_query(
+                &selector.key_expr.to_wire(self),
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                None,
+            );
+        }
+        if destination != Locality::Remote {
             self.handle_query(
                 true,
                 &selector.key_expr.to_wire(self),
@@ -1414,18 +1390,22 @@ impl Session {
                         .queryables
                         .values()
                         .filter(
-                            |queryable| match state.local_wireexpr_to_expr(&queryable.key_expr) {
-                                Ok(qablname) => {
-                                    qablname.intersects(&key_expr)
+                            |queryable|
+                                (queryable.origin == Locality::Any
+                                    || (local == (queryable.origin == Locality::SessionLocal)))
+                                &&
+                                match state.local_wireexpr_to_expr(&queryable.key_expr) {
+                                    Ok(qablname) => {
+                                        qablname.intersects(&key_expr)
+                                    }
+                                    Err(err) => {
+                                        error!(
+                                            "{}. Internal error (queryable key_expr to key_expr failed).",
+                                            err
+                                        );
+                                        false
+                                    }
                                 }
-                                Err(err) => {
-                                    error!(
-                                        "{}. Internal error (queryable key_expr to key_expr failed).",
-                                        err
-                                    );
-                                    false
-                                }
-                            },
                         )
                         .map(|qable| qable.callback.clone())
                         .collect::<Vec<Arc<dyn Fn(Query) + Send + Sync>>>();
@@ -1527,7 +1507,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            local: false,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -1569,6 +1549,7 @@ impl SessionDeclarations for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -1603,7 +1584,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            local_routing: None,
+            destination: None,
         }
     }
 }
@@ -1623,7 +1604,6 @@ impl Primitives for Session {
                 let res = Resource::Node(ResourceNode {
                     key_expr: key_expr.into(),
                     subscribers: subs,
-                    local_subscribers: Vec::new(),
                 });
 
                 state.remote_resources.insert(expr_id, res);
@@ -1690,7 +1670,7 @@ impl Primitives for Session {
             congestion_control,
             info,
         );
-        self.handle_data(false, key_expr, info, payload, None)
+        self.handle_data(false, key_expr, info, payload)
     }
 
     fn send_query(

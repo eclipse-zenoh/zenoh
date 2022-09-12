@@ -146,6 +146,7 @@ pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) key_expr: WireExpr<'static>,
     pub(crate) complete: bool,
+    pub(crate) origin: Locality,
     pub(crate) callback: Arc<dyn Fn(Query) + Send + Sync>,
 }
 
@@ -263,6 +264,7 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) complete: bool,
+    pub(crate) origin: Option<Locality>,
     pub(crate) handler: Handler,
 }
 
@@ -293,12 +295,14 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             complete,
+            origin,
             handler: _,
         } = self;
         QueryableBuilder {
             session,
             key_expr,
             complete,
+            origin,
             handler: callback,
         }
     }
@@ -364,14 +368,24 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             complete,
+            origin,
             handler: _,
         } = self;
         QueryableBuilder {
             session,
             key_expr,
             complete,
+            origin,
             handler,
         }
+    }
+
+    /// Restrict the matching queries that will be receive by this [`Queryable`]
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[inline]
+    pub fn allowed_origin(mut self, origin: Locality) -> Self {
+        self.origin = Some(origin);
+        self
     }
 }
 impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
@@ -456,7 +470,12 @@ where
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
-            .declare_queryable_inner(&self.key_expr?.to_wire(&session), self.complete, callback)
+            .declare_queryable_inner(
+                &self.key_expr?.to_wire(&session),
+                self.complete,
+                self.origin,
+                callback,
+            )
             .map(|qable_state| Queryable {
                 queryable: CallbackQueryable {
                     session,

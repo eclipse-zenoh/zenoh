@@ -14,6 +14,7 @@
 
 //! Subscribing primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
+use crate::prelude::sync::Locality;
 use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
 
 use crate::Undeclarable;
@@ -33,6 +34,7 @@ pub use zenoh_protocol_core::Reliability;
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) origin: Locality,
     pub(crate) callback: Callback<'static, Sample>,
 }
 
@@ -296,7 +298,7 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: Mode,
-    pub(crate) local: bool,
+    pub(crate) origin: Option<Locality>,
     pub(crate) handler: Handler,
 }
 
@@ -328,7 +330,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             key_expr,
             reliability,
             mode,
-            local,
+            origin,
             handler: _,
         } = self;
         SubscriberBuilder {
@@ -336,7 +338,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             key_expr,
             reliability,
             mode,
-            local,
+            origin,
             handler: callback,
         }
     }
@@ -403,7 +405,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             key_expr,
             reliability,
             mode,
-            local,
+            origin,
             handler: _,
         } = self;
         SubscriberBuilder {
@@ -411,7 +413,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
             key_expr,
             reliability,
             mode,
-            local,
+            origin,
             handler,
         }
     }
@@ -438,10 +440,11 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         self
     }
 
-    /// Make the subscription local only.
+    /// Restrict the matching publications that will be receive by this [`Subscriber`]
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
-    pub fn local(mut self) -> Self {
-        self.local = true;
+    pub fn allowed_origin(mut self, origin: Locality) -> Self {
+        self.origin = Some(origin);
         self
     }
 
@@ -453,7 +456,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
             key_expr,
             reliability,
             mode: _,
-            local,
+            origin,
             handler,
         } = self;
         SubscriberBuilder {
@@ -461,7 +464,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
             key_expr,
             reliability,
             mode: PullMode,
-            local,
+            origin,
             handler,
         }
     }
@@ -474,7 +477,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
             key_expr,
             reliability,
             mode: _,
-            local,
+            origin,
             handler,
         } = self;
         SubscriberBuilder {
@@ -482,7 +485,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
             key_expr,
             reliability,
             mode: PushMode,
-            local,
+            origin,
             handler,
         }
     }
@@ -506,37 +509,27 @@ where
     Handler::Receiver: Send,
 {
     fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
         let key_expr = self.key_expr?;
         let session = self.session;
-        let inner = if self.local {
-            session
-                .declare_local_subscriber(&key_expr, callback)
-                .map(|sub_state| SubscriberInner {
+        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        session
+            .declare_subscriber_inner(
+                &key_expr,
+                self.origin,
+                callback,
+                &SubInfo {
+                    reliability: self.reliability,
+                    mode: self.mode.into(),
+                },
+            )
+            .map(|sub_state| Subscriber {
+                subscriber: SubscriberInner {
                     session,
                     state: sub_state,
                     alive: true,
-                })
-        } else {
-            session
-                .declare_subscriber_inner(
-                    &key_expr,
-                    callback,
-                    &SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode.into(),
-                    },
-                )
-                .map(|sub_state| SubscriberInner {
-                    session,
-                    state: sub_state,
-                    alive: true,
-                })
-        };
-        Ok(Subscriber {
-            subscriber: inner?,
-            receiver,
-        })
+                },
+                receiver,
+            })
     }
 }
 impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve
@@ -555,41 +548,29 @@ where
     Handler::Receiver: Send,
 {
     fn res_sync(self) -> Self::Output {
-        let (callback, receiver) = self.handler.into_cb_receiver_pair();
         let key_expr = self.key_expr?;
         let session = self.session;
-        let inner = if self.local {
-            session
-                .declare_local_subscriber(&key_expr, callback)
-                .map(|sub_state| PullSubscriberInner {
+        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        session
+            .declare_subscriber_inner(
+                &key_expr,
+                self.origin,
+                callback,
+                &SubInfo {
+                    reliability: self.reliability,
+                    mode: self.mode.into(),
+                },
+            )
+            .map(|sub_state| PullSubscriber {
+                subscriber: PullSubscriberInner {
                     inner: SubscriberInner {
                         session,
                         state: sub_state,
                         alive: true,
                     },
-                })
-        } else {
-            session
-                .declare_subscriber_inner(
-                    &key_expr,
-                    callback,
-                    &SubInfo {
-                        reliability: self.reliability,
-                        mode: self.mode.into(),
-                    },
-                )
-                .map(|sub_state| PullSubscriberInner {
-                    inner: SubscriberInner {
-                        session,
-                        state: sub_state,
-                        alive: true,
-                    },
-                })
-        };
-        Ok(PullSubscriber {
-            subscriber: inner?,
-            receiver,
-        })
+                },
+                receiver,
+            })
     }
 }
 impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve

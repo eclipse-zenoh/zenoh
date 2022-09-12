@@ -52,6 +52,13 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::ZInt;
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol_core::ZenohId;
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub enum Locality {
+        SessionLocal,
+        Remote,
+        Any,
+    }
 }
 
 pub mod sync {
