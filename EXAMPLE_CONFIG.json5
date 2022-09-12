@@ -69,9 +69,6 @@
     drop_future_timestamp: false,
   },
 
-  /// Whether local writes/queries should reach local subscribers/queryables
-  local_routing: true,
-
   /// The routing strategy to use and it's configuration.
   routing: {
       /// The routing strategy to use in peers and it's configuration.
