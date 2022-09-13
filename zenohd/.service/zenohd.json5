@@ -44,7 +44,7 @@
   //     /* Whether multicast scouting is enabled or not */
   //     enabled: true,
   //     /* The socket which should be used for multicast scouting */
-  //     address: "224.0.0.224:7447",
+  //     address: "224.0.0.224:7446",
   //     /* The network interface which should be used for multicast scouting */
   //     interface: "auto", // auto selection of interface
   //     /**
