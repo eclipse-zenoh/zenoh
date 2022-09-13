@@ -174,6 +174,14 @@ pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY: u64 = 0x53;
 pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR: &str = "routers_autoconnect_gossip";
 pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_DEFAULT: &str = ZN_FALSE;
 
+/// Indicates if local writes/queries should reach local subscribers/queryables.
+/// String key : `"local_routing"`.
+/// Accepted values : `"true"`, `"false"`.
+/// Default value : `"true"`.
+pub const ZN_LOCAL_ROUTING_KEY: u64 = 0x60;
+pub const ZN_LOCAL_ROUTING_STR: &str = "local_routing";
+pub const ZN_LOCAL_ROUTING_DEFAULT: &str = ZN_TRUE;
+
 pub const ZN_JOIN_SUBSCRIPTIONS_KEY: u64 = 0x61;
 pub const ZN_JOIN_SUBSCRIPTIONS_STR: &str = "join_subscriptions";
 

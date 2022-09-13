@@ -138,7 +138,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
-    pub(crate) destination: Option<Locality>,
+    pub(crate) local_routing: Option<bool>,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -171,7 +171,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
+            local_routing,
             timeout,
             handler: _,
         } = self;
@@ -180,7 +180,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
+            local_routing,
             timeout,
             handler: callback,
         }
@@ -248,7 +248,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
+            local_routing,
             timeout,
             handler: _,
         } = self;
@@ -257,7 +257,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
+            local_routing,
             timeout,
             handler,
         }
@@ -278,11 +278,10 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Enable or disable local routing.
     #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = Some(destination);
+    pub fn local_routing(mut self, local_routing: bool) -> Self {
+        self.local_routing = Some(local_routing);
         self
     }
 
@@ -313,7 +312,7 @@ where
                 &self.selector?,
                 self.target,
                 self.consolidation,
-                self.destination,
+                self.local_routing,
                 self.timeout,
                 callback,
             )

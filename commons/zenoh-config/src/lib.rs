@@ -165,6 +165,9 @@ validated_struct::validator! {
             drop_future_timestamp: Option<bool>,
         },
 
+        /// Whether or not to drop live data with timestamps in the future. When set to false, the router
+        /// Whether local writes/queries should reach local subscribers/queryables.
+        local_routing: Option<bool>,
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
 

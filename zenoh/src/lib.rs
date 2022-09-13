@@ -210,11 +210,10 @@ where
 ///
 /// ```
 /// # async_std::task::block_on(async {
-/// use std::str::FromStr;
 /// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_id(ZenohId::from_str("F000").unwrap());
+/// config.set_local_routing(Some(false));
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();
@@ -225,13 +224,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder {
-        config,
-        publications_destination: Locality::Any,
-        subscribers_origin: Locality::Any,
-        queries_destination: Locality::Any,
-        queryables_origin: Locality::Any,
-    }
+    OpenBuilder { config }
 }
 
 /// A builder returned by [`open`] used to open a zenoh [`Session`].
@@ -251,47 +244,6 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
-    publications_destination: Locality,
-    subscribers_origin: Locality,
-    queries_destination: Locality,
-    queryables_origin: Locality,
-}
-
-impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
-where
-    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
-{
-    /// Restrict the matching subscribers that will receive data published from this [`Session`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn publications_allowed_destination(mut self, destination: Locality) -> Self {
-        self.publications_destination = destination;
-        self
-    }
-
-    /// Restrict the matching publications that will be receive by the [`Subscribers`](crate::subscriber::Subscriber)
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn subscribers_allowed_origin(mut self, origin: Locality) -> Self {
-        self.subscribers_origin = origin;
-        self
-    }
-    /// Restrict the matching queryables that will receive queries from this [`Session`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn queries_allowed_destination(mut self, destination: Locality) -> Self {
-        self.publications_destination = destination;
-        self
-    }
-
-    /// Restrict the matching queries that will be receive by the [`Queryables`](crate::queryable::Queryable)
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn queriables_allowed_origin(mut self, origin: Locality) -> Self {
-        self.queryables_origin = origin;
-        self
-    }
 }
 
 impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
@@ -313,14 +265,7 @@ where
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(
-            config,
-            self.publications_destination,
-            self.subscribers_origin,
-            self.queries_destination,
-            self.queryables_origin,
-        )
-        .res_sync()
+        Session::new(config).res_sync()
     }
 }
 
@@ -337,15 +282,7 @@ where
                 .config
                 .try_into()
                 .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-            Session::new(
-                config,
-                self.publications_destination,
-                self.subscribers_origin,
-                self.queries_destination,
-                self.queryables_origin,
-            )
-            .res_async()
-            .await
+            Session::new(config).res_async().await
         })
     }
 }
@@ -354,72 +291,13 @@ where
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder {
-        runtime,
-        publications_destination: Locality::Any,
-        subscribers_origin: Locality::Any,
-        queries_destination: Locality::Any,
-        queryables_origin: Locality::Any,
-        aggregated_subscribers: vec![],
-        aggregated_publishers: vec![],
-    }
+    InitBuilder { runtime }
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[doc(hidden)]
 pub struct InitBuilder {
     runtime: Runtime,
-    publications_destination: Locality,
-    subscribers_origin: Locality,
-    queries_destination: Locality,
-    queryables_origin: Locality,
-    aggregated_subscribers: Vec<OwnedKeyExpr>,
-    aggregated_publishers: Vec<OwnedKeyExpr>,
-}
-
-impl InitBuilder {
-    /// Restrict the matching subscribers that will receive data published from this [`Session`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn publications_allowed_destination(mut self, destination: Locality) -> Self {
-        self.publications_destination = destination;
-        self
-    }
-
-    /// Restrict the matching publications that will be receive by the [`Subscribers`](crate::subscriber::Subscriber)
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn subscribers_allowed_origin(mut self, origin: Locality) -> Self {
-        self.subscribers_origin = origin;
-        self
-    }
-    /// Restrict the matching queryables that will receive queries from this [`Session`]
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn queries_allowed_destination(mut self, destination: Locality) -> Self {
-        self.publications_destination = destination;
-        self
-    }
-
-    /// Restrict the matching queries that will be receive by the [`Queryables`](crate::queryable::Queryable)
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[inline]
-    pub fn queriables_allowed_origin(mut self, origin: Locality) -> Self {
-        self.queryables_origin = origin;
-        self
-    }
-
-    #[inline]
-    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_subscribers = exprs;
-        self
-    }
-
-    #[inline]
-    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
-        self.aggregated_publishers = exprs;
-        self
-    }
 }
 
 impl Resolvable for InitBuilder {
@@ -428,16 +306,7 @@ impl Resolvable for InitBuilder {
 impl SyncResolve for InitBuilder {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        Ok(Session::init(
-            self.runtime,
-            self.publications_destination,
-            self.subscribers_origin,
-            self.queries_destination,
-            self.queryables_origin,
-            self.aggregated_subscribers,
-            self.aggregated_publishers,
-        )
-        .res_sync())
+        Ok(Session::init(self.runtime, true, vec![], vec![]).res_sync())
     }
 }
 
