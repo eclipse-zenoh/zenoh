@@ -539,7 +539,7 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: None,
+            origin: zread!(self.state).subscribers_origin,
             handler: DefaultHandler,
         }
     }
@@ -949,14 +949,13 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        origin: Option<Locality>,
+        origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let origin = origin.unwrap_or(state.subscribers_origin);
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1506,7 +1505,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: None,
+            origin: zread!(self.state).subscribers_origin,
             handler: DefaultHandler,
         }
     }

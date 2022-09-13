@@ -298,7 +298,7 @@ pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: Mode,
-    pub(crate) origin: Option<Locality>,
+    pub(crate) origin: Locality,
     pub(crate) handler: Handler,
 }
 
@@ -444,7 +444,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
-        self.origin = Some(origin);
+        self.origin = origin;
         self
     }
 
