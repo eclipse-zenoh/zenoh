@@ -613,7 +613,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: None,
+            destination: zread!(self.state).publications_destination,
         }
     }
 
@@ -1584,7 +1584,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: None,
+            destination: Locality::default(),
         }
     }
 }
