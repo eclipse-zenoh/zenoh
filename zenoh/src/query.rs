@@ -138,7 +138,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
-    pub(crate) destination: Option<Locality>,
+    pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -282,7 +282,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = Some(destination);
+        self.destination = destination;
         self
     }
 

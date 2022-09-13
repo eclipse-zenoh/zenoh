@@ -774,7 +774,7 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            destination: None,
+            destination: zread!(self.state).queries_destination,
             timeout: Duration::from_secs(10),
             handler: DefaultHandler,
         }
@@ -1303,7 +1303,7 @@ impl Session {
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-        destination: Option<Locality>,
+        destination: Locality,
         timeout: Duration,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1319,7 +1319,6 @@ impl Session {
             }
             Some(mode) => mode,
         };
-        let destination = destination.unwrap_or(state.queries_destination);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let nb_final = match destination {
             Locality::Any => 2,
