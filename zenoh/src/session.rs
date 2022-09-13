@@ -320,10 +320,13 @@ impl Session {
     #[doc(hidden)]
     pub fn init(
         runtime: Runtime,
-        local_routing: bool,
+        #[cfg(feature = "unstable")] local_routing: bool,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
+        #[cfg(not(feature = "unstable"))]
+        let local_routing = true;
+
         ClosureResolve(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
@@ -785,14 +788,14 @@ impl Session {
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async {
             log::debug!("Config: {:?}", &config);
-            let local_routing = config.local_routing().unwrap_or(true);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
                     let session = Self::init(
                         runtime,
-                        local_routing,
+                        #[cfg(feature = "unstable")]
+                        true,
                         aggregated_subscribers,
                         aggregated_publishers,
                     )

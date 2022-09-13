@@ -98,12 +98,14 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    /// Enable or disable local routing.
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
         self.publisher = self.publisher.local_routing(local_routing);
         self
     }
+
     pub fn kind(mut self, kind: SampleKind) -> Self {
         self.kind = kind;
         self
@@ -231,12 +233,14 @@ impl<'a> Publisher<'a> {
         self
     }
 
-    /// Enable or disable local routing.
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
         self.local_routing = Some(local_routing);
         self
     }
+
     fn _write(&self, kind: SampleKind, value: Value) -> Publication {
         Publication {
             publisher: self,
@@ -518,7 +522,8 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
         self
     }
 
-    /// Enable or disable local routing.
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
         self.local_routing = Some(local_routing);

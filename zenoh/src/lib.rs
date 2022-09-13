@@ -213,7 +213,6 @@ where
 /// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_local_routing(Some(false));
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();
@@ -306,7 +305,14 @@ impl Resolvable for InitBuilder {
 impl SyncResolve for InitBuilder {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        Ok(Session::init(self.runtime, true, vec![], vec![]).res_sync())
+        Ok(Session::init(
+            self.runtime,
+            #[cfg(feature = "unstable")]
+            true,
+            vec![],
+            vec![],
+        )
+        .res_sync())
     }
 }
 

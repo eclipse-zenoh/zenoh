@@ -278,7 +278,8 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Enable or disable local routing.
+    #[cfg(feature = "unstable")]
+    #[doc(hidden)]
     #[inline]
     pub fn local_routing(mut self, local_routing: bool) -> Self {
         self.local_routing = Some(local_routing);
