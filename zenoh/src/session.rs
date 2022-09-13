@@ -321,8 +321,8 @@ impl Session {
     pub fn init(
         runtime: Runtime,
         #[cfg(feature = "unstable")] local_routing: bool,
-        aggregated_subscribers: Vec<OwnedKeyExpr>,
-        aggregated_publishers: Vec<OwnedKeyExpr>,
+        #[cfg(feature = "unstable")] aggregated_subscribers: Vec<OwnedKeyExpr>,
+        #[cfg(feature = "unstable")] aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         #[cfg(not(feature = "unstable"))]
         let local_routing = true;
