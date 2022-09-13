@@ -41,7 +41,7 @@ pub(crate) mod common {
     /// The encoding of a zenoh [`Value`].
     pub use zenoh_protocol_core::{Encoding, KnownEncoding};
 
-    pub use crate::sample::Sample;
+    pub use crate::sample::{Locality, Sample};
     pub use zenoh_protocol_core::SampleKind;
 
     pub use crate::publication::Priority;
@@ -52,13 +52,6 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::ZInt;
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol_core::ZenohId;
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub enum Locality {
-        SessionLocal,
-        Remote,
-        Any,
-    }
 }
 
 pub mod sync {

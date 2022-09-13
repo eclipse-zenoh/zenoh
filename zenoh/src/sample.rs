@@ -21,6 +21,14 @@ use crate::buffers::ZBuf;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
 
+/// The locality of samples to be received by subscribers or targeted by publishers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Locality {
+    SessionLocal,
+    Remote,
+    Any,
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
