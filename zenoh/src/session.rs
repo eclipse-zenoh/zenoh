@@ -579,7 +579,7 @@ impl Session {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: None,
+            origin: zread!(self.state).queryables_origin,
             handler: DefaultHandler,
         }
     }
@@ -1099,13 +1099,12 @@ impl Session {
         &self,
         key_expr: &WireExpr,
         complete: bool,
-        origin: Option<Locality>,
+        origin: Locality,
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let origin = origin.unwrap_or(state.queryables_origin);
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
@@ -1549,7 +1548,7 @@ impl SessionDeclarations for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: None,
+            origin: zread!(self.state).queryables_origin,
             handler: DefaultHandler,
         }
     }
