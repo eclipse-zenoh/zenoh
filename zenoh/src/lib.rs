@@ -264,6 +264,7 @@ where
 {
     /// Restrict the matching subscribers that will receive data published from this [`Session`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn publications_allowed_destination(mut self, destination: Locality) -> Self {
         self.publications_destination = destination;
@@ -272,6 +273,7 @@ where
 
     /// Restrict the matching publications that will be receive by the [`Subscribers`](crate::subscriber::Subscriber)
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn subscribers_allowed_origin(mut self, origin: Locality) -> Self {
         self.subscribers_origin = origin;
@@ -279,6 +281,7 @@ where
     }
     /// Restrict the matching queryables that will receive queries from this [`Session`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn queries_allowed_destination(mut self, destination: Locality) -> Self {
         self.publications_destination = destination;
@@ -287,6 +290,7 @@ where
 
     /// Restrict the matching queries that will be receive by the [`Queryables`](crate::queryable::Queryable)
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn queriables_allowed_origin(mut self, origin: Locality) -> Self {
         self.queryables_origin = origin;
@@ -380,6 +384,7 @@ pub struct InitBuilder {
 impl InitBuilder {
     /// Restrict the matching subscribers that will receive data published from this [`Session`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn publications_allowed_destination(mut self, destination: Locality) -> Self {
         self.publications_destination = destination;
@@ -388,6 +393,7 @@ impl InitBuilder {
 
     /// Restrict the matching publications that will be receive by the [`Subscribers`](crate::subscriber::Subscriber)
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn subscribers_allowed_origin(mut self, origin: Locality) -> Self {
         self.subscribers_origin = origin;
@@ -395,6 +401,7 @@ impl InitBuilder {
     }
     /// Restrict the matching queryables that will receive queries from this [`Session`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn queries_allowed_destination(mut self, destination: Locality) -> Self {
         self.publications_destination = destination;
@@ -403,6 +410,7 @@ impl InitBuilder {
 
     /// Restrict the matching queries that will be receive by the [`Queryables`](crate::queryable::Queryable)
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn queriables_allowed_origin(mut self, origin: Locality) -> Self {
         self.queryables_origin = origin;

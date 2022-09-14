@@ -280,6 +280,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[cfg(feature = "unstable")]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = Some(destination);
