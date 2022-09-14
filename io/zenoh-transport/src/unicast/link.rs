@@ -227,7 +227,7 @@ async fn tx_task(
         #[cfg(feature = "stats")]
         {
             stats.inc_tx_t_msgs(b.stats.t_msgs);
-            stats.inc_tx_bytes(b.len());
+            stats.inc_tx_bytes(b.len() as usize);
         }
     }
 
