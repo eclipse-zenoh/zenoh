@@ -126,12 +126,12 @@ impl SyncResolve for PutBuilder<'_, '_> {
         } = self;
         let key_expr = publisher.key_expr?;
         log::trace!("write({:?}, [...])", &key_expr);
-        let destination = publisher.destination;
-        let primitives = zread!(publisher.session.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
+        let state = zread!(publisher.session.state);
+        let destination = publisher
+            .destination
+            .unwrap_or(state.publications_destination);
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
 
         let mut info = DataInfo::new();
         info.kind = kind;
@@ -217,7 +217,7 @@ pub struct Publisher<'a> {
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) destination: Locality,
+    pub(crate) destination: Option<Locality>,
 }
 
 impl<'a> Publisher<'a> {
@@ -243,11 +243,11 @@ impl<'a> Publisher<'a> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = destination;
+        self.destination = Some(destination);
         self
     }
 
-    fn write_inner(&self, kind: SampleKind, value: Value) -> Publication {
+    fn _write(&self, kind: SampleKind, value: Value) -> Publication {
         Publication {
             publisher: self,
             value,
@@ -271,7 +271,7 @@ impl<'a> Publisher<'a> {
     where
         IntoValue: Into<Value>,
     {
-        self.write_inner(kind, value.into())
+        self._write(kind, value.into())
     }
 
     /// Put data.
@@ -291,7 +291,7 @@ impl<'a> Publisher<'a> {
     where
         IntoValue: Into<Value>,
     {
-        self.write_inner(SampleKind::Put, value.into())
+        self._write(SampleKind::Put, value.into())
     }
 
     /// Delete data.
@@ -308,7 +308,7 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     pub fn delete(&self) -> Publication {
-        self.write_inner(SampleKind::Delete, Value::empty())
+        self._write(SampleKind::Delete, Value::empty())
     }
 
     /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
@@ -408,12 +408,12 @@ impl SyncResolve for Publication<'_> {
             kind,
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
-        let destination = publisher.destination;
-        let primitives = zread!(publisher.session.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
+        let state = zread!(publisher.session.state);
+        let destination = publisher
+            .destination
+            .unwrap_or(state.publications_destination);
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
 
         let mut info = DataInfo::new();
         info.kind = kind;
@@ -501,7 +501,7 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) destination: Locality,
+    pub(crate) destination: Option<Locality>,
 }
 
 impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
@@ -538,7 +538,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = destination;
+        self.destination = Some(destination);
         self
     }
 }

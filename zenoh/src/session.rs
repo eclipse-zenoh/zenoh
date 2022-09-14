@@ -539,7 +539,7 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: zread!(self.state).subscribers_origin,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -579,7 +579,7 @@ impl Session {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: zread!(self.state).queryables_origin,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -613,7 +613,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: zread!(self.state).publications_destination,
+            destination: None,
         }
     }
 
@@ -774,7 +774,7 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            destination: zread!(self.state).queries_destination,
+            destination: None,
             timeout: Duration::from_secs(10),
             handler: DefaultHandler,
         }
@@ -949,13 +949,14 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        origin: Locality,
+        origin: Option<Locality>,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let origin = origin.unwrap_or(state.subscribers_origin);
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1098,12 +1099,13 @@ impl Session {
         &self,
         key_expr: &WireExpr,
         complete: bool,
-        origin: Locality,
+        origin: Option<Locality>,
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let origin = origin.unwrap_or(state.queryables_origin);
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
@@ -1303,7 +1305,7 @@ impl Session {
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-        destination: Locality,
+        destination: Option<Locality>,
         timeout: Duration,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1319,6 +1321,7 @@ impl Session {
             }
             Some(mode) => mode,
         };
+        let destination = destination.unwrap_or(state.queries_destination);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let nb_final = match destination {
             Locality::Any => 2,
@@ -1504,7 +1507,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: zread!(self.state).subscribers_origin,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -1546,7 +1549,7 @@ impl SessionDeclarations for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: zread!(self.state).queryables_origin,
+            origin: None,
             handler: DefaultHandler,
         }
     }
@@ -1581,7 +1584,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: Locality::default(),
+            destination: None,
         }
     }
 }
