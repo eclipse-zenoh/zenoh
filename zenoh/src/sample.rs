@@ -33,6 +33,7 @@ pub enum Locality {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Locality {
     SessionLocal,
+    #[allow(dead_code)]
     Remote,
     Any,
 }

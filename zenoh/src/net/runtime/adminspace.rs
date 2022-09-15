@@ -13,7 +13,7 @@
 use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::keyexpr;
-use crate::plugins::PluginsManager;
+use crate::plugins::sealed as plugins;
 use crate::prelude::sync::SampleKind;
 use crate::prelude::KeyExpr;
 use async_std::task;
@@ -38,7 +38,7 @@ use zenoh_transport::{Primitives, TransportUnicast};
 
 pub struct AdminContext {
     runtime: Runtime,
-    plugins_mgr: Mutex<PluginsManager>,
+    plugins_mgr: Mutex<plugins::PluginsManager>,
     zid_str: String,
     version: String,
 }
@@ -64,7 +64,7 @@ enum PluginDiff {
 }
 
 impl AdminSpace {
-    pub async fn start(runtime: &Runtime, plugins_mgr: PluginsManager, version: String) {
+    pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.zid.to_string();
         let root_key: OwnedKeyExpr = format!("@/router/{}", zid_str).try_into().unwrap();
 
@@ -422,7 +422,7 @@ impl Primitives for AdminSpace {
                     };
                     let plugin_status = plugins_status(&context, &key_expr, &parameters).await;
                     for status in plugin_status {
-                        let crate::plugins::Response { key, mut value } = status;
+                        let plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
                         let mut data_info = DataInfo::new();
@@ -606,7 +606,7 @@ pub async fn plugins_status(
     context: &AdminContext,
     key: &KeyExpr<'_>,
     args: &str,
-) -> Vec<crate::plugins::Response> {
+) -> Vec<plugins::Response> {
     let selector = key.clone().with_parameters(args);
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
@@ -615,7 +615,7 @@ pub async fn plugins_status(
         with_extended_string(&mut root_key, &[name], |plugin_key| {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if key.intersects(plugin_path_key.as_str().try_into().unwrap()) {
-                    responses.push(crate::plugins::Response {
+                    responses.push(plugins::Response {
                         key: plugin_path_key.clone(),
                         value: path.into(),
                     })
