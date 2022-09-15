@@ -257,7 +257,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
         log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate}");
-        let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
+        let port = ZSerial::new(path.clone(), baud_rate, true).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
@@ -282,7 +282,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
         log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate}");
-        let port = ZSerial::new(path.clone(), baud_rate).map_err(|e| {
+        let port = ZSerial::new(path.clone(), baud_rate, true).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
