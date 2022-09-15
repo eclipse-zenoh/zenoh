@@ -50,12 +50,7 @@ fn main() {
     let now = Instant::now();
     while now.elapsed() < warmup {
         let data = data.clone();
-        session
-            .put(key_expr_ping, data)
-            // Make sure to not drop messages because of congestion control
-            .congestion_control(CongestionControl::Block)
-            .res()
-            .unwrap();
+        publisher.put(data).res().unwrap();
 
         let _ = sub.recv();
     }
@@ -63,11 +58,7 @@ fn main() {
     for _ in 0..n {
         let data = data.clone();
         let write_time = Instant::now();
-        publisher
-            .put( data)
-            // Make sure to not drop messages because of congestion control
-            .res()
-            .unwrap();
+        publisher.put(data).res().unwrap();
 
         let _ = sub.recv();
         let ts = write_time.elapsed().as_micros();
@@ -98,12 +89,12 @@ fn parse_args() -> (Config, Duration, usize, usize) {
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-n, --samples=[N]          'The number of round-trips to measure'")
+            Arg::from_usage("-n, --samples=[N]         'The number of round-trips to measure'")
                 .default_value("100"),
         )
         .arg(
             Arg::from_usage("-w, --warmup=[N]          'The number of seconds to warm up'")
-                .default_value("3"),
+                .default_value("1"),
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
