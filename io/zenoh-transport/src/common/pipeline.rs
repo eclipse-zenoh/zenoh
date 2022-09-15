@@ -105,7 +105,7 @@ struct StageIn {
 }
 
 impl StageIn {
-    fn push_zenoh_message(&mut self, mut msg: ZenohMessage, priority: Priority) -> bool {
+    fn push_zenoh_message(&mut self, msg: &mut ZenohMessage, priority: Priority) -> bool {
         // Lock the channel. We are the only one that will be writing on it.
         let mut channel = self.mutex.channel(msg.is_reliable());
         // Lock the current serialization batch.
@@ -147,7 +147,7 @@ impl StageIn {
 
         macro_rules! zserialize_rets {
             ($batch:expr) => {{
-                if $batch.serialize_zenoh_message(&mut msg, priority, &mut channel.sn) {
+                if $batch.serialize_zenoh_message(msg, priority, &mut channel.sn) {
                     let bytes = $batch.len();
                     *c_guard = Some($batch);
                     drop(c_guard);
@@ -177,7 +177,7 @@ impl StageIn {
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
-        self.fragbuf.write_zenoh_message(&mut msg);
+        self.fragbuf.write_zenoh_message(msg);
 
         // Fragment the whole message
         let mut to_write = self.fragbuf.len();
@@ -550,7 +550,7 @@ pub(crate) struct TransmissionPipelineProducer {
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, msg: ZenohMessage) -> bool {
+    pub(crate) fn push_zenoh_message(&self, mut msg: ZenohMessage) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
             (msg.channel.priority as usize, msg.channel.priority)
@@ -559,7 +559,7 @@ impl TransmissionPipelineProducer {
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_zenoh_message(msg, priority)
+        queue.push_zenoh_message(&mut msg, priority)
     }
 
     #[inline]
