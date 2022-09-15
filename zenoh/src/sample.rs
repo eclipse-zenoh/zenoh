@@ -43,12 +43,6 @@ impl Default for Locality {
     }
 }
 
-impl Default for Locality {
-    fn default() -> Self {
-        Locality::Any
-    }
-}
-
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
