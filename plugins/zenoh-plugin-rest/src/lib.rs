@@ -33,6 +33,11 @@ use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 mod config;
 pub use config::Config;
 
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+lazy_static::lazy_static! {
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+}
+
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
@@ -178,6 +183,7 @@ impl Plugin for RestPlugin {
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
         let _ = env_logger::try_init();
+        log::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config.lock();
         let plugin_conf = runtime_conf
@@ -191,7 +197,6 @@ impl Plugin for RestPlugin {
     }
 }
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
