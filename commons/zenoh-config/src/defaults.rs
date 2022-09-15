@@ -63,6 +63,11 @@ impl Default for QueueConf {
     }
 }
 
+impl QueueSizeConf {
+    pub const MIN: usize = 1;
+    pub const MAX: usize = 16;
+}
+
 impl Default for QueueSizeConf {
     fn default() -> Self {
         Self {

@@ -14,7 +14,7 @@
 
 //! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
 //! and associated constants.
-mod defaults;
+pub mod defaults;
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
@@ -237,7 +237,7 @@ validated_struct::validator! {
                             data: usize,
                             data_low: usize,
                             background: usize,
-                        },
+                        } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: Option<ZInt>
@@ -646,6 +646,31 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     fn as_ref(&self) -> &dyn Any {
         self.deref()
     }
+}
+
+fn queue_size_validator(q: &QueueSizeConf) -> bool {
+    fn check(size: usize) -> bool {
+        size >= QueueSizeConf::MIN && size <= QueueSizeConf::MAX
+    }
+
+    let QueueSizeConf {
+        control,
+        real_time,
+        interactive_low,
+        interactive_high,
+        data_high,
+        data,
+        data_low,
+        background,
+    } = *q;
+    check(control)
+        && check(real_time)
+        && check(interactive_low)
+        && check(interactive_high)
+        && check(data_high)
+        && check(data)
+        && check(data_low)
+        && check(background)
 }
 
 fn user_conf_validator(u: &UserConf) -> bool {
