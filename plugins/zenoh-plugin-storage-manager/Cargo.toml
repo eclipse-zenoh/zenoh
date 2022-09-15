@@ -51,12 +51,16 @@ crc = "2.1.0"
 derive-new = "0.5"
 flume = "0.10.10"
 urlencoding = "2.1.0"
+lazy_static = "1.4.0"
 zenoh = { path = "../../zenoh/" , default-features = false }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
+
+[build-dependencies]
+rustc_version = "0.4.0"
 
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"

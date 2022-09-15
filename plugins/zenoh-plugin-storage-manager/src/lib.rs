@@ -42,6 +42,11 @@ mod memory_backend;
 mod replica;
 mod storages_mgt;
 
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+lazy_static::lazy_static! {
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+}
+
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
@@ -53,6 +58,7 @@ impl Plugin for StoragesPlugin {
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         std::mem::drop(env_logger::try_init());
+        log::debug!("StorageManager plugin {}", LONG_VERSION.as_str());
         let config =
             { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
@@ -293,7 +299,6 @@ impl From<StorageRuntimeInner> for StorageRuntime {
     }
 }
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 impl RunningPluginTrait for StorageRuntime {
     fn config_checker(&self) -> ValidationFunction {
         let name = { zlock!(self.0).name.clone() };
