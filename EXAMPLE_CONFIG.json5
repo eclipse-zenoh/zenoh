@@ -152,6 +152,7 @@
           volume: "memory",
           /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
           /// In the absence of this configuration, a normal storage is initialized
+          /// Note: all the samples to be stored in replicas should be timestamped
           replica_config: {
             /// Specifying the parameters is optional, by default the values provided will be used.
             /// Time interval between different synchronization attempts in seconds
