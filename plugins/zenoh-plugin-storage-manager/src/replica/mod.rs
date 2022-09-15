@@ -190,6 +190,7 @@ impl Replica {
         let subscriber = self
             .session
             .declare_subscriber(&digest_key)
+            .allowed_origin(Locality::Remote)
             .res_async()
             .await
             .unwrap();
@@ -239,7 +240,6 @@ impl Replica {
         let publisher = self
             .session
             .declare_publisher(digest_key)
-            .local_routing(false)
             .res_async()
             .await
             .unwrap();
