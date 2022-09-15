@@ -39,7 +39,7 @@
       /// The socket which should be used for multicast scouting
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
-      interface: "", // empty string means auto
+      interface: "auto", // If not set or set to "auto" the interface if picked automatically
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
@@ -108,8 +108,8 @@
     storage_manager: {
       /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
       __path__: [
-        "./target/release/libzplugin_storages.so",
-        "./target/release/libzplugin_storages.dylib",
+        "./target/release/libzplugin_storage_manager.so",
+        "./target/release/libzplugin_storage_manager.dylib",
       ],
       /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
       volumes: {
@@ -147,7 +147,7 @@
         influx_demo: {
           key_expr: "demo/influxdb/**",
           /// This prefix will be stripped of the received keys when storing.
-          strip_prefix: "demo/influxdb/",
+          strip_prefix: "demo/influxdb",
           /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
           volume: {
             id: "influxdb",
@@ -156,7 +156,7 @@
         },
         influx_demo2: {
           key_expr: "demo/influxdb2/**",
-          strip_prefix: "demo/influxdb2/",
+          strip_prefix: "demo/influxdb2",
           volume: {
             id: "influxdb2",
             db: "example",
