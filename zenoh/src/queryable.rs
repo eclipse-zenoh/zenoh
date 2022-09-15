@@ -264,7 +264,7 @@ pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) complete: bool,
-    pub(crate) origin: Option<Locality>,
+    pub(crate) origin: Locality,
     pub(crate) handler: Handler,
 }
 
@@ -385,7 +385,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     #[cfg(feature = "unstable")]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
-        self.origin = Some(origin);
+        self.origin = origin;
         self
     }
 }

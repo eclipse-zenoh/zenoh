@@ -138,7 +138,6 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
-    pub(crate) destination: Option<Locality>,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -171,7 +170,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
             timeout,
             handler: _,
         } = self;
@@ -180,7 +178,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
             timeout,
             handler: callback,
         }
@@ -248,7 +245,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
             timeout,
             handler: _,
         } = self;
@@ -257,7 +253,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            destination,
             timeout,
             handler,
         }
@@ -275,15 +270,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
         self.consolidation = consolidation.into();
-        self
-    }
-
-    /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[cfg(feature = "unstable")]
-    #[inline]
-    pub fn allowed_destination(mut self, destination: Locality) -> Self {
-        self.destination = Some(destination);
         self
     }
 
@@ -314,7 +300,6 @@ where
                 &self.selector?,
                 self.target,
                 self.consolidation,
-                self.destination,
                 self.timeout,
                 callback,
             )

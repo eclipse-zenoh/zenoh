@@ -88,10 +88,6 @@ pub(crate) struct SessionState {
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
-    pub(crate) publications_destination: Locality,
-    pub(crate) subscribers_origin: Locality,
-    pub(crate) queries_destination: Locality,
-    pub(crate) queryables_origin: Locality,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
     pub(crate) timer: Timer,
@@ -99,10 +95,6 @@ pub(crate) struct SessionState {
 
 impl SessionState {
     pub(crate) fn new(
-        publications_destination: Locality,
-        subscribers_origin: Locality,
-        queries_destination: Locality,
-        queryables_origin: Locality,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
@@ -117,10 +109,6 @@ impl SessionState {
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
             queries: HashMap::new(),
-            publications_destination,
-            subscribers_origin,
-            queries_destination,
-            queryables_origin,
             aggregated_subscribers,
             aggregated_publishers,
             timer: Timer::new(true),
@@ -323,20 +311,12 @@ static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
 impl Session {
     pub(crate) fn init(
         runtime: Runtime,
-        publications_destination: Locality,
-        subscribers_origin: Locality,
-        queries_destination: Locality,
-        queryables_origin: Locality,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ClosureResolve(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
-                publications_destination,
-                subscribers_origin,
-                queries_destination,
-                queryables_origin,
                 aggregated_subscribers,
                 aggregated_publishers,
             )));
@@ -539,7 +519,7 @@ impl Session {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: None,
+            origin: Locality::default(),
             handler: DefaultHandler,
         }
     }
@@ -579,7 +559,7 @@ impl Session {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: None,
+            origin: Locality::default(),
             handler: DefaultHandler,
         }
     }
@@ -613,7 +593,6 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: None,
         }
     }
 
@@ -774,7 +753,6 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            destination: None,
             timeout: Duration::from_secs(10),
             handler: DefaultHandler,
         }
@@ -792,30 +770,17 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(
-        config: Config,
-        publications_destination: Locality,
-        subscribers_origin: Locality,
-        queries_destination: Locality,
-        queryables_origin: Locality,
-    ) -> impl Resolve<ZResult<Session>> {
+    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> {
         FutureResolve(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::new(config).await {
                 Ok(runtime) => {
-                    let session = Self::init(
-                        runtime,
-                        publications_destination,
-                        subscribers_origin,
-                        queries_destination,
-                        queryables_origin,
-                        aggregated_subscribers,
-                        aggregated_publishers,
-                    )
-                    .res_async()
-                    .await;
+                    let session =
+                        Self::init(runtime, aggregated_subscribers, aggregated_publishers)
+                            .res_async()
+                            .await;
                     // Workaround for the declare_and_shoot problem
                     task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
                     Ok(session)
@@ -949,14 +914,13 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
-        origin: Option<Locality>,
+        origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let origin = origin.unwrap_or(state.subscribers_origin);
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
@@ -1099,13 +1063,12 @@ impl Session {
         &self,
         key_expr: &WireExpr,
         complete: bool,
-        origin: Option<Locality>,
+        origin: Locality,
         callback: Callback<'static, Query>,
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let origin = origin.unwrap_or(state.queryables_origin);
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
@@ -1305,7 +1268,6 @@ impl Session {
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
-        destination: Option<Locality>,
         timeout: Duration,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1321,12 +1283,7 @@ impl Session {
             }
             Some(mode) => mode,
         };
-        let destination = destination.unwrap_or(state.queries_destination);
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
-        let nb_final = match destination {
-            Locality::Any => 2,
-            _ => 1,
-        };
         let timeout = TimedEvent::once(
             Instant::now() + timeout,
             QueryTimeout {
@@ -1336,11 +1293,11 @@ impl Session {
             },
         );
         state.timer.add(timeout);
-        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        log::trace!("Register query {}", qid);
         state.queries.insert(
             qid,
             QueryState {
-                nb_final,
+                nb_final: 2,
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
@@ -1350,26 +1307,22 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
-        if destination != Locality::SessionLocal {
-            primitives.send_query(
-                &selector.key_expr.to_wire(self),
-                selector.parameters(),
-                qid,
-                target,
-                consolidation,
-                None,
-            );
-        }
-        if destination != Locality::Remote {
-            self.handle_query(
-                true,
-                &selector.key_expr.to_wire(self),
-                selector.parameters(),
-                qid,
-                target,
-                consolidation,
-            );
-        }
+        primitives.send_query(
+            &selector.key_expr.to_wire(self),
+            selector.parameters(),
+            qid,
+            target,
+            consolidation,
+            None,
+        );
+        self.handle_query(
+            true,
+            &selector.key_expr.to_wire(self),
+            selector.parameters(),
+            qid,
+            target,
+            consolidation,
+        );
         Ok(())
     }
 
@@ -1507,7 +1460,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             reliability: Reliability::default(),
             mode: PushMode,
-            origin: None,
+            origin: Locality::default(),
             handler: DefaultHandler,
         }
     }
@@ -1549,7 +1502,7 @@ impl SessionDeclarations for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             complete: true,
-            origin: None,
+            origin: Locality::default(),
             handler: DefaultHandler,
         }
     }
@@ -1584,7 +1537,6 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
-            destination: None,
         }
     }
 }
