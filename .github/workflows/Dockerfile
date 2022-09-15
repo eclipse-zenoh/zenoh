@@ -32,7 +32,7 @@ RUN echo 'echo " * Starting: /zenohd $*"' >> /entrypoint.sh
 RUN echo 'exec /zenohd $*' >> /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 7447/udp
+EXPOSE 7446/udp
 EXPOSE 7447/tcp
 EXPOSE 8000/tcp
 

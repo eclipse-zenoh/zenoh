@@ -138,7 +138,6 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
-    pub(crate) local_routing: Option<bool>,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -171,7 +170,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            local_routing,
             timeout,
             handler: _,
         } = self;
@@ -180,7 +178,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            local_routing,
             timeout,
             handler: callback,
         }
@@ -248,7 +245,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            local_routing,
             timeout,
             handler: _,
         } = self;
@@ -257,7 +253,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
-            local_routing,
             timeout,
             handler,
         }
@@ -275,13 +270,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
         self.consolidation = consolidation.into();
-        self
-    }
-
-    /// Enable or disable local routing.
-    #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
         self
     }
 
@@ -312,7 +300,6 @@ where
                 &self.selector?,
                 self.target,
                 self.consolidation,
-                self.local_routing,
                 self.timeout,
                 callback,
             )

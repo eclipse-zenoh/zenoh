@@ -281,7 +281,7 @@ pub mod zmsg {
         use super::{Channel, Priority, Reliability};
 
         pub const DECLARE: Channel = Channel {
-            priority: Priority::Data,
+            priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         };
         pub const DATA: Channel = Channel {

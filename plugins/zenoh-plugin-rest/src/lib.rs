@@ -431,9 +431,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     let _ = env_logger::try_init();
 
     let zid = runtime.zid.to_string();
-    let session = Session::init(runtime, true, vec![], vec![])
-        .res_async()
-        .await;
+    let session = zenoh::init(runtime).res_async().await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

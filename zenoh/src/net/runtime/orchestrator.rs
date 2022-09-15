@@ -65,7 +65,7 @@ impl Runtime {
                     .scouting()
                     .multicast()
                     .address()
-                    .unwrap_or_else(|| "224.0.0.224:7447".parse().unwrap()),
+                    .unwrap_or_else(|| "224.0.0.224:7446".parse().unwrap()),
                 guard
                     .scouting()
                     .multicast()

@@ -34,8 +34,8 @@ impl TransportMulticastInner {
         let guard = zread!(self.link);
         match guard.as_ref() {
             Some(l) => {
-                if let Some(pipeline) = l.pipeline.as_ref() {
-                    zpush!(guard, pipeline, msg);
+                if let Some(pl) = l.pipeline.as_ref() {
+                    zpush!(guard, pl, msg);
                 }
             }
             None => {

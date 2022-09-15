@@ -74,10 +74,10 @@ pub const ZN_MULTICAST_INTERFACE_DEFAULT: &str = ZN_AUTO;
 /// The multicast IPv4 address and ports to use for multicast scouting.
 /// String key : `"multicast_ipv4_address"`.
 /// Accepted values : `<ipv4 address>:<port>`.
-/// Default value : `"224.0.0.224:7447"`.
+/// Default value : `"224.0.0.224:7446"`.
 pub const ZN_MULTICAST_IPV4_ADDRESS_KEY: u64 = 0x47;
 pub const ZN_MULTICAST_IPV4_ADDRESS_STR: &str = "multicast_ipv4_address";
-pub const ZN_MULTICAST_IPV4_ADDRESS_DEFAULT: &str = "224.0.0.224:7447";
+pub const ZN_MULTICAST_IPV4_ADDRESS_DEFAULT: &str = "224.0.0.224:7446";
 
 /// In client mode, the period dedicated to scouting a router before failing.
 /// String key : `"scouting_timeout"`.
@@ -173,14 +173,6 @@ pub const ZN_ROUTERS_AUTOCONNECT_MULTICAST_DEFAULT: &str = ZN_FALSE;
 pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_KEY: u64 = 0x53;
 pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_STR: &str = "routers_autoconnect_gossip";
 pub const ZN_ROUTERS_AUTOCONNECT_GOSSIP_DEFAULT: &str = ZN_FALSE;
-
-/// Indicates if local writes/queries should reach local subscribers/queryables.
-/// String key : `"local_routing"`.
-/// Accepted values : `"true"`, `"false"`.
-/// Default value : `"true"`.
-pub const ZN_LOCAL_ROUTING_KEY: u64 = 0x60;
-pub const ZN_LOCAL_ROUTING_STR: &str = "local_routing";
-pub const ZN_LOCAL_ROUTING_DEFAULT: &str = ZN_TRUE;
 
 pub const ZN_JOIN_SUBSCRIPTIONS_KEY: u64 = 0x61;
 pub const ZN_JOIN_SUBSCRIPTIONS_STR: &str = "join_subscriptions";
@@ -301,10 +293,10 @@ pub const ZN_LINK_RX_BUFF_SIZE_DEFAULT: &str = "65535";
 /// The multicast IPv6 address and ports to use for multicast scouting.
 /// String key : `"multicast_ipv6_address"`.
 /// Accepted values : `<ipv6 address>:<port>`.
-/// Default value : `"[ff24::224]:7447"`.
+/// Default value : `"[ff24::224]:7446"`.
 pub const ZN_MULTICAST_IPV6_ADDRESS_KEY: u64 = 0x77;
 pub const ZN_MULTICAST_IPV6_ADDRESS_STR: &str = "multicast_ipv6_address";
-pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7447";
+pub const ZN_MULTICAST_IPV6_ADDRESS_DEFAULT: &str = "[ff24::224]:7446";
 
 /// The public RSA key.
 /// String key : `"auth_rsa_public_key_pem"`.

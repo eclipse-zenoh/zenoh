@@ -98,12 +98,6 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    /// Enable or disable local routing.
-    #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.publisher = self.publisher.local_routing(local_routing);
-        self
-    }
     pub fn kind(mut self, kind: SampleKind) -> Self {
         self.kind = kind;
         self
@@ -124,9 +118,11 @@ impl SyncResolve for PutBuilder<'_, '_> {
         } = self;
         let key_expr = publisher.key_expr?;
         log::trace!("write({:?}, [...])", &key_expr);
-        let state = zread!(publisher.session.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
+        let primitives = zread!(publisher.session.state)
+            .primitives
+            .as_ref()
+            .unwrap()
+            .clone();
 
         let mut info = DataInfo::new();
         info.kind = kind;
@@ -154,7 +150,6 @@ impl SyncResolve for PutBuilder<'_, '_> {
             &key_expr.to_wire(&publisher.session),
             data_info,
             value.payload,
-            publisher.local_routing,
         );
         Ok(())
     }
@@ -209,7 +204,6 @@ pub struct Publisher<'a> {
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) local_routing: Option<bool>,
 }
 
 impl<'a> Publisher<'a> {
@@ -231,12 +225,6 @@ impl<'a> Publisher<'a> {
         self
     }
 
-    /// Enable or disable local routing.
-    #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
-        self
-    }
     fn _write(&self, kind: SampleKind, value: Value) -> Publication {
         Publication {
             publisher: self,
@@ -398,9 +386,11 @@ impl SyncResolve for Publication<'_> {
             kind,
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
-        let state = zread!(publisher.session.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
+        let primitives = zread!(publisher.session.state)
+            .primitives
+            .as_ref()
+            .unwrap()
+            .clone();
 
         let mut info = DataInfo::new();
         info.kind = kind;
@@ -428,7 +418,6 @@ impl SyncResolve for Publication<'_> {
             &publisher.key_expr.to_wire(&publisher.session),
             data_info,
             value.payload,
-            publisher.local_routing,
         );
         Ok(())
     }
@@ -485,7 +474,6 @@ pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
-    pub(crate) local_routing: Option<bool>,
 }
 
 impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
@@ -498,7 +486,6 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
             },
             congestion_control: self.congestion_control,
             priority: self.priority,
-            local_routing: self.local_routing,
         }
     }
 }
@@ -515,13 +502,6 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
-        self
-    }
-
-    /// Enable or disable local routing.
-    #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
         self
     }
 }
@@ -570,7 +550,6 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,
-            local_routing: self.local_routing,
         };
         log::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)

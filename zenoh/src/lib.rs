@@ -210,10 +210,11 @@ where
 ///
 /// ```
 /// # async_std::task::block_on(async {
+/// use std::str::FromStr;
 /// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_local_routing(Some(false));
+/// config.set_id(ZenohId::from_str("F000").unwrap());
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();
@@ -291,13 +292,33 @@ where
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 pub fn init(runtime: Runtime) -> InitBuilder {
-    InitBuilder { runtime }
+    InitBuilder {
+        runtime,
+        aggregated_subscribers: vec![],
+        aggregated_publishers: vec![],
+    }
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[doc(hidden)]
 pub struct InitBuilder {
     runtime: Runtime,
+    aggregated_subscribers: Vec<OwnedKeyExpr>,
+    aggregated_publishers: Vec<OwnedKeyExpr>,
+}
+
+impl InitBuilder {
+    #[inline]
+    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_subscribers = exprs;
+        self
+    }
+
+    #[inline]
+    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_publishers = exprs;
+        self
+    }
 }
 
 impl Resolvable for InitBuilder {
@@ -306,7 +327,12 @@ impl Resolvable for InitBuilder {
 impl SyncResolve for InitBuilder {
     #[inline]
     fn res_sync(self) -> Self::Output {
-        Ok(Session::init(self.runtime, true, vec![], vec![]).res_sync())
+        Ok(Session::init(
+            self.runtime,
+            self.aggregated_subscribers,
+            self.aggregated_publishers,
+        )
+        .res_sync())
     }
 }
 
