@@ -95,7 +95,15 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        self.process_sample(sample.unwrap()).await;
+                        // log error if the sample is not timestamped
+                        // This is to reduce down the line inconsistencies of having duplaicate samples stored
+                        let sample = sample.unwrap();
+                        if sample.get_timestamp().is_none() {
+                            error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+                        }
+                        else {
+                            self.process_sample(sample).await;
+                        }
                     },
                     // on query on key_expr
                     query = storage_queryable.recv_async() => {
@@ -134,7 +142,9 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        self.process_sample(sample.unwrap()).await;
+                        let mut sample = sample.unwrap();
+                        sample.ensure_timestamp();
+                        self.process_sample(sample).await;
                     },
                     // on query on key_expr
                     query = storage_queryable.recv_async() => {
