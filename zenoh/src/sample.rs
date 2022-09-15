@@ -22,8 +22,16 @@ use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Locality {
+    SessionLocal,
+    Remote,
+    Any,
+}
+#[cfg(not(feature = "unstable"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Locality {
     SessionLocal,
     Remote,
     Any,

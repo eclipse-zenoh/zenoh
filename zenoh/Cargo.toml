@@ -51,6 +51,7 @@ transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_serial = ["zenoh-transport/transport_serial"]
 transport_ws = ["zenoh-transport/transport_ws"]
+unstable = []
 default = [
     "auth_pubkey",
     "auth_usrpwd",
