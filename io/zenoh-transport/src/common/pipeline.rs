@@ -97,12 +97,11 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    batching: bool,
     fragbuf: WBuf,
 }
 
 impl StageIn {
-    fn push_zenoh_message(&mut self, mut msg: ZenohMessage) -> bool {
+    fn push_zenoh_message(&mut self, mut msg: ZenohMessage, priority: Priority) -> bool {
         // Lock the channel. We are the only one that will be writing on it.
         let mut channel = self.mutex.channel(msg.is_reliable());
         // Lock the current serialization batch.
@@ -110,7 +109,6 @@ impl StageIn {
 
         // Check congestion control
         let is_droppable = msg.is_droppable();
-        let priority = msg.channel.priority;
 
         macro_rules! zgetbatch_rets {
             ($fragment:expr) => {
@@ -146,15 +144,10 @@ impl StageIn {
         macro_rules! zserialize_rets {
             ($batch:expr) => {{
                 if $batch.serialize_zenoh_message(&mut msg, priority, &mut channel.sn) {
-                    if !self.batching {
-                        drop(c_guard);
-                        self.s_out.move_batch($batch);
-                    } else {
-                        let bytes = $batch.len();
-                        *c_guard = Some($batch);
-                        drop(c_guard);
-                        self.s_out.notify(bytes);
-                    }
+                    let bytes = $batch.len();
+                    *c_guard = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
                     return true;
                 }
             }};
@@ -250,15 +243,10 @@ impl StageIn {
         macro_rules! zserialize_rets {
             ($batch:expr) => {{
                 if $batch.serialize_transport_message(&mut msg) {
-                    if !self.batching {
-                        drop(c_guard);
-                        self.s_out.move_batch($batch);
-                    } else {
-                        let bytes = $batch.len();
-                        *c_guard = Some($batch);
-                        drop(c_guard);
-                        self.s_out.notify(bytes);
-                    }
+                    let bytes = $batch.len();
+                    *c_guard = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
                     return true;
                 }
             }};
@@ -464,9 +452,9 @@ impl TransmissionPipeline {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
-        let default_queue = [Priority::default() as usize];
+        let default_queue_size = [config.queue_size[Priority::default() as usize]];
         let size_iter = if conduit.len() == 1 {
-            default_queue.iter()
+            default_queue_size.iter()
         } else {
             config.queue_size.iter()
         };
@@ -499,8 +487,6 @@ impl TransmissionPipeline {
             // The batch being serialized upon
             let current = Arc::new(Mutex::new(None));
 
-            // The stage in for this priority
-            let batching = true;
             // prio == Priority::Control as usize || prio == Priority::RealTime as usize;
             let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
@@ -517,7 +503,6 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                batching,
                 fragbuf: WBuf::new(config.batch_size as usize, false),
             }));
 
@@ -556,17 +541,16 @@ pub(crate) struct TransmissionPipelineProducer {
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, mut msg: ZenohMessage) -> bool {
+    pub(crate) fn push_zenoh_message(&self, msg: ZenohMessage) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
-        let priority = if self.stage_in.len() > 1 {
-            msg.channel.priority as usize
+        let (idx, priority) = if self.stage_in.len() > 1 {
+            (msg.channel.priority as usize, msg.channel.priority)
         } else {
-            msg.channel.priority = Priority::default();
-            0
+            (0, Priority::default())
         };
         // Lock the channel. We are the only one that will be writing on it.
-        let mut queue = zlock!(self.stage_in[priority]);
-        queue.push_zenoh_message(msg)
+        let mut queue = zlock!(self.stage_in[idx]);
+        queue.push_zenoh_message(msg, priority)
     }
 
     #[inline]
