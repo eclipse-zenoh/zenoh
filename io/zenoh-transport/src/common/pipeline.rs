@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::proto::MessageWriter;
 
@@ -30,7 +31,7 @@ use zenoh_protocol::proto::MessageWriter;
 // Backoff will never last more the u32::MAX nanoseconds.
 type NanoSeconds = u32;
 
-const RBLEN: usize = 16;
+const RBLEN: usize = QueueSizeConf::MAX;
 const TSLOT: NanoSeconds = 100;
 
 // Inner structure to reuse serialization batches
