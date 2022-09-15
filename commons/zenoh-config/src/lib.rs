@@ -649,8 +649,8 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
 }
 
 fn queue_size_validator(q: &QueueSizeConf) -> bool {
-    fn check(size: usize) -> bool {
-        size >= QueueSizeConf::MIN && size <= QueueSizeConf::MAX
+    fn check(size: &usize) -> bool {
+        (QueueSizeConf::MIN..=QueueSizeConf::MAX).contains(size)
     }
 
     let QueueSizeConf {
@@ -662,7 +662,7 @@ fn queue_size_validator(q: &QueueSizeConf) -> bool {
         data,
         data_low,
         background,
-    } = *q;
+    } = q;
     check(control)
         && check(real_time)
         && check(interactive_low)
