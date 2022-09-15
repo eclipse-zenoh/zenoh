@@ -33,6 +33,7 @@ type NanoSeconds = u32;
 const RBLEN: usize = 16;
 const TSLOT: NanoSeconds = 100;
 
+// Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Receiver<()>,
     s_ref_r: RingBufferReader<SerializationBatch, RBLEN>,
@@ -48,6 +49,7 @@ impl StageInRefill {
     }
 }
 
+// Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Sender<()>,
     s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
@@ -72,6 +74,7 @@ impl StageInOut {
     }
 }
 
+// Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
     current: Arc<Mutex<Option<SerializationBatch>>>,
     conduit: TransportConduitTx,
@@ -93,6 +96,7 @@ impl StageInMutex {
     }
 }
 
+// This is the initial stage of the pipeline where messages are serliazed on
 struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
@@ -186,7 +190,7 @@ impl StageIn {
             // Serialize the message
             let written = batch.serialize_zenoh_fragment(
                 msg.channel.reliability,
-                msg.channel.priority,
+                priority,
                 &mut channel.sn,
                 &mut fragbuf_reader,
                 to_write,
@@ -269,12 +273,14 @@ impl StageIn {
     }
 }
 
+// The result of the pull operation
 enum Pull {
     Some(SerializationBatch),
     None,
     Backoff(NanoSeconds),
 }
 
+// Inner structure to keep track and signal backoff operations
 #[derive(Clone)]
 struct Backoff {
     retry_time: NanoSeconds,
@@ -308,6 +314,7 @@ impl Backoff {
     }
 }
 
+// Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
     s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
     current: Arc<Mutex<Option<SerializationBatch>>>,
@@ -442,6 +449,7 @@ impl Default for TransmissionPipelineConf {
     }
 }
 
+// A 2-stage transmission pipeline
 pub(crate) struct TransmissionPipeline;
 impl TransmissionPipeline {
     // A MPSC pipeline
@@ -464,6 +472,8 @@ impl TransmissionPipeline {
         let (n_out_w, n_out_r) = bounded(1);
 
         for (prio, num) in size_iter.enumerate() {
+            assert!(*num != 0 && *num <= RBLEN);
+
             // Create the refill ring buffer
             // This is a SPSC ring buffer
             let (mut s_ref_w, s_ref_r) = RingBuffer::<SerializationBatch, RBLEN>::new();
@@ -486,8 +496,7 @@ impl TransmissionPipeline {
 
             // The batch being serialized upon
             let current = Arc::new(Mutex::new(None));
-
-            // prio == Priority::Control as usize || prio == Priority::RealTime as usize;
+            // Counters for signaling
             let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
 
