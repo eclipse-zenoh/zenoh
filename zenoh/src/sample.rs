@@ -29,6 +29,12 @@ pub enum Locality {
     Any,
 }
 
+impl Default for Locality {
+    fn default() -> Self {
+        Locality::Any
+    }
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]

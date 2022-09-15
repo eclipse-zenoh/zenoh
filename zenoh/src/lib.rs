@@ -227,10 +227,10 @@ where
 {
     OpenBuilder {
         config,
-        publications_destination: Locality::Any,
-        subscribers_origin: Locality::Any,
-        queries_destination: Locality::Any,
-        queryables_origin: Locality::Any,
+        publications_destination: Locality::default(),
+        subscribers_origin: Locality::default(),
+        queries_destination: Locality::default(),
+        queryables_origin: Locality::default(),
     }
 }
 
@@ -356,10 +356,10 @@ where
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
-        publications_destination: Locality::Any,
-        subscribers_origin: Locality::Any,
-        queries_destination: Locality::Any,
-        queryables_origin: Locality::Any,
+        publications_destination: Locality::default(),
+        subscribers_origin: Locality::default(),
+        queries_destination: Locality::default(),
+        queryables_origin: Locality::default(),
         aggregated_subscribers: vec![],
         aggregated_publishers: vec![],
     }
