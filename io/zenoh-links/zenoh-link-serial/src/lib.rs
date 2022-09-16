@@ -27,7 +27,7 @@ const SERIAL_MAX_MTU: u16 = z_serial::MAX_MTU as u16;
 
 const DEFAULT_BAUDRATE: u32 = 9_600;
 
-const DEFAULT_EXCLUSIVE: bool = false;
+const DEFAULT_EXCLUSIVE: bool = true;
 
 pub const SERIAL_LOCATOR_PREFIX: &str = "serial";
 
