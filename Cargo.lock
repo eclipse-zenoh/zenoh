@@ -672,6 +672,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcb25d077389e53838a8158c8e99174c5a9d902dee4904320db714f3c653ffba"
 
 [[package]]
+name = "crc"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49fc9a695bca7f35f5f4c15cddc84415f66a74ea78eef08e90c5024f2b540e23"
+dependencies = [
+ "crc-catalog",
+]
+
+[[package]]
+name = "crc-catalog"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccaeedb56da03b09f598226e25e80088cb4cd25f316e6e4df7d695f0feeb1403"
+
+[[package]]
 name = "criterion"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -842,6 +857,17 @@ dependencies = [
  "const-oid",
  "crypto-bigint",
  "pem-rfc7468",
+]
+
+[[package]]
+name = "derive-new"
+version = "0.5.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3167,6 +3193,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "urlencoding"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68b90931029ab9b034b300b797048cf23723400aa757e8a2bfb9d748102f9821"
+
+[[package]]
 name = "utf-8"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3865,7 +3897,9 @@ dependencies = [
  "futures",
  "git-version",
  "http-types",
+ "lazy_static",
  "log",
+ "rustc_version 0.4.0",
  "serde",
  "serde_json",
  "tide",
@@ -3883,12 +3917,19 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap 3.2.21",
+ "crc",
+ "derive-new",
  "env_logger",
+ "flume",
  "futures",
  "git-version",
+ "lazy_static",
  "libloading",
  "log",
+ "rustc_version 0.4.0",
+ "serde",
  "serde_json",
+ "urlencoding",
  "zenoh",
  "zenoh-collections",
  "zenoh-core",

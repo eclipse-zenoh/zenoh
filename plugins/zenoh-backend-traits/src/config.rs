@@ -14,6 +14,7 @@
 use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
+use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
 use zenoh_core::{bail, zerror, Error};
 
@@ -45,10 +46,38 @@ pub struct StorageConfig {
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
+    // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
+    pub replica_config: Option<ReplicaConfig>,
     // #[as_ref]
     // #[as_mut]
     // pub rest: Map<String, Value>,
 }
+// Note: All parameters should be same for replicas, else will result on huge overhead
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplicaConfig {
+    pub publication_interval: Duration,
+    pub propagation_delay: Duration,
+    pub delta: Duration,
+}
+
+impl Default for ReplicaConfig {
+    fn default() -> Self {
+        Self {
+            // Publication interval indicates the frequency of digest publications
+            // This will determine the time upto which replicas might be diverged
+            // This can be different for each replica if not used to compute hot and warm
+            publication_interval: Duration::from_secs(5),
+            // This indicates the uncertainity due to the network
+            // The messages might still be in transit in the network
+            propagation_delay: Duration::from_millis(200),
+            // This is the chunk that you would like your data to be divide into in time.
+            // Higher the frequency of updates, lower the delta should be chosen
+            // To be efficient, delta should be the time containing no more than 100,000 samples
+            delta: Duration::from_millis(1000),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigDiff {
     DeleteVolume(VolumeConfig),
@@ -344,12 +373,54 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
+        let replica_config = match config.get("replica_config") {
+            Some(s) => {
+                let mut replica_config = ReplicaConfig::default();
+                // TODO: Discuss what to do in case of wrong configuration - exit or use default
+                match s.get("publication_interval") {
+                    Some(p) => {
+                        let p = p.to_string().parse::<u64>();
+                        if let Ok(p) = p {
+                            replica_config.publication_interval = Duration::from_secs(p)
+                        } else {
+                            bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                match s.get("propagation_delay") {
+                    Some(p) => {
+                        let p = p.to_string().parse::<u64>();
+                        if let Ok(p) = p {
+                            replica_config.propagation_delay = Duration::from_millis(p)
+                        } else {
+                            bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                match s.get("delta") {
+                    Some(d) => {
+                        let d = d.to_string().parse::<u64>();
+                        if let Ok(d) = d {
+                            replica_config.delta = Duration::from_millis(d)
+                        } else {
+                            bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                Some(replica_config)
+            }
+            None => None,
+        };
         Ok(StorageConfig {
             name: storage_name.into(),
             key_expr,
             strip_prefix,
             volume_id,
             volume_cfg,
+            replica_config,
         })
     }
 }
