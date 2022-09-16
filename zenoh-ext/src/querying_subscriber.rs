@@ -378,11 +378,13 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
+                .allowed_origin(conf.origin)
                 .res_sync()?,
             SessionRef::Shared(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
+                .allowed_origin(conf.origin)
                 .res_sync()?,
         };
 
