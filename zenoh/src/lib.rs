@@ -80,6 +80,7 @@ use handlers::DefaultHandler;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 use git_version::git_version;
+#[cfg(feature = "unstable")]
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
@@ -291,6 +292,7 @@ where
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
+#[cfg(feature = "unstable")]
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
@@ -301,12 +303,14 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[doc(hidden)]
+#[cfg(feature = "unstable")]
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
+#[cfg(feature = "unstable")]
 impl InitBuilder {
     #[inline]
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
@@ -321,9 +325,11 @@ impl InitBuilder {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl Resolvable for InitBuilder {
     type Output = ZResult<Session>;
 }
+#[cfg(feature = "unstable")]
 impl SyncResolve for InitBuilder {
     #[inline]
     fn res_sync(self) -> Self::Output {
@@ -336,6 +342,7 @@ impl SyncResolve for InitBuilder {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl AsyncResolve for InitBuilder {
     type Future = futures::future::Ready<Self::Output>;
     fn res_async(self) -> Self::Future {

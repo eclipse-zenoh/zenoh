@@ -23,16 +23,24 @@ use zenoh_util::LibLoader;
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
 pub struct PluginsManager<StartArgs, RunningPlugin> {
-    loader: LibLoader,
+    loader: Option<LibLoader>,
     plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
     running_plugins: HashMap<String, (String, RunningPlugin)>,
 }
 
 impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, RunningPlugin> {
-    /// Constructs a new plugin manager.
-    pub fn new(loader: LibLoader) -> Self {
+    /// Constructs a new plugin manager with dynamic library loading enabled.
+    pub fn dynamic(loader: LibLoader) -> Self {
         PluginsManager {
-            loader,
+            loader: Some(loader),
+            plugin_starters: Vec::new(),
+            running_plugins: HashMap::new(),
+        }
+    }
+    /// Constructs a new plugin manager with dynamic library loading enabled.
+    pub fn static_plugins_only() -> Self {
+        PluginsManager {
+            loader: None,
             plugin_starters: Vec::new(),
             running_plugins: HashMap::new(),
         }
@@ -173,7 +181,10 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
     }
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
-        let (lib, p) = unsafe { self.loader.search_and_load(&format!("zplugin_{}", &name))? };
+        let (lib, p) = match &mut self.loader {
+            Some(l) => unsafe { l.search_and_load(&format!("zplugin_{}", &name))? },
+            None => bail!("Can't load dynamic plugin ` {}`, as dynamic loading is not enabled for this plugin manager.", name),
+        };
         let plugin = match Self::load_plugin(&name, lib, p.clone()) {
             Ok(p) => p,
             Err(e) => bail!("After loading `{:?}`: {}", &p, e),
