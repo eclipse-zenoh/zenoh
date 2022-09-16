@@ -29,7 +29,7 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating PublicationCache on {}", &key_expr);
-    let mut publication_cache_builder = session.publication_cache(&key_expr).history(history);
+    let mut publication_cache_builder = session.declare_publication_cache(&key_expr).history(history);
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }

@@ -70,13 +70,13 @@ pub trait SessionExt {
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.subscribe_with_query("key/expr").res().await.unwrap();
+    /// let subscriber = session.declare_querying_subscriber("key/expr").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
     ///     println!("Received : {:?}", sample);
     /// }
     /// # })
     /// ```
-    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
+    fn declare_querying_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
@@ -84,7 +84,7 @@ pub trait SessionExt {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
-    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
@@ -94,7 +94,7 @@ pub trait SessionExt {
 }
 
 impl SessionExt for Session {
-    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
+    fn declare_querying_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
@@ -108,7 +108,7 @@ impl SessionExt for Session {
         )
     }
 
-    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
@@ -121,7 +121,7 @@ impl SessionExt for Session {
 }
 
 impl SessionExt for Arc<Session> {
-    fn subscribe_with_query<'a, 'b, TryIntoKeyExpr>(
+    fn declare_querying_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         sub_key_expr: TryIntoKeyExpr,
     ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler>
@@ -135,7 +135,7 @@ impl SessionExt for Arc<Session> {
         )
     }
 
-    fn publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>

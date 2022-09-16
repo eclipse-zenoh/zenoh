@@ -38,13 +38,13 @@ async fn main() {
     );
     let mut subscriber = if let Some(selector) = query {
         session
-            .subscribe_with_query(key_expr)
+            .declare_querying_subscriber(key_expr)
             .query_selector(&selector)
             .res()
             .await
             .unwrap()
     } else {
-        session.subscribe_with_query(key_expr).res().await.unwrap()
+        session.declare_querying_subscriber(key_expr).res().await.unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");
