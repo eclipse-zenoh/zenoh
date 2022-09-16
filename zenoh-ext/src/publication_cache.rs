@@ -31,6 +31,7 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
+    queryable_origin: Locality,
     history: usize,
     resources_limit: Option<usize>,
 }
@@ -44,6 +45,7 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
             session,
             pub_key_expr,
             queryable_prefix: None,
+            queryable_origin: Locality::default(),
             history: 1,
             resources_limit: None,
         }
@@ -56,6 +58,16 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_core::Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
+        self
+    }
+
+    /// Restrict the matching queries that will be receive by this [`PublicationCache`]'s queryable
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// NOTE: this operation is marked as "unstable" because its signature might change in future versions.
+    #[cfg(feature = "unstable")]
+    #[inline]
+    pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
+        self.queryable_origin = origin;
         self
     }
 
@@ -132,6 +144,7 @@ impl<'a> PublicationCache<'a> {
         let queryable = conf
             .session
             .declare_queryable(&queryable_key_expr)
+            .allowed_origin(conf.queryable_origin)
             .res_sync()?;
 
         // take local ownership of stuff to be moved into task
