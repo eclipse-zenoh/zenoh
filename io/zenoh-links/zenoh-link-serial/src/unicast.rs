@@ -34,6 +34,8 @@ use zenoh_sync::Signal;
 
 use z_serial::ZSerial;
 
+use crate::get_exclusive;
+
 use super::{
     get_baud_rate, get_unix_path_as_string, SERIAL_ACCEPT_THROTTLE_TIME, SERIAL_DEFAULT_MTU,
     SERIAL_LOCATOR_PREFIX,
@@ -256,8 +258,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
-        log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate}");
-        let port = ZSerial::new(path.clone(), baud_rate, true).map_err(|e| {
+        let exclusive = get_exclusive(&endpoint);
+        log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
@@ -281,8 +284,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let path = get_unix_path_as_string(&endpoint.locator);
         let baud_rate = get_baud_rate(&endpoint);
-        log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate}");
-        let port = ZSerial::new(path.clone(), baud_rate, true).map_err(|e| {
+        let exclusive = get_exclusive(&endpoint);
+        log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
+        let port = ZSerial::new(path.clone(), baud_rate, exclusive).map_err(|e| {
             let e = zerror!(
                 "Can not create a new Serial link bound to {:?}: {}",
                 path,
