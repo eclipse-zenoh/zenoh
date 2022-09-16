@@ -104,11 +104,19 @@ impl Resolvable for ReplyBuilder<'_> {
 impl SyncResolve for ReplyBuilder<'_> {
     fn res_sync(self) -> Self::Output {
         match self.result {
-            Ok(sample) => self
-                .query
-                .replies_sender
-                .send(sample)
-                .map_err(|e| zerror!("{}", e).into()),
+            Ok(sample) => {
+                if !self.query.key_expr().intersects(&sample.key_expr) {
+                    bail!(
+                        "Attempted to reply on `{}`, which doesn't intersect query `{}`",
+                        sample.key_expr,
+                        self.query.key_expr()
+                    )
+                }
+                self.query
+                    .replies_sender
+                    .send(sample)
+                    .map_err(|e| zerror!("{}", e).into())
+            }
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
     }
@@ -134,7 +142,20 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
     fn res_async(self) -> Self::Future {
         ReplyFuture(match self.result {
-            Ok(sample) => Ok(self.query.replies_sender.send_async(sample)),
+            Ok(sample) => {
+                if !self.query.key_expr().intersects(&sample.key_expr) {
+                    Err(Some(
+                        zerror!(
+                            "Attempted to reply on `{}`, which doesn't intersect query `{}`",
+                            sample.key_expr,
+                            self.query.key_expr()
+                        )
+                        .into(),
+                    ))
+                } else {
+                    Ok(self.query.replies_sender.send_async(sample))
+                }
+            }
             Err(_) => Err(Some(
                 zerror!("Replying errors is not yet supported!").into(),
             )),
