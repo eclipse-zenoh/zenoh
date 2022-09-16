@@ -44,7 +44,11 @@ async fn main() {
             .await
             .unwrap()
     } else {
-        session.declare_querying_subscriber(key_expr).res().await.unwrap()
+        session
+            .declare_querying_subscriber(key_expr)
+            .res()
+            .await
+            .unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");
