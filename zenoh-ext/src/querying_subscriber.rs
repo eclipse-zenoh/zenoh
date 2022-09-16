@@ -32,6 +32,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b, Handler> {
     session: SessionRef<'a>,
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
+    origin: Locality,
     query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
@@ -55,6 +56,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability: Reliability::default(),
+            origin: Locality::default(),
             query_selector: None,
             query_target,
             query_consolidation,
@@ -76,6 +78,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability,
+            origin,
             query_selector,
             query_target,
             query_consolidation,
@@ -86,6 +89,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability,
+            origin,
             query_selector,
             query_target,
             query_consolidation,
@@ -119,6 +123,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability,
+            origin,
             query_selector,
             query_target,
             query_consolidation,
@@ -129,6 +134,7 @@ impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
             session,
             key_expr,
             reliability,
+            origin,
             query_selector,
             query_target,
             query_consolidation,
@@ -156,6 +162,16 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
     #[inline]
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
+        self
+    }
+
+    /// Restrict the matching publications that will be receive by this [`Subscriber`]
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// NOTE: this operation is marked as "unstable" because its signature might change in future versions.
+    #[cfg(feature = "unstable")]
+    #[inline]
+    pub fn allowed_origin(mut self, origin: Locality) -> Self {
+        self.origin = origin;
         self
     }
 
@@ -199,6 +215,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
+            origin: self.origin,
             query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
             query_consolidation: self.query_consolidation,

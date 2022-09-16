@@ -442,6 +442,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// NOTE: this operation is marked as "unstable" because its signature might change in the future.
     #[cfg(feature = "unstable")]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
