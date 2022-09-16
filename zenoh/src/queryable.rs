@@ -382,6 +382,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 
     /// Restrict the matching queries that will be receive by this [`Queryable`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// NOTE: this operation is marked as "unstable" because its signature might change in future versions.
     #[cfg(feature = "unstable")]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
