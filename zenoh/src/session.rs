@@ -936,14 +936,16 @@ impl Session {
                 .find(|s| s.includes( key_expr))
                 {
                     Some(join_sub) => {
-                        let joined_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| join_sub.includes(&s.key_expr));
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                        });
                         (!joined_sub).then(|| join_sub.clone().into())
                     }
                     None => {
-                        let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                        let twin_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
                         (!twin_sub).then(|| key_expr.clone())
                     }
                 }
@@ -1032,10 +1034,9 @@ impl Session {
                     .find(|s| s.includes(key_expr))
                 {
                     Some(join_sub) => {
-                        let joined_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| join_sub.includes(&s.key_expr));
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                        });
                         if !joined_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             let key_expr = WireExpr::from(join_sub).to_owned();
@@ -1044,7 +1045,10 @@ impl Session {
                         }
                     }
                     None => {
-                        let twin_sub = state.subscribers.values().any(|s| s.key_expr == *key_expr);
+                        let twin_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
                         if !twin_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             drop(state);
@@ -1119,15 +1123,17 @@ impl Session {
 
     pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
         state.queryables.values().any(|q| {
-            state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                == state.local_wireexpr_to_expr(key).unwrap()
+            q.origin != Locality::SessionLocal
+                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
+                    == state.local_wireexpr_to_expr(key).unwrap()
         })
     }
 
     #[cfg(not(feature = "complete_n"))]
     pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
         state.queryables.values().any(|q| {
-            q.complete
+            q.origin != Locality::SessionLocal
+                && q.complete
                 && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                     == state.local_wireexpr_to_expr(key).unwrap()
         })
@@ -1139,7 +1145,8 @@ impl Session {
             .queryables
             .values()
             .filter(|q| {
-                q.complete
+                q.origin != Locality::SessionLocal
+                    && q.complete
                     && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                         == state.local_wireexpr_to_expr(key).unwrap()
             })
