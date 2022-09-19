@@ -140,6 +140,8 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
+    #[cfg(feature = "unstable")]
+    pub(crate) allow_disjoint_replies: bool,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -172,6 +174,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: _,
+            #[cfg(feature = "unstable")]
+            allow_disjoint_replies,
         } = self;
         GetBuilder {
             session,
@@ -180,6 +184,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: callback,
+            #[cfg(feature = "unstable")]
+            allow_disjoint_replies,
         }
     }
 
@@ -247,6 +253,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: _,
+            #[cfg(feature = "unstable")]
+            allow_disjoint_replies,
         } = self;
         GetBuilder {
             session,
@@ -255,6 +263,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler,
+            #[cfg(feature = "unstable")]
+            allow_disjoint_replies,
         }
     }
 }
@@ -279,6 +289,12 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self.timeout = timeout;
         self
     }
+
+    #[cfg(feature = "unstable")]
+    pub fn allow_disjoint_replies(mut self, value: bool) -> Self {
+        self.allow_disjoint_replies = value;
+        self
+    }
 }
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
@@ -295,6 +311,7 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
+
         self.session
             .query(
                 &self.selector?,

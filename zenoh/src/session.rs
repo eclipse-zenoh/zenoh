@@ -755,6 +755,7 @@ impl Session {
             consolidation: QueryConsolidation::default(),
             timeout: Duration::from_secs(10),
             handler: DefaultHandler,
+            allow_disjoint_replies: false,
         }
     }
 }
