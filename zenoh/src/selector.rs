@@ -185,6 +185,33 @@ impl<'a> Selector<'a> {
             selector.drain(splice_start..(splice_end + (splice_end != selector.len()) as usize));
         }
     }
+
+    pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
+        let starts_with_param = |s: &str| {
+            if let Some(rest) = s.strip_prefix(param_name) {
+                matches!(rest.as_bytes().first(), None | Some(b'='))
+            } else {
+                false
+            }
+        };
+        let mut acc = 0;
+        let mut res = None;
+        for chunk in self.parameters().split('&') {
+            if starts_with_param(chunk) {
+                if res.is_none() {
+                    res = Some(acc)
+                } else {
+                    bail!(
+                        "parameter `{}` appeared multiple times in selector `{}`.",
+                        param_name,
+                        self
+                    )
+                }
+            }
+            acc += chunk.len() as u32 + 1;
+        }
+        Ok(res)
+    }
 }
 
 #[test]

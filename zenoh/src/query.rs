@@ -140,8 +140,6 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
-    #[cfg(feature = "unstable")]
-    pub(crate) allow_disjoint_replies: bool,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -174,8 +172,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: _,
-            #[cfg(feature = "unstable")]
-            allow_disjoint_replies,
         } = self;
         GetBuilder {
             session,
@@ -184,8 +180,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: callback,
-            #[cfg(feature = "unstable")]
-            allow_disjoint_replies,
         }
     }
 
@@ -253,8 +247,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler: _,
-            #[cfg(feature = "unstable")]
-            allow_disjoint_replies,
         } = self;
         GetBuilder {
             session,
@@ -263,8 +255,6 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             consolidation,
             timeout,
             handler,
-            #[cfg(feature = "unstable")]
-            allow_disjoint_replies,
         }
     }
 }
@@ -290,11 +280,59 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    #[cfg(feature = "unstable")]
-    pub fn allow_disjoint_replies(mut self, value: bool) -> Self {
-        self.allow_disjoint_replies = value;
-        self
+    /// By default, `get` will filter out
+    #[zenoh_core::unstable]
+    pub fn accept_replies(self, value: ReplyKeyExpr) -> Self {
+        let Self {
+            session,
+            selector,
+            target,
+            consolidation,
+            timeout,
+            handler,
+        } = self;
+        Self {
+            session,
+            selector: selector.and_then(|mut s| {
+                let any_selparam = s.parameter_index(REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
+                match (value, any_selparam) {
+                    (ReplyKeyExpr::Any, None) => {
+                        let s = s.parameters_mut();
+                        if !s.is_empty() {
+                            s.push('&')
+                        }
+                        s.push_str(REPLY_KEY_EXPR_ANY_SEL_PARAM);
+                    }
+                    (ReplyKeyExpr::MatchingQuery, Some(index)) => {
+                        let s = s.parameters_mut();
+                        let mut start = index as usize;
+                        let pend = start + REPLY_KEY_EXPR_ANY_SEL_PARAM.len();
+                        if start != 0 {
+                            start -= 1
+                        }
+                        match s[pend..].find('&') {
+                            Some(end) => std::mem::drop(s.drain(start..end + pend)),
+                            None => s.truncate(pend),
+                        }
+                    }
+                    _ => {}
+                }
+                Ok(s)
+            }),
+            target,
+            consolidation,
+            timeout,
+            handler,
+        }
     }
+}
+
+#[zenoh_core::unstable]
+pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
+#[zenoh_core::unstable]
+pub enum ReplyKeyExpr {
+    Any,
+    MatchingQuery,
 }
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>

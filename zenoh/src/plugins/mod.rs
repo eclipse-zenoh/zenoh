@@ -1,4 +1,4 @@
 pub(crate) mod sealed;
 
-#[cfg(feature = "unstable")]
+#[zenoh_core::unstable]
 pub use sealed::*;

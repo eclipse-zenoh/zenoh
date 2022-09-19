@@ -80,7 +80,7 @@ use handlers::DefaultHandler;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 use git_version::git_version;
-#[cfg(feature = "unstable")]
+#[zenoh_core::unstable]
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
