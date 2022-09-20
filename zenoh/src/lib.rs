@@ -88,8 +88,9 @@ use prelude::*;
 use scouting::ScoutBuilder;
 use zenoh_core::{zerror, Result as ZResult};
 
-/// A zenoh result.
+/// A zenoh error.
 pub use zenoh_core::Error;
+/// A zenoh result.
 pub use zenoh_core::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
