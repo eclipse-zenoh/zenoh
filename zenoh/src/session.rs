@@ -722,6 +722,9 @@ impl Session {
     }
     /// Query data from the matching queryables in the system.
     ///
+    /// Unless explicitly requested via [`GetBuilder::accept_replies`], replies are guaranteed to have
+    /// key expressions that match the requested `selector`.
+    ///
     /// # Arguments
     ///
     /// * `selector` - The selection of resources to query
@@ -1272,7 +1275,7 @@ impl Session {
 
     pub(crate) fn query(
         &self,
-        selector: Selector<'_>,
+        selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
         timeout: Duration,

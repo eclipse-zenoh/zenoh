@@ -65,7 +65,7 @@ impl Query {
 
     /// Sends a reply to this Query.
     ///
-    /// By default, queries only accept replies which's key expression intersects with the query's.
+    /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]

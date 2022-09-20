@@ -281,7 +281,11 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// By default, `get` will filter out
+    /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
+    /// with the queried key expression.
+    ///
+    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
+    /// expressions that don't intersect with the query's.
     #[zenoh_core::unstable]
     pub fn accept_replies(self, value: ReplyKeyExpr) -> Self {
         let Self {
@@ -294,32 +298,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         } = self;
         Self {
             session,
-            selector: selector.and_then(|mut s| {
-                let any_selparam = s.parameter_index(_REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
-                match (value, any_selparam) {
-                    (ReplyKeyExpr::Any, None) => {
-                        let s = s.parameters_mut();
-                        if !s.is_empty() {
-                            s.push('&')
-                        }
-                        s.push_str(_REPLY_KEY_EXPR_ANY_SEL_PARAM);
-                    }
-                    (ReplyKeyExpr::MatchingQuery, Some(index)) => {
-                        let s = s.parameters_mut();
-                        let mut start = index as usize;
-                        let pend = start + _REPLY_KEY_EXPR_ANY_SEL_PARAM.len();
-                        if start != 0 {
-                            start -= 1
-                        }
-                        match s[pend..].find('&') {
-                            Some(end) => std::mem::drop(s.drain(start..end + pend)),
-                            None => s.truncate(pend),
-                        }
-                    }
-                    _ => {}
-                }
-                Ok(s)
-            }),
+            selector: selector.and_then(|s| s.accept_any_keyexpr(value == ReplyKeyExpr::Any)),
             target,
             consolidation,
             timeout,
@@ -332,6 +311,7 @@ pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_core::unstable]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ReplyKeyExpr {
     Any,
     MatchingQuery,
@@ -354,7 +334,7 @@ where
 
         self.session
             .query(
-                self.selector?,
+                &self.selector?,
                 self.target,
                 self.consolidation,
                 self.timeout,
