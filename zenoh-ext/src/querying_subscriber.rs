@@ -167,8 +167,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    /// NOTE: this operation is marked as "unstable" because its signature might change in future versions.
-    #[cfg(feature = "unstable")]
+    #[zenoh_core::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

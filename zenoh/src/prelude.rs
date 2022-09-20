@@ -41,7 +41,7 @@ pub(crate) mod common {
     /// The encoding of a zenoh [`Value`].
     pub use zenoh_protocol_core::{Encoding, KnownEncoding};
 
-    #[cfg(feature = "unstable")]
+    #[zenoh_core::unstable]
     pub use crate::sample::Locality;
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
