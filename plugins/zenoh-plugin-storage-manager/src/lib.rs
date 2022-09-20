@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Clik here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 #![recursion_limit = "512"]
 
 use async_std::task;

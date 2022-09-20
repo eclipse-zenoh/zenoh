@@ -16,7 +16,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Clik here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
 use std::borrow::Cow;
 use std::cmp::PartialEq;

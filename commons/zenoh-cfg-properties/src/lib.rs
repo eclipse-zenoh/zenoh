@@ -18,7 +18,7 @@
 //!
 //! This crate is intended for Zenoh's internal use.
 //!
-//! [Clik here for Zenoh's documentation](../zenoh/index.html)
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub mod config;
 
 use std::collections::HashMap;
