@@ -33,25 +33,37 @@ pub use zenoh_protocol_core::QueryTarget;
 /// The kind of consolidation.
 pub use zenoh_protocol_core::ConsolidationMode;
 
+/// The operation: either manual or automatic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode<T> {
+    Auto,
+    Manual(T),
+}
+
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
-    pub(crate) mode: Option<ConsolidationMode>,
+    pub(crate) mode: Mode<ConsolidationMode>,
 }
 
 impl QueryConsolidation {
     /// Automatic query consolidation strategy selection.
-    pub const AUTO: Self = Self { mode: None };
+    pub const AUTO: Self = Self { mode: Mode::Auto };
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
-        Self { mode: Some(mode) }
+        Self {
+            mode: Mode::Manual(mode),
+        }
     }
 
     /// Returns the requested [`ConsolidationMode`].
-    ///
-    /// Returns `None` if the mode selection is left to automatic.
-    pub fn mode(&self) -> Option<ConsolidationMode> {
+    pub fn mode(&self) -> Mode<ConsolidationMode> {
         self.mode
+    }
+}
+impl From<Mode<ConsolidationMode>> for QueryConsolidation {
+    fn from(mode: Mode<ConsolidationMode>) -> Self {
+        Self { mode }
     }
 }
 impl From<ConsolidationMode> for QueryConsolidation {

@@ -1281,14 +1281,14 @@ impl Session {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
         let mut state = zwrite!(self.state);
         let consolidation = match consolidation.mode {
-            None => {
+            Mode::Auto => {
                 if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
                     ConsolidationMode::None
                 } else {
                     ConsolidationMode::Latest
                 }
             }
-            Some(mode) => mode,
+            Mode::Manual(mode) => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
         let timeout = TimedEvent::once(
