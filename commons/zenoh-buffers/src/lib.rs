@@ -12,11 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! ⚠️ WARNING ⚠️
-//!
-//! This crate is intended for Zenoh's internal use.
-//!
-//! [Clik here for Zenoh's documentation](../zenoh/index.html)
+//! Provide [ZBuf] and [WBuf] as convenient buffers used for serialization and deserialization.
 pub mod traits;
 pub use traits::*;
 
