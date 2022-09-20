@@ -73,12 +73,7 @@ Examples:
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = if cfg!(feature = "unstable") {
-            PluginsManager::dynamic(config.libloader())
-        } else {
-            log::warn!("Dynamic Plugin Loading disabled due to this instance of `zenohd` not being built with the `unstable` feature, which is required for dynamic plugins.");
-            PluginsManager::static_plugins_only()
-        };
+        let mut plugins = PluginsManager::dynamic(config.libloader());
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {

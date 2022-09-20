@@ -27,6 +27,8 @@ const SERIAL_MAX_MTU: u16 = z_serial::MAX_MTU as u16;
 
 const DEFAULT_BAUDRATE: u32 = 9_600;
 
+const DEFAULT_EXCLUSIVE: bool = true;
+
 pub const SERIAL_LOCATOR_PREFIX: &str = "serial";
 
 const SERIAL_MTU_LIMIT: u16 = SERIAL_MAX_MTU;
@@ -67,10 +69,23 @@ pub fn get_baud_rate(endpoint: &EndPoint) -> u32 {
     }
 }
 
+pub fn get_exclusive(endpoint: &EndPoint) -> bool {
+    match &endpoint.config {
+        Some(config) => {
+            if let Some(exclusive) = config.get(config::PORT_EXCLUSIVE_RAW) {
+                return bool::from_str(exclusive).unwrap_or(DEFAULT_EXCLUSIVE);
+            }
+            DEFAULT_EXCLUSIVE
+        }
+        None => DEFAULT_EXCLUSIVE,
+    }
+}
+
 pub fn get_unix_path_as_string(locator: &Locator) -> String {
     locator.address().to_owned()
 }
 
 pub mod config {
     pub const PORT_BAUD_RATE_RAW: &str = "baudrate";
+    pub const PORT_EXCLUSIVE_RAW: &str = "exclusive";
 }
