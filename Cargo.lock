@@ -3663,6 +3663,7 @@ version = "0.6.0-dev.0"
 dependencies = [
  "anyhow",
  "lazy_static",
+ "zenoh-macros",
 ]
 
 [[package]]

@@ -185,6 +185,63 @@ impl<'a> Selector<'a> {
             selector.drain(splice_start..(splice_end + (splice_end != selector.len()) as usize));
         }
     }
+    #[cfg(any(feature = "unstable", test))]
+    pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
+        let starts_with_param = |s: &str| {
+            if let Some(rest) = s.strip_prefix(param_name) {
+                matches!(rest.as_bytes().first(), None | Some(b'='))
+            } else {
+                false
+            }
+        };
+        let mut acc = 0;
+        let mut res = None;
+        for chunk in self.parameters().split('&') {
+            if starts_with_param(chunk) {
+                if res.is_none() {
+                    res = Some(acc)
+                } else {
+                    bail!(
+                        "parameter `{}` appeared multiple times in selector `{}`.",
+                        param_name,
+                        self
+                    )
+                }
+            }
+            acc += chunk.len() as u32 + 1;
+        }
+        Ok(res)
+    }
+    #[cfg(any(feature = "unstable", test))]
+    pub(crate) fn accept_any_keyexpr(self, any: bool) -> ZResult<Selector<'static>> {
+        use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        let mut s = self.into_owned();
+        let any_selparam = s.parameter_index(_REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
+        match (any, any_selparam) {
+            (true, None) => {
+                let s = s.parameters_mut();
+                if !s.is_empty() {
+                    s.push('&')
+                }
+                s.push_str(_REPLY_KEY_EXPR_ANY_SEL_PARAM);
+            }
+            (false, Some(index)) => {
+                let s = dbg!(s.parameters_mut());
+                let mut start = index as usize;
+                let pend = start + _REPLY_KEY_EXPR_ANY_SEL_PARAM.len();
+                if dbg!(start) != 0 {
+                    start -= 1
+                }
+                match dbg!(&s[pend..]).find('&') {
+                    Some(end) => std::mem::drop(s.drain(start..end + pend)),
+                    None => s.truncate(start),
+                }
+                dbg!(s);
+            }
+            _ => {}
+        }
+        Ok(s)
+    }
 }
 
 #[test]
@@ -206,6 +263,22 @@ fn selector_accessors() {
             selector.time_range().unwrap(),
             map_selector.time_range().unwrap()
         );
+        let without_any = selector.to_string();
+        let with_any = selector.to_string() + "&" + crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        selector = selector.accept_any_keyexpr(false).unwrap();
+        assert_eq!(selector.to_string(), without_any);
+        selector = selector.accept_any_keyexpr(true).unwrap();
+        assert_eq!(selector.to_string(), with_any);
+        selector = selector.accept_any_keyexpr(true).unwrap();
+        assert_eq!(selector.to_string(), with_any);
+        selector = selector.accept_any_keyexpr(false).unwrap();
+        assert_eq!(selector.to_string(), without_any);
+        selector = selector.accept_any_keyexpr(true).unwrap();
+        assert_eq!(selector.to_string(), with_any);
+        selector.parameters_mut().push_str("&other");
+        assert_eq!(selector.to_string(), with_any + "&other");
+        selector = selector.accept_any_keyexpr(false).unwrap();
+        assert_eq!(selector.to_string(), without_any + "&other");
     }
 }
 pub trait Parameter: Sized {

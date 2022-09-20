@@ -14,6 +14,7 @@
 pub use lazy_static::lazy_static;
 pub mod macros;
 pub use macros::*;
+pub use zenoh_macros::*;
 
 pub mod zresult;
 pub use zresult::Error;

@@ -117,6 +117,7 @@ impl Timed for QueryTimeout {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
+    pub(crate) selector: Selector<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
@@ -291,6 +292,41 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self.timeout = timeout;
         self
     }
+
+    /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
+    /// with the queried key expression.
+    ///
+    /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
+    /// expressions that don't intersect with the query's.
+    #[zenoh_core::unstable]
+    pub fn accept_replies(self, value: ReplyKeyExpr) -> Self {
+        let Self {
+            session,
+            selector,
+            target,
+            consolidation,
+            timeout,
+            handler,
+        } = self;
+        Self {
+            session,
+            selector: selector.and_then(|s| s.accept_any_keyexpr(value == ReplyKeyExpr::Any)),
+            target,
+            consolidation,
+            timeout,
+            handler,
+        }
+    }
+}
+pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
+#[zenoh_core::unstable]
+pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
+
+#[zenoh_core::unstable]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReplyKeyExpr {
+    Any,
+    MatchingQuery,
 }
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
@@ -307,6 +343,7 @@ where
 {
     fn res_sync(self) -> Self::Output {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
+
         self.session
             .query(
                 &self.selector?,
