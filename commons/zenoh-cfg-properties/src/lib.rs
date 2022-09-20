@@ -11,6 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is depecrated and it will be completely removed in the future.
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Clik here for Zenoh's documentation](../zenoh/index.html)
 pub mod config;
 
 use std::collections::HashMap;

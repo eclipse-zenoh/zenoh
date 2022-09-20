@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! Value primitives.
+
 use std::borrow::Cow;
 use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]

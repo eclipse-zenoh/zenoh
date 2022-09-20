@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
-//! and associated constants.
+//! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
 use serde::{
     de::{self, MapAccess, Visitor},

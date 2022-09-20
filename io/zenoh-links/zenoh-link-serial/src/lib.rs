@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Clik here for Zenoh's documentation](../zenoh/index.html)
 mod unicast;
 
 use async_trait::async_trait;

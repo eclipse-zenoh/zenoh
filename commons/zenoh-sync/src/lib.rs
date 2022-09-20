@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This module is intended for Zenoh's internal use.
+//!
+//! [Clik here for Zenoh's documentation](../zenoh/index.html)
 use futures::FutureExt;
 use std::future::Future;
 use std::pin::Pin;

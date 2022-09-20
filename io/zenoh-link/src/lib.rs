@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,7 +11,13 @@ use std::collections::HashMap;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[allow(unused_imports)]
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Clik here for Zenoh's documentation](../zenoh/index.html)
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use zenoh_cfg_properties::Properties;
