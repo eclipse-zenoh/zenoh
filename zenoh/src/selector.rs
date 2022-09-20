@@ -58,9 +58,8 @@ use std::{
 /// Here are the currently standardized parameters for Zenoh (check the specification page for the exhaustive list):
 /// - `_time`: used to express interest in only values dated within a certain time range, values for
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
-/// - `_filter`: *TBD* Zenoh intends to provide helper tools to allow the value associated with
-///   this parameter to be treated as a predicate that the value should fulfill before being returned.
-///   A DSL will be designed by the Zenoh team to express these predicates.
+/// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
+///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {

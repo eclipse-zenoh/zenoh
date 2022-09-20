@@ -59,10 +59,12 @@ pub(crate) mod common {
     pub use zenoh_protocol_core::ZenohId;
 }
 
+/// Prelude to import when using Zenoh's sync API.
 pub mod sync {
     pub use super::common::*;
     pub use zenoh_core::SyncResolve;
 }
+/// Prelude to import when using Zenoh's async API.
 pub mod r#async {
     pub use super::common::*;
     pub use zenoh_core::AsyncResolve;
