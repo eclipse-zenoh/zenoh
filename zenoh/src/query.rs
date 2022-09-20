@@ -105,6 +105,7 @@ impl Timed for QueryTimeout {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
+    pub(crate) selector: Selector<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
@@ -294,19 +295,19 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         Self {
             session,
             selector: selector.and_then(|mut s| {
-                let any_selparam = s.parameter_index(REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
+                let any_selparam = s.parameter_index(_REPLY_KEY_EXPR_ANY_SEL_PARAM)?;
                 match (value, any_selparam) {
                     (ReplyKeyExpr::Any, None) => {
                         let s = s.parameters_mut();
                         if !s.is_empty() {
                             s.push('&')
                         }
-                        s.push_str(REPLY_KEY_EXPR_ANY_SEL_PARAM);
+                        s.push_str(_REPLY_KEY_EXPR_ANY_SEL_PARAM);
                     }
                     (ReplyKeyExpr::MatchingQuery, Some(index)) => {
                         let s = s.parameters_mut();
                         let mut start = index as usize;
-                        let pend = start + REPLY_KEY_EXPR_ANY_SEL_PARAM.len();
+                        let pend = start + _REPLY_KEY_EXPR_ANY_SEL_PARAM.len();
                         if start != 0 {
                             start -= 1
                         }
@@ -326,9 +327,10 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         }
     }
 }
-
+pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 #[zenoh_core::unstable]
-pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
+pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
+
 #[zenoh_core::unstable]
 pub enum ReplyKeyExpr {
     Any,
@@ -352,7 +354,7 @@ where
 
         self.session
             .query(
-                &self.selector?,
+                self.selector?,
                 self.target,
                 self.consolidation,
                 self.timeout,

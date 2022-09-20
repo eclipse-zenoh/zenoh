@@ -186,6 +186,7 @@ impl<'a> Selector<'a> {
         }
     }
 
+    #[cfg(feature = "unstable")]
     pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
         let starts_with_param = |s: &str| {
             if let Some(rest) = s.strip_prefix(param_name) {

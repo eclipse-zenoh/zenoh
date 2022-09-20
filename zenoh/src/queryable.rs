@@ -16,6 +16,8 @@
 
 use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
+#[zenoh_core::unstable]
+use crate::query::ReplyKeyExpr;
 use crate::SessionRef;
 use crate::Undeclarable;
 
@@ -62,12 +64,34 @@ impl Query {
     }
 
     /// Sends a reply to this Query.
+    ///
+    /// By default, queries only accept replies which's key expression intersects with the query's.
+    /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
+    /// replying on a disjoint key expression will result in an error when resolving the reply.
     #[inline(always)]
     pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
         ReplyBuilder {
             query: self,
             result,
         }
+    }
+
+    /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
+    /// This getter allows you to check whether or not a specific query does.
+    #[zenoh_core::unstable]
+    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
+        self._accepts_any_replies().map(|any| {
+            if any {
+                ReplyKeyExpr::Any
+            } else {
+                ReplyKeyExpr::MatchingQuery
+            }
+        })
+    }
+    fn _accepts_any_replies(&self) -> ZResult<bool> {
+        self.parameters()
+            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM])
+            .map(|a| a[0])
     }
 }
 
@@ -104,11 +128,17 @@ impl Resolvable for ReplyBuilder<'_> {
 impl SyncResolve for ReplyBuilder<'_> {
     fn res_sync(self) -> Self::Output {
         match self.result {
-            Ok(sample) => self
-                .query
-                .replies_sender
-                .send(sample)
-                .map_err(|e| zerror!("{}", e).into()),
+            Ok(sample) => {
+                if !self.query._accepts_any_replies().unwrap_or(false)
+                    && !self.query.key_expr().intersects(&sample.key_expr)
+                {
+                    bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
+                }
+                self.query
+                    .replies_sender
+                    .send(sample)
+                    .map_err(|e| zerror!("{}", e).into())
+            }
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
     }

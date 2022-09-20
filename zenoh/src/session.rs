@@ -1265,7 +1265,7 @@ impl Session {
 
     pub(crate) fn query(
         &self,
-        selector: &Selector<'_>,
+        selector: Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
         timeout: Duration,
@@ -1294,10 +1294,12 @@ impl Session {
         );
         state.timer.add(timeout);
         log::trace!("Register query {}", qid);
+        let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
             qid,
             QueryState {
                 nb_final: 2,
+                selector: selector.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
@@ -1317,7 +1319,7 @@ impl Session {
         );
         self.handle_query(
             true,
-            &selector.key_expr.to_wire(self),
+            &wexpr,
             selector.parameters(),
             qid,
             target,
@@ -1670,6 +1672,22 @@ impl Primitives for Session {
         };
         match state.queries.get_mut(&qid) {
             Some(query) => {
+                if !matches!(
+                    query
+                        .selector
+                        .parameters()
+                        .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                    Ok([true])
+                ) && !query.selector.key_expr.intersects(&key_expr)
+                {
+                    log::warn!(
+                        "Received ReplyData for `{}` from `{:?}, which didn't match query `{}`: dropping ReplyData.",
+                        key_expr,
+                        replier_id,
+                        query.selector
+                    );
+                    return;
+                }
                 let new_reply = Reply {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
@@ -1738,7 +1756,7 @@ impl Primitives for Session {
                 }
             }
             None => {
-                warn!("Received ReplyData for unkown Query: {}", qid);
+                log::warn!("Received ReplyData for unkown Query: {}", qid);
             }
         }
     }
