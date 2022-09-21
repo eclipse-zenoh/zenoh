@@ -249,6 +249,7 @@ impl Aligner {
             .session
             .get(&selector)
             .consolidation(QueryConsolidation::AUTO)
+            .accept_replies(zenoh::query::ReplyKeyExpr::Any)
             .res()
             .await
             .unwrap();
