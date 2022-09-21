@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[macro_use]
 pub mod fifo_queue;
 pub use fifo_queue::*;

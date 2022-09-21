@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This module is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[doc(hidden)]
 pub(crate) mod protocol {
     #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]

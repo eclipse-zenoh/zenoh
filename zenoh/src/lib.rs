@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest and computations. It elegantly blends traditional pub/sub with geo distributed
 //! storage, queries and computations, while retaining a level of time and space efficiency
@@ -87,8 +88,9 @@ use prelude::*;
 use scouting::ScoutBuilder;
 use zenoh_core::{zerror, Result as ZResult};
 
-/// A zenoh result.
+/// A zenoh error.
 pub use zenoh_core::Error;
+/// A zenoh result.
 pub use zenoh_core::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");

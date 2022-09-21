@@ -64,7 +64,7 @@ impl std::ops::Deref for KeyExpr<'_> {
 }
 
 impl KeyExpr<'static> {
-    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// Constructs a [`KeyExpr`] without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
@@ -72,7 +72,7 @@ impl KeyExpr<'static> {
         Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
     }
 
-    /// Constructs an [`KeyExpr`] without checking [`keyexpr`]'s invariants
+    /// Constructs a [`KeyExpr`] without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
@@ -154,7 +154,7 @@ impl<'a> KeyExpr<'a> {
         self
     }
 
-    /// Ensure's `self` owns all of its data, and informs rustc that it does.
+    /// Ensures `self` owns all of its data, and informs rustc that it does.
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
             KeyExprInner::Borrowed(s) => KeyExpr(KeyExprInner::Owned(s.into())),

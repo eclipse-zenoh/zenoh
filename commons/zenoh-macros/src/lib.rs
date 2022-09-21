@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
 

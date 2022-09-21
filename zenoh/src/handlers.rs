@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! Callback handler trait.
 use crate::API_DATA_RECEPTION_CHANNEL_SIZE;
 
 /// An alias for `Arc<T>`.

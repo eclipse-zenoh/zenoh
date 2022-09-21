@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[macro_use]
 extern crate lazy_static;
 use std::path::{Path, PathBuf};
@@ -35,7 +40,7 @@ pub use zenoh_cfg_properties as properties;
 #[deprecated = "This module is now a separate crate. Use the `zenoh_sync` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_sync as sync;
 
-/// the "ZENOH_HOME" environement variable name
+/// The "ZENOH_HOME" environement variable name
 pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
 
 const DEFAULT_ZENOH_HOME_DIRNAME: &str = ".zenoh";
