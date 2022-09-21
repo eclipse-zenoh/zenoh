@@ -19,7 +19,7 @@ use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::*;
 
-use zenoh::query::{QueryConsolidation, QueryTarget};
+use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
@@ -456,9 +456,17 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
             callback: self.callback.clone(),
         };
 
+        // if selector for query is different than subscription keyexpr: accept Any reply
+        let query_accept_replies = if selector.key_expr != *self._subscriber.key_expr() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        };
+
         log::debug!("Start query on {}", selector);
         self.session
             .get(selector)
+            .accept_replies(query_accept_replies)
             .target(target)
             .consolidation(consolidation)
             .timeout(timeout)
