@@ -39,5 +39,5 @@ zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
 async-std = { version = "=1.12.0", default-features = false }
-async-trait = "0.1.42"
-log = "0.4"
+async-trait = "0.1.57"
+log = "0.4.17"

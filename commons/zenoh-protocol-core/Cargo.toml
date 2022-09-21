@@ -37,16 +37,16 @@ fuzzer = []
 [dependencies]
 zenoh-core = { path = "../zenoh-core/" }
 
-hex = "0.4.2"
+hex = "0.4.3"
 lazy_static = "1.4.0"
-uhlc = "0.5.0"
+uhlc = "0.5.1"
 uuid = { version = "1.1.2", features = ["v4"] }
-serde = "1.0.123"
-rand = "0.8.4"
-itertools = "0.10.3"
+serde = "1.0.144"
+rand = "0.8.5"
+itertools = "0.10.5"
 
 [dev-dependencies]
-criterion = "0.3.4"
+criterion = "0.4.0"
 
 [[bench]]
 name = "key_expr_legacy_bench"

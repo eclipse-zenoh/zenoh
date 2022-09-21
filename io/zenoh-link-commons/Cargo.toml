@@ -38,6 +38,6 @@ zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-protocol-core = { path = "../../commons/zenoh-protocol-core/" }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
 
-async-trait = "0.1.42"
+async-trait = "0.1.57"
 async-std = { version = "=1.12.0", default-features = false }
-flume = "0.10.5"
+flume = "0.10.14"

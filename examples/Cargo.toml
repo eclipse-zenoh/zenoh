@@ -41,16 +41,16 @@ zenoh-ext = { path = "../zenoh-ext/" }
 async-std = { version = "=1.12.0", default-features = false, features = [
   "attributes",
 ] }
-clap = "3.2.10"
-env_logger = "0.9.0"
-flume = "0.10.5"
-futures = "0.3.12"
-git-version = "0.3.4"
+clap = "3.2.22"
+env_logger = "0.9.1"
+flume = "0.10.14"
+futures = "0.3.24"
+git-version = "0.3.5"
 json5 = "0.4.1"
-log = "0.4"
+log = "0.4.17"
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = "0.8.5"
 
 [build-dependencies]
 rustc_version = "0.4.0"

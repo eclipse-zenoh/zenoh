@@ -37,8 +37,8 @@ zenoh-core = { path = "../zenoh-core/" }
 zenoh-collections = { path = "../zenoh-collections/" }
 
 async-std = { version = "=1.12.0", default-features = false }
-bincode = { version = "1.3.1", optional = true }
-hex = "0.4.2"
-log = { version = "0.4", optional = true }
-serde = { version = "1.0.123", optional = true }
+bincode = { version = "1.3.3", optional = true }
+hex = "0.4.3"
+log = { version = "0.4.17", optional = true }
+serde = { version = "1.0.144", optional = true }
 shared_memory = { version = "=0.12.4", optional = true }
