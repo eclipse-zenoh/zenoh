@@ -715,6 +715,11 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
+    /// Returns the [`keyexpr`] this Subscriber subscribes to.
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        &self.subscriber.state.key_expr
+    }
+
     /// Close a [`Subscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
