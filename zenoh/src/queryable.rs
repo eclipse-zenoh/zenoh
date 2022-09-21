@@ -164,7 +164,15 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
     fn res_async(self) -> Self::Future {
         ReplyFuture(match self.result {
-            Ok(sample) => Ok(self.query.replies_sender.send_async(sample)),
+            Ok(sample) => {
+                if !self.query._accepts_any_replies().unwrap_or(false)
+                    && !self.query.key_expr().intersects(&sample.key_expr)
+                {
+                    Err(Some(zerror!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr()).into()))
+                } else {
+                    Ok(self.query.replies_sender.send_async(sample))
+                }
+            }
             Err(_) => Err(Some(
                 zerror!("Replying errors is not yet supported!").into(),
             )),
