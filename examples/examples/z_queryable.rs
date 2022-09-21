@@ -43,9 +43,11 @@ async fn main() {
             query = queryable.recv_async() => {
                 let query = query.unwrap();
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
-                if let Err(e) = query.reply(Ok(Sample::new(key_expr.clone(), value.clone()))).res().await {
-                    eprintln!("An error occured while replying: {}", e)
-                }
+                query
+                    .reply(Ok(Sample::new(key_expr.clone(), value.clone())))
+                    .res()
+                    .await
+                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {}", e));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
