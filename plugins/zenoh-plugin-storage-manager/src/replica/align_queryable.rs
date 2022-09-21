@@ -92,21 +92,21 @@ impl AlignQueryable {
                     match value {
                         AlignData::Interval(i, c) => {
                             let sample = Sample::new(
-                                zenoh::key_expr::KeyExpr::from_str(&self.digest_key).unwrap(),
+                                query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
                             query.reply(Ok(sample)).res_async().await.unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
                             let sample = Sample::new(
-                                zenoh::key_expr::KeyExpr::from_str(&self.digest_key).unwrap(),
+                                query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
                             query.reply(Ok(sample)).res_async().await.unwrap();
                         }
                         AlignData::Content(i, c) => {
                             let sample = Sample::new(
-                                zenoh::key_expr::KeyExpr::from_str(&self.digest_key).unwrap(),
+                                query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
                             query.reply(Ok(sample)).res_async().await.unwrap();
