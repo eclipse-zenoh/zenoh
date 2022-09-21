@@ -78,18 +78,18 @@
       },
   },
 
-  /// The declarations aggregation strategy.
-  aggregation: {
-      /// A list of key-expressions for which all included subscribers will be aggregated into.
-      subscribers: [
-        // key_expression
-      ],
-      /// A list of key-expressions for which all included publishers will be aggregated into.
-      publishers: [
-        // key_expression
-      ],
-  },
-
+//  /// The declarations aggregation strategy.
+//  aggregation: {
+//      /// A list of key-expressions for which all included subscribers will be aggregated into.
+//      subscribers: [
+//        // key_expression
+//      ],
+//      /// A list of key-expressions for which all included publishers will be aggregated into.
+//      publishers: [
+//        // key_expression
+//      ],
+//  },
+//
 //  /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
 //  plugins_search_dirs: [],
 //  /// Plugins are only loaded if present in the configuration. When starting
@@ -195,12 +195,6 @@
       max_sessions: 1000,
       /// Maximum number of incoming links that are admitted per session
       max_links: 1,
-    },
-    multicast: {
-      /// Link join interval duration in milliseconds
-      join_interval: 2500,
-      /// Maximum number of sessions that can be simultaneously alive
-      max_sessions: 1000,
     },
     qos: {
       enabled: true,
