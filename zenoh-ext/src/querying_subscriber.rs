@@ -457,8 +457,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         };
 
         // if selector for query is different than subscription keyexpr: accept Any reply
-        let query_accept_replies = if selector.key_expr != *self._subscriber.key_expr()
-        {
+        let query_accept_replies = if selector.key_expr != *self._subscriber.key_expr() {
             ReplyKeyExpr::Any
         } else {
             ReplyKeyExpr::MatchingQuery
