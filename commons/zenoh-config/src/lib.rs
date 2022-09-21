@@ -393,7 +393,7 @@ fn config_deser() {
         .unwrap(),
     )
     .unwrap_err());
-    dbg!(Config::from_file("../../EXAMPLE_CONFIG.json5").unwrap());
+    dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
 impl Config {
