@@ -329,6 +329,13 @@ pub enum ReplyKeyExpr {
     MatchingQuery,
 }
 
+#[zenoh_core::unstable]
+impl Default for ReplyKeyExpr {
+    fn default() -> Self {
+        ReplyKeyExpr::MatchingQuery
+    }
+}
+
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
 where
     Handler: crate::prelude::IntoCallbackReceiverPair<'static, Reply>,
