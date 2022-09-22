@@ -63,16 +63,16 @@ zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
 zenoh-link = { path = "../zenoh-link/" }
 
 async-executor = "1.4.1"
-async-global-executor = "2.0.2"
+async-global-executor = "2.3.0"
 async-std = { version = "=1.12.0", default-features = false }
-async-trait = "0.1.42"
-flume = "0.10.5"
-log = "0.4"
-paste = "1.0"
+async-trait = "0.1.57"
+flume = "0.10.14"
+log = "0.4.17"
+paste = "1.0.9"
 rand = "0.8.3"
 ringbuffer-spsc = "0.1.6"
 rsa = { version = "0.6.1", optional = true }
-serde = "1.0.123"
+serde = "1.0.144"
 
 [dev-dependencies]
-env_logger = "0.9.0"
+env_logger = "0.9.1"
