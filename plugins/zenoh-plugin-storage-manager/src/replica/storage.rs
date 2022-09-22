@@ -95,9 +95,15 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
+                        let sample = match sample {
+                            Ok(sample) => sample,
+                            Err(e) => {
+                                error!("Error in sample: {}", e);
+                                continue;
+                            }
+                        };
                         // log error if the sample is not timestamped
-                        // This is to reduce down the line inconsistencies of having duplaicate samples stored
-                        let sample = sample.unwrap();
+                        // This is to reduce down the line inconsistencies of having duplicate samples stored
                         if sample.get_timestamp().is_none() {
                             error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
@@ -142,7 +148,13 @@ impl StorageService {
                 select!(
                     // on sample for key_expr
                     sample = storage_sub.recv_async() => {
-                        let mut sample = sample.unwrap();
+                        let mut sample = match sample {
+                            Ok(sample) => sample,
+                            Err(e) => {
+                                error!("Error in sample: {}", e);
+                                continue;
+                            }
+                        };
                         sample.ensure_timestamp();
                         self.process_sample(sample).await;
                     },
@@ -204,7 +216,13 @@ impl StorageService {
     }
 
     async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
-        let q = query.unwrap();
+        let q = match query {
+            Ok(q) => q,
+            Err(e) => {
+                error!("Error in query: {}", e);
+                return;
+            }
+        };
         // wrap zenoh::Query in zenoh_backend_traits::Query
         // with outgoing interceptor
         let query = Query::new(q, self.out_interceptor.clone());

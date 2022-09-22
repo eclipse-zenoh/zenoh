@@ -101,7 +101,10 @@ impl Aligner {
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
                 trace!("[REPLICA] Adding sample {:?} to storage", sample);
-                self.tx_sample.send_async(sample).await.unwrap();
+                match self.tx_sample.send_async(sample).await {
+                    Ok(()) => continue,
+                    Err(e) => error!("Error adding sample to storage: {}", e),
+                }
             }
 
             let mut processed = self.digests_processed.write().await;
@@ -182,8 +185,12 @@ impl Aligner {
         let reply_content = self.perform_query(other_rep.to_string(), properties).await;
         let mut other_intervals: HashMap<u64, u64> = HashMap::new();
         for each in reply_content {
-            let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap();
-            other_intervals.insert(i, c);
+            match serde_json::from_str(&each.value.to_string()) {
+                Ok((i, c)) => {
+                    other_intervals.insert(i, c);
+                }
+                Err(e) => error!("Error decoding reply: {}", e),
+            };
         }
         // get era diff
         let diff_intervals = this.get_interval_diff(other_intervals.clone());
@@ -202,8 +209,12 @@ impl Aligner {
             let reply_content = self.perform_query(other_rep.to_string(), properties).await;
             let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
             for each in reply_content {
-                let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
-                other_subintervals.insert(i, c);
+                match serde_json::from_str(&each.value.to_string()) {
+                    Ok((i, c)) => {
+                        other_subintervals.insert(i, c);
+                    }
+                    Err(e) => error!("Error decoding reply: {}", e),
+                };
             }
             // get intervals diff
             let diff_subintervals = this.get_subinterval_diff(other_subintervals);
@@ -226,8 +237,12 @@ impl Aligner {
                 let reply_content = self.perform_query(other_rep.to_string(), properties).await;
                 let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
                 for each in reply_content {
-                    let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
-                    other_content.insert(i, c);
+                    match serde_json::from_str(&each.value.to_string()) {
+                        Ok((i, c)) => {
+                            other_content.insert(i, c);
+                        }
+                        Err(e) => error!("Error decoding reply: {}", e),
+                    };
                 }
                 // get subintervals diff
                 let result = this.get_full_content_diff(other_content);
@@ -299,8 +314,12 @@ impl Aligner {
             let reply_content = self.perform_query(other_rep.to_string(), properties).await;
             let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
             for each in reply_content {
-                let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
-                other_subintervals.insert(i, c);
+                match serde_json::from_str(&each.value.to_string()) {
+                    Ok((i, c)) => {
+                        other_subintervals.insert(i, c);
+                    }
+                    Err(e) => error!("Error decoding reply: {}", e),
+                };
             }
             // get intervals diff
             let diff_subintervals = this.get_subinterval_diff(other_subintervals);
@@ -320,8 +339,12 @@ impl Aligner {
                 let reply_content = self.perform_query(other_rep.to_string(), properties).await;
                 let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
                 for each in reply_content {
-                    let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
-                    other_content.insert(i, c);
+                    match serde_json::from_str(&each.value.to_string()) {
+                        Ok((i, c)) => {
+                            other_content.insert(i, c);
+                        }
+                        Err(e) => error!("Error decoding reply: {}", e),
+                    };
                 }
                 // get subintervals diff
                 return this.get_full_content_diff(other_content);
@@ -364,8 +387,12 @@ impl Aligner {
             let reply_content = self.perform_query(other_rep.to_string(), properties).await;
             let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
             for each in reply_content {
-                let (i, c) = serde_json::from_str(&each.value.to_string()).unwrap_or_default();
-                other_content.insert(i, c);
+                match serde_json::from_str(&each.value.to_string()) {
+                    Ok((i, c)) => {
+                        other_content.insert(i, c);
+                    }
+                    Err(e) => error!("Error decoding reply: {}", e),
+                };
             }
             // get subintervals diff
             return this.get_full_content_diff(other_content);
