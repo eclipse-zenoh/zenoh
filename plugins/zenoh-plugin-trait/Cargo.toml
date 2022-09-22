@@ -39,6 +39,6 @@ default = ["no_mangle"]
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-macros = { path = "../../commons/zenoh-macros/" }
-libloading = "0.7.0"
-log = "0.4"
-serde_json = "1.0"
+libloading = "0.7.3"
+log = "0.4.17"
+serde_json = "1.0.85"

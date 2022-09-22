@@ -38,19 +38,19 @@ crate-type = ["cdylib"]
 
 [dependencies]
 async-std = "=1.12.0"
-async-trait = "0.1"
-clap = "3.2.10"
-env_logger = "0.9.0"
-futures = "0.3.12"
+async-trait = "0.1.57"
+clap = "3.2.22"
+env_logger = "0.9.1"
+futures = "0.3.24"
 git-version = "0.3.5"
-libloading = "0.7.0"
-log = "0.4.14"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1.0"
-crc = "2.1.0"
-derive-new = "0.5"
-flume = "0.10.10"
-urlencoding = "2.1.0"
+libloading = "0.7.3"
+log = "0.4.17"
+serde = { version = "1.0.144", features = ["derive"] }
+serde_json = "1.0.85"
+crc = "3.0.0"
+derive-new = "0.5.9"
+flume = "0.10.14"
+urlencoding = "2.1.2"
 lazy_static = "1.4.0"
 zenoh = { path = "../../zenoh/" , default-features = false }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }

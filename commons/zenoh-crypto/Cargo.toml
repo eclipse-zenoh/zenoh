@@ -31,6 +31,6 @@ description = "Internal crate for zenoh."
 zenoh-core = { path = "../zenoh-core/" }
 aes = "0.8.1"
 hmac = { version = "0.12.1", features = ["std"] }
-rand = "0.8.3"
-rand_chacha = "0.3.0"
-sha3 = "0.10.1"
+rand = "0.8.5"
+rand_chacha = "0.3.1"
+sha3 = "0.10.5"

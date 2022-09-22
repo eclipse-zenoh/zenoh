@@ -38,13 +38,13 @@ zenoh-core = { path = "../zenoh-core/" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 zenoh-buffers = { path = "../zenoh-buffers/" }
 
-log = "0.4"
-uhlc = "0.5.0"
+log = "0.4.17"
+uhlc = "0.5.1"
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = "0.8.5"
 uuid = { version = "1.1.2", features = ["v4"] }
-criterion = "0.3.4"
+criterion = "0.4.0"
 
 
 [[bench]]
