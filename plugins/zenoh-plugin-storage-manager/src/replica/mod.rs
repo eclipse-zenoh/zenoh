@@ -195,8 +195,13 @@ impl Replica {
             .await
             .unwrap();
         loop {
-            let sample = subscriber.recv_async().await;
-            let sample = sample.unwrap();
+            let sample = match subscriber.recv_async().await {
+                Ok(sample) => sample,
+                Err(e) => {
+                    error!("Error receiving sample: {}", e);
+                    continue;
+                }
+            };
             let from = &sample.key_expr.as_str()[Replica::get_digest_key(
                 self.key_expr.clone(),
                 ALIGN_PREFIX.to_string(),
@@ -210,7 +215,13 @@ impl Replica {
                 sample.key_expr.as_str(),
                 sample.value
             );
-            let digest: Digest = serde_json::from_str(&format!("{}", sample.value)).unwrap();
+            let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
+                Ok(digest) => digest,
+                Err(e) => {
+                    error!("Error in decoding the digest: {}", e);
+                    continue;
+                }
+            };
             let ts = digest.timestamp;
             let to_be_processed = self
                 .processing_needed(
@@ -223,7 +234,10 @@ impl Replica {
                 .await;
             if to_be_processed {
                 trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
-                tx.send_async((from.to_string(), digest)).await.unwrap();
+                match tx.send_async((from.to_string(), digest)).await {
+                    Ok(()) => {}
+                    Err(e) => error!("Error sending digest to aligner: {}", e),
+                }
             };
             received.insert(from.to_string(), ts);
         }
@@ -256,7 +270,10 @@ impl Replica {
             drop(digest);
 
             trace!("[DIGEST_PUB] Putting Digest : {} ...", digest_json);
-            publisher.put(digest_json).res_async().await.unwrap();
+            match publisher.put(digest_json).res_async().await {
+                Ok(()) => {}
+                Err(e) => error!("Digest publication failed: {}", e),
+            }
         }
     }
 
