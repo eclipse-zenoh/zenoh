@@ -43,7 +43,7 @@ enum AlignData {
     Interval(u64, u64),
     Subinterval(u64, u64),
     Content(u64, BTreeSet<Timestamp>),
-    Data(String, (Value, Timestamp)),
+    Data(OwnedKeyExpr, (Value, Timestamp)),
 }
 
 impl AlignQueryable {
@@ -77,8 +77,13 @@ impl AlignQueryable {
             .unwrap();
 
         loop {
-            let query = queryable.recv_async().await;
-            let query = query.unwrap();
+            let query = match queryable.recv_async().await {
+                Ok(query) => query,
+                Err(e) => {
+                    error!("Error in receiving query: {}", e);
+                    continue;
+                }
+            };
             trace!("[ALIGN QUERYABLE] Received Query '{}'", query.selector());
             let diff_required = self.parse_selector(query.selector());
             trace!(
@@ -112,9 +117,7 @@ impl AlignQueryable {
                             query.reply(Ok(sample)).res_async().await.unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
-                            let sample =
-                                Sample::new(zenoh::key_expr::KeyExpr::from_str(&k).unwrap(), v)
-                                    .with_timestamp(ts);
+                            let sample = Sample::new(k, v).with_timestamp(ts);
                             query.reply(Ok(sample)).res_async().await.unwrap();
                         }
                     }
@@ -162,10 +165,9 @@ impl AlignQueryable {
                     let entry = self.get_entry_with_ts(each).await;
                     if entry.is_some() {
                         let entry = entry.unwrap();
-                        let ts = entry.timestamp.unwrap();
                         result.push(AlignData::Data(
-                            entry.key_expr.as_str().to_string(),
-                            (entry.value, ts),
+                            OwnedKeyExpr::from(entry.key_expr),
+                            (entry.value, each),
                         ));
                     }
                 }
