@@ -377,39 +377,30 @@ impl StorageConfig {
             Some(s) => {
                 let mut replica_config = ReplicaConfig::default();
                 // TODO: Discuss what to do in case of wrong configuration - exit or use default
-                match s.get("publication_interval") {
-                    Some(p) => {
-                        let p = p.to_string().parse::<u64>();
-                        if let Ok(p) = p {
-                            replica_config.publication_interval = Duration::from_secs(p)
-                        } else {
-                            bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
+                if let Some(p) = s.get("publication_interval") {
+                    let p = p.to_string().parse::<u64>();
+                    if let Ok(p) = p {
+                        replica_config.publication_interval = Duration::from_secs(p)
+                    } else {
+                        bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
-                    None => (),
-                };
-                match s.get("propagation_delay") {
-                    Some(p) => {
-                        let p = p.to_string().parse::<u64>();
-                        if let Ok(p) = p {
-                            replica_config.propagation_delay = Duration::from_millis(p)
-                        } else {
-                            bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
+                }
+                if let Some(p) = s.get("propagation_delay") {
+                    let p = p.to_string().parse::<u64>();
+                    if let Ok(p) = p {
+                        replica_config.propagation_delay = Duration::from_millis(p)
+                    } else {
+                        bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
-                    None => (),
-                };
-                match s.get("delta") {
-                    Some(d) => {
-                        let d = d.to_string().parse::<u64>();
-                        if let Ok(d) = d {
-                            replica_config.delta = Duration::from_millis(d)
-                        } else {
-                            bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
-                        }
+                }
+                if let Some(d) = s.get("delta") {
+                    let d = d.to_string().parse::<u64>();
+                    if let Ok(d) = d {
+                        replica_config.delta = Duration::from_millis(d)
+                    } else {
+                        bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
-                    None => (),
-                };
+                }
                 Some(replica_config)
             }
             None => None,

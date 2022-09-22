@@ -794,7 +794,7 @@ pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
             net2.graph
                 .node_references()
                 .any(|(_, node2)| node1.zid == node2.zid)
-                .then(|| node1.zid)
+                .then_some(node1.zid)
         })
         .collect()
 }

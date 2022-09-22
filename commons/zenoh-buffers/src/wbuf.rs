@@ -616,7 +616,7 @@ impl<'a> crate::traits::reader::Reader for WBufReader<'a> {
     }
     fn read_byte(&mut self) -> Option<u8> {
         let mut byte = 0;
-        (self.read(std::slice::from_mut(&mut byte)) != 0).then(|| byte)
+        (self.read(std::slice::from_mut(&mut byte)) != 0).then_some(byte)
     }
 }
 impl crate::traits::buffer::CopyBuffer for WBuf {

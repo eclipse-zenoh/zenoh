@@ -145,7 +145,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             fn count_matches(routes: &[OwnedKeyExpr], matching: &keyexpr) -> usize {
                 routes
                     .iter()
-                    .filter_map(|r| r.intersects(matching).then(|| ()))
+                    .filter_map(|r| r.intersects(matching).then_some(()))
                     .count()
             }
             count_matches(&routes, unsafe { keyexpr::from_str_unchecked("**") });

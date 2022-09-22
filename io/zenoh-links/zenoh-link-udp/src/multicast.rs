@@ -72,7 +72,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        (&self.unicast_socket)
+        self.unicast_socket
             .send_to(buffer, self.multicast_addr)
             .await
             .map_err(|e| {
@@ -92,7 +92,7 @@ impl LinkMulticastTrait for LinkMulticastUdp {
 
     async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)> {
         loop {
-            let (n, addr) = (&self.mcast_sock).recv_from(buffer).await.map_err(|e| {
+            let (n, addr) = self.mcast_sock.recv_from(buffer).await.map_err(|e| {
                 let e = zerror!("Read error on UDP link {}: {}", self, e);
                 log::trace!("{}", e);
                 e

@@ -60,9 +60,7 @@ impl ZSliceBuffer {
             }
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
             #[cfg(feature = "shared-memory")]
-            Self::ShmBuffer(buf) => {
-                (&mut (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf))).as_mut_slice()
-            }
+            Self::ShmBuffer(buf) => (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf)).as_mut_slice(),
             #[cfg(feature = "shared-memory")]
             Self::ShmInfo(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
         }

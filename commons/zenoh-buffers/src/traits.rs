@@ -103,7 +103,7 @@ pub mod reader {
         fn read_exact(&mut self, into: &mut [u8]) -> bool;
         fn read_byte(&mut self) -> Option<u8> {
             let mut byte = 0;
-            (self.read(std::slice::from_mut(&mut byte)) != 0).then(|| byte)
+            (self.read(std::slice::from_mut(&mut byte)) != 0).then_some(byte)
         }
         fn remaining(&self) -> usize;
         fn can_read(&self) -> bool {

@@ -47,14 +47,14 @@ struct LinkUnicastUdpConnected {
 
 impl LinkUnicastUdpConnected {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        (&self.socket)
+        self.socket
             .recv(buffer)
             .await
             .map_err(|e| zerror!(e).into())
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        (&self.socket)
+        self.socket
             .send(buffer)
             .await
             .map_err(|e| zerror!(e).into())

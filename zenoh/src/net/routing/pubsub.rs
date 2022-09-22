@@ -90,7 +90,7 @@ fn propagate_simple_subscription_to(
                     src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
                 }
             }
-            _ => (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client),
+            _ => src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client,
         }
     {
         get_mut_unchecked(dst_face).local_subs.insert(res.clone());

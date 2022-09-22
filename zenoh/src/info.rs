@@ -178,7 +178,7 @@ impl SessionInfo<'_> {
                 .filter_map(|s| {
                     s.get_whatami()
                         .ok()
-                        .and_then(|what| (what == WhatAmI::Router).then(|| ()))
+                        .and_then(|what| (what == WhatAmI::Router).then_some(()))
                         .and_then(|_| s.get_zid().ok())
                 })
         })))
@@ -207,7 +207,7 @@ impl SessionInfo<'_> {
                 .filter_map(|s| {
                     s.get_whatami()
                         .ok()
-                        .and_then(|what| (what == WhatAmI::Peer).then(|| ()))
+                        .and_then(|what| (what == WhatAmI::Peer).then_some(()))
                         .and_then(|_| s.get_zid().ok())
                 })
         })))
