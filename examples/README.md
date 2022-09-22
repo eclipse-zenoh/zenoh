@@ -46,7 +46,7 @@
    ```
    or
    ```bash
-      z_put -p /demo/example/test -v 'Hello World'
+      z_put -k /demo/example/test -v 'Hello World'
    ```
 
 ### z_pub
@@ -60,7 +60,7 @@
    ```
    or
    ```bash
-      z_pub -p /demo/example/test -v 'Hello World'
+      z_pub -k /demo/example/test -v 'Hello World'
    ```
 
 ### z_sub
@@ -74,7 +74,7 @@
    ```
    or
    ```bash
-      z_sub -s /demo/**
+      z_sub -k /demo/**
    ```
 
 ### z_pull
@@ -89,7 +89,7 @@
    ```
    or
    ```bash
-      z_pull -s /demo/**
+      z_pull -k /demo/**
    ```
 
 ### z_get
@@ -104,7 +104,7 @@
    ```
    or
    ```bash
-      z_get -s /demo/**
+      z_get -k /demo/**
    ```
 
 ### z_queryable
@@ -136,7 +136,7 @@
    ```
    or
    ```bash
-      z_storage -s /demo/**
+      z_storage -k /demo/**
    ```
 
 ### z_pub_shm & z_sub_shm
