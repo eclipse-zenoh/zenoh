@@ -106,13 +106,15 @@ impl<'a> Selector<'a> {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
-
-    /// Set [Selector] parameters
     pub fn set_parameters(&mut self, selector: impl Into<Cow<'a, str>>) {
         self.parameters = selector.into();
     }
-
-    /// Convert the [Selector] into an owned object
+    pub fn borrowing_clone(&'a self) -> Self {
+        Selector {
+            key_expr: self.key_expr.clone(),
+            parameters: self.parameters.as_ref().into(),
+        }
+    }
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
@@ -120,19 +122,23 @@ impl<'a> Selector<'a> {
         }
     }
 
+    #[deprecated = "If you have ownership of this selector, prefer `Selector::into_owned`"]
+    pub fn to_owned(&self) -> Selector<'static> {
+        self.borrowing_clone().into_owned()
+    }
+
     /// Returns this selectors components as a tuple.
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
         (self.key_expr, self.parameters)
     }
 
-    /// Sets the `parameters` part of this [Selector].
+    /// Sets the `parameters` part of this `Selector`.
     #[inline(always)]
     pub fn with_parameters(mut self, parameters: &'a str) -> Self {
         self.parameters = parameters.into();
         self
     }
 
-    /// Extend the `parameters` of this [Selector]
     pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
@@ -178,7 +184,6 @@ impl<'a> Selector<'a> {
             selector.drain(splice_start..(splice_end + (splice_end != selector.len()) as usize));
         }
     }
-
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
         let starts_with_param = |s: &str| {
@@ -206,7 +211,6 @@ impl<'a> Selector<'a> {
         }
         Ok(res)
     }
-
     #[cfg(any(feature = "unstable", test))]
     pub(crate) fn accept_any_keyexpr(self, any: bool) -> ZResult<Selector<'static>> {
         use crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM;

@@ -96,6 +96,39 @@ impl<'a> KeyExpr<'a> {
         Self::try_from(t)
     }
 
+    /// Constructs a new [`KeyExpr`] aliasing `self`.
+    ///
+    /// Note that [`KeyExpr`] (as well as [`OwnedKeyExpr`]) use reference counters internally, so you're probably better off using clone.
+    pub fn borrowing_clone(&'a self) -> Self {
+        let inner = match &self.0 {
+            KeyExprInner::Borrowed(key_expr) => KeyExprInner::Borrowed(key_expr),
+            KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            },
+            KeyExprInner::Owned(key_expr) => KeyExprInner::Borrowed(key_expr),
+            KeyExprInner::Wire {
+                key_expr,
+                expr_id,
+                prefix_len,
+                session_id,
+            } => KeyExprInner::BorrowedWire {
+                key_expr,
+                expr_id: *expr_id,
+                prefix_len: *prefix_len,
+                session_id: *session_id,
+            },
+        };
+        Self(inner)
+    }
+
     /// Canonizes the passed value before returning it as a `KeyExpr`.
     ///
     /// Will return Err if the passed value isn't a valid key expression despite canonization.
