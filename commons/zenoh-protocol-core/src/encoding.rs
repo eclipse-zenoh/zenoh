@@ -1,6 +1,46 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use crate::ZInt;
 use core::fmt;
 use std::{borrow::Cow, convert::TryFrom};
+
+mod consts {
+    pub(super) const MIMES: [&str; 21] = [
+        /*  0 */ "",
+        /*  1 */ "application/octet-stream",
+        /*  2 */ "application/custom", // non iana standard
+        /*  3 */ "text/plain",
+        /*  4 */ "application/properties", // non iana standard
+        /*  5 */ "application/json", // if not readable from casual users
+        /*  6 */ "application/sql",
+        /*  7 */ "application/integer", // non iana standard
+        /*  8 */ "application/float", // non iana standard
+        /*  9 */
+        "application/xml", // if not readable from casual users (RFC 3023, sec 3)
+        /* 10 */ "application/xhtml+xml",
+        /* 11 */ "application/x-www-form-urlencoded",
+        /* 12 */ "text/json", // non iana standard - if readable from casual users
+        /* 13 */ "text/html",
+        /* 14 */ "text/xml", // if readable from casual users (RFC 3023, section 3)
+        /* 15 */ "text/css",
+        /* 16 */ "text/csv",
+        /* 17 */ "text/javascript",
+        /* 18 */ "image/jpeg",
+        /* 19 */ "image/png",
+        /* 20 */ "image/gif",
+    ];
+}
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,16 +67,25 @@ pub enum KnownEncoding {
     ImagePng = 19,
     ImageGif = 20,
 }
+
 impl From<KnownEncoding> for u8 {
     fn from(val: KnownEncoding) -> Self {
         unsafe { std::mem::transmute(val) }
     }
 }
+
+impl From<KnownEncoding> for &str {
+    fn from(val: KnownEncoding) -> Self {
+        consts::MIMES[usize::from(val)]
+    }
+}
+
 impl From<KnownEncoding> for usize {
     fn from(val: KnownEncoding) -> Self {
         u8::from(val) as usize
     }
 }
+
 impl std::convert::TryFrom<u8> for KnownEncoding {
     type Error = ();
     fn try_from(value: u8) -> Result<Self, Self::Error> {
@@ -47,8 +96,10 @@ impl std::convert::TryFrom<u8> for KnownEncoding {
         }
     }
 }
+
 impl std::convert::TryFrom<ZInt> for KnownEncoding {
     type Error = ();
+
     fn try_from(value: ZInt) -> Result<Self, Self::Error> {
         if value < consts::MIMES.len() as ZInt + 1 {
             Ok(unsafe { std::mem::transmute(value as u8) })
@@ -57,6 +108,7 @@ impl std::convert::TryFrom<ZInt> for KnownEncoding {
         }
     }
 }
+
 impl AsRef<str> for KnownEncoding {
     fn as_ref(&self) -> &str {
         consts::MIMES[usize::from(*self)]
@@ -72,33 +124,6 @@ pub enum Encoding {
     WithSuffix(KnownEncoding, Cow<'static, str>),
 }
 
-mod consts {
-    pub(super) const MIMES: [&str; 21] = [
-        /*  0 */ "",
-        /*  1 */ "application/octet-stream",
-        /*  2 */ "application/custom", // non iana standard
-        /*  3 */ "text/plain",
-        /*  4 */ "application/properties", // non iana standard
-        /*  5 */ "application/json", // if not readable from casual users
-        /*  6 */ "application/sql",
-        /*  7 */ "application/integer", // non iana standard
-        /*  8 */ "application/float", // non iana standard
-        /*  9 */
-        "application/xml", // if not readable from casual users (RFC 3023, section 3)
-        /* 10 */ "application/xhtml+xml",
-        /* 11 */ "application/x-www-form-urlencoded",
-        /* 12 */ "text/json", // non iana standard - if readable from casual users
-        /* 13 */ "text/html",
-        /* 14 */ "text/xml", // if readable from casual users (RFC 3023, section 3)
-        /* 15 */ "text/css",
-        /* 16 */ "text/csv",
-        /* 17 */ "text/javascript",
-        /* 18 */ "image/jpeg",
-        /* 19 */ "image/png",
-        /* 20 */ "image/gif",
-    ];
-}
-
 impl Encoding {
     pub fn new<IntoCowStr>(prefix: ZInt, suffix: IntoCowStr) -> Option<Self>
     where
@@ -111,30 +136,6 @@ impl Encoding {
             Some(Encoding::WithSuffix(prefix, suffix.into()))
         }
     }
-
-    pub const EMPTY: Encoding = Encoding::Exact(KnownEncoding::Empty);
-    pub const APP_OCTET_STREAM: Encoding = Encoding::Exact(KnownEncoding::AppOctetStream);
-    pub const APP_CUSTOM: Encoding = Encoding::Exact(KnownEncoding::AppCustom);
-    pub const TEXT_PLAIN: Encoding = Encoding::Exact(KnownEncoding::TextPlain);
-    pub const STRING: Encoding = Encoding::TEXT_PLAIN;
-    pub const APP_PROPERTIES: Encoding = Encoding::Exact(KnownEncoding::AppProperties);
-    pub const APP_JSON: Encoding = Encoding::Exact(KnownEncoding::AppJson);
-    pub const APP_SQL: Encoding = Encoding::Exact(KnownEncoding::AppSql);
-    pub const APP_INTEGER: Encoding = Encoding::Exact(KnownEncoding::AppInteger);
-    pub const APP_FLOAT: Encoding = Encoding::Exact(KnownEncoding::AppFloat);
-    pub const APP_XML: Encoding = Encoding::Exact(KnownEncoding::AppXml);
-    pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
-    pub const APP_X_WWW_FORM_URLENCODED: Encoding =
-        Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
-    pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);
-    pub const TEXT_HTML: Encoding = Encoding::Exact(KnownEncoding::TextHtml);
-    pub const TEXT_XML: Encoding = Encoding::Exact(KnownEncoding::TextXml);
-    pub const TEXT_CSS: Encoding = Encoding::Exact(KnownEncoding::TextCss);
-    pub const TEXT_CSV: Encoding = Encoding::Exact(KnownEncoding::TextCsv);
-    pub const TEXT_JAVASCRIPT: Encoding = Encoding::Exact(KnownEncoding::TextJavascript);
-    pub const IMG_JPG: Encoding = Encoding::Exact(KnownEncoding::ImageJpeg);
-    pub const IMG_PNG: Encoding = Encoding::Exact(KnownEncoding::ImagePng);
-    pub const IMG_GIF: Encoding = Encoding::Exact(KnownEncoding::ImageGif);
 
     /// Sets the suffix of this encoding.
     pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> Self
@@ -158,20 +159,51 @@ impl Encoding {
 
     /// Returns `true`if the string representation of this encoding starts with
     /// the string representation of ther given encoding.
-    pub fn starts_with(&self, with: &Encoding) -> bool {
+    pub fn starts_with<T>(&self, with: T) -> bool
+    where
+        T: Into<Encoding>,
+    {
+        let with: Encoding = with.into();
         self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
     }
+
     pub const fn prefix(&self) -> &KnownEncoding {
         match self {
             Encoding::Exact(e) | Encoding::WithSuffix(e, _) => e,
         }
     }
+
     pub fn suffix(&self) -> &str {
         match self {
             Encoding::Exact(_) => "",
             Encoding::WithSuffix(_, s) => s.as_ref(),
         }
     }
+}
+
+impl Encoding {
+    pub const EMPTY: Encoding = Encoding::Exact(KnownEncoding::Empty);
+    pub const APP_OCTET_STREAM: Encoding = Encoding::Exact(KnownEncoding::AppOctetStream);
+    pub const APP_CUSTOM: Encoding = Encoding::Exact(KnownEncoding::AppCustom);
+    pub const TEXT_PLAIN: Encoding = Encoding::Exact(KnownEncoding::TextPlain);
+    pub const APP_PROPERTIES: Encoding = Encoding::Exact(KnownEncoding::AppProperties);
+    pub const APP_JSON: Encoding = Encoding::Exact(KnownEncoding::AppJson);
+    pub const APP_SQL: Encoding = Encoding::Exact(KnownEncoding::AppSql);
+    pub const APP_INTEGER: Encoding = Encoding::Exact(KnownEncoding::AppInteger);
+    pub const APP_FLOAT: Encoding = Encoding::Exact(KnownEncoding::AppFloat);
+    pub const APP_XML: Encoding = Encoding::Exact(KnownEncoding::AppXml);
+    pub const APP_XHTML_XML: Encoding = Encoding::Exact(KnownEncoding::AppXhtmlXml);
+    pub const APP_XWWW_FORM_URLENCODED: Encoding =
+        Encoding::Exact(KnownEncoding::AppXWwwFormUrlencoded);
+    pub const TEXT_JSON: Encoding = Encoding::Exact(KnownEncoding::TextJson);
+    pub const TEXT_HTML: Encoding = Encoding::Exact(KnownEncoding::TextHtml);
+    pub const TEXT_XML: Encoding = Encoding::Exact(KnownEncoding::TextXml);
+    pub const TEXT_CSS: Encoding = Encoding::Exact(KnownEncoding::TextCss);
+    pub const TEXT_CSV: Encoding = Encoding::Exact(KnownEncoding::TextCsv);
+    pub const TEXT_JAVASCRIPT: Encoding = Encoding::Exact(KnownEncoding::TextJavascript);
+    pub const IMAGE_JPEG: Encoding = Encoding::Exact(KnownEncoding::ImageJpeg);
+    pub const IMAGE_PNG: Encoding = Encoding::Exact(KnownEncoding::ImagePng);
+    pub const IMAGE_GIF: Encoding = Encoding::Exact(KnownEncoding::ImageGif);
 }
 
 impl fmt::Display for Encoding {
@@ -228,16 +260,20 @@ impl From<String> for Encoding {
     }
 }
 
-// impl From<ZInt> for Encoding {
-//     fn from(i: ZInt) -> Self {
-//         Encoding {
-//             prefix: i,
-//             suffix: "".into(),
-//         }
-//     }
-// }
+impl From<&KnownEncoding> for Encoding {
+    fn from(e: &KnownEncoding) -> Encoding {
+        Encoding::Exact(*e)
+    }
+}
+
+impl From<KnownEncoding> for Encoding {
+    fn from(e: KnownEncoding) -> Encoding {
+        Encoding::Exact(e)
+    }
+}
+
 impl Default for Encoding {
     fn default() -> Self {
-        Encoding::EMPTY
+        KnownEncoding::Empty.into()
     }
 }

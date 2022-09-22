@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
 
@@ -43,4 +49,16 @@ pub fn rustc_version_release(_tokens: TokenStream) -> TokenStream {
         .find_map(|l| l.strip_prefix("commit-hash: "))
         .unwrap();
     (quote! {(#release, #commit)}).into()
+}
+
+#[proc_macro_attribute]
+pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = proc_macro2::TokenStream::from(item);
+    TokenStream::from(quote! {
+        #[cfg(feature = "unstable")]
+        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        /// To use it, you must enable zenoh's `unstable` feature flag.
+        ///
+        #item
+    })
 }

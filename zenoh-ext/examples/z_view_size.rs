@@ -1,7 +1,21 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use clap::{App, Arg};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh_core::AsyncResolve;
 use zenoh_ext::group::*;
 
 #[async_std::main]
@@ -10,11 +24,15 @@ async fn main() {
 
     let (config, group_name, id, size, timeout) = parse_args();
 
-    let z = Arc::new(zenoh::open(config).await.unwrap());
-    let member_id = id.unwrap_or(z.id().await);
-    let member = Member::new(&member_id).lease(Duration::from_secs(3));
+    let z = Arc::new(zenoh::open(config).res().await.unwrap());
+    let member_id = id.unwrap_or_else(|| z.zid().to_string());
+    let member = Member::new(member_id.as_str())
+        .unwrap()
+        .lease(Duration::from_secs(3));
 
-    let group = Group::join(z.clone(), &group_name, member).await;
+    let group = Group::join(z.clone(), group_name.as_str(), member)
+        .await
+        .unwrap();
     println!(
         "Member {} waiting for {} members in group {} for {} seconds...",
         member_id, size, group_name, timeout

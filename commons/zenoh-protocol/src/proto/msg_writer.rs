@@ -48,21 +48,20 @@ pub trait MessageWriter {
     ) -> bool;
     fn write_zenoh_message(&mut self, msg: &mut ZenohMessage) -> bool;
     fn write_data(&mut self, data: &Data) -> bool;
-    fn write_key_expr(&mut self, key: &KeyExpr) -> bool;
+    fn write_key_expr(&mut self, key: &WireExpr) -> bool;
     fn write_data_info(&mut self, info: &DataInfo) -> bool;
     fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool;
     fn write_declare(&mut self, declare: &Declare) -> bool;
     fn write_declaration(&mut self, declaration: &Declaration) -> bool;
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool;
+    fn write_submode(&mut self, mode: &SubMode) -> bool;
     fn write_unit(&mut self, unit: &Unit) -> bool;
     fn write_pull(&mut self, pull: &Pull) -> bool;
     fn write_query(&mut self, query: &Query) -> bool;
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool;
     fn write_link_state(&mut self, link_state: &LinkState) -> bool;
     fn write_query_target(&mut self, target: &QueryTarget) -> bool;
-    fn write_target(&mut self, target: &Target) -> bool;
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt;
-    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool;
+    fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool;
 }
 
 impl MessageWriter for WBuf {
@@ -91,8 +90,7 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_byte(reply_context.header()).is_some());
         zcheck!(self.write_zint(reply_context.qid));
         if let Some(replier) = reply_context.replier.as_ref() {
-            zcheck!(self.write_zint(replier.kind));
-            zcheck!(self.write_peeexpr_id(&replier.id));
+            zcheck!(self.write_zid(&replier.id));
         }
         true
     }
@@ -168,8 +166,8 @@ impl MessageWriter for WBuf {
 
     fn write_hello(&mut self, hello: &Hello) -> bool {
         zcheck!(self.write_byte(hello.header()).is_some());
-        if let Some(pid) = hello.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+        if let Some(zid) = hello.zid.as_ref() {
+            zcheck!(self.write_zid(zid));
         }
         if let Some(w) = hello.whatami {
             if w != WhatAmI::Router {
@@ -190,7 +188,7 @@ impl MessageWriter for WBuf {
         }
         zcheck!(self.write_byte(init_syn.version).is_some());
         zcheck!(self.write_zint(init_syn.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_syn.pid));
+        zcheck!(self.write_zid(&init_syn.zid));
         if imsg::has_flag(header, tmsg::flag::S) {
             zcheck!(self.write_zint(init_syn.sn_resolution));
         }
@@ -203,7 +201,7 @@ impl MessageWriter for WBuf {
             zcheck!(self.write_zint(init_ack.options()));
         }
         zcheck!(self.write_zint(init_ack.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&init_ack.pid));
+        zcheck!(self.write_zid(&init_ack.zid));
         if let Some(snr) = init_ack.sn_resolution {
             zcheck!(self.write_zint(snr));
         }
@@ -241,7 +239,7 @@ impl MessageWriter for WBuf {
         }
         zcheck!(self.write_byte(join.version).is_some());
         zcheck!(self.write_zint(join.whatami.into()));
-        zcheck!(self.write_peeexpr_id(&join.pid));
+        zcheck!(self.write_zid(&join.zid));
         if imsg::has_flag(header, tmsg::flag::T1) {
             zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
         } else {
@@ -267,8 +265,8 @@ impl MessageWriter for WBuf {
 
     fn write_close(&mut self, close: &Close) -> bool {
         zcheck!(self.write_byte(close.header()).is_some());
-        if let Some(p) = close.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+        if let Some(p) = close.zid.as_ref() {
+            zcheck!(self.write_zid(p));
         }
         self.write_byte(close.reason).is_some()
     }
@@ -293,8 +291,8 @@ impl MessageWriter for WBuf {
 
     fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
         zcheck!(self.write_byte(keep_alive.header()).is_some());
-        if let Some(p) = keep_alive.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(p));
+        if let Some(p) = keep_alive.zid.as_ref() {
+            zcheck!(self.write_zid(p));
         }
         true
     }
@@ -397,7 +395,7 @@ impl MessageWriter for WBuf {
     }
 
     #[inline(always)]
-    fn write_key_expr(&mut self, key: &KeyExpr) -> bool {
+    fn write_key_expr(&mut self, key: &WireExpr) -> bool {
         if key.has_suffix() {
             self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
         } else {
@@ -409,8 +407,8 @@ impl MessageWriter for WBuf {
     fn write_data_info(&mut self, info: &DataInfo) -> bool {
         zcheck!(self.write_zint(info.options()));
 
-        if let Some(kind) = info.kind {
-            zcheck!(self.write_zint(kind));
+        if info.kind != SampleKind::Put {
+            zcheck!(self.write_zint(info.kind as u64));
         }
         if let Some(enc) = info.encoding.as_ref() {
             zcheck!(self.write_byte(u8::from(*enc.prefix())).is_some());
@@ -418,18 +416,6 @@ impl MessageWriter for WBuf {
         }
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
-        }
-        if let Some(pid) = info.source_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
-        }
-        if let Some(sn) = info.source_sn {
-            zcheck!(self.write_zint(sn));
-        }
-        if let Some(pid) = info.first_router_id.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
-        }
-        if let Some(sn) = info.first_router_sn {
-            zcheck!(self.write_zint(sn));
         }
         true
     }
@@ -465,7 +451,7 @@ impl MessageWriter for WBuf {
                 zcheck!(self.write_byte(header).is_some());
                 zcheck!(self.write_key_expr(&s.key));
                 if imsg::has_flag(header, zmsg::flag::S) {
-                    zcheck!(self.write_submode(&s.info.mode, &s.info.period))
+                    zcheck!(self.write_submode(&s.info.mode))
                 }
                 true
             }
@@ -482,26 +468,19 @@ impl MessageWriter for WBuf {
                 let header = q.header();
                 zcheck!(self.write_byte(header).is_some());
                 zcheck!(self.write_key_expr(&q.key));
-                zcheck!(self.write_zint(q.kind));
                 if imsg::has_flag(header, zmsg::flag::Q) {
                     zcheck!(self.write_queryable_info(&q.info));
                 }
                 true
             }
             Declaration::ForgetQueryable(fq) => {
-                self.write_byte(fq.header()).is_some()
-                    && self.write_key_expr(&fq.key)
-                    && self.write_zint(fq.kind)
+                self.write_byte(fq.header()).is_some() && self.write_key_expr(&fq.key)
             }
         }
     }
 
-    fn write_submode(&mut self, mode: &SubMode, period: &Option<Period>) -> bool {
-        let period_mask: u8 = if period.is_some() {
-            zmsg::declaration::flag::PERIOD
-        } else {
-            0
-        };
+    fn write_submode(&mut self, mode: &SubMode) -> bool {
+        let period_mask: u8 = 0;
         zcheck!(match mode {
             SubMode::Push => self
                 .write_byte(zmsg::declaration::id::MODE_PUSH | period_mask)
@@ -510,11 +489,7 @@ impl MessageWriter for WBuf {
                 .write_byte(zmsg::declaration::id::MODE_PULL | period_mask)
                 .is_some(),
         });
-        if let Some(p) = period {
-            self.write_zint(p.origin) && self.write_zint(p.period) && self.write_zint(p.duration)
-        } else {
-            true
-        }
+        true
     }
 
     fn write_unit(&mut self, unit: &Unit) -> bool {
@@ -538,12 +513,12 @@ impl MessageWriter for WBuf {
     fn write_query(&mut self, query: &Query) -> bool {
         zcheck!(self.write_byte(query.header()).is_some());
         zcheck!(self.write_key_expr(&query.key));
-        zcheck!(self.write_string(&query.value_selector));
+        zcheck!(self.write_string(&query.parameters));
         zcheck!(self.write_zint(query.qid));
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));
         }
-        self.write_consolidation(&query.consolidation)
+        self.write_consolidation(query.consolidation)
     }
 
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool {
@@ -559,8 +534,8 @@ impl MessageWriter for WBuf {
         zcheck!(self.write_zint(link_state.options()));
         zcheck!(self.write_zint(link_state.psid));
         zcheck!(self.write_zint(link_state.sn));
-        if let Some(pid) = link_state.pid.as_ref() {
-            zcheck!(self.write_peeexpr_id(pid));
+        if let Some(zid) = link_state.zid.as_ref() {
+            zcheck!(self.write_zid(zid));
         }
         if let Some(&whatami) = link_state.whatami.as_ref() {
             zcheck!(self.write_zint(whatami.into()));
@@ -577,35 +552,26 @@ impl MessageWriter for WBuf {
     }
 
     fn write_query_target(&mut self, target: &QueryTarget) -> bool {
-        self.write_zint(target.kind) && self.write_target(&target.target)
-    }
-
-    fn write_target(&mut self, target: &Target) -> bool {
         // Note: desactivate Clippy check here because cast to ZInt can't be changed since ZInt size might change
         #![allow(clippy::unnecessary_cast)]
         match target {
-            Target::BestMatching => self.write_zint(0 as ZInt),
-            Target::All => self.write_zint(1 as ZInt),
-            Target::AllComplete => self.write_zint(2 as ZInt),
-            Target::None => self.write_zint(3 as ZInt),
+            QueryTarget::BestMatching => self.write_zint(0 as ZInt),
+            QueryTarget::All => self.write_zint(1 as ZInt),
+            QueryTarget::AllComplete => self.write_zint(2 as ZInt),
             #[cfg(feature = "complete_n")]
-            Target::Complete(n) => self.write_zint(4 as ZInt) && self.write_zint(*n),
+            QueryTarget::Complete(n) => self.write_zint(3 as ZInt) && self.write_zint(*n),
         }
     }
 
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt {
         match mode {
             ConsolidationMode::None => 0,
-            ConsolidationMode::Lazy => 1,
-            ConsolidationMode::Full => 2,
+            ConsolidationMode::Monotonic => 1,
+            ConsolidationMode::Latest => 2,
         }
     }
 
-    fn write_consolidation(&mut self, consolidation: &ConsolidationStrategy) -> bool {
-        self.write_zint(
-            (WBuf::write_consolidation_mode(consolidation.first_routers) << 4)
-                | (WBuf::write_consolidation_mode(consolidation.last_router) << 2)
-                | (WBuf::write_consolidation_mode(consolidation.reception)),
-        )
+    fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool {
+        self.write_zint(WBuf::write_consolidation_mode(consolidation))
     }
 }

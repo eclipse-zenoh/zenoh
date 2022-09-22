@@ -17,6 +17,7 @@ mod tests {
     use async_std::task;
     use std::any::Any;
     use std::collections::HashSet;
+    use std::convert::TryFrom;
     use std::iter::FromIterator;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -25,7 +26,7 @@ mod tests {
     use zenoh_core::zasync_executor_init;
     use zenoh_core::Result as ZResult;
     use zenoh_link::{EndPoint, Link};
-    use zenoh_protocol::core::{Channel, PeerId, Priority, Reliability, WhatAmI};
+    use zenoh_protocol::core::{Channel, Priority, Reliability, WhatAmI, ZenohId};
     use zenoh_protocol::io::{SharedMemoryManager, ZBuf};
     use zenoh_protocol::proto::{Data, ZenohBody, ZenohMessage};
     use zenoh_protocol_core::CongestionControl;
@@ -132,9 +133,9 @@ mod tests {
 
     async fn run(endpoint: &EndPoint) {
         // Define client and router IDs
-        let peer_shm01 = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer_shm02 = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
-        let peer_net01 = PeerId::new(1, [2_u8; PeerId::MAX_SIZE]);
+        let peer_shm01 = ZenohId::try_from([1]).unwrap();
+        let peer_shm02 = ZenohId::try_from([2]).unwrap();
+        let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         // Create the SharedMemoryManager
         let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
@@ -147,7 +148,7 @@ mod tests {
             ]));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_shm01)
+            .zid(peer_shm01)
             .unicast(unicast)
             .build(peer_shm01_handler.clone())
             .unwrap();
@@ -160,7 +161,7 @@ mod tests {
             ]));
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_shm02)
+            .zid(peer_shm02)
             .unicast(unicast)
             .build(peer_shm02_handler.clone())
             .unwrap();
@@ -169,7 +170,7 @@ mod tests {
         let peer_net01_handler = Arc::new(SHPeer::new(false));
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer_net01)
+            .zid(peer_net01)
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -212,7 +213,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "/test".into();
+            let key = "test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),
@@ -265,7 +266,7 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "/test".into();
+            let key = "test".into();
             let payload: ZBuf = sbuf.into();
             let channel = Channel {
                 priority: Priority::default(),

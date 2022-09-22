@@ -145,6 +145,18 @@ pub mod tmsg {
         pub const EXPIRED: u8 = 0x05;
     }
 
+    pub fn close_reason_to_str(reason: u8) -> &'static str {
+        match reason {
+            close_reason::GENERIC => "GENERIC",
+            close_reason::UNSUPPORTED => "UNSUPPORTED",
+            close_reason::INVALID => "INVALID",
+            close_reason::MAX_SESSIONS => "MAX_SESSIONS",
+            close_reason::MAX_LINKS => "MAX_LINKS",
+            close_reason::EXPIRED => "EXPIRED",
+            _ => "UNKNOWN",
+        }
+    }
+
     pub mod conduit {
         use super::{imsg, Priority};
 
@@ -188,11 +200,11 @@ pub mod zmsg {
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
         pub const K: u8 = 1 << 7; // 0x80 KeySuffix     if K==1 then key_expr has suffix
         pub const N: u8 = 1 << 6; // 0x40 MaxSamples    if N==1 then the MaxSamples is indicated
-        pub const P: u8 = 1 << 0; // 0x01 Pid           if P==1 then the pid is present
+        pub const P: u8 = 1 << 0; // 0x01 Zid           if P==1 then the zid is present
         pub const Q: u8 = 1 << 6; // 0x40 QueryableInfo if Q==1 then the queryable info is present
         pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then it concerns the reliable channel, best-effort otherwise
         pub const S: u8 = 1 << 6; // 0x40 SubMode       if S==1 then the declaration SubMode is indicated
-        pub const T: u8 = 1 << 5; // 0x20 QueryTarget   if T==1 then the query target is present
+        pub const T: u8 = 1 << 5; // 0x20 QueryTAK   if T==1 then the query target is present
 
         pub const X: u8 = 0; // Unused flags are set to zero
     }
@@ -269,7 +281,7 @@ pub mod zmsg {
         use super::{Channel, Priority, Reliability};
 
         pub const DECLARE: Channel = Channel {
-            priority: Priority::Data,
+            priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         };
         pub const DATA: Channel = Channel {
@@ -381,15 +393,13 @@ impl Attachment {
 ///   - the **Data** messages that result from a query
 ///   - or a **Unit** message in case the message is a
 ///     SOURCE_FINAL or REPLY_FINAL.
-///  The **replier-id** (eval or storage id) is represented as a byte-array.
+///  The **replier-id** (queryable id) is represented as a byte-array.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
 /// |X|X|F|  R_CTX  |
 /// +-+-+-+---------+
 /// ~      qid      ~
-/// +---------------+
-/// ~  replier_kind ~ if F==0
 /// +---------------+
 /// ~   replier_id  ~ if F==0
 /// +---------------+
@@ -398,8 +408,7 @@ impl Attachment {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplierInfo {
-    pub kind: ZInt,
-    pub id: PeerId,
+    pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
@@ -530,13 +539,9 @@ impl Header for Priority {
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
-    pub kind: Option<ZInt>,
+    pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
-    pub source_id: Option<PeerId>,
-    pub source_sn: Option<ZInt>,
-    pub first_router_id: Option<PeerId>,
-    pub first_router_sn: Option<ZInt>,
 }
 
 impl DataInfo {
@@ -552,7 +557,7 @@ impl Options for DataInfo {
         if self.sliced {
             options |= zmsg::data::info::SLICED;
         }
-        if self.kind.is_some() {
+        if self.kind != SampleKind::Put {
             options |= zmsg::data::info::KIND;
         }
         if self.encoding.is_some() {
@@ -560,18 +565,6 @@ impl Options for DataInfo {
         }
         if self.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
-        }
-        if self.source_id.is_some() {
-            options |= zmsg::data::info::SRCID;
-        }
-        if self.source_sn.is_some() {
-            options |= zmsg::data::info::SRCSN;
-        }
-        if self.first_router_id.is_some() {
-            options |= zmsg::data::info::RTRID;
-        }
-        if self.first_router_sn.is_some() {
-            options |= zmsg::data::info::RTRSN;
         }
         options
     }
@@ -591,13 +584,9 @@ impl Options for DataInfo {
         }
 
         sliced!(self)
-            || self.kind.is_some()
+            || self.kind != SampleKind::Put
             || self.encoding.is_some()
             || self.timestamp.is_some()
-            || self.source_id.is_some()
-            || self.source_sn.is_some()
-            || self.first_router_id.is_some()
-            || self.first_router_sn.is_some()
     }
 }
 
@@ -624,7 +613,7 @@ impl PartialOrd for DataInfo {
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Data {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
@@ -699,7 +688,7 @@ pub enum Declaration {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resource {
     pub expr_id: ZInt,
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for Resource {
@@ -743,7 +732,7 @@ impl Header for ForgetResource {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Publisher {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for Publisher {
@@ -767,7 +756,7 @@ impl Header for Publisher {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetPublisher {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for ForgetPublisher {
@@ -795,7 +784,7 @@ impl Header for ForgetPublisher {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subscriber {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub info: SubInfo,
 }
 
@@ -806,7 +795,7 @@ impl Header for Subscriber {
         if self.info.reliability == Reliability::Reliable {
             header |= zmsg::flag::R;
         }
-        if !(self.info.mode == SubMode::Push && self.info.period.is_none()) {
+        if self.info.mode != SubMode::Push {
             header |= zmsg::flag::S;
         }
         if self.key.has_suffix() {
@@ -826,7 +815,7 @@ impl Header for Subscriber {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetSubscriber {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for ForgetSubscriber {
@@ -847,15 +836,12 @@ impl Header for ForgetSubscriber {
 /// +---------------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~     Kind      ~
-/// +---------------+
 /// ~   QablInfo    ~ if Q==1
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Queryable {
-    pub key: KeyExpr<'static>,
-    pub kind: ZInt,
+    pub key: WireExpr<'static>,
     pub info: QueryableInfo,
 }
 
@@ -880,22 +866,16 @@ impl Header for Queryable {
 /// +---------------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~     Kind      ~
-/// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetQueryable {
-    pub key: KeyExpr<'static>,
-    pub kind: ZInt,
+    pub key: WireExpr<'static>,
 }
 
 impl Header for ForgetQueryable {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = zmsg::declaration::id::FORGET_QUERYABLE;
-        if self.kind != queryable::EVAL {
-            header |= zmsg::flag::Q
-        }
         if self.key.has_suffix() {
             header |= zmsg::flag::K
         }
@@ -941,7 +921,7 @@ impl Header for Declare {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
-    pub key: KeyExpr<'static>,
+    pub key: WireExpr<'static>,
     pub pull_id: ZInt,
     pub max_samples: Option<ZInt>,
     pub is_final: bool,
@@ -973,7 +953,7 @@ impl Header for Pull {
 /// +-+-+-+---------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
-/// ~ value_selector~
+/// ~selector_params~
 /// +---------------+
 /// ~      qid      ~
 /// +---------------+
@@ -984,11 +964,11 @@ impl Header for Pull {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
-    pub key: KeyExpr<'static>,
-    pub value_selector: String,
+    pub key: WireExpr<'static>,
+    pub parameters: String,
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
-    pub consolidation: ConsolidationStrategy,
+    pub consolidation: ConsolidationMode,
 }
 
 impl Header for Query {
@@ -1013,7 +993,7 @@ impl Header for Query {
 // +---------------+
 // ~      sn       ~
 // +---------------+
-// ~      pid      ~ if P == 1
+// ~      zid      ~ if P == 1
 // +---------------+
 // ~    whatami    ~ if W == 1
 // +---------------+
@@ -1025,7 +1005,7 @@ impl Header for Query {
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
-    pub pid: Option<PeerId>,
+    pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
     pub links: Vec<ZInt>,
@@ -1034,7 +1014,7 @@ pub struct LinkState {
 impl Options for LinkState {
     fn options(&self) -> ZInt {
         let mut opts = 0;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             opts |= zmsg::link_state::PID;
         }
         if self.whatami.is_some() {
@@ -1136,7 +1116,7 @@ impl ZenohMessage {
     #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_data(
-        key: KeyExpr<'static>,
+        key: WireExpr<'static>,
         payload: ZBuf,
         channel: Channel,
         congestion_control: CongestionControl,
@@ -1182,7 +1162,7 @@ impl ZenohMessage {
 
     pub fn make_pull(
         is_final: bool,
-        key: KeyExpr<'static>,
+        key: WireExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
         attachment: Option<Attachment>,
@@ -1204,18 +1184,18 @@ impl ZenohMessage {
 
     #[inline(always)]
     pub fn make_query(
-        key: KeyExpr<'static>,
-        value_selector: String,
+        key: WireExpr<'static>,
+        parameters: String,
         qid: ZInt,
         target: Option<QueryTarget>,
-        consolidation: ConsolidationStrategy,
+        consolidation: ConsolidationMode,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
                 key,
-                value_selector,
+                parameters,
                 qid,
                 target,
                 consolidation,
@@ -1300,14 +1280,14 @@ pub enum TransportMode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
-    pub pid_request: bool,
+    pub zid_request: bool,
 }
 
 impl Header for Scout {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::SCOUT;
-        if self.pid_request {
+        if self.zid_request {
             header |= tmsg::flag::I;
         }
         if self.what.is_some() {
@@ -1351,7 +1331,7 @@ impl Header for Scout {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hello {
-    pub pid: Option<PeerId>,
+    pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
 }
@@ -1360,7 +1340,7 @@ impl Header for Hello {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::HELLO;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I
         }
         if self.whatami.is_some() && self.whatami.unwrap() != WhatAmI::Router {
@@ -1387,7 +1367,7 @@ impl fmt::Display for Hello {
             None => vec![],
         };
         f.debug_struct("Hello")
-            .field("pid", &self.pid)
+            .field("zid", &self.zid)
             .field("whatami", &what)
             .field("locators", &locators)
             .finish()
@@ -1434,7 +1414,7 @@ impl fmt::Display for Hello {
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub zid: ZenohId,
     pub sn_resolution: ZInt,
     pub is_qos: bool,
 }
@@ -1470,7 +1450,7 @@ impl Options for InitSyn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub zid: ZenohId,
     pub sn_resolution: Option<ZInt>,
     pub is_qos: bool,
     pub cookie: ZSlice,
@@ -1610,7 +1590,7 @@ impl Header for OpenAck {
 pub struct Join {
     pub version: u8,
     pub whatami: WhatAmI,
-    pub pid: PeerId,
+    pub zid: ZenohId,
     pub lease: Duration,
     pub sn_resolution: ZInt,
     pub next_sns: ConduitSnList,
@@ -1685,7 +1665,7 @@ impl Options for Join {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Close {
-    pub pid: Option<PeerId>,
+    pub zid: Option<ZenohId>,
     pub reason: u8,
     pub link_only: bool,
 }
@@ -1694,7 +1674,7 @@ impl Header for Close {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::CLOSE;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I;
         }
         if self.link_only {
@@ -1809,14 +1789,14 @@ impl Header for AckNack {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeepAlive {
-    pub pid: Option<PeerId>,
+    pub zid: Option<ZenohId>,
 }
 
 impl Header for KeepAlive {
     #[inline(always)]
     fn header(&self) -> u8 {
         let mut header = tmsg::id::KEEP_ALIVE;
-        if self.pid.is_some() {
+        if self.zid.is_some() {
             header |= tmsg::flag::I;
         }
         header
@@ -1998,11 +1978,11 @@ pub struct TransportMessage {
 impl TransportMessage {
     pub fn make_scout(
         what: Option<WhatAmIMatcher>,
-        pid_request: bool,
+        zid_request: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
-            body: TransportBody::Scout(Scout { what, pid_request }),
+            body: TransportBody::Scout(Scout { what, zid_request }),
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -2010,14 +1990,14 @@ impl TransportMessage {
     }
 
     pub fn make_hello(
-        pid: Option<PeerId>,
+        zid: Option<ZenohId>,
         whatami: Option<WhatAmI>,
         locators: Option<Vec<Locator>>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::Hello(Hello {
-                pid,
+                zid,
                 whatami,
                 locators,
             }),
@@ -2030,7 +2010,7 @@ impl TransportMessage {
     pub fn make_init_syn(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        zid: ZenohId,
         sn_resolution: ZInt,
         is_qos: bool,
         attachment: Option<Attachment>,
@@ -2039,7 +2019,7 @@ impl TransportMessage {
             body: TransportBody::InitSyn(InitSyn {
                 version,
                 whatami,
-                pid,
+                zid,
                 sn_resolution,
                 is_qos,
             }),
@@ -2051,7 +2031,7 @@ impl TransportMessage {
 
     pub fn make_init_ack(
         whatami: WhatAmI,
-        pid: PeerId,
+        zid: ZenohId,
         sn_resolution: Option<ZInt>,
         is_qos: bool,
         cookie: ZSlice,
@@ -2060,7 +2040,7 @@ impl TransportMessage {
         TransportMessage {
             body: TransportBody::InitAck(InitAck {
                 whatami,
-                pid,
+                zid,
                 sn_resolution,
                 is_qos,
                 cookie,
@@ -2105,7 +2085,7 @@ impl TransportMessage {
     pub fn make_join(
         version: u8,
         whatami: WhatAmI,
-        pid: PeerId,
+        zid: ZenohId,
         lease: Duration,
         sn_resolution: ZInt,
         next_sns: ConduitSnList,
@@ -2115,7 +2095,7 @@ impl TransportMessage {
             body: TransportBody::Join(Join {
                 version,
                 whatami,
-                pid,
+                zid,
                 lease,
                 sn_resolution,
                 next_sns,
@@ -2127,14 +2107,14 @@ impl TransportMessage {
     }
 
     pub fn make_close(
-        pid: Option<PeerId>,
+        zid: Option<ZenohId>,
         reason: u8,
         link_only: bool,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
             body: TransportBody::Close(Close {
-                pid,
+                zid,
                 reason,
                 link_only,
             }),
@@ -2176,11 +2156,11 @@ impl TransportMessage {
     }
 
     pub fn make_keep_alive(
-        pid: Option<PeerId>,
+        zid: Option<ZenohId>,
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
-            body: TransportBody::KeepAlive(KeepAlive { pid }),
+            body: TransportBody::KeepAlive(KeepAlive { zid }),
             attachment,
             #[cfg(feature = "stats")]
             size: None,

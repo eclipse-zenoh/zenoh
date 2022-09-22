@@ -27,6 +27,7 @@ use zenoh_protocol_core::Locator;
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
+//noinspection ALL
 impl TransportMulticastInner {
     fn trigger_callback(
         &self,
@@ -77,7 +78,7 @@ impl TransportMulticastInner {
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.manager.config.pid,
+                self.manager.config.zid,
                 sn,
                 guard.sn.get()
             );
@@ -103,7 +104,7 @@ impl TransportMulticastInner {
                     let msg = guard.defrag.defragment().ok_or_else(|| {
                         zerror!(
                             "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.pid,
+                            self.manager.config.zid,
                             self.locator
                         )
                     })?;
@@ -128,7 +129,7 @@ impl TransportMulticastInner {
     ) -> ZResult<()> {
         // Check if parameters are ok
         if join.version != peer.version
-            || join.pid != peer.pid
+            || join.zid != peer.zid
             || join.whatami != peer.whatami
             || join.sn_resolution != peer.sn_resolution
             || join.lease != peer.lease
@@ -136,7 +137,7 @@ impl TransportMulticastInner {
         {
             let e = format!(
                 "Ingoring Join on {} of peer: {}. Inconsistent parameters. Version",
-                peer.locator, peer.pid,
+                peer.locator, peer.zid,
             );
             log::debug!("{}", e);
             bail!("{}", e);
@@ -150,7 +151,7 @@ impl TransportMulticastInner {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
                 locator,
-                join.pid,
+                join.zid,
                 self.manager.config.multicast.max_sessions,
             );
             return Ok(());
@@ -160,7 +161,7 @@ impl TransportMulticastInner {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported version: {}. Expected: {}.",
                 locator,
-                join.pid,
+                join.zid,
                 join.version,
                 self.manager.config.version,
             );
@@ -171,7 +172,7 @@ impl TransportMulticastInner {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {}. Expected: <= {}.",
                 locator,
-                join.pid,
+                join.zid,
                 join.sn_resolution,
                 self.manager.config.sn_resolution,
             );
@@ -182,7 +183,7 @@ impl TransportMulticastInner {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
-                join.pid,
+                join.zid,
             );
             return Ok(());
         }
@@ -212,7 +213,7 @@ impl TransportMulticastInner {
                         } else {
                             bail!(
                                 "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.pid,
+                                self.manager.config.zid,
                                 self.locator,
                                 channel.priority,
                                 peer.locator

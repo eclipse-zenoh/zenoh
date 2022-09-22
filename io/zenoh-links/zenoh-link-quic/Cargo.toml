@@ -40,15 +40,15 @@ zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
 
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
-async-std = { version = "=1.11.0", default-features = false, features = [
+async-std = { version = "=1.12.0", default-features = false, features = [
 	"unstable",
 	"tokio1",
 ] }
-async-trait = "0.1.42"
-log = "0.4"
-quinn = "0.8.1" 
-rustls = "0.20.4"
-rustls-native-certs = "0.6.1"
-rustls-pemfile = "0.3.0"
+async-trait = "0.1.57"
+log = "0.4.17"
+quinn = "0.8.5" 
+rustls = "0.20.6"
+rustls-native-certs = "0.6.2"
+rustls-pemfile = "1.0.1"
 webpki = { version = "0.22.0", features = ["std"] }
-futures = "0.3.21"
+futures = "0.3.24"

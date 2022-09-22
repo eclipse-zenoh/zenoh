@@ -12,9 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::PseudoRng;
-use aes::cipher::generic_array::GenericArray;
-use aes::cipher::NewBlockCipher;
-use aes::{Aes128, BlockDecrypt, BlockEncrypt};
+use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::Aes128;
 use rand::Rng;
 use zenoh_core::{bail, Result as ZResult};
 

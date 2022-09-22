@@ -172,7 +172,7 @@ impl fmt::Debug for TransportMulticast {
                 let peers: String = zread!(transport.peers)
                     .iter()
                     .map(|(l, p)| {
-                        format!("(locator: {}, pid: {}, whatami: {})", l, p.pid, p.whatami)
+                        format!("(locator: {}, zid: {}, whatami: {})", l, p.zid, p.whatami)
                     })
                     .collect();
 

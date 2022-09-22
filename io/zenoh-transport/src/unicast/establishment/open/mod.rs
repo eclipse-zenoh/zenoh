@@ -60,9 +60,9 @@ pub(crate) async fn open_link(
         };
     }
 
-    let pid = output.pid;
+    let zid = output.zid;
     let input = InputInit {
-        pid,
+        zid,
         whatami: output.whatami,
         sn_resolution: output.sn_resolution,
         is_shm: output.is_shm,
@@ -78,7 +78,7 @@ pub(crate) async fn open_link(
                 Err((e, reason)) => {
                     if let Ok(ll) = transport.get_links() {
                         if ll.is_empty() {
-                            let _ = manager.del_transport_unicast(&pid).await;
+                            let _ = manager.del_transport_unicast(&zid).await;
                         }
                     }
                     close_link(link, manager, auth_link, reason).await;
@@ -116,7 +116,7 @@ pub(crate) async fn open_link(
     .sync(output.initial_sn)
     .await;
 
-    log::debug!("New transport link established with {}: {}", pid, link);
+    log::debug!("New transport link established with {}: {}", zid, link);
 
     let output = InputFinalize {
         transport,

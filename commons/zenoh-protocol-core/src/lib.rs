@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod key_expr;
 
+use key_expr::OwnedKeyExpr;
 use std::convert::{From, TryFrom, TryInto};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -38,13 +40,13 @@ pub type WhatAmI = whatami::WhatAmI;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 
-/// A numerical Id mapped to a key expression with `zenoh::Session::declare_expr()`.
+/// A numerical Id mapped to a key expression.
 pub type ExprId = ZInt;
 
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
-pub mod key_expr;
-pub use crate::key_expr::KeyExpr;
+pub mod wire_expr;
+pub use crate::wire_expr::WireExpr;
 
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
@@ -60,91 +62,230 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
-/// The global unique id of a zenoh peer.
-#[derive(Clone, Copy, Eq)]
-pub struct PeerId {
-    size: usize,
-    id: [u8; PeerId::MAX_SIZE],
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
 }
 
-impl PeerId {
-    pub const MAX_SIZE: usize = 16;
-
-    pub fn new(size: usize, id: [u8; PeerId::MAX_SIZE]) -> PeerId {
-        PeerId { size, id }
-    }
-
-    #[inline]
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
-    #[inline]
-    pub fn as_slice(&self) -> &[u8] {
-        &self.id[..self.size]
-    }
-
-    pub fn rand() -> PeerId {
-        PeerId::from(Uuid::new_v4())
+impl Default for SampleKind {
+    fn default() -> Self {
+        SampleKind::Put
     }
 }
 
-impl From<uuid::Uuid> for PeerId {
-    #[inline]
-    fn from(uuid: uuid::Uuid) -> Self {
-        PeerId {
-            size: 16,
-            id: *uuid.as_bytes(),
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
         }
     }
 }
 
-impl FromStr for PeerId {
+impl TryFrom<ZInt> for SampleKind {
+    type Error = ZInt;
+    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
+
+/// The global unique id of a zenoh peer.
+#[derive(Clone, Copy, Eq)]
+pub struct ZenohId(uhlc::ID);
+
+impl ZenohId {
+    pub const MAX_SIZE: usize = 16;
+
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.0.size()
+    }
+
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    pub fn rand() -> ZenohId {
+        ZenohId::from(Uuid::new_v4())
+    }
+
+    pub fn into_keyexpr(self) -> OwnedKeyExpr {
+        self.into()
+    }
+}
+
+impl Default for ZenohId {
+    fn default() -> Self {
+        Self::rand()
+    }
+}
+
+impl From<uuid::Uuid> for ZenohId {
+    #[inline]
+    fn from(uuid: uuid::Uuid) -> Self {
+        ZenohId(uuid.into())
+    }
+}
+
+macro_rules! derive_tryfrom {
+    ($T: ty) => {
+        impl TryFrom<$T> for ZenohId {
+            type Error = zenoh_core::Error;
+            fn try_from(val: $T) -> Result<Self, Self::Error> {
+                Ok(Self(val.try_into()?))
+            }
+        }
+    };
+}
+derive_tryfrom!([u8; 1]);
+derive_tryfrom!(&[u8; 1]);
+derive_tryfrom!([u8; 2]);
+derive_tryfrom!(&[u8; 2]);
+derive_tryfrom!([u8; 3]);
+derive_tryfrom!(&[u8; 3]);
+derive_tryfrom!([u8; 4]);
+derive_tryfrom!(&[u8; 4]);
+derive_tryfrom!([u8; 5]);
+derive_tryfrom!(&[u8; 5]);
+derive_tryfrom!([u8; 6]);
+derive_tryfrom!(&[u8; 6]);
+derive_tryfrom!([u8; 7]);
+derive_tryfrom!(&[u8; 7]);
+derive_tryfrom!([u8; 8]);
+derive_tryfrom!(&[u8; 8]);
+derive_tryfrom!([u8; 9]);
+derive_tryfrom!(&[u8; 9]);
+derive_tryfrom!([u8; 10]);
+derive_tryfrom!(&[u8; 10]);
+derive_tryfrom!([u8; 11]);
+derive_tryfrom!(&[u8; 11]);
+derive_tryfrom!([u8; 12]);
+derive_tryfrom!(&[u8; 12]);
+derive_tryfrom!([u8; 13]);
+derive_tryfrom!(&[u8; 13]);
+derive_tryfrom!([u8; 14]);
+derive_tryfrom!(&[u8; 14]);
+derive_tryfrom!([u8; 15]);
+derive_tryfrom!(&[u8; 15]);
+derive_tryfrom!([u8; 16]);
+derive_tryfrom!(&[u8; 16]);
+derive_tryfrom!(&[u8]);
+
+impl FromStr for ZenohId {
     type Err = zenoh_core::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // filter-out '-' characters (in case s has UUID format)
         let s = s.replace('-', "");
         let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-        let size = vec.len();
-        if size > PeerId::MAX_SIZE {
-            bail!("Invalid id size: {} ({} bytes max)", size, PeerId::MAX_SIZE)
-        }
-        let mut id = [0_u8; PeerId::MAX_SIZE];
-        id[..size].copy_from_slice(vec.as_slice());
-        Ok(PeerId::new(size, id))
+        vec.as_slice().try_into()
     }
 }
 
-impl PartialEq for PeerId {
+impl PartialEq for ZenohId {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.size == other.size && self.as_slice() == other.as_slice()
+        self.0.eq(&other.0)
     }
 }
 
-impl Hash for PeerId {
+impl Hash for ZenohId {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state);
     }
 }
 
-impl fmt::Debug for PeerId {
+impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", hex::encode_upper(self.as_slice()))
     }
 }
 
-impl fmt::Display for PeerId {
+impl fmt::Display for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
 // A PeerID can be converted into a Timestamp's ID
-impl From<&PeerId> for uhlc::ID {
-    fn from(pid: &PeerId) -> Self {
-        uhlc::ID::new(pid.size, pid.id)
+impl From<&ZenohId> for uhlc::ID {
+    fn from(zid: &ZenohId) -> Self {
+        zid.0
+    }
+}
+
+impl From<ZenohId> for OwnedKeyExpr {
+    fn from(zid: ZenohId) -> Self {
+        // Safety: zid.to_string() returns an stringified hexadecimal
+        // representation of the zid. Therefore, building a OwnedKeyExpr
+        // by calling from_string_unchecked() is safe because it is
+        // guaranteed that no wildcards nor reserved chars will be present.
+        unsafe { OwnedKeyExpr::from_string_unchecked(zid.to_string()) }
+    }
+}
+
+impl From<&ZenohId> for OwnedKeyExpr {
+    fn from(zid: &ZenohId) -> Self {
+        (*zid).into()
+    }
+}
+
+impl serde::Serialize for ZenohId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ZenohId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ZenohIdVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ZenohIdVisitor {
+            type Value = ZenohId;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(&format!("An hex string of 1-{} bytes", ZenohId::MAX_SIZE))
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                v.parse().map_err(serde::de::Error::custom)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(v)
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_str(ZenohIdVisitor)
     }
 }
 
@@ -291,22 +432,13 @@ impl Default for SubMode {
     }
 }
 
-/// A time period.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct Period {
-    pub origin: ZInt,
-    pub period: ZInt,
-    pub duration: ZInt,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
-    pub period: Option<Period>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QueryableInfo {
     pub complete: ZInt,
     pub distance: ZInt,
@@ -321,137 +453,36 @@ impl Default for QueryableInfo {
     }
 }
 
-pub mod queryable {
-    pub const ALL_KINDS: super::ZInt = 0x01;
-    pub const STORAGE: super::ZInt = 0x02;
-    pub const EVAL: super::ZInt = 0x04;
-}
-
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-#[repr(u8)]
 pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
-    Lazy,
-    Full,
-}
-
-/// The kind of consolidation that should be applied on replies to a`zenoh::Session::get()`
-/// at different stages of the reply process.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConsolidationStrategy {
-    pub first_routers: ConsolidationMode,
-    pub last_router: ConsolidationMode,
-    pub reception: ConsolidationMode,
-}
-
-impl ConsolidationStrategy {
-    /// No consolidation performed.
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
     ///
-    /// This is usefull when querying timeseries data bases or
-    /// when using quorums.
-    #[inline]
-    pub fn none() -> Self {
-        Self {
-            first_routers: ConsolidationMode::None,
-            last_router: ConsolidationMode::None,
-            reception: ConsolidationMode::None,
-        }
-    }
-
-    /// Lazy consolidation performed at all stages.
+    /// This optimizes latency while potentially reducing bandwidth.
     ///
-    /// This strategy offers the best latency. Replies are directly
-    /// transmitted to the application when received without needing
-    /// to wait for all replies.
-    ///
-    /// This mode does not garantie that there will be no duplicates.
-    #[inline]
-    pub fn lazy() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Lazy,
-            reception: ConsolidationMode::Lazy,
-        }
-    }
-
-    /// Full consolidation performed at reception.
-    ///
-    /// This is the default strategy. It offers the best latency while
-    /// garantying that there will be no duplicates.
-    #[inline]
-    pub fn reception() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Lazy,
-            reception: ConsolidationMode::Full,
-        }
-    }
-
-    /// Full consolidation performed on last router and at reception.
-    ///
-    /// This mode offers a good latency while optimizing bandwidth on
-    /// the last transport link between the router and the application.
-    #[inline]
-    pub fn last_router() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Lazy,
-            last_router: ConsolidationMode::Full,
-            reception: ConsolidationMode::Full,
-        }
-    }
-
-    /// Full consolidation performed everywhere.
-    ///
-    /// This mode optimizes bandwidth on all links in the system
-    /// but will provide a very poor latency.
-    #[inline]
-    pub fn full() -> Self {
-        Self {
-            first_routers: ConsolidationMode::Full,
-            last_router: ConsolidationMode::Full,
-            reception: ConsolidationMode::Full,
-        }
-    }
-}
-
-impl Default for ConsolidationStrategy {
-    #[inline]
-    fn default() -> Self {
-        ConsolidationStrategy::reception()
-    }
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Target {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryTarget {
     BestMatching,
     All,
     AllComplete,
-    None,
     #[cfg(feature = "complete_n")]
     Complete(ZInt),
 }
 
-impl Default for Target {
-    fn default() -> Self {
-        Target::BestMatching
-    }
-}
-
-/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QueryTarget {
-    pub kind: ZInt,
-    pub target: Target,
-}
-
 impl Default for QueryTarget {
     fn default() -> Self {
-        QueryTarget {
-            kind: queryable::ALL_KINDS,
-            target: Target::default(),
-        }
+        QueryTarget::BestMatching
     }
 }
 

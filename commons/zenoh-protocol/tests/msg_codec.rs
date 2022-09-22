@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use rand::*;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::time::Duration;
 use uhlc::Timestamp;
 use zenoh_buffers::reader::HasReader;
@@ -62,8 +62,8 @@ fn gen_buffer(max_size: usize) -> Vec<u8> {
     buf
 }
 
-fn gen_pid() -> PeerId {
-    PeerId::from(uuid::Uuid::new_v4())
+fn gen_zid() -> ZenohId {
+    ZenohId::from(uuid::Uuid::new_v4())
 }
 
 fn gen_props(len: usize, max_size: usize) -> Vec<Property> {
@@ -83,10 +83,7 @@ fn gen_routing_context() -> RoutingContext {
 fn gen_reply_context(is_final: bool) -> ReplyContext {
     let qid = gen!(ZInt);
     let replier = if !is_final {
-        Some(ReplierInfo {
-            kind: thread_rng().gen_range(0..4),
-            id: gen_pid(),
-        })
+        Some(ReplierInfo { id: gen_zid() })
     } else {
         None
     };
@@ -118,7 +115,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Push,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -126,7 +122,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Pull,
-                period: None,
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -134,11 +129,6 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::Reliable,
                 mode: SubMode::Pull,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::Subscriber(Subscriber {
@@ -146,17 +136,11 @@ fn gen_declarations() -> Vec<Declaration> {
             info: SubInfo {
                 reliability: Reliability::BestEffort,
                 mode: SubMode::Push,
-                period: Some(Period {
-                    origin: gen!(ZInt),
-                    period: gen!(ZInt),
-                    duration: gen!(ZInt),
-                }),
             },
         }),
         Declaration::ForgetSubscriber(ForgetSubscriber { key: gen_key() }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::ALL_KINDS,
             info: QueryableInfo {
                 complete: 1,
                 distance: 0,
@@ -164,7 +148,6 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::STORAGE,
             info: QueryableInfo {
                 complete: 0,
                 distance: 10,
@@ -172,69 +155,44 @@ fn gen_declarations() -> Vec<Declaration> {
         }),
         Declaration::Queryable(Queryable {
             key: gen_key(),
-            kind: queryable::EVAL,
             info: QueryableInfo {
                 complete: 10,
                 distance: 0,
             },
         }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::ALL_KINDS,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::STORAGE,
-        }),
-        Declaration::ForgetQueryable(ForgetQueryable {
-            key: gen_key(),
-            kind: queryable::EVAL,
-        }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
+        Declaration::ForgetQueryable(ForgetQueryable { key: gen_key() }),
     ]
 }
 
-fn gen_key() -> KeyExpr<'static> {
-    let num: u8 = thread_rng().gen_range(0..3);
-    match num {
-        0 => KeyExpr::from(gen!(ZInt)),
-        1 => KeyExpr::from("my_resource"),
-        _ => KeyExpr::from(gen!(ZInt)).with_suffix("my_resource"),
-    }
+fn gen_key() -> WireExpr<'static> {
+    let key = [
+        WireExpr::from(gen!(ZInt)),
+        WireExpr::from("my_resource"),
+        WireExpr::from(gen!(ZInt)).with_suffix("my_resource"),
+    ];
+    key[thread_rng().gen_range(0..key.len())].clone()
 }
 
 fn gen_query_target() -> QueryTarget {
-    let kind: ZInt = thread_rng().gen_range(0..4);
-    let target = gen_target();
-    QueryTarget { kind, target }
-}
-
-fn gen_target() -> Target {
-    let num: u8 = thread_rng().gen_range(0..4);
-    match num {
-        0 => Target::BestMatching,
-        1 => Target::All,
-        2 => Target::AllComplete,
+    let tgt = [
+        QueryTarget::BestMatching,
+        QueryTarget::All,
+        QueryTarget::AllComplete,
         #[cfg(feature = "complete_n")]
-        4 => Target::Complete(3),
-        _ => Target::None,
-    }
+        QueryTarget::Complete(3),
+    ];
+    tgt[thread_rng().gen_range(0..tgt.len())]
 }
 
 fn gen_consolidation_mode() -> ConsolidationMode {
-    let num: u8 = thread_rng().gen_range(0..3);
-    match num {
-        0 => ConsolidationMode::None,
-        1 => ConsolidationMode::Lazy,
-        _ => ConsolidationMode::Full,
-    }
-}
-
-fn gen_consolidation() -> ConsolidationStrategy {
-    ConsolidationStrategy {
-        first_routers: gen_consolidation_mode(),
-        last_router: gen_consolidation_mode(),
-        reception: gen_consolidation_mode(),
-    }
+    let cm = [
+        ConsolidationMode::None,
+        ConsolidationMode::Monotonic,
+        ConsolidationMode::Latest,
+    ];
+    cm[thread_rng().gen_range(0..cm.len())]
 }
 
 fn gen_timestamp() -> Timestamp {
@@ -243,15 +201,11 @@ fn gen_timestamp() -> Timestamp {
 
 fn gen_data_info() -> DataInfo {
     DataInfo {
-        kind: option_gen!(gen!(ZInt)),
+        kind: (gen!(ZInt) % 2).try_into().unwrap(),
         encoding: option_gen!(Encoding::Exact(TryFrom::try_from(gen!(u8) % 21).unwrap())),
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
-        source_id: option_gen!(gen_pid()),
-        source_sn: option_gen!(gen!(ZInt)),
-        first_router_id: option_gen!(gen_pid()),
-        first_router_sn: option_gen!(gen!(ZInt)),
     }
 }
 
@@ -303,11 +257,11 @@ fn test_write_read_zenoh_message(mut msg: ZenohMessage) {
 fn codec_scout() {
     for _ in 0..NUM_ITER {
         let wami = [None, Some(gen!(ZInt))];
-        let pid_req = [true, false];
+        let zid_req = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
         for w in wami.iter() {
-            for p in pid_req.iter() {
+            for p in zid_req.iter() {
                 for a in attachment.iter() {
                     let msg = TransportMessage::make_scout(
                         w.map(WhatAmIMatcher::try_from).flatten(),
@@ -324,7 +278,7 @@ fn codec_scout() {
 #[test]
 fn codec_hello() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let wami = [None, Some(gen!(ZInt))];
         let locators = [
             None,
@@ -335,7 +289,7 @@ fn codec_hello() {
         ];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for w in wami.iter() {
                 for l in locators.iter() {
                     for a in attachment.iter() {
@@ -368,7 +322,7 @@ fn codec_init() {
                         let msg = TransportMessage::make_init_syn(
                             gen!(u8),
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             a.clone(),
@@ -386,7 +340,7 @@ fn codec_init() {
                     for a in attachment.iter() {
                         let msg = TransportMessage::make_init_ack(
                             *w,
-                            gen_pid(),
+                            gen_zid(),
                             *s,
                             *q,
                             gen_buffer(64).into(),
@@ -447,7 +401,7 @@ fn codec_join() {
                             let msg = TransportMessage::make_join(
                                 gen!(u8),
                                 *w,
-                                gen_pid(),
+                                gen_zid(),
                                 *l,
                                 *s,
                                 i.clone(),
@@ -465,11 +419,11 @@ fn codec_join() {
 #[test]
 fn codec_close() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let link_only = [true, false];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for k in link_only.iter() {
                 for a in attachment.iter() {
                     let msg = TransportMessage::make_close(*p, gen!(u8), *k, a.clone());
@@ -516,10 +470,10 @@ fn codec_ack_nack() {
 #[test]
 fn codec_keep_alive() {
     for _ in 0..NUM_ITER {
-        let pid = [None, Some(gen_pid())];
+        let zid = [None, Some(gen_zid())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in pid.iter() {
+        for p in zid.iter() {
             for a in attachment.iter() {
                 let msg = TransportMessage::make_keep_alive(*p, a.clone());
                 test_write_read_transport_message(msg);
@@ -861,12 +815,12 @@ fn codec_pull() {
 #[test]
 fn codec_query() {
     for _ in 0..NUM_ITER {
-        let value_selector = [String::default(), "my_value_selector".to_string()];
+        let parameters = [String::default(), "my_params".to_string()];
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
 
-        for p in value_selector.iter() {
+        for p in parameters.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {
@@ -874,8 +828,8 @@ fn codec_query() {
                             gen_key(),
                             p.clone(),
                             gen!(ZInt),
-                            t.clone(),
-                            gen_consolidation(),
+                            *t,
+                            gen_consolidation_mode(),
                             *roc,
                             a.clone(),
                         );

@@ -13,38 +13,46 @@
 //
 
 use async_std::prelude::FutureExt;
-use futures::prelude::*;
+use futures::StreamExt;
 use http_types::Method;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, ReplyReceiver};
+use zenoh::query::{QueryConsolidation, Reply};
+use zenoh::runtime::Runtime;
+use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_cfg_properties::Properties;
+use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
 
 mod config;
 pub use config::Config;
 
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+lazy_static::lazy_static! {
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+}
+
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(&Encoding::STRING) => {
+        p if p.starts_with(KnownEncoding::TextPlain) => {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
-        p if p.starts_with(&Encoding::APP_PROPERTIES) => {
+        p if p.starts_with(KnownEncoding::AppProperties) => {
             // convert to Json string for special characters escaping
-            serde_json::json!(*crate::Properties::from(value.to_string())).to_string()
+            serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
-        p if p.starts_with(&Encoding::APP_JSON)
-            || p.starts_with(&Encoding::APP_X_WWW_FORM_URLENCODED)
-            || p.starts_with(&Encoding::APP_INTEGER)
-            || p.starts_with(&Encoding::APP_FLOAT) =>
+        p if p.starts_with(KnownEncoding::AppJson)
+            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded)
+            || p.starts_with(KnownEncoding::AppInteger)
+            || p.starts_with(KnownEncoding::AppFloat) =>
         {
             value.to_string()
         }
@@ -69,9 +77,24 @@ fn sample_to_json(sample: Sample) -> String {
     )
 }
 
-async fn to_json(results: ReplyReceiver) -> String {
+fn result_to_json(sample: Result<Sample, Value>) -> String {
+    match sample {
+        Ok(sample) => sample_to_json(sample),
+        Err(err) => {
+            let encoding = err.encoding.to_string();
+            format!(
+                r#"{{ "key": "ERROR", "value": {}, "encoding": "{}"}}"#,
+                value_to_json(err),
+                encoding,
+            )
+        }
+    }
+}
+
+async fn to_json(results: flume::Receiver<Reply>) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_json(reply.sample)) })
+        .stream()
+        .filter_map(move |reply| async move { Some(result_to_json(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join(",\n");
@@ -82,13 +105,26 @@ fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
         sample.key_expr.as_str(),
-        String::from_utf8_lossy(&sample.value.payload.contiguous())
+        String::from_utf8_lossy(&sample.payload.contiguous())
     )
 }
 
-async fn to_html(results: ReplyReceiver) -> String {
+fn result_to_html(sample: Result<Sample, Value>) -> String {
+    match sample {
+        Ok(sample) => sample_to_html(sample),
+        Err(err) => {
+            format!(
+                "<dt>ERROR</dt>\n<dd>{}</dd>\n",
+                String::from_utf8_lossy(&err.payload.contiguous())
+            )
+        }
+    }
+}
+
+async fn to_html(results: flume::Receiver<Reply>) -> String {
     let values = results
-        .filter_map(move |reply| async move { Some(sample_to_html(reply.sample)) })
+        .stream()
+        .filter_map(move |reply| async move { Some(result_to_html(reply.sample)) })
         .collect::<Vec<String>>()
         .await
         .join("\n");
@@ -98,7 +134,6 @@ async fn to_html(results: ReplyReceiver) -> String {
 fn method_to_kind(method: Method) -> SampleKind {
     match method {
         Method::Put => SampleKind::Put,
-        Method::Patch => SampleKind::Patch,
         Method::Delete => SampleKind::Delete,
         _ => SampleKind::default(),
     }
@@ -148,6 +183,7 @@ impl Plugin for RestPlugin {
         // Required in case of dynamic lib, otherwise no logs.
         // But cannot be done twice in case of static link.
         let _ = env_logger::try_init();
+        log::debug!("REST plugin {}", LONG_VERSION.as_str());
 
         let runtime_conf = runtime.config.lock();
         let plugin_conf = runtime_conf
@@ -161,7 +197,6 @@ impl Plugin for RestPlugin {
     }
 }
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
@@ -178,19 +213,25 @@ impl RunningPluginTrait for RunningPlugin {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::key_expr::intersect(key, selector.key_selector.as_str()) {
-                responses.push(zenoh::plugins::Response {
-                    key: key.clone(),
-                    value: GIT_VERSION.into(),
-                })
+            if keyexpr::new(key.as_str())
+                .unwrap()
+                .intersects(&selector.key_expr)
+            {
+                responses.push(zenoh::plugins::Response::new(
+                    key.clone(),
+                    GIT_VERSION.into(),
+                ))
             }
         });
         with_extended_string(&mut key, &["/port"], |port_key| {
-            if zenoh::utils::key_expr::intersect(selector.key_selector.as_str(), port_key) {
-                responses.push(zenoh::plugins::Response {
-                    key: port_key.clone(),
-                    value: (&self.0).into(),
-                })
+            if keyexpr::new(port_key.as_str())
+                .unwrap()
+                .intersects(&selector.key_expr)
+            {
+                responses.push(zenoh::plugins::Response::new(
+                    port_key.clone(),
+                    (&self.0).into(),
+                ))
             }
         });
         Ok(responses)
@@ -230,7 +271,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         Ok(tide::sse::upgrade(
             req,
             move |req: Request<(Arc<Session>, String)>, sender: Sender| async move {
-                let key_expr = path_to_key_expr(req.url().path(), &req.state().1).to_owned();
+                let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                    Ok(ke) => ke.into_owned(),
+                    Err(e) => {
+                        return Err(tide::Error::new(
+                            tide::StatusCode::BadRequest,
+                            anyhow::anyhow!("{}", e),
+                        ))
+                    }
+                };
                 async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
@@ -238,9 +287,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let mut sub = req.state().0.subscribe(&key_expr).await.unwrap();
+                    let sub = req
+                        .state()
+                        .0
+                        .declare_subscriber(&key_expr)
+                        .res_async()
+                        .await
+                        .unwrap();
                     loop {
-                        let sample = sub.next().await.unwrap();
+                        let sample = sub.recv_async().await.unwrap();
                         match sender
                             .send(&sample.kind.to_string(), sample_to_json(sample), None)
                             .timeout(std::time::Duration::new(10, 0))
@@ -253,7 +308,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.close().await {
+                                if let Err(e) = sub.undeclare().res().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -263,7 +318,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.close().await {
+                                if let Err(e) = sub.undeclare().res().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -276,23 +331,33 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         ))
     } else {
         let url = req.url();
-        let key_expr = path_to_key_expr(url.path(), &req.state().1);
-        let query_part = url.query().map(|q| format!("?{}", q));
-        let selector = if let Some(q) = &query_part {
-            Selector::from(key_expr).with_value_selector(q)
+        let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
+            Ok(ke) => ke,
+            Err(e) => {
+                return Ok(response(
+                    StatusCode::BadRequest,
+                    Mime::from_str("text/plain").unwrap(),
+                    &e.to_string(),
+                ))
+            }
+        };
+        let query_part = url.query();
+        let selector = if let Some(q) = query_part {
+            Selector::from(key_expr).with_parameters(q)
         } else {
             key_expr.into()
         };
-        let consolidation = if selector.has_time_range() {
-            QueryConsolidation::none()
+        let consolidation = if selector.decode().any(|(k, _)| k.as_ref() == TIME_RANGE_KEY) {
+            QueryConsolidation::from(zenoh::query::ConsolidationMode::None)
         } else {
-            QueryConsolidation::default()
+            QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
         match req
             .state()
             .0
             .get(&selector)
             .consolidation(consolidation)
+            .res_async()
             .await
         {
             Ok(receiver) => {
@@ -323,7 +388,16 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     log::trace!("Incoming PUT request: {:?}", req);
     match req.body_bytes().await {
         Ok(bytes) => {
-            let key_expr = path_to_key_expr(req.url().path(), &req.state().1);
+            let key_expr = match path_to_key_expr(req.url().path(), &req.state().1) {
+                Ok(ke) => ke,
+                Err(e) => {
+                    return Ok(response(
+                        StatusCode::BadRequest,
+                        Mime::from_str("text/plain").unwrap(),
+                        &e.to_string(),
+                    ))
+                }
+            };
             let encoding: Encoding = req
                 .content_type()
                 .map(|m| m.essence().to_owned().into())
@@ -336,6 +410,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .put(&key_expr, bytes)
                 .encoding(encoding)
                 .kind(method_to_kind(req.method()))
+                .res_async()
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -360,10 +435,10 @@ pub async fn run(runtime: Runtime, conf: Config) {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let pid = runtime.get_pid_str();
-    let session = Session::init(runtime, true, vec![], vec![]).await;
+    let zid = runtime.zid.to_string();
+    let session = zenoh::init(runtime).res_async().await.unwrap();
 
-    let mut app = Server::with_state((Arc::new(session), pid));
+    let mut app = Server::with_state((Arc::new(session), zid));
     app.with(
         tide::security::CorsMiddleware::new()
             .allow_methods(
@@ -383,12 +458,13 @@ pub async fn run(runtime: Runtime, conf: Config) {
     }
 }
 
-fn path_to_key_expr<'a>(path: &'a str, pid: &str) -> KeyExpr<'a> {
-    if path == "/@/router/local" {
-        KeyExpr::from(format!("/@/router/{}", pid))
-    } else if let Some(suffix) = path.strip_prefix("/@/router/local/") {
-        KeyExpr::from(format!("/@/router/{}/{}", pid, suffix))
+fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
+    let path = path.strip_prefix('/').unwrap_or(path);
+    if path == "@/router/local" {
+        KeyExpr::try_from(format!("@/router/{}", zid))
+    } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
+        KeyExpr::try_from(format!("@/router/{}/{}", zid, suffix))
     } else {
-        KeyExpr::from(path)
+        KeyExpr::try_from(path)
     }
 }

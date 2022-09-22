@@ -92,7 +92,7 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)]
     {
-        for iface in pnet::datalink::interfaces() {
+        for iface in pnet_datalink::interfaces() {
             if iface.name == name {
                 for ifaddr in &iface.ips {
                     if ifaddr.is_ipv4() {
@@ -179,7 +179,7 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
 pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     #[cfg(unix)]
     {
-        pnet::datalink::interfaces()
+        pnet_datalink::interfaces()
             .iter()
             .filter_map(|iface| {
                 if iface.is_up() && iface.is_multicast() {
@@ -203,7 +203,7 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
 pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
-        Ok(pnet::datalink::interfaces()
+        Ok(pnet_datalink::interfaces()
             .into_iter()
             .flat_map(|iface| iface.ips)
             .map(|ipnet| ipnet.ip())
@@ -264,7 +264,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
 pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
     #[cfg(unix)]
     {
-        pnet::datalink::interfaces()
+        pnet_datalink::interfaces()
             .iter()
             .filter(|iface| iface.is_up() && iface.is_multicast())
             .flat_map(|iface| {
@@ -287,7 +287,7 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
 pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
-        let addrs = pnet::datalink::interfaces()
+        let addrs = pnet_datalink::interfaces()
             .into_iter()
             .filter(|iface| iface.is_up() && iface.name == name)
             .flat_map(|iface| {

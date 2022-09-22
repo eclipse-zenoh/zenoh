@@ -533,6 +533,7 @@ where
     }
 }
 pub trait ByteSliceExactIter<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator {}
+//noinspection ALL
 impl<'a, T: Iterator<Item = &'a [u8]> + ExactSizeIterator> ByteSliceExactIter<'a> for T {}
 impl<'a> crate::traits::SplitBuffer<'a> for WBuf {
     type Slices = Box<dyn ByteSliceExactIter<'a> + 'a>;
@@ -666,9 +667,8 @@ impl AsMut<WBuf> for WBuf {
 impl crate::traits::writer::Writer for WBuf {
     type Buffer = Self;
 }
-impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
-    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
-        let slice = slice.into();
+impl WBuf {
+    fn append_zslice(&mut self, slice: ZSlice) -> Option<NonZeroUsize> {
         let len = slice.len();
         if len > 0 {
             self.write_zslice(slice)
@@ -676,6 +676,11 @@ impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
         } else {
             None
         }
+    }
+}
+impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for WBuf {
+    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
+        self.append_zslice(slice.into())
     }
 }
 

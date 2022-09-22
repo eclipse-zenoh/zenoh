@@ -21,10 +21,10 @@ use super::protocol::io::WBuf;
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
 
-type LengthType = u16;
 const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
 
 #[derive(Clone, Copy, Debug)]
+#[repr(u8)]
 enum CurrentFrame {
     Reliable,
     BestEffort,
@@ -141,10 +141,10 @@ impl SerializationBatch {
 
     /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
     #[inline(always)]
-    pub(crate) fn len(&self) -> usize {
-        let len = self.buffer.as_ref().len();
+    pub(crate) fn len(&self) -> u16 {
+        let len = self.buffer.as_ref().len() as u16;
         if self.is_streamed() {
-            len - LENGTH_BYTES.len()
+            len - (LENGTH_BYTES.len() as u16)
         } else {
             len
         }
@@ -175,7 +175,7 @@ impl SerializationBatch {
     #[inline(always)]
     pub(crate) fn write_len(&mut self) {
         if self.is_streamed() {
-            let length = self.len() as LengthType;
+            let length = self.len();
             let bits = self
                 .buffer
                 .as_mut()
@@ -398,7 +398,7 @@ mod tests {
     use zenoh_protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
-    use zenoh_protocol_core::{Channel, CongestionControl, KeyExpr, Priority, Reliability, ZInt};
+    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
 
     fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {
@@ -421,9 +421,9 @@ mod tests {
                 // Insert a transport message every 3 ZenohMessage
                 if zmsgs_in.len() % 3 == 0 {
                     // Create a TransportMessage
-                    let pid = None;
+                    let zid = None;
                     let attachment = None;
-                    let mut msg = TransportMessage::make_keep_alive(pid, attachment);
+                    let mut msg = TransportMessage::make_keep_alive(zid, attachment);
 
                     // Serialize the TransportMessage
                     let res = batch.serialize_transport_message(&mut msg);
@@ -443,7 +443,7 @@ mod tests {
                     // Change dropping strategy every three messages
                     dropping = !dropping;
                 }
-                let key: KeyExpr = format!("test{}", zmsgs_in.len()).into();
+                let key: WireExpr = format!("test{}", zmsgs_in.len()).into();
                 let payload = ZBuf::from(vec![0_u8; payload_size]);
                 let channel = Channel {
                     priority,

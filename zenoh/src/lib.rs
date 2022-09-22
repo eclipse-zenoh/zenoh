@@ -11,33 +11,34 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 //! [Zenoh](https://zenoh.io) /zeno/ is a stack that unifies data in motion, data at
 //! rest and computations. It elegantly blends traditional pub/sub with geo distributed
 //! storage, queries and computations, while retaining a level of time and space efficiency
 //! that is well beyond any of the mainstream stacks.
 //!
-//! Below are some examples that highlight the its key comcepts and show how easy it is to get
-//! started with it.
-//!
-//! # Examples
-//! Before delving into the examples, we need to introduce few **zenoh** concepts.
-//! First off, in zenoh you will deal with **Resources**, where a resource is made up of a
+//! Before delving into the examples, we need to introduce few **Zenoh** concepts.
+//! First off, in Zenoh you will deal with **Resources**, where a resource is made up of a
 //! key and a value.  The other concept you'll have to familiarize yourself with are
-//! **key expressions**, such as ```/robot/sensor/temp```, ```/robot/sensor/*```, ```/robot/**```, etc.
-//! As you can gather,  the above key expression denotes set of keys, while the ```*``` and ```**```
-//! are wildcards representing respectively (1) an arbirary string of characters, with the exclusion of the ```/```
+//! **key expressions**, such as ```robot/sensor/temp```, ```robot/sensor/*```, ```robot/**```, etc.
+//! As you can gather, the above key expression denotes set of keys, while the ```*``` and ```**```
+//! are wildcards representing respectively (1) an arbitrary string of characters, with the exclusion of the ```/```
 //! separator, and (2) an arbitrary sequence of characters including separators.
 //!
+//! Below are some examples that highlight these key concepts and show how easy it is to get
+//! started with.
+//!
+//! # Examples
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     session.put("/key/expression", "value").await.unwrap();
-//!     session.close().await.unwrap();
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     session.put("key/expression", "value").res().await.unwrap();
+//!     session.close().res().await.unwrap();
 //! }
 //! ```
 //!
@@ -45,13 +46,13 @@
 //! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-//!     while let Some(sample) = subscriber.next().await {
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+//!     while let Ok(sample) = subscriber.recv_async().await {
 //!         println!("Received : {}", sample);
 //!     };
 //! }
@@ -62,39 +63,33 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
-//!     let session = zenoh::open(config::default()).await.unwrap();
-//!     let mut replies = session.get("/key/expression").await.unwrap();
-//!     while let Some(reply) = replies.next().await {
-//!         println!(">> Received {}", reply.sample);
+//!     let session = zenoh::open(config::default()).res().await.unwrap();
+//!     let replies = session.get("key/expression").res().await.unwrap();
+//!     while let Ok(reply) = replies.recv_async().await {
+//!         println!(">> Received {:?}", reply.sample);
 //!     }
 //! }
 //! ```
-
-// #[cfg(test)]
-// mod tests;
-
 #[macro_use]
 extern crate zenoh_core;
 
-use async_std::net::UdpSocket;
-use flume::bounded;
-use futures::prelude::*;
+use handlers::DefaultHandler;
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+
 use git_version::git_version;
-use log::trace;
-use net::protocol::proto::data_kind;
-use net::runtime::orchestrator::Loop;
+#[zenoh_core::unstable]
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
-use sync::{zready, ZFuture};
-use zenoh_cfg_properties::config::*;
+use scouting::ScoutBuilder;
 use zenoh_core::{zerror, Result as ZResult};
-use zenoh_sync::zpinbox;
 
+/// A zenoh error.
+pub use zenoh_core::Error;
 /// A zenoh result.
 pub use zenoh_core::Result;
 
@@ -104,43 +99,42 @@ const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 mod session;
 pub use session::*;
 
-#[doc(hidden)]
-pub mod net;
-
+pub mod key_expr;
+pub(crate) mod net;
+pub use net::runtime;
+pub mod selector;
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_config as config;
+pub mod handlers;
 pub mod info;
+pub mod plugins;
 pub mod prelude;
 pub mod publication;
 pub mod query;
 pub mod queryable;
+pub mod sample;
 pub mod subscriber;
 pub mod utils;
-
-pub mod plugins;
+pub mod value;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
-pub use zenoh_buffers as buf;
+pub use zenoh_buffers as buffers;
 
 /// Time related types and functions.
 pub mod time {
+    use std::convert::TryFrom;
+
     pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
 
-    /// A time period.
-    pub use zenoh_protocol_core::Period;
-
-    /// Generates a reception [`Timestamp`] with id=0x00.  
+    /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-        Timestamp::new(
-            now.into(),
-            TimestampId::new(1, [0_u8; TimestampId::MAX_SIZE]),
-        )
+        Timestamp::new(now.into(), TimestampId::try_from([1]).unwrap())
     }
 }
 
@@ -150,8 +144,8 @@ pub mod properties {
     pub use zenoh_cfg_properties::Properties;
 
     /// Convert a set of [`Properties`] into a [`Value`].  
-    /// For instance such Properties: `[("k1", "v1"), ("k2, v2")]`  
-    /// are converted into such Json: `{ "k1": "v1", "k2": "v2" }`
+    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
+    /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()
@@ -161,99 +155,14 @@ pub mod properties {
     }
 }
 
-#[allow(clippy::needless_doctest_main)]
-/// Synchronisation primitives.
-///
-/// This module provides some traits that provide some syncronous accessors to some outputs :
-/// [`ZFuture`] for a single output and [`channel::Receiver`](crate::sync::channel::Receiver) for multiple outputs.
-///
-/// Most zenoh types that provide a single output both implment [`ZFuture`] and [`futures::Future`]
-/// and allow users to access their output synchronously via [`ZFuture::wait()`] or asynchronously
-/// via `.await`.
-///
-/// Most zenoh types that provide multiple outputs both implment [`channel::Receiver`](crate::sync::channel::Receiver) and
-/// [`futures::Stream`] and allow users to access their output synchronously via [`channel::Receiver::recv()`](crate::sync::channel::Receiver::recv)
-/// or asynchronously via `.next().await`.
-///
-/// # Examples
-///
-/// ### Sync
-/// ```no_run
-/// use zenoh::prelude::*;
-/// use zenoh::scouting::WhatAmI;
-///
-/// fn main() {
-///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).wait().unwrap();
-///     while let Ok(hello) = receiver.recv() {
-///         println!("{}", hello);
-///     }
-/// }
-/// ```
-///
-/// ### Async
-/// ```no_run
-/// use futures::prelude::*;
-/// use zenoh::prelude::*;
-/// use zenoh::scouting::WhatAmI;
-///
-/// #[async_std::main]
-/// async fn main() {
-///     let mut receiver = zenoh::scout(WhatAmI::Router, config::default()).await.unwrap();
-///     while let Some(hello) = receiver.next().await {
-///         println!("{}", hello);
-///     }
-/// }
-/// ```
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub mod sync {
-    pub use zenoh_sync::zready;
-    pub use zenoh_sync::ZFuture;
-    pub use zenoh_sync::ZPinBoxFuture;
-    pub use zenoh_sync::ZReady;
-
-    /// A multi-producer, multi-consumer channel that can be accessed synchronously or asynchronously.
-    pub mod channel {
-        pub use zenoh_sync::channel::Iter;
-        pub use zenoh_sync::channel::Receiver;
-        pub use zenoh_sync::channel::RecvError;
-        pub use zenoh_sync::channel::RecvFut;
-        pub use zenoh_sync::channel::RecvTimeoutError;
-        pub use zenoh_sync::channel::TryIter;
-        pub use zenoh_sync::channel::TryRecvError;
-    }
-}
-
 /// Scouting primitives.
-pub mod scouting {
-    use crate::sync::channel::{
-        Iter, Receiver, RecvError, RecvFut, RecvTimeoutError, TryIter, TryRecvError,
-    };
-    use flume::Sender;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
-    use zenoh_sync::zreceiver;
-
-    /// Constants and helpers for zenoh `whatami` flags.
-    pub use zenoh_protocol_core::WhatAmI;
-
-    /// A zenoh Hello message.
-    pub use zenoh_protocol::proto::Hello;
-
-    zreceiver! {
-        /// A [`Receiver`] of [`Hello`] messages returned by the [`scout`](crate::scout) operation.
-        #[derive(Clone)]
-        pub struct HelloReceiver : Receiver<Hello> {
-            pub(crate) stop_sender: Sender<()>,
-        }
-    }
-}
+pub mod scouting;
 
 /// Scout for routers and/or peers.
 ///
-/// [`scout`] spawns a task that periodically sends scout messages and returns a
-/// [`HelloReceiver`](crate::scouting::HelloReceiver) : a stream of received [`Hello`](crate::scouting::Hello) messages.
+/// [`scout`] spawns a task that periodically sends scout messages and waits for [`Hello`](crate::scouting::Hello) replies.
 ///
-/// Drop the returned [`HelloReceiver`](crate::scouting::HelloReceiver) to stop the scouting task.
+/// Drop the returned [`Scout`](crate::scouting::Scout) to stop the scouting task.
 ///
 /// # Arguments
 ///
@@ -263,82 +172,28 @@ pub mod scouting {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use futures::prelude::*;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let mut receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
-/// while let Some(hello) = receiver.next().await {
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).res().await.unwrap();
+/// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
 /// # })
 /// ```
-pub fn scout<I: Into<WhatAmIMatcher>, IntoConfig>(
+pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
-    config: IntoConfig,
-) -> impl ZFuture<Output = ZResult<scouting::HelloReceiver>>
+    config: TryIntoConfig,
+) -> ScoutBuilder<DefaultHandler>
 where
-    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: Into<zenoh_core::Error>,
 {
-    let what = what.into();
-    let config: crate::config::Config = match config.try_into() {
-        Ok(config) => config,
-        Err(e) => return zready(Err(zerror!("invalid configuration {:?}", &e).into())),
-    };
-
-    trace!("scout({}, {})", what, &config);
-
-    let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            return zready(Err(zerror!(
-                "invalid default addr {}: {:?}",
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-                &e
-            )
-            .into()))
-        }
-    };
-
-    let addr = config.scouting.multicast.address().unwrap_or(default_addr);
-    let ifaces = config
-        .scouting
-        .multicast
-        .interface()
-        .as_ref()
-        .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
-
-    let (hello_sender, hello_receiver) = bounded::<scouting::Hello>(1);
-    let (stop_sender, stop_receiver) = bounded::<()>(1);
-
-    let ifaces = Runtime::get_interfaces(ifaces);
-    if !ifaces.is_empty() {
-        let sockets: Vec<UdpSocket> = ifaces
-            .into_iter()
-            .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-            .collect();
-        if !sockets.is_empty() {
-            async_std::task::spawn(async move {
-                let hello_sender = &hello_sender;
-                let mut stop_receiver = stop_receiver.stream();
-                let scout = Runtime::scout(&sockets, what, &addr, move |hello| async move {
-                    let _ = hello_sender.send_async(hello).await;
-                    Loop::Continue
-                });
-                let stop = async move {
-                    stop_receiver.next().await;
-                    trace!("stop scout({}, {})", what, &config);
-                };
-                async_std::prelude::FutureExt::race(scout, stop).await;
-            });
-        }
+    ScoutBuilder {
+        what: what.into(),
+        config: config.try_into().map_err(|e| e.into()),
+        handler: DefaultHandler,
     }
-
-    zready(Ok(scouting::HelloReceiver::new(
-        stop_sender,
-        hello_receiver,
-    )))
 }
 
 /// Open a zenoh [`Session`].
@@ -350,35 +205,149 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # })
 /// ```
 ///
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use std::str::FromStr;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_local_routing(Some(false));
+/// config.set_id(ZenohId::from_str("F000").unwrap());
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
-/// let session = zenoh::open(config).await.unwrap();
+/// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
-pub fn open<IntoConfig>(config: IntoConfig) -> impl ZFuture<Output = ZResult<Session>>
+pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
-    IntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <IntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    Session::new(config)
+    OpenBuilder { config }
+}
+
+/// A builder returned by [`open`] used to open a zenoh [`Session`].
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// # })
+/// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+pub struct OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    config: TryIntoConfig,
+}
+
+impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Output = ZResult<Session>;
+}
+
+impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    #[inline]
+    fn res_sync(self) -> Self::Output {
+        let config: crate::config::Config = self
+            .config
+            .try_into()
+            .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+        Session::new(config).res_sync()
+    }
+}
+
+impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    type Future = zenoh_sync::PinBoxFuture<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        zenoh_sync::pinbox(async move {
+            let config: crate::config::Config = self
+                .config
+                .try_into()
+                .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+            Session::new(config).res_async().await
+        })
+    }
 }
 
 /// Initialize a Session with an existing Runtime.
-/// This operation is used by the plugins to share the same Runtime than the router.
+/// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
-#[must_use = "ZFutures do nothing unless you `.wait()`, `.await` or poll them"]
-pub fn init(runtime: Runtime) -> impl ZFuture<Output = ZResult<Session>> {
-    zpinbox(async { Ok(Session::init(runtime, true, vec![], vec![]).await) })
+#[zenoh_core::unstable]
+pub fn init(runtime: Runtime) -> InitBuilder {
+    InitBuilder {
+        runtime,
+        aggregated_subscribers: vec![],
+        aggregated_publishers: vec![],
+    }
+}
+
+/// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[doc(hidden)]
+#[zenoh_core::unstable]
+pub struct InitBuilder {
+    runtime: Runtime,
+    aggregated_subscribers: Vec<OwnedKeyExpr>,
+    aggregated_publishers: Vec<OwnedKeyExpr>,
+}
+
+#[zenoh_core::unstable]
+impl InitBuilder {
+    #[inline]
+    pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_subscribers = exprs;
+        self
+    }
+
+    #[inline]
+    pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
+        self.aggregated_publishers = exprs;
+        self
+    }
+}
+
+#[zenoh_core::unstable]
+impl Resolvable for InitBuilder {
+    type Output = ZResult<Session>;
+}
+#[zenoh_core::unstable]
+impl SyncResolve for InitBuilder {
+    #[inline]
+    fn res_sync(self) -> Self::Output {
+        Ok(Session::init(
+            self.runtime,
+            self.aggregated_subscribers,
+            self.aggregated_publishers,
+        )
+        .res_sync())
+    }
+}
+
+#[zenoh_core::unstable]
+impl AsyncResolve for InitBuilder {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
 }

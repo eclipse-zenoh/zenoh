@@ -29,7 +29,9 @@ mod tests {
     use zenoh_link::Link;
     use zenoh_protocol::io::ZBuf;
     use zenoh_protocol::proto::ZenohMessage;
-    use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+    use zenoh_protocol_core::{
+        Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
+    };
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -135,14 +137,15 @@ mod tests {
     async fn open_transport(
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
+        use std::convert::TryFrom;
         // Define peer01 and peer02 IDs
-        let peer01_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-        let peer02_id = PeerId::new(1, [1u8; PeerId::MAX_SIZE]);
+        let peer01_id = ZenohId::try_from([1]).unwrap();
+        let peer02_id = ZenohId::try_from([2]).unwrap();
 
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
         let peer01_manager = TransportManager::builder()
-            .pid(peer01_id)
+            .zid(peer01_id)
             .whatami(WhatAmI::Peer)
             .build(peer01_handler.clone())
             .unwrap();
@@ -151,7 +154,7 @@ mod tests {
         let peer02_handler = Arc::new(SHPeer::default());
         let peer02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
-            .pid(peer02_id)
+            .zid(peer02_id)
             .build(peer02_handler.clone())
             .unwrap();
 
@@ -231,7 +234,7 @@ mod tests {
         msg_size: usize,
     ) {
         // Create the message to send
-        let key = "/test".into();
+        let key = "test".into();
         let payload = ZBuf::from(vec![0_u8; msg_size]);
         let data_info = None;
         let routing_context = None;

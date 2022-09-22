@@ -17,7 +17,7 @@ use crate::TransportManager;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::ZInt;
 use zenoh_protocol::io::ZSlice;
-use zenoh_protocol::proto::{Attachment, TransportMessage};
+use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
 
 pub(super) struct Input {
     pub(super) cookie: ZSlice,
@@ -40,7 +40,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&mut message)
         .await
-        .map_err(|e| (e, None))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     let output = Output;
     Ok(output)

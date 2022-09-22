@@ -19,142 +19,151 @@ use crate::prelude::*;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
-use zenoh_core::zread;
+use crate::Undeclarable;
 use zenoh_core::zresult::ZResult;
-use zenoh_protocol::proto::{data_kind, DataInfo, Options};
+use zenoh_core::Resolve;
+use zenoh_core::{zread, AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::proto::{DataInfo, Options};
 use zenoh_protocol_core::Channel;
-use zenoh_sync::{derive_zfuture, Runnable};
 
 /// The kind of congestion control.
 pub use zenoh_protocol_core::CongestionControl;
 
-derive_zfuture! {
-    /// A builder for initializing a `write` operation ([`put`](crate::Session::put) or [`delete`](crate::Session::delete)).
-    ///
-    /// The `write` operation can be run synchronously via [`wait()`](ZFuture::wait()) or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// session
-    ///     .put("/key/expression", "value")
-    ///     .encoding(Encoding::TEXT_PLAIN)
-    ///     .congestion_control(CongestionControl::Block)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct Writer<'a> {
-        pub(crate) session: SessionRef<'a>,
-        pub(crate) key_expr: KeyExpr<'a>,
-        pub(crate) value: Option<Value>,
-        pub(crate) kind: Option<ZInt>,
-        pub(crate) congestion_control: CongestionControl,
-        pub(crate) priority: Priority,
-        pub(crate) local_routing: Option<bool>,
-    }
+/// A builder for initializing a [`delete`](crate::Session::delete) operation.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// session
+///     .delete("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
+
+/// A builder for initializing a [`put`](crate::Session::put) operation.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// session
+///     .put("key/expression", "value")
+///     .encoding(KnownEncoding::TextPlain)
+///     .congestion_control(CongestionControl::Block)
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug, Clone)]
+pub struct PutBuilder<'a, 'b> {
+    pub(crate) publisher: PublisherBuilder<'a, 'b>,
+    pub(crate) value: Value,
+    pub(crate) kind: SampleKind,
 }
 
-impl<'a> Writer<'a> {
-    /// Change the `congestion_control` to apply when routing the data.
-    #[inline]
-    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.congestion_control = congestion_control;
-        self
-    }
-
-    /// Change the kind of the written data.
-    #[inline]
-    pub fn kind(mut self, kind: SampleKind) -> Self {
-        self.kind = Some(kind as ZInt);
-        self
-    }
-
+impl PutBuilder<'_, '_> {
     /// Change the encoding of the written data.
     #[inline]
     pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
     where
         IntoEncoding: Into<Encoding>,
     {
-        if let Some(mut payload) = self.value.as_mut() {
-            payload.encoding = encoding.into();
-        } else {
-            self.value = Some(Value::empty().encoding(encoding.into()));
-        }
+        self.value.encoding = encoding.into();
+        self
+    }
+    /// Change the `congestion_control` to apply when routing the data.
+    #[inline]
+    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.publisher = self.publisher.congestion_control(congestion_control);
         self
     }
 
     /// Change the priority of the written data.
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
-        self.priority = priority;
+        self.publisher = self.publisher.priority(priority);
         self
     }
 
-    /// Enable or disable local routing.
+    pub fn kind(mut self, kind: SampleKind) -> Self {
+        self.kind = kind;
+        self
+    }
+}
+
+impl Resolvable for PutBuilder<'_, '_> {
+    type Output = zenoh_core::Result<()>;
+}
+
+impl SyncResolve for PutBuilder<'_, '_> {
     #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.local_routing = Some(local_routing);
-        self
-    }
-
-    fn write(&self, value: Value) -> zenoh_core::Result<()> {
-        log::trace!("write({:?}, [...])", self.key_expr);
-        let state = zread!(self.session.state);
-        let primitives = state.primitives.as_ref().unwrap().clone();
-        drop(state);
+    fn res_sync(self) -> Self::Output {
+        let PutBuilder {
+            publisher,
+            value,
+            kind,
+        } = self;
+        let key_expr = publisher.key_expr?;
+        log::trace!("write({:?}, [...])", &key_expr);
+        let primitives = zread!(publisher.session.state)
+            .primitives
+            .as_ref()
+            .unwrap()
+            .clone();
 
         let mut info = DataInfo::new();
-        info.kind = match self.kind {
-            Some(data_kind::DEFAULT) => None,
-            kind => kind,
-        };
+        info.kind = kind;
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {
             None
         };
-        info.timestamp = self.session.runtime.new_timestamp();
+        info.timestamp = publisher.session.runtime.new_timestamp();
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
-            &self.key_expr,
+            &key_expr.to_wire(&publisher.session),
             value.payload.clone(),
             Channel {
-                priority: self.priority.into(),
+                priority: publisher.priority.into(),
                 reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
             },
-            self.congestion_control,
+            publisher.congestion_control,
             data_info.clone(),
             None,
         );
-        self.session.handle_data(
+        publisher.session.handle_data(
             true,
-            &self.key_expr,
+            &key_expr.to_wire(&publisher.session),
             data_info,
             value.payload,
-            self.local_routing,
         );
         Ok(())
     }
 }
-
-impl Runnable for Writer<'_> {
-    type Output = zenoh_core::Result<()>;
-
-    #[inline]
-    fn run(&mut self) -> Self::Output {
-        let value = self.value.take().unwrap();
-        self.write(value)
+impl AsyncResolve for PutBuilder<'_, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
     }
 }
 
 use futures::Sink;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use zenoh_core::zresult::Error;
@@ -166,11 +175,11 @@ use zenoh_core::zresult::Error;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let publisher = session.publish("/key/expression").await.unwrap();
-/// publisher.send("value").unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.put("value").res().await.unwrap();
 /// # })
 /// ```
 ///
@@ -179,35 +188,238 @@ use zenoh_core::zresult::Error;
 /// streams to zenoh.
 /// ```no_run
 /// # async_std::task::block_on(async {
+/// use futures::StreamExt;
 /// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let mut subscriber = session.subscribe("/key/expression").await.unwrap();
-/// let publisher = session.publish("/another/key/expression").await.unwrap();
-/// subscriber.forward(publisher).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let mut subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+/// let publisher = session.declare_publisher("another/key/expression").res().await.unwrap();
+/// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # })
 /// ```
-pub type Publisher<'a> = Writer<'a>;
+#[derive(Debug, Clone)]
+pub struct Publisher<'a> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: KeyExpr<'a>,
+    pub(crate) congestion_control: CongestionControl,
+    pub(crate) priority: Priority,
+}
 
-impl Publisher<'_> {
-    /// Send a value.
+impl<'a> Publisher<'a> {
+    pub fn key_expr(&self) -> &KeyExpr<'a> {
+        &self.key_expr
+    }
+
+    /// Change the `congestion_control` to apply when routing the data.
+    #[inline]
+    pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.congestion_control = congestion_control;
+        self
+    }
+
+    /// Change the priority of the written data.
+    #[inline]
+    pub fn priority(mut self, priority: Priority) -> Self {
+        self.priority = priority;
+        self
+    }
+
+    fn _write(&self, kind: SampleKind, value: Value) -> Publication {
+        Publication {
+            publisher: self,
+            value,
+            kind,
+        }
+    }
+
+    /// Send data with [`kind`](SampleKind) (Put or Delete).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
+    /// # })
+    /// ```
+    pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
+    where
+        IntoValue: Into<Value>,
+    {
+        self._write(kind, value.into())
+    }
+
+    /// Put data.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn put<IntoValue>(&self, value: IntoValue) -> Publication
+    where
+        IntoValue: Into<Value>,
+    {
+        self._write(SampleKind::Put, value.into())
+    }
+
+    /// Delete data.
     ///
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.publish("/key/expression").await.unwrap();
-    /// publisher.send("value").unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.delete().res().await.unwrap();
     /// # })
     /// ```
-    #[inline]
-    pub fn send<IntoValue>(&self, value: IntoValue) -> zenoh_core::Result<()>
-    where
-        IntoValue: Into<Value>,
-    {
-        self.write(value.into())
+    pub fn delete(&self) -> Publication {
+        self._write(SampleKind::Delete, Value::empty())
+    }
+
+    /// Undeclares the [`Publisher`], informing the network that it needn't optimize publications for its key expression anymore.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::*;
+    /// use r#async::AsyncResolve;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.undeclare().res().await.unwrap();
+    /// # })
+    /// ```
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        Undeclarable::undeclare(self, ())
+    }
+}
+impl<'a> Undeclarable<()> for Publisher<'a> {
+    type Output = ZResult<()>;
+    type Undeclaration = PublisherUndeclaration<'a>;
+    fn undeclare(self, _: ()) -> Self::Undeclaration {
+        PublisherUndeclaration { publisher: self }
+    }
+}
+
+/// A [`Resolvable`] returned when undeclaring a publisher.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.undeclare().res().await.unwrap();
+/// # })
+/// ```
+pub struct PublisherUndeclaration<'a> {
+    publisher: Publisher<'a>,
+}
+impl Resolvable for PublisherUndeclaration<'_> {
+    type Output = ZResult<()>;
+}
+impl SyncResolve for PublisherUndeclaration<'_> {
+    fn res_sync(mut self) -> Self::Output {
+        let Publisher {
+            session, key_expr, ..
+        } = &self.publisher;
+        session
+            .undeclare_publication_intent(key_expr.clone())
+            .res_sync()?;
+        self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
+        Ok(())
+    }
+}
+impl AsyncResolve for PublisherUndeclaration<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+impl Drop for Publisher<'_> {
+    fn drop(&mut self) {
+        if !self.key_expr.is_empty() {
+            let _ = self
+                .session
+                .undeclare_publication_intent(self.key_expr.clone())
+                .res_sync();
+        }
+    }
+}
+
+/// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
+/// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
+pub struct Publication<'a> {
+    publisher: &'a Publisher<'a>,
+    value: Value,
+    kind: SampleKind,
+}
+impl Resolvable for Publication<'_> {
+    type Output = ZResult<()>;
+}
+impl AsyncResolve for Publication<'_> {
+    type Future = futures::future::Ready<Self::Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+impl SyncResolve for Publication<'_> {
+    fn res_sync(self) -> Self::Output {
+        let Publication {
+            publisher,
+            value,
+            kind,
+        } = self;
+        log::trace!("write({:?}, [...])", publisher.key_expr);
+        let primitives = zread!(publisher.session.state)
+            .primitives
+            .as_ref()
+            .unwrap()
+            .clone();
+
+        let mut info = DataInfo::new();
+        info.kind = kind;
+        info.encoding = if value.encoding != Encoding::default() {
+            Some(value.encoding)
+        } else {
+            None
+        };
+        info.timestamp = publisher.session.runtime.new_timestamp();
+        let data_info = if info.has_options() { Some(info) } else { None };
+
+        primitives.send_data(
+            &publisher.key_expr.to_wire(&publisher.session),
+            value.payload.clone(),
+            Channel {
+                priority: publisher.priority.into(),
+                reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            },
+            publisher.congestion_control,
+            data_info.clone(),
+            None,
+        );
+        publisher.session.handle_data(
+            true,
+            &publisher.key_expr.to_wire(&publisher.session),
+            data_info,
+            value.payload,
+        );
+        Ok(())
     }
 }
 
@@ -224,7 +436,7 @@ where
 
     #[inline]
     fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
-        self.write(item.into())
+        self.put(item.into()).res_sync()
     }
 
     #[inline]
@@ -238,85 +450,214 @@ where
     }
 }
 
-derive_zfuture! {
-    /// A builder for initializing a [`Publisher`](Publisher).
-    ///
-    /// The result of this builder can be accessed synchronously via [`wait()`](ZFuture::wait())
-    /// or asynchronously via `.await`.
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use zenoh::publication::CongestionControl;
-    ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session
-    ///     .publish("/key/expression")
-    ///     .encoding(Encoding::TEXT_PLAIN)
-    ///     .congestion_control(CongestionControl::Block)
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[derive(Debug, Clone)]
-    pub struct PublisherBuilder<'a> {
-        pub(crate) publisher: Option<Publisher<'a>>,
+/// A builder for initializing a [`Publisher`](Publisher).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::*;
+/// use r#async::AsyncResolve;
+/// use zenoh::publication::CongestionControl;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let publisher = session
+///     .declare_publisher("key/expression")
+///     .congestion_control(CongestionControl::Block)
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug)]
+pub struct PublisherBuilder<'a, 'b: 'a> {
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) congestion_control: CongestionControl,
+    pub(crate) priority: Priority,
+}
+
+impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
+    fn clone(&self) -> Self {
+        Self {
+            session: self.session.clone(),
+            key_expr: match &self.key_expr {
+                Ok(k) => Ok(k.clone()),
+                Err(e) => Err(zerror!("Cloned KE Error: {}", e).into()),
+            },
+            congestion_control: self.congestion_control,
+            priority: self.priority,
+        }
     }
 }
 
-impl<'a> PublisherBuilder<'a> {
+impl<'a, 'b> PublisherBuilder<'a, 'b> {
     /// Change the `congestion_control` to apply when routing the data.
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
-        self.publisher = Some(
-            self.publisher
-                .take()
-                .unwrap()
-                .congestion_control(congestion_control),
-        );
-        self
-    }
-
-    /// Change the kind of the written data.
-    #[inline]
-    pub fn kind(mut self, kind: SampleKind) -> Self {
-        self.publisher = Some(self.publisher.take().unwrap().kind(kind));
-        self
-    }
-
-    /// Change the encoding of the written data.
-    #[inline]
-    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
-    where
-        IntoEncoding: Into<Encoding>,
-    {
-        self.publisher = Some(self.publisher.take().unwrap().encoding(encoding));
+        self.congestion_control = congestion_control;
         self
     }
 
     /// Change the priority of the written data.
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
-        self.publisher = Some(self.publisher.take().unwrap().priority(priority));
-        self
-    }
-
-    /// Enable or disable local routing.
-    #[inline]
-    pub fn local_routing(mut self, local_routing: bool) -> Self {
-        self.publisher = Some(self.publisher.take().unwrap().local_routing(local_routing));
+        self.priority = priority;
         self
     }
 }
 
-impl<'a> Runnable for PublisherBuilder<'a> {
+impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
     type Output = ZResult<Publisher<'a>>;
+}
 
+impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
     #[inline]
-    fn run(&mut self) -> Self::Output {
-        let publisher = self.publisher.take().unwrap();
+    fn res_sync(self) -> Self::Output {
+        let mut key_expr = self.key_expr?;
+        if !key_expr.is_fully_optimized(&self.session) {
+            let session_id = self.session.id;
+            let expr_id = self.session.declare_prefix(key_expr.as_str()).res_sync();
+            let prefix_len = key_expr
+                .len()
+                .try_into()
+                .expect("How did you get a key expression with a length over 2^32!?");
+            key_expr = match key_expr.0 {
+                crate::key_expr::KeyExprInner::Borrowed(key_expr)
+                | crate::key_expr::KeyExprInner::BorrowedWire { key_expr, .. } => {
+                    KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id,
+                    })
+                }
+                crate::key_expr::KeyExprInner::Owned(key_expr)
+                | crate::key_expr::KeyExprInner::Wire { key_expr, .. } => {
+                    KeyExpr(crate::key_expr::KeyExprInner::Wire {
+                        key_expr,
+                        expr_id,
+                        prefix_len,
+                        session_id,
+                    })
+                }
+            }
+        }
+        self.session
+            .declare_publication_intent(key_expr.clone())
+            .res_sync()?;
+        let publisher = Publisher {
+            session: self.session,
+            key_expr,
+            congestion_control: self.congestion_control,
+            priority: self.priority,
+        };
         log::trace!("publish({:?})", publisher.key_expr);
         Ok(publisher)
+    }
+}
+
+impl<'a> AsyncResolve for PublisherBuilder<'a, '_> {
+    type Future = futures::future::Ready<Self::Output>;
+
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.res_sync())
+    }
+}
+
+/// The Priority of zenoh messages.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Priority {
+    RealTime = 1,
+    InteractiveHigh = 2,
+    InteractiveLow = 3,
+    DataHigh = 4,
+    Data = 5,
+    DataLow = 6,
+    Background = 7,
+}
+
+impl Priority {
+    /// The lowest Priority
+    pub const MIN: Self = Self::Background;
+    /// The highest Priority
+    pub const MAX: Self = Self::RealTime;
+    /// The number of available priorities
+    pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
+}
+
+impl Default for Priority {
+    fn default() -> Priority {
+        Priority::Data
+    }
+}
+
+impl TryFrom<u8> for Priority {
+    type Error = zenoh_core::Error;
+
+    /// A Priority is identified by a numeric value.
+    /// Lower the value, higher the priority.
+    /// Higher the value, lower the priority.
+    ///
+    /// Admitted values are: 1-7.
+    ///
+    /// Highest priority: 1
+    /// Lowest priority: 7
+    fn try_from(priority: u8) -> Result<Self, Self::Error> {
+        match priority {
+            1 => Ok(Priority::RealTime),
+            2 => Ok(Priority::InteractiveHigh),
+            3 => Ok(Priority::InteractiveLow),
+            4 => Ok(Priority::DataHigh),
+            5 => Ok(Priority::Data),
+            6 => Ok(Priority::DataLow),
+            7 => Ok(Priority::Background),
+            unknown => bail!(
+                "{} is not a valid priority value. Admitted values are: [{}-{}].",
+                unknown,
+                Self::MAX as u8,
+                Self::MIN as u8
+            ),
+        }
+    }
+}
+
+impl From<Priority> for crate::net::protocol::core::Priority {
+    fn from(prio: Priority) -> Self {
+        // The Priority in the prelude differs from the Priority in the core protocol only from
+        // the missing Control priority. The Control priority is reserved for zenoh internal use
+        // and as such it is not exposed by the zenoh API. Nevertheless, the values of the
+        // priorities which are common to the internal and public Priority enums are the same. Therefore,
+        // it is possible to safely transmute from the public Priority enum toward the internal
+        // Priority enum without risking to be in an invalid state.
+        // For better robusteness, the correctness of the unsafe transmute operation is covered
+        // by the unit test below.
+        unsafe { std::mem::transmute::<Priority, crate::net::protocol::core::Priority>(prio) }
+    }
+}
+
+mod tests {
+    #[test]
+    fn priority_from() {
+        use super::Priority as APrio;
+        use crate::net::protocol::core::Priority as TPrio;
+        use std::convert::TryInto;
+
+        for i in APrio::MAX as u8..=APrio::MIN as u8 {
+            let p: APrio = i.try_into().unwrap();
+
+            match p {
+                APrio::RealTime => assert_eq!(p as u8, TPrio::RealTime as u8),
+                APrio::InteractiveHigh => assert_eq!(p as u8, TPrio::InteractiveHigh as u8),
+                APrio::InteractiveLow => assert_eq!(p as u8, TPrio::InteractiveLow as u8),
+                APrio::DataHigh => assert_eq!(p as u8, TPrio::DataHigh as u8),
+                APrio::Data => assert_eq!(p as u8, TPrio::Data as u8),
+                APrio::DataLow => assert_eq!(p as u8, TPrio::DataLow as u8),
+                APrio::Background => assert_eq!(p as u8, TPrio::Background as u8),
+            }
+
+            let t: TPrio = p.into();
+            assert_eq!(p as u8, t as u8);
+        }
     }
 }

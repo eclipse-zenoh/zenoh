@@ -1,3 +1,5 @@
+use std::io::{stdin, Read};
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,7 +15,8 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::keyexpr;
+use zenoh::prelude::sync::{SessionDeclarations, SyncResolve};
 use zenoh::publication::CongestionControl;
 
 fn main() {
@@ -22,24 +25,26 @@ fn main() {
 
     let config = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(config).res().unwrap().into_arc();
 
     // The key expression to read the data from
-    let key_expr_ping = session.declare_expr("/test/ping").wait().unwrap();
+    let key_expr_ping = keyexpr::new("test/ping").unwrap();
 
     // The key expression to echo the data back
-    let key_expr_pong = session.declare_expr("/test/pong").wait().unwrap();
+    let key_expr_pong = keyexpr::new("test/pong").unwrap();
 
-    let sub = session.subscribe(&key_expr_ping).wait().unwrap();
+    let publisher = session
+        .declare_publisher(key_expr_pong)
+        .congestion_control(CongestionControl::Block)
+        .res()
+        .unwrap();
 
-    while let Ok(sample) = sub.recv() {
-        session
-            .put(&key_expr_pong, sample.value)
-            // Make sure to not drop messages because of congestion control
-            .congestion_control(CongestionControl::Block)
-            .wait()
-            .unwrap();
-    }
+    let _sub = session
+        .declare_subscriber(key_expr_ping)
+        .callback(move |sample| publisher.put(sample.value).res().unwrap())
+        .res()
+        .unwrap();
+    for _ in stdin().bytes().take_while(|b| !matches!(b, Ok(b'q'))) {}
 }
 
 fn parse_args() -> Config {

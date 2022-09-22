@@ -47,12 +47,8 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                                 .decl_subscriber(&s.key, &s.info, msg.routing_context);
                         }
                         Declaration::Queryable(q) => {
-                            self.primitives.decl_queryable(
-                                &q.key,
-                                q.kind,
-                                &q.info,
-                                msg.routing_context,
-                            );
+                            self.primitives
+                                .decl_queryable(&q.key, &q.info, msg.routing_context);
                         }
                         Declaration::ForgetResource(fr) => {
                             self.primitives.forget_resource(fr.expr_id);
@@ -67,7 +63,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                         }
                         Declaration::ForgetQueryable(q) => {
                             self.primitives
-                                .forget_queryable(&q.key, q.kind, msg.routing_context);
+                                .forget_queryable(&q.key, msg.routing_context);
                         }
                     }
                 }
@@ -92,14 +88,8 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                 }
                 Some(rep) => match rep.replier {
                     Some(replier) => {
-                        self.primitives.send_reply_data(
-                            rep.qid,
-                            replier.kind,
-                            replier.id,
-                            key,
-                            data_info,
-                            payload,
-                        );
+                        self.primitives
+                            .send_reply_data(rep.qid, replier.id, key, data_info, payload);
                     }
                     None => {
                         bail!("ReplyData with no replier_id")
@@ -117,7 +107,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
 
             ZenohBody::Query(Query {
                 key,
-                value_selector,
+                parameters,
                 qid,
                 target,
                 consolidation,
@@ -125,7 +115,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
             }) => {
                 self.primitives.send_query(
                     &key,
-                    &value_selector,
+                    &parameters,
                     qid,
                     target.unwrap_or_default(),
                     consolidation,

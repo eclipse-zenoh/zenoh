@@ -26,7 +26,7 @@ use zenoh_core::{bail, zerror};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
-const ZENOH_SHM_PREFIX: &str = "zenoh_shm_pid";
+const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
 
 // Chunk header
 type ChunkHeaderType = AtomicUsize;
@@ -67,6 +67,7 @@ impl PartialEq for Chunk {
 /// Informations about a [`SharedMemoryBuf`].
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
+#[non_exhaustive]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SharedMemoryBufInfo {
     /// The index of the beginning of the buffer in the shm segment.
@@ -116,6 +117,7 @@ impl Clone for SharedMemoryBufInfo {
 }
 
 /// A zenoh buffer in shared memory.
+#[non_exhaustive]
 pub struct SharedMemoryBuf {
     pub rc_ptr: AtomicPtr<ChunkHeaderType>,
     pub buf: AtomicPtr<u8>,

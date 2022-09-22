@@ -110,27 +110,23 @@
 //!                 //  - if not: drop the sample
 //!                 // return Ok(StorageInsertionResult::Outdated);
 //!             }
-//!             SampleKind::Patch => {
-//!                 println!("Received PATCH for {}: not yet supported", sample.key_expr);
-//!                 return Ok(StorageInsertionResult::Outdated);
-//!             }
 //!         }
 //!     }
 //!
 //!     // When receiving a Query (i.e. on GET operations)
 //!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-//!         let _key_elector = query.key_selector();
+//!         let _key_elector = query.key_expr();
 //!         // @TODO:
 //!         //  - test if key selector contains *
 //!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
 //!         //  - if yes: get all the samples with key matching key_selector and call for each: query.reply(sample.clone()).await;
 //!         //
-//!         // NOTE: in case query.value_selector() is not empty something smarter should be done with returned samples...
+//!         // NOTE: in case query.parameters() is not empty something smarter should be done with returned samples...
 //!         Ok(())
 //!     }
 //!
 //!     // To get all entries in the datastore
-//!     async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>> {
+//!     async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
 //!         // @TODO: get the list of (key, timestamp) in the datastore
 //!         Ok(Vec::new())
 //!     }
@@ -139,12 +135,12 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use zenoh::prelude::{KeyExpr, Sample, Selector};
+use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
+use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-pub mod utils;
 use config::{StorageConfig, VolumeConfig};
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
@@ -195,7 +191,7 @@ pub trait Storage: Send + Sync {
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
-    async fn get_all_entries(&self) -> ZResult<Vec<(String, Timestamp)>>;
+    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>>;
 }
 
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the
@@ -221,18 +217,18 @@ impl Query {
 
     /// The key selector part of this Query.
     #[inline(always)]
-    pub fn key_selector(&self) -> &KeyExpr<'_> {
-        self.q.key_selector()
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        self.q.key_expr()
     }
 
-    /// The value selector part of this Query.
+    /// This Query's selector parameters.
     #[inline(always)]
-    pub fn value_selector(&self) -> &str {
-        self.q.value_selector()
+    pub fn parameters(&self) -> &str {
+        self.q.parameters()
     }
 
     /// Sends a Sample as a reply to this Query
-    pub async fn reply(&self, sample: Sample) {
+    pub fn reply(&self, sample: Sample) -> ReplyBuilder<'_> {
         // Call outgoing intercerceptor
         let sample = if let Some(ref interceptor) = self.interceptor {
             interceptor(sample)
@@ -240,6 +236,6 @@ impl Query {
             sample
         };
         // Send reply
-        self.q.reply_async(sample).await
+        self.q.reply(Ok(sample))
     }
 }

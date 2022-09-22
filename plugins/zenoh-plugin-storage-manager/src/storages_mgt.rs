@@ -11,134 +11,66 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::channel::{bounded, Sender};
-use async_std::task;
-use futures::select;
-use futures::stream::StreamExt;
-use futures::FutureExt;
-use log::{debug, error, trace, warn};
-use std::sync::Arc;
+use async_std::sync::Arc;
+use log::trace;
 use zenoh::prelude::*;
-use zenoh::query::{QueryConsolidation, QueryTarget, Target};
-use zenoh::queryable;
 use zenoh::Session;
-use zenoh_backend_traits::Query;
+use zenoh_backend_traits::config::ReplicaConfig;
 use zenoh_core::Result as ZResult;
 
-pub(crate) enum StorageMessage {
+pub use super::replica::{Replica, StorageService};
+
+pub enum StorageMessage {
     Stop,
-    GetStatus(Sender<serde_json::Value>),
+    GetStatus(async_std::channel::Sender<serde_json::Value>),
+}
+
+pub struct StoreIntercept {
+    pub storage: Box<dyn zenoh_backend_traits::Storage>,
+    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
 }
 
 pub(crate) async fn start_storage(
-    mut storage: Box<dyn zenoh_backend_traits::Storage>,
+    storage: Box<dyn zenoh_backend_traits::Storage>,
+    config: Option<ReplicaConfig>,
     admin_key: String,
-    key_expr: String,
+    key_expr: OwnedKeyExpr,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
-) -> ZResult<Sender<StorageMessage>> {
-    debug!("Start storage {} on {}", admin_key, key_expr);
+) -> ZResult<flume::Sender<StorageMessage>> {
+    // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
+    let parts: Vec<&str> = admin_key.split('/').collect();
+    let uuid = parts[2];
+    let storage_name = parts[7];
+    let name = format!("{}/{}", uuid, storage_name);
 
-    let (tx, rx) = bounded(1);
-    task::spawn(async move {
-        // subscribe on key_expr
-        let mut storage_sub = match zenoh.subscribe(&key_expr).await {
-            Ok(storage_sub) => storage_sub,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_key, e);
-                return;
-            }
+    trace!("Start storage {} on {}", name, key_expr);
+
+    let (tx, rx) = flume::bounded(1);
+
+    async_std::task::spawn(async move {
+        let store_intercept = StoreIntercept {
+            storage,
+            in_interceptor,
+            out_interceptor,
         };
 
-        // align with other storages, querying them on key_expr,
-        // with starttime to get historical data (in case of time-series)
-        let query_target = QueryTarget {
-            kind: queryable::STORAGE,
-            target: Target::All,
-        };
-        let mut replies = match zenoh
-            .get(&Selector::from(&key_expr).with_value_selector("?(starttime=0)"))
-            .target(query_target)
-            .consolidation(QueryConsolidation::none())
-            .await
-        {
-            Ok(replies) => replies,
-            Err(e) => {
-                error!("Error aligning storage {} : {}", admin_key, e);
-                return;
-            }
-        };
-        while let Some(reply) = replies.next().await {
-            log::trace!(
-                "Storage {} aligns data {}",
-                admin_key,
-                reply.sample.key_expr
-            );
-            // Call incoming data interceptor (if any)
-            let sample = if let Some(ref interceptor) = in_interceptor {
-                interceptor(reply.sample)
-            } else {
-                reply.sample
-            };
-            // Call storage
-            if let Err(e) = storage.on_sample(sample).await {
-                warn!(
-                    "Storage {} raised an error aligning a sample: {}",
-                    admin_key, e
-                );
-            }
-        }
-
-        // answer to queries on key_expr
-        let mut storage_queryable = match zenoh.queryable(&key_expr).kind(queryable::STORAGE).await
-        {
-            Ok(storage_queryable) => storage_queryable,
-            Err(e) => {
-                error!("Error starting storage {} : {}", admin_key, e);
-                return;
-            }
-        };
-
-        loop {
-            select!(
-                // on sample for key_expr
-                sample = storage_sub.next() => {
-                    // Call incoming data interceptor (if any)
-                    let sample = if let Some(ref interceptor) = in_interceptor {
-                        interceptor(sample.unwrap())
-                    } else {
-                        sample.unwrap()
-                    };
-                    // Call storage
-                    if let Err(e) = storage.on_sample(sample).await {
-                        warn!("Storage {} raised an error receiving a sample: {}", admin_key, e);
-                    }
-                },
-                // on query on key_expr
-                query = storage_queryable.next() => {
-                    let q = query.unwrap();
-                    // wrap zenoh::Query in zenoh_backend_traits::Query
-                    // with outgoing interceptor
-                    let query = Query::new(q, out_interceptor.clone());
-                    if let Err(e) = storage.on_query(query).await {
-                        warn!("Storage {} raised an error receiving a query: {}", admin_key, e);
-                    }
-                },
-                // on storage handle drop
-                message = rx.recv().fuse() => {
-                    match message {
-                        Ok(StorageMessage::Stop) => {
-                            trace!("Dropping storage {}", admin_key);
-                            return
-                        },
-                        Ok(StorageMessage::GetStatus(tx)) => {
-                            std::mem::drop(tx.send(storage.get_admin_status()).await);
-                        }
-                        Err(e) => {log::error!("Storage Message Channel Error: {}", e); return},
-                    };
-                }
-            );
+        // If a configuration for replica is present, we initialize a replica, else only a storage service
+        // A replica contains a storage service and all metadata required for anti-entropy
+        if config.is_some() {
+            Replica::start(
+                config.unwrap(),
+                zenoh.clone(),
+                store_intercept,
+                key_expr,
+                &name,
+                rx,
+            )
+            .await;
+        } else {
+            StorageService::start(zenoh.clone(), key_expr, &name, store_intercept, rx, None).await;
         }
     });
 

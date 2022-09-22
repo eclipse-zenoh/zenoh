@@ -14,7 +14,8 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::config::Config;
+use zenoh::config::{Config, ModeDependentValue};
+use zenoh_core::AsyncResolve;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -25,24 +26,22 @@ async fn main() {
     let (config, key_expr, value, history, prefix) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
-    print!("Declare key expression {}", key_expr);
-    let expr_id = session.declare_expr(&key_expr).await.unwrap();
-    println!(" => ExprId {}", expr_id);
-
-    println!("Creating PublicationCache on {}", expr_id);
-    let mut publication_cache_builder = session.publication_cache(expr_id).history(history);
+    println!("Creating PublicationCache on {}", &key_expr);
+    let mut publication_cache_builder = session
+        .declare_publication_cache(&key_expr)
+        .history(history);
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
-    let _publication_cache = publication_cache_builder.await.unwrap();
+    let _publication_cache = publication_cache_builder.res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Put Data ('{}': '{}')", expr_id, buf);
-        session.put(expr_id, buf).await.unwrap();
+        println!("Put Data ('{}': '{}')", &key_expr, buf);
+        session.put(&key_expr, buf).res().await.unwrap();
     }
 }
 
@@ -60,7 +59,7 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish.'")
-                .default_value("/demo/example/zenoh-rs-pub"),
+                .default_value("demo/example/zenoh-rs-pub"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
@@ -95,7 +94,7 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints
@@ -106,7 +105,10 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
     }
 
     // Timestamping of publications is required for publication cache
-    config.set_add_timestamp(Some(true)).unwrap();
+    config
+        .timestamping
+        .set_enabled(Some(ModeDependentValue::Unique(true)))
+        .unwrap();
 
     let key_expr = args.value_of("key").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();

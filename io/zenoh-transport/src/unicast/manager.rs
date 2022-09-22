@@ -13,7 +13,7 @@
 //
 use crate::unicast::{
     establishment::authenticator::*,
-    protocol::core::PeerId,
+    protocol::core::ZenohId,
     transport::{TransportUnicastConfig, TransportUnicastInner},
     TransportConfigUnicast, TransportUnicast,
 };
@@ -58,7 +58,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<PeerId, Arc<TransportUnicastInner>>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -176,7 +176,7 @@ impl TransportManagerBuilderUnicast {
             is_shm: self.is_shm,
         };
 
-        // Enable pubkey authentication by default to avoid PeerId spoofing
+        // Enable pubkey authentication by default to avoid ZenohId spoofing
         #[cfg(feature = "auth_pubkey")]
         if !self
             .peer_authenticator
@@ -418,7 +418,7 @@ impl TransportManager {
                 // Create the transport
                 let stc = TransportUnicastConfig {
                     manager: self.clone(),
-                    pid: config.peer,
+                    zid: config.peer,
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
                     initial_sn_tx: config.initial_sn_tx,
@@ -479,7 +479,7 @@ impl TransportManager {
         super::establishment::open::open_link(&link, self, &mut auth_link).await
     }
 
-    pub fn get_transport_unicast(&self, peer: &PeerId) -> Option<TransportUnicast> {
+    pub fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         zlock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| t.into())
@@ -492,7 +492,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &PeerId) -> ZResult<()> {
+    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
         let _ = zlock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
@@ -526,16 +526,16 @@ impl TransportManager {
         *guard += 1;
         drop(guard);
 
-        let mut peer_id: Option<PeerId> = None;
+        let mut peer_id: Option<ZenohId> = None;
         let peer_link = Link::from(&link);
         for la in zasyncread!(self.state.unicast.link_authenticator).iter() {
             let res = la.handle_new_link(&peer_link).await;
             match res {
-                Ok(pid) => {
-                    // Check that all the peer authenticators, eventually return the same PeerId
-                    if let Some(pid1) = peer_id.as_ref() {
-                        if let Some(pid2) = pid.as_ref() {
-                            if pid1 != pid2 {
+                Ok(zid) => {
+                    // Check that all the peer authenticators, eventually return the same ZenohId
+                    if let Some(zid1) = peer_id.as_ref() {
+                        if let Some(zid2) = zid.as_ref() {
+                            if zid1 != zid2 {
                                 log::debug!("Ambigous PeerID identification for link: {}", link);
                                 let _ = link.close().await;
                                 let mut guard = zasynclock!(self.state.unicast.incoming);
@@ -544,7 +544,7 @@ impl TransportManager {
                             }
                         }
                     } else {
-                        peer_id = pid;
+                        peer_id = zid;
                     }
                 }
                 Err(e) => {

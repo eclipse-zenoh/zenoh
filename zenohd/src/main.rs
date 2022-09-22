@@ -15,9 +15,9 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
-use zenoh::config::{Config, EndPoint, PluginLoad, ValidatedMap};
-use zenoh::net::runtime::{AdminSpace, Runtime};
+use zenoh::config::{Config, EndPoint, ModeDependentValue, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
+use zenoh::runtime::{AdminSpace, Runtime};
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -65,15 +65,15 @@ r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, w
   - KEY must be a valid config path.
   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
 Examples:
---cfg='startup/subscribe:["/demo/**"]'
---cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'"#)
+--cfg='startup/subscribe:["demo/**"]'
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#)
                 ]
             );
         let args = app.get_matches();
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::new(config.libloader());
+        let mut plugins = PluginsManager::dynamic(config.libloader());
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {
@@ -143,7 +143,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
     }
     if args.occurrences_of("id") > 0 {
         config
-            .set_id(args.value_of("id").map(|s| s.to_string()))
+            .set_id(args.value_of("id").unwrap().parse().unwrap())
             .unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwritting config),
@@ -217,17 +217,11 @@ fn config_from_args(args: &ArgMatches) -> Config {
             .endpoints
             .push(DEFAULT_LISTENER.parse().unwrap())
     }
-    match (
-        config.add_timestamp().is_none(),
-        args.is_present("no-timestamp"),
-    ) {
-        (_, true) => {
-            config.set_add_timestamp(Some(false)).unwrap();
-        }
-        (true, false) => {
-            config.set_add_timestamp(Some(true)).unwrap();
-        }
-        (false, false) => {}
+    if args.is_present("no-timestamp") {
+        config
+            .timestamping
+            .set_enabled(Some(ModeDependentValue::Unique(false)))
+            .unwrap();
     };
     match (
         config.scouting.multicast.enabled().is_none(),

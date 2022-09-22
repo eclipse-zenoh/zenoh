@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This module is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub mod face;
 pub mod network;
 pub mod pubsub;

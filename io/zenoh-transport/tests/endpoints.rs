@@ -14,13 +14,14 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{PeerId, WhatAmI};
+use zenoh_protocol_core::{WhatAmI, ZenohId};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -81,7 +82,7 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the transport manager
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
-        .pid(PeerId::new(1, [0_u8; PeerId::MAX_SIZE]))
+        .zid(ZenohId::try_from([1]).unwrap())
         .build(Arc::new(SH::default()))
         .unwrap();
 

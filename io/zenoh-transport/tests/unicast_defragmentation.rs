@@ -13,13 +13,13 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
-use std::sync::Arc;
 use std::time::Duration;
+use std::{convert::TryFrom, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -36,12 +36,12 @@ macro_rules! ztimeout {
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_manager = TransportManager::builder()
-        .pid(router_id)
+        .zid(router_id)
         .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
@@ -50,7 +50,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Create the client transport manager
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
         .build(Arc::new(DummyTransportEventHandler::default()))
         .unwrap();
@@ -67,7 +67,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Create the message to send, this would trigger the transport closure
-    let key = "/test".into();
+    let key = "test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;
@@ -92,7 +92,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait that the client transport has been closed
     ztimeout!(async {
-        while client_transport.get_pid().is_ok() {
+        while client_transport.get_zid().is_ok() {
             task::sleep(SLEEP).await;
         }
     });

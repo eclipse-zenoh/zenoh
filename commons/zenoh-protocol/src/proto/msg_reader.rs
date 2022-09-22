@@ -42,7 +42,7 @@ pub trait MessageReader {
     fn read_deco_reply_context(&mut self, header: u8) -> Option<ReplyContext>;
     fn read_zenoh_message(&mut self, reliability: Reliability) -> Option<ZenohMessage>;
     fn read_data(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody>;
-    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>>;
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<WireExpr<'static>>;
     fn read_data_info(&mut self) -> Option<DataInfo>;
     fn read_queryable_info(&mut self) -> Option<QueryableInfo>;
     fn read_unit(&mut self, header: u8, reply_context: Option<ReplyContext>) -> Option<ZenohBody>;
@@ -53,11 +53,10 @@ pub trait MessageReader {
     fn read_query(&mut self, header: u8) -> Option<ZenohBody>;
     fn read_link_state_list(&mut self, _header: u8) -> Option<ZenohBody>;
     fn read_link_state(&mut self) -> Option<LinkState>;
-    fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)>;
+    fn read_submode(&mut self) -> Option<SubMode>;
     fn read_query_target(&mut self) -> Option<QueryTarget>;
-    fn read_target(&mut self) -> Option<Target>;
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode>;
-    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy>;
+    fn read_consolidation(&mut self) -> Option<ConsolidationMode>;
 }
 #[allow(deprecated)]
 impl MessageReader for ZBufReader<'_> {
@@ -198,18 +197,18 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let pid_request = imsg::has_flag(header, tmsg::flag::I);
+        let zid_request = imsg::has_flag(header, tmsg::flag::I);
         let what = if imsg::has_flag(header, tmsg::flag::W) {
             WhatAmIMatcher::try_from(self.read_zint()?)
         } else {
             None
         };
-        Some(TransportBody::Scout(Scout { what, pid_request }))
+        Some(TransportBody::Scout(Scout { what, zid_request }))
     }
 
     fn read_hello(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
@@ -225,7 +224,7 @@ impl MessageReader for ZBufReader<'_> {
         };
 
         Some(TransportBody::Hello(Hello {
-            pid,
+            zid,
             whatami,
             locators,
         }))
@@ -239,7 +238,7 @@ impl MessageReader for ZBufReader<'_> {
         };
         let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             self.read_zint()?
         } else {
@@ -250,7 +249,7 @@ impl MessageReader for ZBufReader<'_> {
         Some(TransportBody::InitSyn(InitSyn {
             version,
             whatami,
-            pid,
+            zid,
             sn_resolution,
             is_qos,
         }))
@@ -263,7 +262,7 @@ impl MessageReader for ZBufReader<'_> {
             0
         };
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
             Some(self.read_zint()?)
         } else {
@@ -274,7 +273,7 @@ impl MessageReader for ZBufReader<'_> {
 
         Some(TransportBody::InitAck(InitAck {
             whatami,
-            pid,
+            zid,
             sn_resolution,
             is_qos,
             cookie,
@@ -318,7 +317,7 @@ impl MessageReader for ZBufReader<'_> {
         };
         let version = self.read_byte()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
-        let pid = self.read_peeexpr_id()?;
+        let zid = self.read_zid()?;
         let lease = self.read_zint()?;
         let lease = if imsg::has_flag(header, tmsg::flag::T1) {
             Duration::from_secs(lease)
@@ -348,7 +347,7 @@ impl MessageReader for ZBufReader<'_> {
         Some(TransportBody::Join(Join {
             version,
             whatami,
-            pid,
+            zid,
             lease,
             sn_resolution,
             next_sns,
@@ -357,15 +356,15 @@ impl MessageReader for ZBufReader<'_> {
 
     fn read_close(&mut self, header: u8) -> Option<TransportBody> {
         let link_only = imsg::has_flag(header, tmsg::flag::K);
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
         let reason = self.read_byte()?;
 
         Some(TransportBody::Close(Close {
-            pid,
+            zid,
             reason,
             link_only,
         }))
@@ -402,13 +401,13 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     fn read_keep_alive(&mut self, header: u8) -> Option<TransportBody> {
-        let pid = if imsg::has_flag(header, tmsg::flag::I) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_flag(header, tmsg::flag::I) {
+            Some(self.read_zid()?)
         } else {
             None
         };
 
-        Some(TransportBody::KeepAlive(KeepAlive { pid }))
+        Some(TransportBody::KeepAlive(KeepAlive { zid }))
     }
 
     fn read_ping(&mut self, _header: u8) -> Option<TransportBody> {
@@ -438,8 +437,7 @@ impl MessageReader for ZBufReader<'_> {
             None
         } else {
             Some(ReplierInfo {
-                kind: self.read_zint()?,
-                id: self.read_peeexpr_id()?,
+                id: self.read_zid()?,
             })
         };
 
@@ -550,16 +548,16 @@ impl MessageReader for ZBufReader<'_> {
     }
 
     #[inline(always)]
-    fn read_key_expr(&mut self, has_suffix: bool) -> Option<KeyExpr<'static>> {
+    fn read_key_expr(&mut self, has_suffix: bool) -> Option<WireExpr<'static>> {
         let id = self.read_zint()?;
         if has_suffix {
             let s = self.read_string()?;
-            Some(KeyExpr {
+            Some(WireExpr {
                 scope: id,
                 suffix: s.into(),
             })
         } else {
-            Some(KeyExpr {
+            Some(WireExpr {
                 scope: id,
                 suffix: "".into(),
             })
@@ -569,14 +567,19 @@ impl MessageReader for ZBufReader<'_> {
     #[inline(always)]
     fn read_data_info(&mut self) -> Option<DataInfo> {
         let mut info = DataInfo::new();
-
         let options = self.read_zint()?;
         #[cfg(feature = "shared-memory")]
         {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }
         if imsg::has_option(options, zmsg::data::info::KIND) {
-            info.kind = Some(self.read_zint()?);
+            info.kind = match self.read_zint()?.try_into() {
+                Ok(kind) => kind,
+                Err(e) => {
+                    log::error!("Received an unknown SampleKind: {}", e);
+                    return None;
+                }
+            }
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
             let prefix = self.read_zint()?;
@@ -586,19 +589,13 @@ impl MessageReader for ZBufReader<'_> {
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCID) {
-            info.source_id = Some(self.read_peeexpr_id()?);
+        const RESERVED_FIELDS: u64 = zmsg::data::info::SRCID
+            | zmsg::data::info::SRCSN
+            | zmsg::data::info::RTRID
+            | zmsg::data::info::RTRSN;
+        if options & RESERVED_FIELDS != 0 {
+            log::error!("A message with set reserved bits has been received. This is likely to be because your network has different versions of zenoh linked together.")
         }
-        if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            info.source_sn = Some(self.read_zint()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::RTRID) {
-            info.first_router_id = Some(self.read_peeexpr_id()?);
-        }
-        if imsg::has_option(options, zmsg::data::info::RTRSN) {
-            info.first_router_sn = Some(self.read_zint()?);
-        }
-
         Some(info)
     }
 
@@ -674,18 +671,14 @@ impl MessageReader for ZBufReader<'_> {
                     Reliability::BestEffort
                 };
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let (mode, period) = if imsg::has_flag(header, zmsg::flag::S) {
+                let mode = if imsg::has_flag(header, zmsg::flag::S) {
                     self.read_submode()?
                 } else {
-                    (SubMode::Push, None)
+                    SubMode::Push
                 };
                 Some(Declaration::Subscriber(Subscriber {
                     key,
-                    info: SubInfo {
-                        reliability,
-                        mode,
-                        period,
-                    },
+                    info: SubInfo { reliability, mode },
                 }))
             }
             FORGET_SUBSCRIBER => {
@@ -702,18 +695,16 @@ impl MessageReader for ZBufReader<'_> {
             }
             QUERYABLE => {
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = self.read_zint()?;
                 let info = if imsg::has_flag(header, zmsg::flag::Q) {
                     self.read_queryable_info()?
                 } else {
                     QueryableInfo::default()
                 };
-                Some(Declaration::Queryable(Queryable { key, kind, info }))
+                Some(Declaration::Queryable(Queryable { key, info }))
             }
             FORGET_QUERYABLE => {
                 let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-                let kind = self.read_zint()?;
-                Some(Declaration::ForgetQueryable(ForgetQueryable { key, kind }))
+                Some(Declaration::ForgetQueryable(ForgetQueryable { key }))
             }
             unknown => {
                 log::trace!("Invalid ID for Declaration: {}", unknown);
@@ -724,7 +715,7 @@ impl MessageReader for ZBufReader<'_> {
 
     fn read_query(&mut self, header: u8) -> Option<ZenohBody> {
         let key = self.read_key_expr(imsg::has_flag(header, zmsg::flag::K))?;
-        let value_selector = self.read_string()?;
+        let parameters = self.read_string()?;
         let qid = self.read_zint()?;
         let target = if imsg::has_flag(header, zmsg::flag::T) {
             Some(self.read_query_target()?)
@@ -735,7 +726,7 @@ impl MessageReader for ZBufReader<'_> {
 
         Some(ZenohBody::Query(Query {
             key,
-            value_selector,
+            parameters,
             qid,
             target,
             consolidation,
@@ -755,8 +746,8 @@ impl MessageReader for ZBufReader<'_> {
         let options = self.read_zint()?;
         let psid = self.read_zint()?;
         let sn = self.read_zint()?;
-        let pid = if imsg::has_option(options, zmsg::link_state::PID) {
-            Some(self.read_peeexpr_id()?)
+        let zid = if imsg::has_option(options, zmsg::link_state::PID) {
+            Some(self.read_zid()?)
         } else {
             None
         };
@@ -779,14 +770,14 @@ impl MessageReader for ZBufReader<'_> {
         Some(LinkState {
             psid,
             sn,
-            pid,
+            zid,
             whatami,
             locators,
             links,
         })
     }
 
-    fn read_submode(&mut self) -> Option<(SubMode, Option<Period>)> {
+    fn read_submode(&mut self) -> Option<SubMode> {
         use super::zmsg::declaration::flag::*;
         use super::zmsg::declaration::id::*;
 
@@ -799,38 +790,25 @@ impl MessageReader for ZBufReader<'_> {
                 return None;
             }
         };
-        let period = if imsg::has_flag(mode_flag, PERIOD) {
-            Some(Period {
-                origin: self.read_zint()?,
-                period: self.read_zint()?,
-                duration: self.read_zint()?,
-            })
-        } else {
-            None
-        };
-        Some((mode, period))
+        if imsg::has_flag(mode_flag, PERIOD) {
+            return None;
+        }
+        Some(mode)
     }
 
     fn read_query_target(&mut self) -> Option<QueryTarget> {
-        let kind = self.read_zint()?;
-        let target = self.read_target()?;
-        Some(QueryTarget { kind, target })
-    }
-
-    fn read_target(&mut self) -> Option<Target> {
         let t = self.read_zint()?;
         match t {
-            0 => Some(Target::BestMatching),
-            1 => Some(Target::All),
-            2 => Some(Target::AllComplete),
-            3 => Some(Target::None),
+            0 => Some(QueryTarget::BestMatching),
+            1 => Some(QueryTarget::All),
+            2 => Some(QueryTarget::AllComplete),
             #[cfg(feature = "complete_n")]
-            4 => {
+            3 => {
                 let n = self.read_zint()?;
-                Some(Target::Complete(n))
+                Some(QueryTarget::Complete(n))
             }
             id => {
-                log::trace!("UNEXPECTED ID FOR Target: {}", id);
+                log::trace!("UNEXPECTED ID FOR QueryTarget: {}", id);
                 None
             }
         }
@@ -839,8 +817,8 @@ impl MessageReader for ZBufReader<'_> {
     fn read_consolidation_mode(mode: ZInt) -> Option<ConsolidationMode> {
         match mode {
             0 => Some(ConsolidationMode::None),
-            1 => Some(ConsolidationMode::Lazy),
-            2 => Some(ConsolidationMode::Full),
+            1 => Some(ConsolidationMode::Monotonic),
+            2 => Some(ConsolidationMode::Latest),
             unknown => {
                 log::trace!("Invalid consolidation mode: {}", unknown);
                 None
@@ -848,12 +826,8 @@ impl MessageReader for ZBufReader<'_> {
         }
     }
 
-    fn read_consolidation(&mut self) -> Option<ConsolidationStrategy> {
+    fn read_consolidation(&mut self) -> Option<ConsolidationMode> {
         let modes = self.read_zint()?;
-        Some(ConsolidationStrategy {
-            first_routers: ZBufReader::read_consolidation_mode((modes >> 4) & 0x03)?,
-            last_router: ZBufReader::read_consolidation_mode((modes >> 2) & 0x03)?,
-            reception: ZBufReader::read_consolidation_mode(modes & 0x03)?,
-        })
+        ZBufReader::read_consolidation_mode(modes & 0x03)
     }
 }

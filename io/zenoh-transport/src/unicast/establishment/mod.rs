@@ -16,7 +16,7 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{PeerId, Property, WhatAmI, ZInt};
+use super::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 use super::protocol::io::{WBuf, ZBuf};
 use super::protocol::proto::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
@@ -101,7 +101,7 @@ pub(super) fn properties_from_attachment(att: Attachment) -> ZResult<Establishme
 /*************************************/
 pub struct Cookie {
     whatami: WhatAmI,
-    pid: PeerId,
+    zid: ZenohId,
     sn_resolution: ZInt,
     is_qos: bool,
     nonce: ZInt,
@@ -126,7 +126,7 @@ impl Cookie {
         let mut wbuf = WBuf::new(64, false);
 
         zwrite!(wbuf.write_zint(self.whatami.into()));
-        zwrite!(wbuf.write_peeexpr_id(&self.pid));
+        zwrite!(wbuf.write_zid(&self.zid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
         zwrite!(wbuf.write_byte(if self.is_qos { 1 } else { 0 }).is_some());
         zwrite!(wbuf.write_zint(self.nonce));
@@ -154,7 +154,7 @@ impl Cookie {
 
         let whatami = WhatAmI::try_from(zread!(reader.read_zint()))
             .ok_or_else(|| zerror!("Invalid Cookie"))?;
-        let pid = zread!(reader.read_peeexpr_id());
+        let zid = zread!(reader.read_zid());
         let sn_resolution = zread!(reader.read_zint());
         let is_qos = zread!(reader.read_byte()) == 1;
         let nonce = zread!(reader.read_zint());
@@ -167,7 +167,7 @@ impl Cookie {
 
         let cookie = Cookie {
             whatami,
-            pid,
+            zid,
             sn_resolution,
             is_qos,
             nonce,
@@ -184,7 +184,7 @@ pub(super) async fn close_link(
 ) {
     if let Some(reason) = reason.take() {
         // Build the close message
-        let peer_id = Some(manager.config.pid);
+        let peer_id = Some(manager.config.zid);
         let link_only = true;
         let attachment = None;
         let mut message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
@@ -204,7 +204,7 @@ pub(super) async fn close_link(
 /*            TRANSPORT              */
 /*************************************/
 pub(super) struct InputInit {
-    pub(super) pid: PeerId,
+    pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_shm: bool,
@@ -218,7 +218,7 @@ async fn transport_init(
     let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.sn_resolution);
 
     let config = TransportConfigUnicast {
-        peer: input.pid,
+        peer: input.zid,
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
         is_shm: input.is_shm,
@@ -261,7 +261,7 @@ pub(super) async fn transport_finalize(
         }
         None => {
             let peer = TransportPeer {
-                pid: transport.get_pid(),
+                zid: transport.get_zid(),
                 whatami: transport.get_whatami(),
                 is_qos: transport.is_qos(),
                 is_shm: transport.is_shm(),

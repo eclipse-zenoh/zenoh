@@ -24,18 +24,24 @@ authors = [
 edition = "2018"
 
 [lib]
+# When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zplugin_example"
+# `zenohd` will expect the file to be named according to OS conventions:
+#   - libzplugin_example.so on linux
+#   - libzplugin_example.dylib on macOS
+#   - zplugin_example.dll on Windows
 name = "zplugin_example"
+# This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
 
 [dependencies]
-async-std = "=1.11.0"
-clap = "2"
-env_logger = "0.9.0"
-futures = "0.3.12"
-log = "0.4.14"
-zenoh = { path = "../../zenoh" }
+async-std = "=1.12.0"
+clap = "3.2.22"
+env_logger = "0.9.1"
+futures = "0.3.24"
+log = "0.4.17"
+zenoh = { path = "../../zenoh", default-features = false}
 zenoh-util = { path = "../../commons/zenoh-util" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait" }
-serde_json = "1.0"
+serde_json = "1.0.85"

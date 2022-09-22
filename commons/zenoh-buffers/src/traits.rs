@@ -1,3 +1,16 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use std::borrow::Cow;
 
 pub mod buffer {
@@ -50,16 +63,26 @@ pub mod writer {
     }
 }
 
+/// A trait for buffers that can be composed of multiple non contiguous slices.
 pub trait SplitBuffer<'a> {
     type Slices: Iterator<Item = &'a [u8]> + ExactSizeIterator;
+
+    /// Gets all the slices of this buffer.
     fn slices(&'a self) -> Self::Slices;
 
+    /// Returns `true` if the buffer has a length of 0.
     fn is_empty(&'a self) -> bool {
         self.slices().all(|s| s.is_empty())
     }
+
+    /// Returns the number of bytes in the buffer.
     fn len(&'a self) -> usize {
         self.slices().fold(0, |acc, it| acc + it.len())
     }
+
+    /// Returns all the bytes of this buffer in a conitguous slice.
+    /// This may require allocation and copy if the original buffer
+    /// is not contiguous.
     fn contiguous(&'a self) -> Cow<'a, [u8]> {
         let mut slices = self.slices();
         match slices.len() {

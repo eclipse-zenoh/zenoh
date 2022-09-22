@@ -12,12 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use super::common::{
-    conduit::{TransportConduitRx, TransportConduitTx},
-    pipeline::TransmissionPipeline,
-};
+use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, PeerId, Priority, WhatAmI, ZInt};
+use super::protocol::core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId};
 use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -51,7 +48,7 @@ macro_rules! zlinkindex {
 #[derive(Clone)]
 pub(crate) struct TransportUnicastConfig {
     pub(crate) manager: TransportManager,
-    pub(crate) pid: PeerId,
+    pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
@@ -134,7 +131,7 @@ impl TransportUnicastInner {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = zasynclock!(self.alive);
         if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.pid);
+            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
             log::trace!("{}", e);
             return Err(e.into());
         }
@@ -158,8 +155,8 @@ impl TransportUnicastInner {
     pub(super) async fn delete(&self) -> ZResult<()> {
         log::debug!(
             "[{}] Closing transport with peer: {}",
-            self.config.manager.config.pid,
-            self.config.pid
+            self.config.manager.config.zid,
+            self.config.zid
         );
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
@@ -176,7 +173,7 @@ impl TransportUnicastInner {
         let _ = self
             .config
             .manager
-            .del_transport_unicast(&self.config.pid)
+            .del_transport_unicast(&self.config.zid)
             .await;
 
         // Close all the links
@@ -218,7 +215,7 @@ impl TransportUnicastInner {
                 let e = zerror!(
                     "Can not add Link {} with peer {}: max num of links reached {}/{}",
                     link,
-                    self.config.pid,
+                    self.config.zid,
                     count,
                     limit
                 );
@@ -248,14 +245,14 @@ impl TransportUnicastInner {
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 assert!(!self.conduit_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, self.conduit_tx.clone());
+                l.start_tx(executor, keep_alive, batch_size, &self.conduit_tx);
                 Ok(())
             }
             None => {
                 bail!(
                     "Can not start Link TX {} with peer: {}",
                     link,
-                    self.config.pid
+                    self.config.zid
                 )
             }
         }
@@ -272,7 +269,7 @@ impl TransportUnicastInner {
                 bail!(
                     "Can not stop Link TX {} with peer: {}",
                     link,
-                    self.config.pid
+                    self.config.zid
                 )
             }
         }
@@ -289,7 +286,7 @@ impl TransportUnicastInner {
                 bail!(
                     "Can not start Link RX {} with peer: {}",
                     link,
-                    self.config.pid
+                    self.config.zid
                 )
             }
         }
@@ -306,7 +303,7 @@ impl TransportUnicastInner {
                 bail!(
                     "Can not stop Link RX {} with peer: {}",
                     link,
-                    self.config.pid
+                    self.config.zid
                 )
             }
         }
@@ -344,7 +341,7 @@ impl TransportUnicastInner {
                 bail!(
                     "Can not delete Link {} with peer: {}",
                     link,
-                    self.config.pid
+                    self.config.zid
                 )
             }
         };
@@ -360,8 +357,8 @@ impl TransportUnicastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_pid(&self) -> PeerId {
-        self.config.pid
+    pub(crate) fn get_zid(&self) -> ZenohId {
+        self.config.zid
     }
 
     pub(crate) fn get_whatami(&self) -> WhatAmI {
@@ -388,14 +385,15 @@ impl TransportUnicastInner {
     /*           TERMINATION             */
     /*************************************/
     pub(crate) async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
-        log::trace!("Closing link {} with peer: {}", link, self.config.pid);
+        log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
         let mut pipeline = zlinkget!(zread!(self.links), link)
             .map(|l| l.pipeline.clone())
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
+
         if let Some(p) = pipeline.take() {
             // Close message to be sent on the target link
-            let peer_id = Some(self.config.manager.pid());
+            let peer_id = Some(self.config.manager.zid());
             let reason_id = reason;
             let link_only = true; // This is should always be true when closing a link
             let attachment = None; // No attachment here
@@ -403,20 +401,21 @@ impl TransportUnicastInner {
 
             p.push_transport_message(msg, Priority::Background);
         }
+
         // Remove the link from the channel
         self.del_link(link).await
     }
 
     pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
-        log::trace!("Closing transport with peer: {}", self.config.pid);
+        log::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let mut pipelines: Vec<Arc<TransmissionPipeline>> = zread!(self.links)
+        let mut pipelines = zread!(self.links)
             .iter()
             .filter_map(|sl| sl.pipeline.clone())
-            .collect();
+            .collect::<Vec<_>>();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
-            let peer_id = Some(self.config.manager.pid());
+            let peer_id = Some(self.config.manager.zid());
             let reason_id = reason;
             // link_only should always be false for user-triggered close. However, in case of
             // multiple links, it is safer to close all the links first. When no links are left,
@@ -435,7 +434,7 @@ impl TransportUnicastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) -> bool {
+    pub(crate) fn schedule(&self, #[allow(unused_mut)] mut message: ZenohMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {

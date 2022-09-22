@@ -63,9 +63,9 @@ pub(crate) async fn accept_link(
         };
     }
 
-    let pid = output.cookie.pid;
+    let zid = output.cookie.zid;
     let input = super::InputInit {
-        pid: output.cookie.pid,
+        zid: output.cookie.zid,
         whatami: output.cookie.whatami,
         sn_resolution: output.cookie.sn_resolution,
         is_shm: output.is_shm,
@@ -81,7 +81,7 @@ pub(crate) async fn accept_link(
                 Err((e, reason)) => {
                     if let Ok(ll) = transport.get_links() {
                         if ll.is_empty() {
-                            let _ = manager.del_transport_unicast(&pid).await;
+                            let _ = manager.del_transport_unicast(&zid).await;
                         }
                     }
                     close_link(link, manager, auth_link, reason).await;
@@ -105,7 +105,7 @@ pub(crate) async fn accept_link(
     .sync(output.initial_sn)
     .await;
 
-    log::debug!("New transport link established from {}: {}", pid, link);
+    log::debug!("New transport link established from {}: {}", zid, link);
 
     let initial_sn = step!(transport
         .get_inner()

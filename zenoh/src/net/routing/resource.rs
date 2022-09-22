@@ -15,27 +15,28 @@ use super::face::FaceState;
 use super::router::Tables;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::key_expr;
-use zenoh_protocol_core::{KeyExpr, PeerId, QueryableInfo, SubInfo, ZInt};
+use zenoh_protocol_core::key_expr::keyexpr;
+use zenoh_protocol_core::{QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId};
 use zenoh_sync::get_mut_unchecked;
 
-pub(super) type Direction = (Arc<FaceState>, KeyExpr<'static>, Option<RoutingContext>);
+pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::Target)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol_core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = Route;
-pub(super) struct TargetQabl {
+pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) kind: ZInt,
     pub(super) complete: ZInt,
     pub(super) distance: f64,
 }
-pub(super) type TargetQablSet = Vec<TargetQabl>;
+pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
 pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
@@ -43,23 +44,25 @@ pub(super) struct SessionContext {
     pub(super) local_expr_id: Option<ZInt>,
     pub(super) remote_expr_id: Option<ZInt>,
     pub(super) subs: Option<SubInfo>,
-    pub(super) qabl: HashMap<ZInt, QueryableInfo>,
+    pub(super) qabl: Option<QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
 pub(super) struct ResourceContext {
-    pub(super) router_subs: HashSet<PeerId>,
-    pub(super) peer_subs: HashSet<PeerId>,
-    pub(super) router_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
-    pub(super) peer_qabls: HashMap<(PeerId, ZInt), QueryableInfo>,
+    pub(super) router_subs: HashSet<ZenohId>,
+    pub(super) peer_subs: HashSet<ZenohId>,
+    pub(super) router_qabls: HashMap<ZenohId, QueryableInfo>,
+    pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
     pub(super) peers_data_routes: Vec<Arc<Route>>,
+    pub(super) peer_data_route: Option<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
-    pub(super) routers_query_routes: Vec<Arc<TargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<TargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<TargetQablSet>>,
+    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
 }
 
 impl ResourceContext {
@@ -73,9 +76,11 @@ impl ResourceContext {
             matching_pulls: Arc::new(Vec::new()),
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
+            peer_data_route: None,
             client_data_route: None,
             routers_query_routes: Vec::new(),
             peers_query_routes: Vec::new(),
+            peer_query_route: None,
             client_query_route: None,
         }
     }
@@ -128,7 +133,7 @@ impl Resource {
 
     pub fn expr(&self) -> String {
         match &self.parent {
-            Some(parent) => [&parent.expr() as &str, &self.suffix].concat(),
+            Some(parent) => parent.expr() + &self.suffix,
             None => String::from(""),
         }
     }
@@ -175,15 +180,18 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn client_data_route(&self) -> Option<Arc<Route>> {
+    pub fn client_data_route(&self, source_type: WhatAmI) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => ctx.client_data_route.clone(),
+            Some(ctx) => match source_type {
+                WhatAmI::Client => ctx.client_data_route.clone(),
+                _ => ctx.peer_data_route.clone(),
+            },
             None => None,
         }
     }
 
     #[inline(always)]
-    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.routers_query_routes.len() > context)
                 .then(|| ctx.routers_query_routes[context].clone()),
@@ -192,7 +200,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => (ctx.peers_query_routes.len() > context)
                 .then(|| ctx.peers_query_routes[context].clone()),
@@ -201,9 +209,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn client_query_route(&self) -> Option<Arc<TargetQablSet>> {
+    pub(super) fn client_query_route(
+        &self,
+        source_type: WhatAmI,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => ctx.client_query_route.clone(),
+            Some(ctx) => match source_type {
+                WhatAmI::Client => ctx.client_query_route.clone(),
+                _ => ctx.peer_query_route.clone(),
+            },
             None => None,
         }
     }
@@ -344,22 +358,24 @@ impl Resource {
         }
     }
 
-    fn fst_chunk(key_expr: &str) -> (&str, &str) {
-        if let Some(stripped_key_expr) = key_expr.strip_prefix('/') {
-            match stripped_key_expr.find('/') {
-                Some(idx) => (&key_expr[0..(idx + 1)], &key_expr[(idx + 1)..]),
-                None => (key_expr, ""),
+    fn fst_chunk(key_expr: &keyexpr) -> (&keyexpr, Option<&keyexpr>) {
+        match key_expr.as_bytes().iter().position(|c| *c == b'/') {
+            Some(pos) => {
+                let left = &key_expr.as_bytes()[..pos];
+                let right = &key_expr.as_bytes()[pos + 1..];
+                unsafe {
+                    (
+                        keyexpr::from_slice_unchecked(left),
+                        Some(keyexpr::from_slice_unchecked(right)),
+                    )
+                }
             }
-        } else {
-            match key_expr.find('/') {
-                Some(idx) => (&key_expr[0..(idx)], &key_expr[(idx)..]),
-                None => (key_expr, ""),
-            }
+            None => (key_expr, None),
         }
     }
 
     #[inline]
-    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> KeyExpr<'static> {
+    pub fn decl_key(res: &Arc<Resource>, face: &mut Arc<FaceState>) -> WireExpr<'static> {
         let (nonwild_prefix, wildsuffix) = Resource::nonwild_prefix(res);
         match nonwild_prefix {
             Some(mut nonwild_prefix) => {
@@ -372,7 +388,7 @@ impl Resource {
                             local_expr_id: None,
                             remote_expr_id: None,
                             subs: None,
-                            qabl: HashMap::new(),
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     });
@@ -390,7 +406,7 @@ impl Resource {
                         expr_id
                     }
                 };
-                KeyExpr {
+                WireExpr {
                     scope: expr_id,
                     suffix: wildsuffix.into(),
                 }
@@ -400,27 +416,27 @@ impl Resource {
     }
 
     #[inline]
-    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> KeyExpr<'a> {
+    pub fn get_best_key<'a>(prefix: &Arc<Resource>, suffix: &'a str, sid: usize) -> WireExpr<'a> {
         fn get_best_key_<'a>(
             prefix: &Arc<Resource>,
             suffix: &'a str,
             sid: usize,
             checkchilds: bool,
-        ) -> KeyExpr<'a> {
+        ) -> WireExpr<'a> {
             if checkchilds && !suffix.is_empty() {
-                let (chunk, rest) = Resource::fst_chunk(suffix);
+                let (chunk, rest) = suffix.split_at(suffix.find('/').unwrap_or(suffix.len()));
                 if let Some(child) = prefix.childs.get(chunk) {
                     return get_best_key_(child, rest, sid, true);
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
                 if let Some(expr_id) = ctx.local_expr_id {
-                    return KeyExpr {
+                    return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                     };
                 } else if let Some(expr_id) = ctx.remote_expr_id {
-                    return KeyExpr {
+                    return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
                     };
@@ -436,82 +452,116 @@ impl Resource {
         get_best_key_(prefix, suffix, sid, true)
     }
 
-    pub fn get_matches(tables: &Tables, key_expr: &str) -> Vec<Weak<Resource>> {
-        fn get_matches_from(
-            key_expr: &str,
-            is_admin: bool,
-            from: &Arc<Resource>,
-        ) -> Vec<Weak<Resource>> {
-            let mut matches = Vec::new();
-            if from.parent.is_none() {
-                for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(key_expr, is_admin, child));
-                }
-                return matches;
+    pub fn get_matches(tables: &Tables, key_expr: &keyexpr) -> Vec<Weak<Resource>> {
+        fn recursive_push(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
+            if from.context.is_some() {
+                matches.push(Arc::downgrade(from));
             }
-            if key_expr.is_empty() {
-                if from.suffix == "/**" || from.suffix == "/" {
-                    if from.context.is_some()
-                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
-                    {
-                        matches.push(Arc::downgrade(from));
-                    }
-                    for child in from.childs.values() {
-                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
-                    }
-                }
-                return matches;
+            for child in from.childs.values() {
+                recursive_push(child, matches)
             }
-            let (chunk, rest) = Resource::fst_chunk(key_expr);
-            if key_expr::intersect(chunk, &from.suffix) {
-                if rest.is_empty() || rest == "/" || rest == "/**" {
-                    if from.context.is_some()
-                        && is_admin == from.expr().starts_with(key_expr::ADMIN_PREFIX)
-                    {
-                        matches.push(Arc::downgrade(from));
-                    }
-                } else if chunk == "/**" || from.suffix == "/**" {
-                    matches.append(&mut get_matches_from(rest, is_admin, from));
-                }
-                for child in from.childs.values() {
-                    matches.append(&mut get_matches_from(rest, is_admin, child));
-                    if chunk == "/**" || from.suffix == "/**" {
-                        matches.append(&mut get_matches_from(key_expr, is_admin, child));
-                    }
-                }
-            }
-            matches
         }
-        get_matches_from(
-            key_expr,
-            key_expr.starts_with(key_expr::ADMIN_PREFIX),
-            &tables.root_res,
-        )
+        fn get_matches_from(
+            key_expr: &keyexpr,
+            from: &Arc<Resource>,
+            matches: &mut Vec<Weak<Resource>>,
+        ) {
+            if from.parent.is_none() || from.suffix == "/" {
+                for child in from.childs.values() {
+                    get_matches_from(key_expr, child, matches);
+                }
+                return;
+            }
+            let suffix: &keyexpr = from
+                .suffix
+                .strip_prefix('/')
+                .unwrap_or(&from.suffix)
+                .try_into()
+                .unwrap();
+            let (chunk, rest) = Resource::fst_chunk(key_expr);
+            if chunk.intersects(suffix) {
+                match rest {
+                    None => {
+                        if chunk.as_bytes() == b"**" {
+                            recursive_push(from, matches)
+                        } else {
+                            if from.context.is_some() {
+                                matches.push(Arc::downgrade(from));
+                            }
+                            if suffix.as_bytes() == b"**" {
+                                for child in from.childs.values() {
+                                    get_matches_from(key_expr, child, matches)
+                                }
+                            }
+                            if let Some(child) =
+                                from.childs.get("/**").or_else(|| from.childs.get("**"))
+                            {
+                                if child.context.is_some() {
+                                    matches.push(Arc::downgrade(child))
+                                }
+                            }
+                        }
+                    }
+                    Some(rest) if rest.as_bytes() == b"**" => recursive_push(from, matches),
+                    Some(rest) => {
+                        let recheck_keyexpr_one_level_lower =
+                            chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                        for child in from.childs.values() {
+                            get_matches_from(rest, child, matches);
+                            if recheck_keyexpr_one_level_lower {
+                                get_matches_from(key_expr, child, matches)
+                            }
+                        }
+                        if recheck_keyexpr_one_level_lower {
+                            get_matches_from(rest, from, matches)
+                        }
+                    }
+                };
+            }
+        }
+        let mut matches = Vec::new();
+        get_matches_from(key_expr, &tables.root_res, &mut matches);
+        let mut i = 0;
+        while i < matches.len() {
+            let current = matches[i].as_ptr();
+            let mut j = i + 1;
+            while j < matches.len() {
+                if std::ptr::eq(current, matches[j].as_ptr()) {
+                    matches.swap_remove(j);
+                } else {
+                    j += 1
+                }
+            }
+            i += 1
+        }
+        matches
     }
 
     pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
         if res.context.is_some() {
-            let mut matches = Resource::get_matches(tables, &res.expr());
+            if let Ok(ke) = keyexpr::new(res.expr().as_str()) {
+                let mut matches = Resource::get_matches(tables, ke);
 
-            fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
-                for match_ in matches {
-                    if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
-                        return true;
+                fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
+                    for match_ in matches {
+                        if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
+                            return true;
+                        }
+                    }
+                    false
+                }
+
+                for match_ in &mut matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if !matches_contain(&match_.context().matches, res) {
+                        get_mut_unchecked(&mut match_)
+                            .context_mut()
+                            .matches
+                            .push(Arc::downgrade(res));
                     }
                 }
-                false
+                get_mut_unchecked(res).context_mut().matches = matches;
             }
-
-            for match_ in &mut matches {
-                let mut match_ = match_.upgrade().unwrap();
-                if !matches_contain(&match_.context().matches, res) {
-                    get_mut_unchecked(&mut match_)
-                        .context_mut()
-                        .matches
-                        .push(Arc::downgrade(res));
-                }
-            }
-            get_mut_unchecked(res).context_mut().matches = matches;
         } else {
             log::error!("Call match_resource() on context less res {}", res.expr());
         }
@@ -528,7 +578,7 @@ pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     expr_id: ZInt,
-    expr: &KeyExpr,
+    expr: &WireExpr,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
@@ -549,7 +599,7 @@ pub fn register_expr(
                             local_expr_id: None,
                             remote_expr_id: Some(expr_id),
                             subs: None,
-                            qabl: HashMap::new(),
+                            qabl: None,
                             last_values: HashMap::new(),
                         })
                     })
@@ -584,27 +634,8 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
     }
 }
 
-// pub(super) struct QueryableRef {
-//     pub(super) res: Arc<Resource>,
-//     pub(super) kind: ZInt,
-// }
-
-// impl PartialEq for QueryableRef {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.res.eq(&other.res)
-//     }
-// }
-
-// impl Eq for QueryableRef {}
-
-// impl Hash for QueryableRef {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.res.hash(state)
-//     }
-// }
-
 #[inline]
-pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [PeerId]) -> &'a PeerId {
+pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {
     if routers.len() == 1 {
         &routers[0]
     } else {

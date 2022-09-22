@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha3::{Digest, Sha3_256};
 use zenoh_core::Result as ZResult;
 

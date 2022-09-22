@@ -48,7 +48,10 @@ transport_quic = ["zenoh-transport/transport_quic"]
 transport_tcp = ["zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
-transport_unixsock-stream = ["zenoh-link/transport_unixsock-stream"]
+transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
+transport_serial = ["zenoh-transport/transport_serial"]
+transport_ws = ["zenoh-transport/transport_ws"]
+unstable = []
 default = [
     "auth_pubkey",
     "auth_usrpwd",
@@ -77,57 +80,35 @@ zenoh-transport = { path = "../io/zenoh-transport/" }
 
 zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
 
-async-global-executor = "2.0.2"
-async-std = { version = "=1.11.0", default-features = false, features = [
+async-global-executor = "2.3.0"
+async-std = { version = "=1.12.0", default-features = false, features = [
     "attributes",
 ] }
-async-trait = "0.1.42"
+async-trait = "0.1.57"
 base64 = "0.13.0"
-env_logger = "0.9.0"
-event-listener = "2.5.1"
-futures = "0.3.12"
-flume = "0.10.5"
-git-version = "0.3.4"
-hex = "0.4.2"
+env_logger = "0.9.1"
+event-listener = "2.5.3"
+form_urlencoded = "1.1.0"
+futures = "0.3.24"
+flume = "0.10.14"
+git-version = "0.3.5"
+hex = "0.4.3"
 lazy_static = "1.4.0"
-log = "0.4"
-ordered-float = "2.5.1"
-petgraph = "0.6.0"
-rand = "0.8.3"
-regex = "1"
-serde_json = "1.0"
+log = "0.4.17"
+ordered-float = "3.1.0"
+petgraph = "0.6.2"
+rand = "0.8.5"
+regex = "1.6.0"
+serde_json = "1.0.85"
 serde = "1.0.123"
 socket2 = "0.4.0"
 stop-token = "0.7.0"
-uhlc = "0.4.0"
-uuid = { version = "0.8.2", features = ["v4"] }
+uhlc = "0.5.0"
+uuid = { version = "1.1.2", features = ["v4"] }
 vec_map = "0.8.2"
-
-[dev-dependencies]
-criterion = "0.3.4"
 
 [build-dependencies]
 rustc_version = "0.4.0"
 
 [lib]
 name = "zenoh"
-
-[[bench]]
-name = "codec_bench"
-harness = false
-
-[[bench]]
-name = "rwbuf_bench"
-harness = false
-
-[[bench]]
-name = "data_creation"
-harness = false
-
-[[bench]]
-name = "frame_codec"
-harness = false
-
-[[bench]]
-name = "tables_bench"
-harness = false

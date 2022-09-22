@@ -16,4 +16,36 @@
 
 /// Helpers to manipulate and compare key expressions.
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_protocol_core::key_expr;
+pub use zenoh_protocol_core::wire_expr;
+
+pub(crate) struct ClosureResolve<F>(pub F);
+impl<Output, F: FnOnce() -> Output> zenoh_core::Resolvable for ClosureResolve<F> {
+    type Output = Output;
+}
+impl<Output: Send, F: FnOnce() -> Output> zenoh_core::SyncResolve for ClosureResolve<F> {
+    //noinspection ALL
+    fn res_sync(self) -> Self::Output {
+        self.0()
+    }
+}
+impl<Output: Send, F: FnOnce() -> Output> zenoh_core::AsyncResolve for ClosureResolve<F> {
+    type Future = futures::future::Ready<Output>;
+    fn res_async(self) -> Self::Future {
+        futures::future::ready(self.0())
+    }
+}
+pub(crate) struct FutureResolve<F>(pub F);
+impl<F: std::future::Future> zenoh_core::Resolvable for FutureResolve<F> {
+    type Output = F::Output;
+}
+impl<F: std::future::Future + Send> zenoh_core::SyncResolve for FutureResolve<F> {
+    fn res_sync(self) -> Self::Output {
+        async_global_executor::block_on(self.0)
+    }
+}
+impl<F: std::future::Future + Send> zenoh_core::AsyncResolve for FutureResolve<F> {
+    type Future = F;
+    fn res_async(self) -> Self::Future {
+        self.0
+    }
+}

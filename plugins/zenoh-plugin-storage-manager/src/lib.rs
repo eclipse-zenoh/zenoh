@@ -11,10 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 #![recursion_limit = "512"]
 
-use async_std::channel::Sender;
 use async_std::task;
+use flume::Sender;
 use libloading::Library;
 use memory_backend::create_memory_backend;
 use std::collections::HashMap;
@@ -24,21 +30,28 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
-use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
+use zenoh::runtime::Runtime;
 use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::Result as ZResult;
+use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock};
 use zenoh_util::LibLoader;
 
 mod backends_mgt;
 use backends_mgt::*;
 mod memory_backend;
+mod replica;
 mod storages_mgt;
+
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
+lazy_static::lazy_static! {
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
+}
 
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
@@ -51,6 +64,7 @@ impl Plugin for StoragesPlugin {
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         std::mem::drop(env_logger::try_init());
+        log::debug!("StorageManager plugin {}", LONG_VERSION.as_str());
         let config =
             { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
@@ -71,8 +85,8 @@ struct StorageRuntimeInner {
 impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
-            "/@/router/{}/status/plugins/{}",
-            &self.runtime.pid, &self.name
+            "@/router/{}/status/plugins/{}",
+            &self.runtime.zid, &self.name
         )
     }
     fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
@@ -91,7 +105,7 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let session = Arc::new(zenoh::init(runtime.clone()).wait().unwrap());
+        let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
         let mut new_self = StorageRuntimeInner {
             name,
             runtime,
@@ -133,7 +147,7 @@ impl StorageRuntimeInner {
             async_std::task::block_on(futures::future::join_all(
                 storages
                     .into_iter()
-                    .map(|(_, s)| async move { s.send(StorageMessage::Stop).await }),
+                    .map(|(_, s)| async move { s.send(StorageMessage::Stop) }),
             ));
         }
         std::mem::drop(self.volumes.remove(&volume.name));
@@ -228,8 +242,13 @@ impl StorageRuntimeInner {
         let volume = &config.volume_id;
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
-                log::debug!("Closing storage {} from volume {}", config.name, volume);
-                let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
+                log::debug!(
+                    "Closing storage {} from volume {}",
+                    config.name,
+                    config.volume_id
+                );
+                // let _ = async_std::task::block_on(storage.send(StorageMessage::Stop));
+                let _ = storage.send(StorageMessage::Stop); // TODO: was previosuly spawning a task. do we need that?
             }
         }
     }
@@ -286,7 +305,6 @@ impl From<StorageRuntimeInner> for StorageRuntime {
     }
 }
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 impl RunningPluginTrait for StorageRuntime {
     fn config_checker(&self) -> ValidationFunction {
         let name = { zlock!(self.0).name.clone() };
@@ -310,13 +328,15 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<zenoh::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        let key_selector = selector.key_selector.as_str();
         with_extended_string(&mut key, &["/version"], |key| {
-            if zenoh::utils::key_expr::intersect(key, key_selector) {
-                responses.push(zenoh::plugins::Response {
-                    key: key.clone(),
-                    value: GIT_VERSION.into(),
-                })
+            if keyexpr::new(key.as_str())
+                .unwrap()
+                .intersects(&selector.key_expr)
+            {
+                responses.push(zenoh::plugins::Response::new(
+                    key.clone(),
+                    GIT_VERSION.into(),
+                ))
             }
         });
         let guard = self.0.lock().unwrap();
@@ -324,18 +344,24 @@ impl RunningPluginTrait for StorageRuntime {
             for (volume_id, volume) in &guard.volumes {
                 with_extended_string(key, &[volume_id], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
-                        if zenoh::utils::key_expr::intersect(key, key_selector) {
-                            responses.push(zenoh::plugins::Response {
-                                key: key.clone(),
-                                value: volume.lib_path.clone().into(),
-                            })
+                        if keyexpr::new(key.as_str())
+                            .unwrap()
+                            .intersects(&selector.key_expr)
+                        {
+                            responses.push(zenoh::plugins::Response::new(
+                                key.clone(),
+                                volume.lib_path.clone().into(),
+                            ))
                         }
                     });
-                    if zenoh::utils::key_expr::intersect(key, key_selector) {
-                        responses.push(zenoh::plugins::Response {
-                            key: key.clone(),
-                            value: volume.backend.get_admin_status(),
-                        })
+                    if keyexpr::new(key.as_str())
+                        .unwrap()
+                        .intersects(&selector.key_expr)
+                    {
+                        responses.push(zenoh::plugins::Response::new(
+                            key.clone(),
+                            volume.backend.get_admin_status(),
+                        ))
                     }
                 });
             }
@@ -344,16 +370,16 @@ impl RunningPluginTrait for StorageRuntime {
             for storages in guard.storages.values() {
                 for (storage, handle) in storages {
                     with_extended_string(key, &[storage], |key| {
-                        if zenoh::utils::key_expr::intersect(key, key_selector) {
+                        if keyexpr::new(key.as_str())
+                            .unwrap()
+                            .intersects(&selector.key_expr)
+                        {
                             if let Ok(value) = task::block_on(async {
                                 let (tx, rx) = async_std::channel::bounded(1);
-                                let _ = handle.send(StorageMessage::GetStatus(tx)).await;
+                                let _ = handle.send(StorageMessage::GetStatus(tx));
                                 rx.recv().await
                             }) {
-                                responses.push(zenoh::plugins::Response {
-                                    key: key.clone(),
-                                    value,
-                                })
+                                responses.push(zenoh::plugins::Response::new(key.clone(), value))
                             }
                         }
                     })

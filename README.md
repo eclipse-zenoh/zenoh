@@ -47,23 +47,23 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - in another shell run: `./target/release/examples/z_put`
     - the subscriber should receive the publication.
 
- - **get/eval**
-    - run: `./target/release/examples/z_eval`
+ - **get/queryable**
+    - run: `./target/release/examples/z_queryable`
     - in another shell run: `./target/release/examples/z_get`
-    - the eval should display the log in its listener, and the get should receive the eval result.
+    - the queryable should display the log in its listener, and the get should receive the queryable result.
 
 **Routed tests:**
 
  - **put/store/get**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell run: `./target/release/examples/z_put`
     - then run `./target/release/examples/z_get`
     - the get should receive the stored publication.
 
  - **REST API using `curl` tool**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell, do a publication via the REST API:  
       `curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test`
     - get it back via the REST API:  
@@ -71,7 +71,7 @@ To access the v0.5 version of the code and matching README, please go to the [0.
 
   - **router admin space via the REST API**
     - run the zenoh router with a memory storage:  
-      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"/demo/example/**",volume:"memory"}'`
+      `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell, get info of the zenoh router via the zenoh admin space:  
       `curl http://localhost:8000/@/router/local`
     - get the volumes of the router (only memory by default):  
@@ -79,18 +79,18 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
      `curl 'http://localhost:8000/@/router/local/**/storages/*'`
     - add another memory storage on `/demo/mystore/**`:  
-      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"/demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
+      `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
 
-See other examples of zenoh usage in [zenoh/examples/zenoh](https://github.com/eclipse-zenoh/zenoh/tree/master/zenoh/examples/zenoh)
+See other examples of zenoh usage in [examples/](examples)
 
 -------------------------------
 ## zenoh router command line arguments
 `zenohd` accepts the following arguments:
 
-  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
   * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
   * `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions. 
     Repeat this option to open several listeners. By default, `tcp/0.0.0.0:7447` is used. The following endpoints are currently supported:
@@ -132,7 +132,7 @@ Note that the REST plugin is added to the configuration by the default value of 
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
 
 **[Storages plugin](https://zenoh.io/docs/manual/plugin-storages/)** (managing [backends and storages](https://zenoh.io/docs/manual/backends/))
-This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [EXAMPLE_CONFIG.json5](https://github.com/eclipse-zenoh/zenoh/tree/master/EXAMPLE_CONFIG.json5) for info on how to configure them.
+This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) for info on how to configure them.
 
 -------------------------------
 ## Troubleshooting

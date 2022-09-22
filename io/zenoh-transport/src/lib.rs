@@ -11,6 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 mod common;
 mod manager;
 mod multicast;
@@ -26,7 +32,7 @@ pub use unicast::*;
 use zenoh_core::Result as ZResult;
 use zenoh_link::Link;
 use zenoh_protocol as protocol;
-use zenoh_protocol::core::{PeerId, WhatAmI};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::proto::ZenohMessage;
 
 /*************************************/
@@ -95,7 +101,7 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 #[derive(Clone)]
 pub struct TransportPeer {
-    pub pid: PeerId,
+    pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
     pub is_shm: bool,

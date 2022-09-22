@@ -20,14 +20,14 @@ use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
 use zenoh_cfg_properties::config::*;
-use zenoh_config::EndPoint;
+use zenoh_config::{EndPoint, ModeDependent};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
-use zenoh_protocol_core::{whatami::WhatAmIMatcher, PeerId, WhatAmI};
+use zenoh_protocol_core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = 65536;
@@ -65,7 +65,7 @@ impl Runtime {
                     .scouting()
                     .multicast()
                     .address()
-                    .unwrap_or_else(|| "224.0.0.224:7447".parse().unwrap()),
+                    .unwrap_or_else(|| "224.0.0.224:7446".parse().unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -92,7 +92,7 @@ impl Runtime {
                         if sockets.is_empty() {
                             bail!("Unable to bind UDP port to any multicast interface!")
                         } else {
-                            self.connect_first(&sockets, WhatAmI::Router, &addr, timeout)
+                            self.connect_first(&sockets, WhatAmI::Router.into(), &addr, timeout)
                                 .await
                         }
                     }
@@ -115,7 +115,7 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, peers_autoconnect, addr, ifaces, delay) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
@@ -130,9 +130,17 @@ impl Runtime {
                 guard
                     .scouting()
                     .multicast()
-                    .autoconnect()
-                    .map(|m| m.matches(WhatAmI::Peer))
+                    .listen()
+                    .peer()
+                    .cloned()
                     .unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
+                    .autoconnect()
+                    .peer()
+                    .cloned()
+                    .unwrap_or_else(|| WhatAmIMatcher::try_from(131).unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -158,39 +166,14 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(&ifaces);
-            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
-            if !ifaces.is_empty() {
-                let sockets: Vec<UdpSocket> = ifaces
-                    .into_iter()
-                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-                    .collect();
-                if !sockets.is_empty() {
-                    let this = self.clone();
-                    self.spawn(async move {
-                        async_std::prelude::FutureExt::race(
-                            this.responder(&mcast_socket, &sockets),
-                            this.connect_all(
-                                &sockets,
-                                if peers_autoconnect {
-                                    WhatAmI::Peer | WhatAmI::Router
-                                } else {
-                                    WhatAmI::Router.into()
-                                },
-                                &addr,
-                            ),
-                        )
-                        .await;
-                    });
-                }
-            }
+            self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
         async_std::task::sleep(delay).await;
         Ok(())
     }
 
     async fn start_router(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, routers_autoconnect_multicast, addr, ifaces) = {
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
             let guard = self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
@@ -205,9 +188,17 @@ impl Runtime {
                 guard
                     .scouting()
                     .multicast()
+                    .listen()
+                    .peer()
+                    .cloned()
+                    .unwrap_or(true),
+                guard
+                    .scouting()
+                    .multicast()
                     .autoconnect()
-                    .map(|m| m.matches(WhatAmI::Router))
-                    .unwrap_or(false),
+                    .peer()
+                    .cloned()
+                    .unwrap_or_else(|| WhatAmIMatcher::try_from(128).unwrap()),
                 guard
                     .scouting()
                     .multicast()
@@ -232,32 +223,52 @@ impl Runtime {
         }
 
         if scouting {
-            let ifaces = Runtime::get_interfaces(&ifaces);
-            let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
-            if !ifaces.is_empty() {
-                let sockets: Vec<UdpSocket> = ifaces
-                    .into_iter()
-                    .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
-                    .collect();
-                if !sockets.is_empty() {
-                    let this = self.clone();
-                    if routers_autoconnect_multicast {
-                        self.spawn(async move {
+            self.start_scout(listen, autoconnect, addr, ifaces).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn start_scout(
+        &self,
+        listen: bool,
+        autoconnect: WhatAmIMatcher,
+        addr: SocketAddr,
+        ifaces: String,
+    ) -> ZResult<()> {
+        let ifaces = Runtime::get_interfaces(&ifaces);
+        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces).await?;
+        if !ifaces.is_empty() {
+            let sockets: Vec<UdpSocket> = ifaces
+                .into_iter()
+                .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
+                .collect();
+            if !sockets.is_empty() {
+                let this = self.clone();
+                match (listen, autoconnect.is_empty()) {
+                    (true, false) => {
+                        async_std::task::spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
-                                this.connect_all(&sockets, WhatAmI::Router, &addr),
+                                this.connect_all(&sockets, autoconnect, &addr),
                             )
                             .await;
                         });
-                    } else {
+                    }
+                    (true, true) => {
                         async_std::task::spawn(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
+                    (false, false) => {
+                        async_std::task::spawn(async move {
+                            this.connect_all(&sockets, autoconnect, &addr).await
+                        });
+                    }
+                    _ => {}
                 }
             }
         }
-
         Ok(())
     }
 
@@ -322,7 +333,9 @@ impl Runtime {
                 }
             }
         }
-        for locator in self.manager().get_locators() {
+        let mut locators = self.locators.write().unwrap();
+        *locators = self.manager().get_locators();
+        for locator in &*locators {
             log::info!("zenohd can be reached on {}", locator);
         }
         Ok(())
@@ -468,24 +481,29 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            if let Ok(transport) = self.manager().open_transport(endpoint).await {
-                log::debug!("Successfully connected to configured peer {}", peer);
-                if let Some(orch_transport) = transport
-                    .get_callback()
-                    .unwrap()
-                    .unwrap()
-                    .as_any()
-                    .downcast_ref::<super::RuntimeSession>()
-                {
-                    *zwrite!(orch_transport.endpoint) = Some(peer);
+            match self.manager().open_transport(endpoint).await {
+                Ok(transport) => {
+                    log::debug!("Successfully connected to configured peer {}", peer);
+                    if let Some(orch_transport) = transport
+                        .get_callback()
+                        .unwrap()
+                        .unwrap()
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        *zwrite!(orch_transport.endpoint) = Some(peer);
+                    }
+                    break;
                 }
-                break;
+                Err(e) => {
+                    log::debug!(
+                        "Unable to connect to configured peer {}! {}. Retry in {} ms.",
+                        peer,
+                        e,
+                        delay
+                    );
+                }
             }
-            log::debug!(
-                "Unable to connect to configured peer {}. Retry in {} ms.",
-                peer,
-                delay
-            );
             async_std::task::sleep(Duration::from_millis(delay)).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
             if delay > CONNECTION_RETRY_MAX_PERIOD {
@@ -498,9 +516,9 @@ impl Runtime {
         sockets: &[UdpSocket],
         matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
-        mut f: F,
+        f: F,
     ) where
-        F: FnMut(Hello) -> Fut + std::marker::Send + Copy,
+        F: Fn(Hello) -> Fut + std::marker::Send + std::marker::Sync + Clone,
         Fut: Future<Output = Loop> + std::marker::Send,
         Self: Sized,
     {
@@ -540,6 +558,7 @@ impl Runtime {
             }
         };
         let recvs = futures::future::select_all(sockets.iter().map(move |socket| {
+            let f = f.clone();
             async move {
                 let mut buf = vec![0; RCV_BUF_SIZE];
                 loop {
@@ -580,44 +599,44 @@ impl Runtime {
             let endpoint = locator.clone().into();
             match self.manager().open_transport(endpoint).await {
                 Ok(transport) => return Some(transport),
-                Err(e) => log::trace!("Failed to connect to {} : {}", locator, e),
+                Err(e) => log::trace!("Unable to connect to {}! {}", locator, e),
             }
         }
         None
     }
 
-    pub async fn connect_peer(&self, pid: &PeerId, locators: &[Locator]) {
-        if pid != &self.manager().pid() {
-            if self.manager().get_transport(pid).is_none() {
-                log::debug!("Try to connect to peer {} via any of {:?}", pid, locators);
+    pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
+        if zid != &self.manager().zid() {
+            if self.manager().get_transport(zid).is_none() {
+                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
                 if let Some(transport) = self.connect(locators).await {
                     log::debug!(
                         "Successfully connected to newly scouted peer {} via {:?}",
-                        pid,
+                        zid,
                         transport
                     );
                 } else {
                     log::warn!(
                         "Unable to connect any locator of scouted peer {} : {:?}",
-                        pid,
+                        zid,
                         locators
                     );
                 }
             } else {
-                log::trace!("Already connected scouted peer : {}", pid);
+                log::trace!("Already connected scouted peer : {}", zid);
             }
         }
     }
 
-    async fn connect_first<I: Into<WhatAmIMatcher>>(
+    async fn connect_first(
         &self,
         sockets: &[UdpSocket],
-        what: I,
+        what: WhatAmIMatcher,
         addr: &SocketAddr,
         timeout: std::time::Duration,
     ) -> ZResult<()> {
         let scout = async {
-            Runtime::scout(sockets, what.into(), addr, move |hello| async move {
+            Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if let Some(locators) = &hello.locators {
                     if let Some(transport) = self.connect(locators).await {
@@ -644,23 +663,23 @@ impl Runtime {
         async_std::prelude::FutureExt::race(scout, timeout).await
     }
 
-    async fn connect_all<I: Into<WhatAmIMatcher>>(
+    async fn connect_all(
         &self,
         ucast_sockets: &[UdpSocket],
-        what: I,
+        what: WhatAmIMatcher,
         addr: &SocketAddr,
     ) {
-        Runtime::scout(ucast_sockets, what.into(), addr, move |hello| async move {
-            match &hello.pid {
-                Some(pid) => {
+        Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
+            match &hello.zid {
+                Some(zid) => {
                     if let Some(locators) = &hello.locators {
-                        self.connect_peer(pid, locators).await
+                        self.connect_peer(zid, locators).await
                     } else {
                         log::warn!("Received Hello with no locators : {:?}", hello);
                     }
                 }
                 None => {
-                    log::warn!("Received Hello with no pid : {:?}", hello);
+                    log::warn!("Received Hello with no zid : {:?}", hello);
                 }
             }
             Loop::Continue
@@ -709,21 +728,21 @@ impl Runtime {
             if let Some(msg) = zbuf.reader().read_transport_message() {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let TransportBody::Scout(Scout {
-                    what, pid_request, ..
+                    what, zid_request, ..
                 }) = &msg.body
                 {
                     let what = what.or(Some(WhatAmI::Router.into())).unwrap();
                     if what.matches(self.whatami) {
                         let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-                        let pid = if *pid_request {
-                            Some(self.manager().pid())
+                        let zid = if *zid_request {
+                            Some(self.manager().zid())
                         } else {
                             None
                         };
                         let mut hello = TransportMessage::make_hello(
-                            pid,
+                            zid,
                             Some(self.whatami),
-                            Some(self.manager().get_locators().clone()),
+                            Some(self.get_locators()),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();

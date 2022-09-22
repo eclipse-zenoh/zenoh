@@ -40,7 +40,7 @@ pub(super) async fn send(
 
     // Build the fields for the InitAck message
     let whatami = manager.config.whatami;
-    let apid = manager.config.pid;
+    let azid = manager.config.zid;
     let sn_resolution = if agreed_sn_resolution == input.sn_resolution {
         None
     } else {
@@ -50,7 +50,7 @@ pub(super) async fn send(
     // Create the cookie
     let cookie = Cookie {
         whatami: input.whatami,
-        pid: input.pid,
+        zid: input.zid,
         sn_resolution: agreed_sn_resolution,
         is_qos: input.is_qos,
         nonce: zasynclock!(manager.prng).gen_range(0..agreed_sn_resolution),
@@ -78,7 +78,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
         // Add state in the cookie if avaiable
         if let Some(cke) = cke.take() {
@@ -87,7 +87,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: cke,
                 })
-                .map_err(|e| (e, None))?;
+                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
         }
     }
     let attachment = attachment_from_properties(&ps_attachment).ok();
@@ -103,7 +103,7 @@ pub(super) async fn send(
     let cookie: ZSlice = encrypted.into();
     let mut message = TransportMessage::make_init_ack(
         whatami,
-        apid,
+        azid,
         sn_resolution,
         input.is_qos,
         cookie,
@@ -114,7 +114,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&mut message)
         .await
-        .map_err(|e| (e, None))?;
+        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 
     let output = Output { cookie_hash };
     Ok(output)

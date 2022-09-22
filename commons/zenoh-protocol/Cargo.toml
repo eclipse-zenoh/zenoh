@@ -38,9 +38,31 @@ zenoh-core = { path = "../zenoh-core/" }
 zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 zenoh-buffers = { path = "../zenoh-buffers/" }
 
-log = "0.4"
-uhlc = "0.4.0"
+log = "0.4.17"
+uhlc = "0.5.1"
 
 [dev-dependencies]
-rand = "0.8.3"
-uuid = { version = "0.8.2", features = ["v4"] }
+rand = "0.8.5"
+uuid = { version = "1.1.2", features = ["v4"] }
+criterion = "0.4.0"
+
+
+[[bench]]
+name = "codec_bench"
+harness = false
+
+[[bench]]
+name = "rwbuf_bench"
+harness = false
+
+[[bench]]
+name = "data_creation"
+harness = false
+
+[[bench]]
+name = "frame_codec"
+harness = false
+
+[[bench]]
+name = "tables_bench"
+harness = false

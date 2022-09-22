@@ -44,20 +44,21 @@ zenoh-cfg-properties = { path = "../zenoh-cfg-properties", optional = true }
 zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
 zenoh-sync = { path = "../zenoh-sync/", optional = true }
 zenoh-collections = { path = "../zenoh-collections/", optional = true }
-async-std = { version = "=1.11.0" }
-clap = "2.33.3"
-futures = "0.3.12"
-hex = "0.4.2"
+async-std = { version = "=1.12.0" }
+clap = "3.2.22"
+futures = "0.3.24"
+hex = "0.4.3"
 home = "0.5.3"
 humantime = "2.1.0"
 lazy_static = "1.4.0"
-libloading = "0.7.0"
-log = "0.4.14"
-shellexpand = "2.1.0"
+libloading = "0.7.3"
+log = "0.4.17"
+shellexpand = "2.1.2"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.85"
-pnet = "0.28.0"
+libc = "0.2.133"
+pnet = "0.31.0"
+pnet_datalink = "0.31.0"

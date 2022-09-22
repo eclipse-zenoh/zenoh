@@ -12,14 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Properties to pass to `zenoh::open()` and `zenoh::scout()` functions as configuration
-//! and associated constants.
-mod defaults;
+//! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+pub mod defaults;
+use serde::{
+    de::{self, MapAccess, Visitor},
+    Deserialize, Serialize,
+};
 use serde_json::Value;
 use std::{
     any::Any,
     collections::HashMap,
+    fmt,
     io::Read,
+    marker::PhantomData,
     net::SocketAddr,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
@@ -28,7 +33,11 @@ use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
-pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI};
+use zenoh_protocol_core::{
+    key_expr::OwnedKeyExpr,
+    whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
+};
+pub use zenoh_protocol_core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
@@ -99,7 +108,7 @@ validated_struct::validator! {
     #[serde(deny_unknown_fields)]
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
-        id: Option<String>,
+        id: ZenohId,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
@@ -112,48 +121,71 @@ validated_struct::validator! {
         ListenConfig {
             pub endpoints: Vec<EndPoint>,
         },
-        /// Actions taken by the Zenoh instance upon startup.
-        pub startup: #[derive(Default)]
-        JoinConfig {
-            /// A list of key-expressions to subscribe to upon startup.
-            subscribe: Vec<String>,
-            /// A list of key-expressions to declare publications onto upon startup.
-            declare_publications: Vec<String>,
-        },
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
-            /// How multicast should behave.
+            /// The multicast scouting configuration.
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
                 enabled: Option<bool>,
-                /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7447` by default if none is provided.
+                /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7446` by default if none is provided.
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
                 interface: Option<String>,
-                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through multicast scouting.
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
                 #[serde(deserialize_with = "treat_error_as_none")]
-                autoconnect: Option<whatami::WhatAmIMatcher>,
+                autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
+                /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+                listen: Option<ModeDependentValue<bool>>,
             },
+            /// The gossip scouting configuration.
             pub gossip: #[derive(Default)]
             GossipConf {
-                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip scouting.
+                /// Whether gossip scouting is enabled or not.
+                enabled: Option<bool>,
+                /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 #[serde(deserialize_with = "treat_error_as_none")]
-                autoconnect: Option<whatami::WhatAmIMatcher>,
+                autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
             },
-            /// If set to `false`, peers will never automatically establish sessions between each-other.
-            peers_autoconnect: Option<bool>,
         },
-        /// Whether data messages should be timestamped. If left empty, `zenohd` will set it according to the presence of the `--no-timestamp` argument.
-        add_timestamp: Option<bool>,
-        /// Whether local writes/queries should reach local subscribers/queryables.
-        local_routing: Option<bool>,
+
+        /// Configuration of data messages timestamps management.
+        pub timestamping: #[derive(Default)]
+        TimestampingConf {
+            /// Whether data messages should be timestamped if not already.
+            enabled: Option<ModeDependentValue<bool>>,
+            /// Whether data messages with timestamps in the future should be dropped or not.
+            /// If set to false (default), messages with timestamps in the future are retimestamped.
+            /// Timestamps are ignored if timestamping is disabled.
+            drop_future_timestamp: Option<bool>,
+        },
+
         /// The default timeout to apply to queries in milliseconds.
         queries_default_timeout: Option<ZInt>,
+
+        /// The routing strategy to use and it's configuration.
+        pub routing: #[derive(Default)]
+        RoutingConf {
+            /// The routing strategy to use in peers and it's configuration.
+            pub peer: #[derive(Default)]
+            PeerRoutingConf {
+                /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
+                mode: Option<String>,
+            },
+        },
+
+        /// The declarations aggregation strategy.
+        pub aggregation: #[derive(Default)]
+        AggregationConf {
+            /// A list of key-expressions for which all included subscribers will be aggregated into.
+            subscribers: Vec<OwnedKeyExpr>,
+            /// A list of key-expressions for which all included publishers will be aggregated into.
+            publishers: Vec<OwnedKeyExpr>,
+        },
         pub transport: #[derive(Default)]
         TransportConf {
             pub unicast: TransportUnicastConf {
@@ -204,7 +236,7 @@ validated_struct::validator! {
                             data: usize,
                             data_low: usize,
                             background: usize,
-                        },
+                        } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
                         backoff: Option<ZInt>
@@ -292,7 +324,7 @@ fn config_deser() {
         scouting: {
           multicast: {
             enabled: false,
-            autoconnect: "router"
+            autoconnect: "peer|router"
           }
         }
       }"#,
@@ -301,6 +333,42 @@ fn config_deser() {
     )
     .unwrap();
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
+    assert_eq!(
+        config.scouting().multicast().autoconnect().router(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().peer(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().client(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        scouting: {
+          multicast: {
+            enabled: false,
+            autoconnect: {router: "", peer: "peer|router"}
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(*config.scouting().multicast().enabled(), Some(false));
+    assert_eq!(
+        config.scouting().multicast().autoconnect().router(),
+        Some(&WhatAmIMatcher::try_from(128).unwrap())
+    );
+    assert_eq!(
+        config.scouting().multicast().autoconnect().peer(),
+        Some(&WhatAmIMatcher::try_from(131).unwrap())
+    );
+    assert_eq!(config.scouting().multicast().autoconnect().client(), None);
     let config = Config::from_deserializer(
         &mut json5::Deserializer::from_str(
             r#"{transport: { auth: { usrpwd: { user: null, password: null, dictionary_file: "file" }}}}"#,
@@ -325,7 +393,7 @@ fn config_deser() {
         .unwrap(),
     )
     .unwrap_err());
-    dbg!(Config::from_file("../../EXAMPLE_CONFIG.json5").unwrap());
+    dbg!(Config::from_file("../../DEFAULT_CONFIG.json5").unwrap());
 }
 
 impl Config {
@@ -345,6 +413,10 @@ impl Config {
 
     pub fn remove<K: AsRef<str>>(&mut self, key: K) -> ZResult<()> {
         let key = key.as_ref();
+        self._remove(key)
+    }
+
+    fn _remove(&mut self, key: &str) -> ZResult<()> {
         let key = key.strip_prefix('/').unwrap_or(key);
         if !key.starts_with("plugins/") {
             bail!(
@@ -378,6 +450,9 @@ impl std::error::Error for ConfigOpenErr {}
 impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
+        Self::_from_file(path)
+    }
+    fn _from_file(path: &Path) -> ZResult<Config> {
         match std::fs::File::open(path) {
             Ok(mut f) => {
                 let mut content = String::new();
@@ -452,6 +527,10 @@ impl<T> Clone for Notifier<T> {
 impl Notifier<Config> {
     pub fn remove<K: AsRef<str>>(&self, key: K) -> ZResult<()> {
         let key = key.as_ref();
+        self._remove(key)
+    }
+
+    fn _remove(&self, key: &str) -> ZResult<()> {
         {
             let mut guard = zlock!(self.inner.inner);
             guard.remove(key)?;
@@ -477,7 +556,11 @@ impl<T: ValidatedMap> Notifier<T> {
         rx
     }
     pub fn notify<K: AsRef<str>>(&self, key: K) {
-        let key: Arc<str> = Arc::from(key.as_ref());
+        let key = key.as_ref();
+        self._notify(key);
+    }
+    fn _notify(&self, key: &str) {
+        let key: Arc<str> = Arc::from(key);
         let mut marked = Vec::new();
         let mut guard = zlock!(self.inner.subscribers);
         for (i, sub) in guard.iter().enumerate() {
@@ -501,6 +584,7 @@ impl<T: ValidatedMap> Notifier<T> {
         unsafe { std::mem::transmute(self) }
     }
 }
+
 impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
     type Accessor = GetGuard<'a, T>;
 }
@@ -561,6 +645,31 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     fn as_ref(&self) -> &dyn Any {
         self.deref()
     }
+}
+
+fn queue_size_validator(q: &QueueSizeConf) -> bool {
+    fn check(size: &usize) -> bool {
+        (QueueSizeConf::MIN..=QueueSizeConf::MAX).contains(size)
+    }
+
+    let QueueSizeConf {
+        control,
+        real_time,
+        interactive_low,
+        interactive_high,
+        data_high,
+        data,
+        data_low,
+        background,
+    } = q;
+    check(control)
+        && check(real_time)
+        && check(interactive_low)
+        && check(interactive_high)
+        && check(data_high)
+        && check(data)
+        && check(data_low)
+        && check(background)
 }
 
 fn user_conf_validator(u: &UserConf) -> bool {
@@ -897,5 +1006,172 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             }
         }
         Ok(serde_json::to_string(value).unwrap())
+    }
+}
+
+pub trait ModeDependent<T> {
+    fn router(&self) -> Option<&T>;
+    fn peer(&self) -> Option<&T>;
+    fn client(&self) -> Option<&T>;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModeValues<T> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    router: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peer: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client: Option<T>,
+}
+
+impl<T> ModeDependent<T> for ModeValues<T> {
+    fn router(&self) -> Option<&T> {
+        self.router.as_ref()
+    }
+
+    fn peer(&self) -> Option<&T> {
+        self.peer.as_ref()
+    }
+
+    fn client(&self) -> Option<&T> {
+        self.client.as_ref()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ModeDependentValue<T> {
+    Unique(T),
+    Dependent(ModeValues<T>),
+}
+
+impl<T> ModeDependent<T> for ModeDependentValue<T> {
+    fn router(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.router(),
+        }
+    }
+
+    fn peer(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.peer(),
+        }
+    }
+
+    fn client(&self) -> Option<&T> {
+        match self {
+            Self::Unique(v) => Some(v),
+            Self::Dependent(o) => o.client(),
+        }
+    }
+}
+
+impl<T> serde::Serialize for ModeDependentValue<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ModeDependentValue::Unique(value) => value.serialize(serializer),
+            ModeDependentValue::Dependent(options) => options.serialize(serializer),
+        }
+    }
+}
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<bool> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<bool>> {
+            type Value = ModeDependentValue<bool>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("bool or mode dependent bool")
+            }
+
+            fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ModeDependentValue::Unique(value))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<WhatAmIMatcher>> {
+            type Value = ModeDependentValue<WhatAmIMatcher>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("WhatAmIMatcher or mode dependent WhatAmIMatcher")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                WhatAmIMatcherVisitor {}
+                    .visit_str(value)
+                    .map(ModeDependentValue::Unique)
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
+impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
+    fn router(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.router(),
+            None => None,
+        }
+    }
+
+    fn peer(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.peer(),
+            None => None,
+        }
+    }
+
+    fn client(&self) -> Option<&T> {
+        match self {
+            Some(ModeDependentValue::Unique(v)) => Some(v),
+            Some(ModeDependentValue::Dependent(o)) => o.client(),
+            None => None,
+        }
     }
 }

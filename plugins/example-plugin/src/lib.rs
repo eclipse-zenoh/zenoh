@@ -13,19 +13,19 @@
 //
 #![recursion_limit = "256"]
 
-use futures::prelude::*;
 use futures::select;
 use log::{debug, info};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::*;
-use zenoh::queryable::STORAGE;
-use zenoh::utils::key_expr;
+use zenoh::runtime::Runtime;
+use zenoh_core::AsyncResolve;
+use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -36,7 +36,7 @@ zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
 // A default selector for this example of storage plugin (in case the config doesn't set it)
 // This plugin will subscribe to this selector and declare a queryable with this selector
-const DEFAULT_SELECTOR: &str = "/demo/example/**";
+const DEFAULT_SELECTOR: &str = "demo/example/**";
 
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
@@ -50,24 +50,22 @@ impl Plugin for ExamplePlugin {
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
-
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
-        let selector;
-        match self_cfg.get("storage-selector") {
-            Some(serde_json::Value::String(s)) => {
-                selector = s.clone();
-            }
-            None => selector = DEFAULT_SELECTOR.into(),
+        let selector: KeyExpr = match self_cfg.get("storage-selector") {
+            Some(serde_json::Value::String(s)) => KeyExpr::try_from(s)?,
+            None => KeyExpr::try_from(DEFAULT_SELECTOR).unwrap(),
             _ => {
                 bail!("storage-selector is a mandatory option for {}", name)
             }
         }
+        .clone()
+        .into_owned();
         std::mem::drop(config);
 
         // a flag to end the plugin's loop when the plugin is removed from the config
         let flag = Arc::new(AtomicBool::new(true));
         // spawn the task running the plugin's loop
-        async_std::task::spawn(run(runtime.clone(), selector.into(), flag.clone()));
+        async_std::task::spawn(run(runtime.clone(), selector, flag.clone()));
         // return a RunningPlugin to zenohd
         Ok(Box::new(RunningPlugin(Arc::new(Mutex::new(
             RunningPluginInner {
@@ -106,11 +104,16 @@ impl RunningPluginTrait for RunningPlugin {
                         let mut guard = zlock!(&plugin.0);
                         guard.flag.store(false, Relaxed);
                         guard.flag = Arc::new(AtomicBool::new(true));
-                        async_std::task::spawn(run(
-                            guard.runtime.clone(),
-                            selector.clone().into(),
-                            guard.flag.clone(),
-                        ));
+                        match KeyExpr::try_from(selector.clone()) {
+                            Err(e) => log::error!("{}", e),
+                            Ok(selector) => {
+                                async_std::task::spawn(run(
+                                    guard.runtime.clone(),
+                                    selector,
+                                    guard.flag.clone(),
+                                ));
+                            }
+                        }
                         return Ok(None);
                     }
                     (_, None) => {
@@ -148,7 +151,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::Session::init(runtime, true, vec![], vec![]).await;
+    let session = zenoh::init(runtime).res_async().await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
@@ -157,32 +160,35 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
-    let mut sub = session.subscribe(&selector).await.unwrap();
+    let sub = session
+        .declare_subscriber(&selector)
+        .res_async()
+        .await
+        .unwrap();
 
     // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
-    let mut queryable = session.queryable(&selector).kind(STORAGE).await.unwrap();
+    let queryable = session.declare_queryable(&selector).res_sync().unwrap();
 
     // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
         select!(
-            // on sample received by the Subscriber
-            sample = sub.next() => {
-                let sample = sample.unwrap();
-                info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
-                stored.insert(sample.key_expr.to_string(), sample);
-            },
-
-            // on query received by the Queryable
-            query = queryable.next() => {
-                let query = query.unwrap();
-                info!("Handling query '{}'", query.selector());
-                for (key_expr, sample) in stored.iter() {
-                    if key_expr::intersect(query.selector().key_selector.as_str(), key_expr) {
-                        query.reply_async(sample.clone()).await;
+        // on sample received by the Subscriber
+                    sample = sub.recv_async() => {
+                        let sample = sample.unwrap();
+                        info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
+                        stored.insert(sample.key_expr.to_string(), sample);
+                    },
+        // on query received by the Queryable
+                    query = queryable.recv_async() => {
+                        let query = query.unwrap();
+                        info!("Handling query '{}'", query.selector());
+                        for (key_expr, sample) in stored.iter() {
+                            if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                                query.reply(Ok(sample.clone())).res_async().await.unwrap();
+                            }
+                        }
                     }
-                }
-            }
-        );
+                );
     }
 }

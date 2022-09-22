@@ -1,4 +1,17 @@
-use super::{NonZeroZInt, ZInt};
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+use super::ZInt;
 use zenoh_core::{bail, zresult::ZError};
 
 #[repr(u8)]
@@ -103,34 +116,39 @@ impl From<WhatAmI> for ZInt {
     }
 }
 
-use std::ops::BitOr;
+use std::{num::NonZeroU8, ops::BitOr};
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WhatAmIMatcher(pub NonZeroZInt);
+pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
-    pub fn try_from<T: std::convert::TryInto<ZInt>>(i: T) -> Option<Self> {
+    pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
         let i = i.try_into().ok()?;
-        if 0 < i && i < 8 {
-            Some(WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(i) }))
+        if 127 < i && i < 136 {
+            Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
         } else {
             None
         }
     }
 
+    pub fn is_empty(self) -> bool {
+        self.0.get() == 128
+    }
+
     pub fn matches(self, w: WhatAmI) -> bool {
-        (self.0.get() & w as ZInt) != 0
+        (self.0.get() & w as u8) != 0
     }
 
     pub fn to_str(self) -> &'static str {
         match self.0.get() {
-            2 => "peer",
-            4 => "client",
-            1 => "router",
-            3 => "router|peer",
-            6 => "client|peer",
-            5 => "client|router",
-            7 => "client|router|peer",
+            128 => "",
+            129 => "router",
+            130 => "peer",
+            132 => "client",
+            131 => "router|peer",
+            134 => "client|peer",
+            133 => "client|router",
+            135 => "client|router|peer",
             _ => "invalid_matcher",
         }
     }
@@ -140,12 +158,13 @@ impl std::str::FromStr for WhatAmIMatcher {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut inner = 0;
+        let mut inner = 128;
         for s in s.split('|') {
             match s.trim() {
-                "router" => inner |= WhatAmI::Router as ZInt,
-                "client" => inner |= WhatAmI::Client as ZInt,
-                "peer" => inner |= WhatAmI::Peer as ZInt,
+                "" => {}
+                "router" => inner |= WhatAmI::Router as u8,
+                "client" => inner |= WhatAmI::Client as u8,
+                "peer" => inner |= WhatAmI::Peer as u8,
                 _ => return Err(()),
             }
         }
@@ -161,7 +180,7 @@ impl serde::Serialize for WhatAmIMatcher {
         serializer.serialize_str(self.to_str())
     }
 }
-struct WhatAmIMatcherVisitor;
+pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -215,7 +234,7 @@ impl From<WhatAmIMatcher> for ZInt {
 
 impl<T> BitOr<T> for WhatAmIMatcher
 where
-    NonZeroZInt: BitOr<T, Output = NonZeroZInt>,
+    NonZeroU8: BitOr<T, Output = NonZeroU8>,
 {
     type Output = Self;
     fn bitor(self, rhs: T) -> Self::Output {
@@ -226,7 +245,7 @@ where
 impl BitOr<WhatAmI> for WhatAmIMatcher {
     type Output = Self;
     fn bitor(self, rhs: WhatAmI) -> Self::Output {
-        self | rhs as ZInt
+        self | rhs as u8
     }
 }
 
@@ -240,12 +259,12 @@ impl BitOr for WhatAmIMatcher {
 impl BitOr for WhatAmI {
     type Output = WhatAmIMatcher;
     fn bitor(self, rhs: Self) -> Self::Output {
-        WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(self as ZInt | rhs as ZInt) })
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8) })
     }
 }
 
 impl From<WhatAmI> for WhatAmIMatcher {
     fn from(w: WhatAmI) -> Self {
-        WhatAmIMatcher(unsafe { NonZeroZInt::new_unchecked(w as ZInt) })
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8) })
     }
 }

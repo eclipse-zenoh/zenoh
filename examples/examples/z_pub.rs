@@ -15,6 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::AsyncResolve;
 
 #[async_std::main]
 async fn main() {
@@ -24,20 +25,16 @@ async fn main() {
     let (config, key_expr, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
-    print!("Declaring key expression '{}'...", key_expr);
-    let expr_id = session.declare_expr(&key_expr).await.unwrap();
-    println!(" => ExprId {}", expr_id);
-
-    println!("Declaring publication on '{}'...", expr_id);
-    session.declare_publication(expr_id).await.unwrap();
+    println!("Declaring a publisher for '{}'...", key_expr);
+    let publisher = session.declare_publisher(&key_expr).res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
-        println!("Putting Data ('{}': '{}')...", expr_id, buf);
-        session.put(expr_id, buf).await.unwrap();
+        println!("Putting Data ('{}': '{}')...", &key_expr, buf);
+        publisher.put(buf).res().await.unwrap();
     }
 }
 
@@ -55,7 +52,7 @@ fn parse_args() -> (Config, String, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish onto.'")
-                .default_value("/demo/example/zenoh-rs-pub"),
+                .default_value("demo/example/zenoh-rs-pub"),
         )
         .arg(
             Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")

@@ -14,7 +14,8 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
-use std::fmt::Write;
+use std::convert::TryFrom;
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +24,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -179,21 +180,21 @@ async fn open_transport(
     TransportUnicast,
 ) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::new(priority));
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
-        .pid(router_id)
+        .zid(router_id)
         .build(router_handler.clone())
         .unwrap();
 
     // Create the client transport manager
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .build(Arc::new(SHClient::default()))
         .unwrap();
 
@@ -230,7 +231,7 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        write!(ee, "{} ", e).unwrap();
+        let _ = write!(ee, "{} ", e);
     }
     println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
@@ -264,7 +265,7 @@ async fn single_run(
     msg_size: usize,
 ) {
     // Create the message to send
-    let key = "/test".into();
+    let key = "test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;

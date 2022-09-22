@@ -17,11 +17,11 @@ version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
@@ -35,20 +35,22 @@ readme = "README.md"
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-zenoh = { path = "../zenoh/" }
+zenoh = { path = "../zenoh/" , default-features = false }
+zenoh-ext = { path = "../zenoh-ext/" }
 
-async-std = { version = "=1.11.0", default-features = false, features = [
-	"attributes",
+async-std = { version = "=1.12.0", default-features = false, features = [
+  "attributes",
 ] }
-clap = "2.33.3"
-env_logger = "0.9.0"
-futures = "0.3.12"
-git-version = "0.3.4"
+clap = "3.2.22"
+env_logger = "0.9.1"
+flume = "0.10.14"
+futures = "0.3.24"
+git-version = "0.3.5"
 json5 = "0.4.1"
-log = "0.4"
+log = "0.4.17"
 
 [dev-dependencies]
-rand = "0.8.3"
+rand = "0.8.5"
 
 [build-dependencies]
 rustc_version = "0.4.0"
@@ -62,10 +64,10 @@ license-file = ["../LICENSE", "0"]
 depends = "$auto"
 maintainer-scripts = "zenoh/.deb"
 assets = [
-	# binary
-	["target/release/zenohd", "/usr/bin/", "755"],
-	# service
-	[".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
+  # binary
+  ["target/release/zenohd", "/usr/bin/", "755"],
+  # service
+  [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]
 
 
@@ -107,8 +109,8 @@ name = "z_pull"
 path = "examples/z_pull.rs"
 
 [[example]]
-name = "z_eval"
-path = "examples/z_eval.rs"
+name = "z_queryable"
+path = "examples/z_queryable.rs"
 
 [[example]]
 name = "z_storage"

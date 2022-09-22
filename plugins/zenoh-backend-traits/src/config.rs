@@ -1,7 +1,21 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use derive_more::{AsMut, AsRef};
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
-use zenoh::Result as ZResult;
+use std::time::Duration;
+use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
 use zenoh_core::{bail, zerror, Error};
 
 #[derive(Debug, Clone, AsMut, AsRef)]
@@ -28,14 +42,42 @@ pub struct VolumeConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageConfig {
     pub name: String,
-    pub key_expr: String,
-    pub strip_prefix: String,
+    pub key_expr: OwnedKeyExpr,
+    pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
+    // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
+    pub replica_config: Option<ReplicaConfig>,
     // #[as_ref]
     // #[as_mut]
     // pub rest: Map<String, Value>,
 }
+// Note: All parameters should be same for replicas, else will result on huge overhead
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplicaConfig {
+    pub publication_interval: Duration,
+    pub propagation_delay: Duration,
+    pub delta: Duration,
+}
+
+impl Default for ReplicaConfig {
+    fn default() -> Self {
+        Self {
+            // Publication interval indicates the frequency of digest publications
+            // This will determine the time upto which replicas might be diverged
+            // This can be different for each replica if not used to compute hot and warm
+            publication_interval: Duration::from_secs(5),
+            // This indicates the uncertainity due to the network
+            // The messages might still be in transit in the network
+            propagation_delay: Duration::from_millis(200),
+            // This is the chunk that you would like your data to be divide into in time.
+            // Higher the frequency of updates, lower the delta should be chosen
+            // To be efficient, delta should be the time containing no more than 100,000 samples
+            delta: Duration::from_millis(1000),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigDiff {
     DeleteVolume(VolumeConfig),
@@ -246,12 +288,9 @@ impl VolumeConfig {
 impl StorageConfig {
     pub fn to_json_value(&self) -> Value {
         let mut result = serde_json::Map::new();
-        result.insert("key_expr".into(), Value::String(self.key_expr.clone()));
-        if !self.strip_prefix.is_empty() {
-            result.insert(
-                "strip_prefix".into(),
-                Value::String(self.strip_prefix.clone()),
-            );
+        result.insert("key_expr".into(), Value::String(self.key_expr.to_string()));
+        if let Some(s) = &self.strip_prefix {
+            result.insert("strip_prefix".into(), Value::String(s.to_string()));
         }
         result.insert(
             "volume".into(),
@@ -274,16 +313,43 @@ impl StorageConfig {
                 plugin_name,
             )
         })?;
-        let key_expr = if let Some(Value::String(s)) = config.get("key_expr") {
-            s.clone()
-        } else {
-            bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` field",
+        let key_expr = match config.get("key_expr").and_then(|x| x.as_str()) {
+            Some(s) => match keyexpr::new(s) {
+                Ok(ke) => ke.to_owned(),
+                Err(e) => bail!("key_expr='{}' is not a valid key-expression: {}", s, e),
+            },
+            None => {
+                bail!("elements of the `storages` field of `{}`'s configuration must be objects with at least a `key_expr` string-typed field",
             plugin_name,)
+            }
         };
-        let strip_prefix = match config.get("strip_prefix") {
-            Some(Value::String(s)) => s.clone(),
-            None => String::new(),
-            _ => bail!("Invalid type for field `strip_prefix` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
+        let strip_prefix: Option<OwnedKeyExpr> = match config.get("strip_prefix") {
+            Some(Value::String(s)) => {
+                if !key_expr.starts_with(s) {
+                    bail!(
+                        r#"The specified "strip_prefix={}" is not a prefix of "key_expr={}""#,
+                        s,
+                        key_expr
+                    )
+                }
+                match keyexpr::new(s.as_str()) {
+                    Ok(ke) => {
+                        if ke.is_wild() {
+                            bail!(
+                                r#"The specified "strip_prefix={}" contains wildcard characters (it shouldn't)"#,
+                                ke
+                            )
+                        }
+                        Some(ke.to_owned())
+                    }
+                    Err(e) => bail!("strip_prefix='{}' is not a valid key-expression: {}", s, e),
+                }
+            }
+            None => None,
+            _ => bail!(
+                "Invalid type for field `strip_prefix` of storage `{}`. Only strings are accepted.",
+                storage_name
+            ),
         };
         let (volume_id, volume_cfg) = match config.get("volume") {
             Some(Value::String(volume_id)) => (volume_id.clone(), Value::Null),
@@ -307,12 +373,54 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
+        let replica_config = match config.get("replica_config") {
+            Some(s) => {
+                let mut replica_config = ReplicaConfig::default();
+                // TODO: Discuss what to do in case of wrong configuration - exit or use default
+                match s.get("publication_interval") {
+                    Some(p) => {
+                        let p = p.to_string().parse::<u64>();
+                        if let Ok(p) = p {
+                            replica_config.publication_interval = Duration::from_secs(p)
+                        } else {
+                            bail!("Invalid type for field `publication_interval` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                match s.get("propagation_delay") {
+                    Some(p) => {
+                        let p = p.to_string().parse::<u64>();
+                        if let Ok(p) = p {
+                            replica_config.propagation_delay = Duration::from_millis(p)
+                        } else {
+                            bail!("Invalid type for field `propagation_delay` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                match s.get("delta") {
+                    Some(d) => {
+                        let d = d.to_string().parse::<u64>();
+                        if let Ok(d) = d {
+                            replica_config.delta = Duration::from_millis(d)
+                        } else {
+                            bail!("Invalid type for field `delta` in `replica_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        }
+                    }
+                    None => (),
+                };
+                Some(replica_config)
+            }
+            None => None,
+        };
         Ok(StorageConfig {
             name: storage_name.into(),
             key_expr,
             strip_prefix,
             volume_id,
             volume_cfg,
+            replica_config,
         })
     }
 }

@@ -14,7 +14,8 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use std::any::Any;
-use std::fmt::Write;
+use std::convert::TryFrom;
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +24,7 @@ use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::io::ZBuf;
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, PeerId, Priority, Reliability, WhatAmI};
+use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -156,15 +157,15 @@ async fn open_transport(
     TransportUnicast,
 ) {
     // Define client and router IDs
-    let client_id = PeerId::new(1, [0_u8; PeerId::MAX_SIZE]);
-    let router_id = PeerId::new(1, [1_u8; PeerId::MAX_SIZE]);
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
     let unicast = TransportManager::config_unicast().max_links(endpoints.len());
 
     let router_manager = TransportManager::builder()
-        .pid(router_id)
+        .zid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build(router_handler.clone())
@@ -174,7 +175,7 @@ async fn open_transport(
     let unicast = TransportManager::config_unicast().max_links(endpoints.len());
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
-        .pid(client_id)
+        .zid(client_id)
         .unicast(unicast)
         .build(Arc::new(SHClient::default()))
         .unwrap();
@@ -212,7 +213,7 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        write!(ee, "{} ", e).unwrap();
+        let _ = write!(ee, "{} ", e);
     }
     println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
@@ -252,7 +253,7 @@ async fn test_transport(
     msg_size: usize,
 ) {
     // Create the message to send
-    let key = "/test".into();
+    let key = "test".into();
     let payload = ZBuf::from(vec![0_u8; msg_size]);
     let data_info = None;
     let routing_context = None;
@@ -316,7 +317,7 @@ async fn run_single(endpoints: &[EndPoint], channel: Channel, msg_size: usize) {
         let c_stats = client_transport.get_stats().unwrap();
         println!("\tClient: {:?}", c_stats,);
         let r_stats = router_manager
-            .get_transport_unicast(&client_manager.config.pid)
+            .get_transport_unicast(&client_manager.config.zid)
             .unwrap()
             .get_stats()
             .unwrap();

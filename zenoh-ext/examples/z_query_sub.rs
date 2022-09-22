@@ -15,9 +15,10 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh_core::AsyncResolve;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -28,7 +29,7 @@ async fn main() {
     let (config, key_expr, query) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!(
         "Creating a QueryingSubscriber on {} with an initial query on {}",
@@ -37,12 +38,17 @@ async fn main() {
     );
     let mut subscriber = if let Some(selector) = query {
         session
-            .subscribe_with_query(key_expr)
+            .declare_querying_subscriber(key_expr)
             .query_selector(&selector)
+            .res()
             .await
             .unwrap()
     } else {
-        session.subscribe_with_query(key_expr).await.unwrap()
+        session
+            .declare_querying_subscriber(key_expr)
+            .res()
+            .await
+            .unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");
@@ -50,10 +56,10 @@ async fn main() {
     let mut input = [0_u8];
     loop {
         select!(
-            sample = subscriber.next() => {
+            sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::from_utf8_lossy(&sample.value.payload.contiguous()));
+                    sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -61,7 +67,7 @@ async fn main() {
                     b'q' => break,
                     b'd' => {
                         println!("Do query again");
-                        subscriber.query().await.unwrap()
+                        subscriber.query().res().await.unwrap()
                     }
                     0 => sleep(Duration::from_secs(1)).await,
                     _ => (),
@@ -85,7 +91,7 @@ fn parse_args() -> (Config, String, Option<String>) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
-                .default_value("/demo/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(
             Arg::from_usage("-q, --query=[SELECTOR] 'The selector to use for queries (by default it's same than 'selector' option)'"),
@@ -112,7 +118,7 @@ fn parse_args() -> (Config, String, Option<String>) {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints
