@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-plugin-rest"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -32,11 +33,9 @@ description = "The zenoh REST plugin"
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
 default = ["no_mangle"]
 
-
 [lib]
 name = "zplugin_rest"
 crate-type = ["cdylib", "rlib"]
-
 
 [dependencies]
 anyhow = "1.0.65"
@@ -48,16 +47,16 @@ flume = "0.10.14"
 futures = "0.3.24"
 git-version = "0.3.5"
 http-types = "2.12.0"
+lazy_static = "1.4.0"
 log = "0.4.17"
 serde = "1.0.144"
 serde_json = "1.0.85"
 tide = "0.16.0"
-lazy_static = "1.4.0"
-zenoh = { path = "../../zenoh/" , default-features = false }
-zenoh-util = { path = "../../commons/zenoh-util/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh = { path = "../../zenoh/", default-features = false }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
+zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [build-dependencies]
 rustc_version = "0.4.0"

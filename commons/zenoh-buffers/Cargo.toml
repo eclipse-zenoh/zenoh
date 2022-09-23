@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-buffers"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -33,8 +34,6 @@ description = "Internal crate for zenoh."
 shared-memory = ["shared_memory", "serde", "log", "bincode"]
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core/" }
-zenoh-collections = { path = "../zenoh-collections/" }
 
 async-std = { version = "=1.12.0", default-features = false }
 bincode = { version = "1.3.3", optional = true }
@@ -42,3 +41,5 @@ hex = "0.4.3"
 log = { version = "0.4.17", optional = true }
 serde = { version = "1.0.144", optional = true }
 shared_memory = { version = "=0.12.4", optional = true }
+zenoh-collections = { path = "../zenoh-collections/" }
+zenoh-core = { path = "../zenoh-core/" }

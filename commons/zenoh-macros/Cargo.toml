@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-macros"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -31,10 +32,10 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 proc-macro2 = "1.0.43"
-syn = { version = "1.0.100", features = ["full"] }
 quote = "1.0.21"
-unzip-n = "0.1.2"
 rustc_version = "0.4.0"
+syn = { version = "1.0.100", features = ["full"] }
+unzip-n = "0.1.2"
 
 [lib]
 proc-macro = true

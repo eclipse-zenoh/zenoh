@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-protocol"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -33,19 +34,18 @@ shared-memory = ["zenoh-buffers/shared-memory"]
 complete_n = ["zenoh-protocol-core/complete_n"]
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core/" }
-
-zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
-zenoh-buffers = { path = "../zenoh-buffers/" }
 
 log = "0.4.17"
 uhlc = "0.5.1"
+zenoh-buffers = { path = "../zenoh-buffers/" }
+zenoh-core = { path = "../zenoh-core/" }
+
+zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 
 [dev-dependencies]
+criterion = "0.4.0"
 rand = "0.8.5"
 uuid = { version = "1.1.2", features = ["v4"] }
-criterion = "0.4.0"
-
 
 [[bench]]
 name = "codec_bench"

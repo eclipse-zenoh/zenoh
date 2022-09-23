@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-link-udp"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -27,19 +28,18 @@ edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-core = { path = "../../../commons/zenoh-core/" }
-zenoh-util = { path = "../../../commons/zenoh-util/" }
-zenoh-collections = { path = "../../../commons/zenoh-collections/" }
-zenoh-sync = { path = "../../../commons/zenoh-sync/" }
-zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
-
-zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 
 async-std = { version = "=1.12.0", default-features = false }
 async-trait = "0.1.57"
 log = "0.4.17"
 socket2 = "0.4.7"
+zenoh-collections = { path = "../../../commons/zenoh-collections/" }
+zenoh-core = { path = "../../../commons/zenoh-core/" }
+
+zenoh-link-commons = { path = "../../zenoh-link-commons/" }
+zenoh-protocol-core = { path = "../../../commons/zenoh-protocol-core/" }
+zenoh-sync = { path = "../../../commons/zenoh-sync/" }
+zenoh-util = { path = "../../../commons/zenoh-util/" }

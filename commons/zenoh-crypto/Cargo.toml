@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-crypto"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -28,9 +29,9 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core/" }
 aes = "0.8.1"
 hmac = { version = "0.12.1", features = ["std"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 sha3 = "0.10.5"
+zenoh-core = { path = "../zenoh-core/" }

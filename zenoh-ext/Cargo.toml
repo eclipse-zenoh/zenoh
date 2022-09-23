@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.64"
 name = "zenoh-ext"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -41,14 +42,13 @@ futures = "0.3.24"
 log = "0.4.17"
 serde = "1.0.144"
 zenoh = { path = "../zenoh", default-features = false, features = ["unstable"] }
-zenoh-util = { path = "../commons/zenoh-util" }
-zenoh-sync = { path = "../commons/zenoh-sync" }
 zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-sync = { path = "../commons/zenoh-sync" }
+zenoh-util = { path = "../commons/zenoh-util" }
 
 [dev-dependencies]
 clap = "3.2.22"
 env_logger = "0.9.1"
-
 
 [[example]]
 name = "z_query_sub"
