@@ -15,7 +15,9 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
-use zenoh::config::{Config, EndPoint, ModeDependentValue, PluginLoad, ValidatedMap};
+use zenoh::config::{
+    Config, EndPoint, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap,
+};
 use zenoh::plugins::PluginsManager;
 use zenoh::runtime::{AdminSpace, Runtime};
 
@@ -66,7 +68,8 @@ r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, w
   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
 Examples:
 --cfg='startup/subscribe:["demo/**"]'
---cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#)
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#),
+clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_name("[r|w|rw|none]").help(r"Configure the read and/or write permissions on the admin space. Default is read only."),
                 ]
             );
         let args = app.get_matches();
@@ -234,6 +237,42 @@ fn config_from_args(args: &ArgMatches) -> Config {
             config.scouting.multicast.set_enabled(Some(true)).unwrap();
         }
         (false, false) => {}
+    };
+    if let Some(permissions) = args.value_of("adminspace-permissions") {
+        match permissions {
+            "r" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: true,
+                    write: false,
+                })
+                .unwrap(),
+            "w" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: false,
+                    write: true,
+                })
+                .unwrap(),
+            "rw" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: true,
+                    write: true,
+                })
+                .unwrap(),
+            "none" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: false,
+                    write: false,
+                })
+                .unwrap(),
+            s => panic!(
+                r#"Invalid option: --adminspace-permissions={} - Accepted values: "r", "w", "rw" or "none""#,
+                s
+            ),
+        };
     };
     for json in args.values_of("cfg").unwrap_or_default() {
         if let Some((key, value)) = json.split_once(':') {
