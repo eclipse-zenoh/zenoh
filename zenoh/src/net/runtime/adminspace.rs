@@ -309,9 +309,9 @@ impl Primitives for AdminSpace {
 
         {
             let conf = self.context.runtime.config.lock();
-            if !*conf.adminspace.changes() {
-                error!(
-                    "Received PUT on '{}' but adminspace doesn't accept configuration changes!",
+            if !conf.adminspace.permissions().write {
+                log::error!(
+                    "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
                     key_expr
                 );
                 return;
@@ -382,13 +382,29 @@ impl Primitives for AdminSpace {
             target,
             _consolidation
         );
+        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+
+        {
+            let conf = self.context.runtime.config.lock();
+            if !conf.adminspace.permissions().read {
+                log::error!(
+                    "Received GET on '{}' but adminspace.permissions.read=false in configuration",
+                    key_expr
+                );
+                // router is not re-entrant
+                task::spawn(async move {
+                    primitives.send_reply_final(qid);
+                });
+                return;
+            }
+        }
+
         let zid = self.zid;
         let plugin_key: OwnedKeyExpr = format!("@/router/{}/status/plugins/**", &zid)
             .try_into()
             .unwrap();
         let mut ask_plugins = false;
         let context = self.context.clone();
-        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
 
         let mut matching_handlers = vec![];
         match self.key_expr_to_string(key_expr) {
