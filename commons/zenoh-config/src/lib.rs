@@ -292,6 +292,12 @@ validated_struct::validator! {
                 },
             },
         },
+        /// Configuration of the admin space.
+        pub adminspace:
+        AdminSpaceConf {
+            /// Whether the admin space accepts config changes at runtime.
+            readonly: bool,
+        },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
         plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
@@ -300,6 +306,12 @@ validated_struct::validator! {
         ///
         /// Please refer to [`PluginsConfig`]'s documentation for further details.
         plugins: PluginsConfig,
+    }
+}
+
+impl Default for AdminSpaceConf {
+    fn default() -> Self {
+        AdminSpaceConf { readonly:true }
     }
 }
 

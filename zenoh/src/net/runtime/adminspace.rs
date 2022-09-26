@@ -307,6 +307,17 @@ impl Primitives for AdminSpace {
             data_info,
         );
 
+        {
+            let conf = self.context.runtime.config.lock();
+            if *conf.adminspace.readonly() {
+                error!(
+                    "Received PUT on '{}' but adminspace is read-only!",
+                    key_expr
+                );
+                return;
+            }
+        }
+
         if let Some(key) = key_expr
             .as_str()
             .strip_prefix(&format!("@/router/{}/config/", &self.context.zid_str))
