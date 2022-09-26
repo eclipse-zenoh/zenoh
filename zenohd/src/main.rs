@@ -66,7 +66,8 @@ r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, w
   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
 Examples:
 --cfg='startup/subscribe:["demo/**"]'
---cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#)
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#),
+clap::arg!(--"adminspace-changes" r"By default zenohd doesn't accept any runtime configuration changes via its admin space. This option allows such changes"),
                 ]
             );
         let args = app.get_matches();
@@ -234,6 +235,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
             config.scouting.multicast.set_enabled(Some(true)).unwrap();
         }
         (false, false) => {}
+    };
+    if args.is_present("adminspace-changes") {
+        config.adminspace.set_changes(true).unwrap();
     };
     for json in args.values_of("cfg").unwrap_or_default() {
         if let Some((key, value)) = json.split_once(':') {
