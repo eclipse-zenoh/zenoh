@@ -293,10 +293,11 @@ validated_struct::validator! {
             },
         },
         /// Configuration of the admin space.
-        pub adminspace:
+        pub adminspace: #[derive(Default)]
         AdminSpaceConf {
-            /// Whether the admin space accepts config changes at runtime.
-            readonly: bool,
+            /// Whether the admin space accepts config changes at runtime (false by default).
+            /// [unstable]: this configuration may change in the future.
+            changes: bool,
         },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
@@ -306,12 +307,6 @@ validated_struct::validator! {
         ///
         /// Please refer to [`PluginsConfig`]'s documentation for further details.
         plugins: PluginsConfig,
-    }
-}
-
-impl Default for AdminSpaceConf {
-    fn default() -> Self {
-        AdminSpaceConf { readonly:true }
     }
 }
 

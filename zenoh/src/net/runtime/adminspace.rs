@@ -309,9 +309,9 @@ impl Primitives for AdminSpace {
 
         {
             let conf = self.context.runtime.config.lock();
-            if *conf.adminspace.readonly() {
+            if !*conf.adminspace.changes() {
                 error!(
-                    "Received PUT on '{}' but adminspace is read-only!",
+                    "Received PUT on '{}' but adminspace doesn't accept configuration changes!",
                     key_expr
                 );
                 return;
