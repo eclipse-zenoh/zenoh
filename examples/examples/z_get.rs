@@ -15,8 +15,7 @@ use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::query::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -26,14 +25,13 @@ async fn main() {
     let (config, selector, target, timeout) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Sending Query '{}'...", selector);
     let replies = session
         .get(&selector)
         .target(target)
         .timeout(timeout)
-        .res()
         .await
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {

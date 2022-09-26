@@ -340,7 +340,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // Wait for the event to occur
+            // SyncResolve for the event to occur
             task::sleep(3 * interval).await;
 
             // Load and reset the counter value
@@ -359,7 +359,7 @@ mod tests {
             //
             handle.defuse();
 
-            // Wait for the event to occur
+            // SyncResolve for the event to occur
             task::sleep(3 * interval).await;
 
             // Load and reset the counter value
@@ -381,7 +381,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // Wait for the events to occur
+            // SyncResolve for the events to occur
             task::sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
@@ -392,7 +392,7 @@ mod tests {
             handle.clone().defuse();
             handle.defuse();
 
-            // Wait a bit more to verify that not more events have been fired
+            // SyncResolve a bit more to verify that not more events have been fired
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value
@@ -407,7 +407,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // Wait for the events to occur
+            // SyncResolve for the events to occur
             task::sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
@@ -417,7 +417,7 @@ mod tests {
             // Stop the timer
             timer.stop_async().await;
 
-            // Wait some time
+            // SyncResolve some time
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value
@@ -427,7 +427,7 @@ mod tests {
             // Restart the timer
             timer.start_async(false).await;
 
-            // Wait for the events to occur
+            // SyncResolve for the events to occur
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value

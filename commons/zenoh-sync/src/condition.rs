@@ -15,7 +15,7 @@ use async_std::sync::MutexGuard as AysncMutexGuard;
 use event_listener::{Event, EventListener};
 use std::sync::MutexGuard;
 
-pub type ConditionWaiter = EventListener;
+pub type ConditionSyncResolveer = EventListener;
 /// This is a Condition Variable similar to that provided by POSIX.
 /// As for POSIX condition variables, this assumes that a mutex is
 /// properly used to coordinate behaviour. In other terms there should
@@ -42,7 +42,7 @@ impl Condition {
         Condition::default()
     }
 
-    /// Waits for the condition to be notified
+    /// SyncResolves for the condition to be notified
     #[inline]
     pub async fn wait<T>(&self, guard: AysncMutexGuard<'_, T>) {
         let listener = self.event.listen();
@@ -51,7 +51,7 @@ impl Condition {
     }
 
     #[inline]
-    pub fn waiter<T>(&self, guard: MutexGuard<'_, T>) -> ConditionWaiter {
+    pub fn waiter<T>(&self, guard: MutexGuard<'_, T>) -> ConditionSyncResolveer {
         let listener = self.event.listen();
         drop(guard);
         listener

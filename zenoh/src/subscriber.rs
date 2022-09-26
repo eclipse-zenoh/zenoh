@@ -16,10 +16,10 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::sync::Locality;
 use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
-
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
+use std::future::{IntoFuture, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
@@ -62,11 +62,10 @@ impl fmt::Debug for SubscriberState {
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -96,12 +95,11 @@ pub(crate) struct SubscriberInner<'a> {
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
 ///     .pull_mode()
-///     .res()
 ///     .await
 ///     .unwrap();
 /// subscriber.pull();
@@ -117,16 +115,14 @@ impl<'a> PullSubscriberInner<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     /// use zenoh::subscriber::SubMode;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
     ///     .pull_mode()
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// subscriber.pull();
@@ -136,6 +132,7 @@ impl<'a> PullSubscriberInner<'a> {
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.inner.session.pull(&self.inner.state.key_expr)
     }
+
     /// Close a [`CallbackPullSubscriber`](CallbackPullSubscriber).
     ///
     /// `CallbackPullSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -144,19 +141,17 @@ impl<'a> PullSubscriberInner<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
     ///     .pull_mode()
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -165,7 +160,7 @@ impl<'a> PullSubscriberInner<'a> {
     }
 }
 
-impl<'l> SubscriberInner<'l> {
+impl<'a> SubscriberInner<'a> {
     /// Close a [`CallbackSubscriber`](CallbackSubscriber).
     ///
     /// `CallbackSubscribers` are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -174,30 +169,26 @@ impl<'l> SubscriberInner<'l> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(data_handler)
-    ///     .res()
     ///     .await
     ///     .unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'l {
+    pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         Undeclarable::undeclare(self, ())
     }
 }
 
-impl<'a> Undeclarable<()> for SubscriberInner<'a> {
-    type Output = ZResult<()>;
-    type Undeclaration = SubscriberUndeclaration<'a>;
-    fn undeclare(self, _: ()) -> Self::Undeclaration {
+impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
+    fn undeclare(self, _: ()) -> SubscriberUndeclaration<'a> {
         SubscriberUndeclaration { subscriber: self }
     }
 }
@@ -210,13 +201,12 @@ impl<'a> Undeclarable<()> for SubscriberInner<'a> {
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .res()
 ///     .await
 ///     .unwrap();
-/// subscriber.undeclare().res().await.unwrap();
+/// subscriber.undeclare().await.unwrap();
 /// # })
 /// ```
 pub struct SubscriberUndeclaration<'a> {
@@ -224,11 +214,11 @@ pub struct SubscriberUndeclaration<'a> {
 }
 
 impl Resolvable for SubscriberUndeclaration<'_> {
-    type Output = ZResult<()>;
+    type To = ZResult<()>;
 }
 
 impl SyncResolve for SubscriberUndeclaration<'_> {
-    fn res_sync(mut self) -> Self::Output {
+    fn res_sync(mut self) -> <Self as Resolvable>::To {
         self.subscriber.alive = false;
         self.subscriber
             .session
@@ -237,9 +227,19 @@ impl SyncResolve for SubscriberUndeclaration<'_> {
 }
 
 impl AsyncResolve for SubscriberUndeclaration<'_> {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl IntoFuture for SubscriberUndeclaration<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
     }
 }
 
@@ -281,12 +281,11 @@ impl From<PushMode> for SubMode {
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .best_effort()
 ///     .pull_mode()
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -308,14 +307,12 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -351,15 +348,13 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut n = 0;
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .callback_mut(move |_sample| { n += 1; })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -380,14 +375,12 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
@@ -492,24 +485,21 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     }
 }
 
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> Resolvable
-    for SubscriberBuilder<'a, '_, PushMode, Handler>
-{
-    type Output = ZResult<Subscriber<'a, Handler::Receiver>>;
-}
-
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> Resolvable
-    for SubscriberBuilder<'a, '_, PullMode, Handler>
-{
-    type Output = ZResult<PullSubscriber<'a, Handler::Receiver>>;
-}
-
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> SyncResolve
-    for SubscriberBuilder<'a, '_, PushMode, Handler>
+// Push mode
+impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
+    type To = ZResult<Subscriber<'a, Handler::Receiver>>;
+}
+
+impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
@@ -533,22 +523,47 @@ where
             })
     }
 }
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve
-    for SubscriberBuilder<'a, '_, PushMode, Handler>
+
+impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
     }
 }
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> SyncResolve
-    for SubscriberBuilder<'a, '_, PullMode, Handler>
+
+impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
+    }
+}
+
+// Pull mode
+impl<'a, Handler> Resolvable for SubscriberBuilder<'a, '_, PullMode, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
+}
+
+impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
@@ -574,14 +589,29 @@ where
             })
     }
 }
-impl<'a, Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve
-    for SubscriberBuilder<'a, '_, PullMode, Handler>
+
+impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl<'a, Handler> IntoFuture for SubscriberBuilder<'a, '_, PullMode, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
     }
 }
 
@@ -600,11 +630,10 @@ where
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
-///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
@@ -637,12 +666,11 @@ pub struct Subscriber<'a, Receiver> {
 /// use zenoh::prelude::*;
 /// use r#async::AsyncResolve;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
 ///     .with(flume::bounded(32))
 ///     .pull_mode()
-///     .res()
 ///     .await
 ///     .unwrap();
 /// subscriber.pull();
@@ -673,16 +701,14 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     /// use zenoh::subscriber::SubMode;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
     ///     .with(flume::bounded(32))
     ///     .pull_mode()
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// subscriber.pull();
@@ -692,6 +718,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
+
     /// Close a [`PullSubscriber`].
     ///
     /// Subscribers are automatically closed when dropped, but you may want to use this function to handle errors or
@@ -700,12 +727,11 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").pull_mode().res().await.unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").pull_mode().await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -728,23 +754,21 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
-    /// subscriber.undeclare().res().await.unwrap();
+    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
+    /// subscriber.undeclare().await.unwrap();
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
     }
 }
-impl<'a, T> Undeclarable<()> for Subscriber<'a, T> {
-    type Output = ZResult<()>;
-    type Undeclaration = SubscriberUndeclaration<'a>;
-    fn undeclare(self, _: ()) -> Self::Undeclaration {
+
+impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
+    fn undeclare(self, _: ()) -> SubscriberUndeclaration<'a> {
         Undeclarable::undeclare(self.subscriber, ())
     }
 }

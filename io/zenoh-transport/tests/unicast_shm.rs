@@ -239,10 +239,10 @@ mod tests {
             peer_shm02_transport.schedule(message.clone()).unwrap();
         }
 
-        // Wait a little bit
+        // SyncResolve a little bit
         task::sleep(SLEEP).await;
 
-        // Wait for the messages to arrive to the other side
+        // SyncResolve for the messages to arrive to the other side
         println!("\nTransport SHM [3b]");
         ztimeout!(async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
@@ -292,10 +292,10 @@ mod tests {
             peer_net01_transport.schedule(message.clone()).unwrap();
         }
 
-        // Wait a little bit
+        // SyncResolve a little bit
         task::sleep(SLEEP).await;
 
-        // Wait for the messages to arrive to the other side
+        // SyncResolve for the messages to arrive to the other side
         println!("\nTransport SHM [4b]");
         ztimeout!(async {
             while peer_net01_handler.get_count() != MSG_COUNT {
@@ -303,7 +303,7 @@ mod tests {
             }
         });
 
-        // Wait a little bit
+        // SyncResolve a little bit
         task::sleep(SLEEP).await;
 
         // Close the transports
@@ -323,7 +323,7 @@ mod tests {
         println!("Transport SHM [6a]");
         ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
 
-        // Wait a little bit
+        // SyncResolve a little bit
         ztimeout!(async {
             while !peer_shm01_manager.get_listeners().is_empty() {
                 task::sleep(SLEEP).await;
@@ -335,7 +335,7 @@ mod tests {
         ztimeout!(peer_shm01_manager.close());
         ztimeout!(peer_shm02_manager.close());
 
-        // Wait a little bit
+        // SyncResolve a little bit
         task::sleep(SLEEP).await;
     }
 

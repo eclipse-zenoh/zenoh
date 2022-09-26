@@ -396,7 +396,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
         let handle = task::spawn(async move {
-            // Wait for the accept loop to terminate
+            // SyncResolve for the accept loop to terminate
             let res = accept_task(quic_endpoint, acceptor, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
@@ -526,7 +526,7 @@ async fn accept_task(
     // The accept future
     log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
     while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
+        // SyncResolve for incoming connections
         let mut quic_conn = match accept(&mut acceptor).race(stop(signal.clone())).await {
             Ok(action) => match action {
                 Action::Accept(qc) => qc,

@@ -13,7 +13,6 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
 
 #[async_std::main]
 async fn main() {
@@ -23,12 +22,12 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).await.unwrap();
 
     println!("Deleting resources matching '{}'...", key_expr);
-    session.delete(&key_expr).res().await.unwrap();
+    session.delete(&key_expr).await.unwrap();
 
-    session.close().res().await.unwrap();
+    session.close().await.unwrap();
 }
 
 fn parse_args() -> (Config, String) {

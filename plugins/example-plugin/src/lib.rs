@@ -22,10 +22,8 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
-use zenoh_core::AsyncResolve;
-use zenoh_core::SyncResolve;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -151,7 +149,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::init(runtime).res_async().await.unwrap();
+    let session = zenoh::init(runtime).await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
@@ -160,15 +158,11 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
-    let sub = session
-        .declare_subscriber(&selector)
-        .res_async()
-        .await
-        .unwrap();
+    let sub = session.declare_subscriber(&selector).await.unwrap();
 
     // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
-    let queryable = session.declare_queryable(&selector).res_sync().unwrap();
+    let queryable = session.declare_queryable(&selector).await.unwrap();
 
     // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
@@ -185,7 +179,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
                         info!("Handling query '{}'", query.selector());
                         for (key_expr, sample) in stored.iter() {
                             if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
-                                query.reply(Ok(sample.clone())).res_async().await.unwrap();
+                                query.reply(Ok(sample.clone())).await.unwrap();
                             }
                         }
                     }

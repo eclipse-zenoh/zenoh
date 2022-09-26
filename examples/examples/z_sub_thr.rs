@@ -15,7 +15,7 @@ use clap::{App, Arg};
 use std::io::{stdin, Read};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::prelude::sync::SyncResolve;
+use zenoh::prelude::sync::*;
 
 struct Stats {
     round_count: usize,
@@ -73,7 +73,7 @@ fn main() {
 
     let (config, m, n) = parse_args();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(config).wait().unwrap();
 
     let key_expr = "test/thr";
 
@@ -86,7 +86,7 @@ fn main() {
                 std::process::exit(0)
             }
         })
-        .res()
+        .wait()
         .unwrap();
 
     for byte in stdin().bytes() {

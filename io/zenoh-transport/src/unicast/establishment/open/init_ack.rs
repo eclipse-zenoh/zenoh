@@ -44,7 +44,7 @@ pub(super) async fn recv(
     auth_link: &mut AuthenticatedPeerLink,
     _input: super::init_syn::Output,
 ) -> OResult<Output> {
-    // Wait to read an InitAck
+    // SyncResolve to read an InitAck
     let mut messages = link
         .read_transport_message()
         .await

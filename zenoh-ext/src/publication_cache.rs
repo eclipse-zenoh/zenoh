@@ -13,18 +13,17 @@
 //
 use async_std::channel::{bounded, Sender};
 use async_std::task;
-use futures::FutureExt;
-use futures::StreamExt;
-use futures::{select, Future};
+use futures::select;
+use futures::{FutureExt, StreamExt};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::pin::Pin;
+use std::future::{IntoFuture, Ready};
 use zenoh::prelude::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
-use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
@@ -85,17 +84,29 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
 }
 
 impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
-    type Output = ZResult<PublicationCache<'a>>;
+    type To = ZResult<PublicationCache<'a>>;
 }
-impl AsyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+
+impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        PublicationCache::new(self)
     }
 }
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> Self::Output {
-        PublicationCache::new(self)
+
+impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
     }
 }
 
@@ -138,14 +149,14 @@ impl<'a> PublicationCache<'a> {
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
-            .res_sync()?;
+            .wait()?;
 
         // declare the queryable that will answer to queries on cache
         let queryable = conf
             .session
             .declare_queryable(&queryable_key_expr)
             .allowed_origin(conf.queryable_origin)
-            .res_sync()?;
+            .wait()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();
@@ -193,7 +204,7 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_expr.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
-                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                        if let Err(e) = query.reply(Ok(sample.clone())).await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
                                     }
@@ -202,7 +213,7 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
-                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                            if let Err(e) = query.reply(Ok(sample.clone())).await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
                                         }
@@ -230,29 +241,16 @@ impl<'a> PublicationCache<'a> {
     /// Close this PublicationCache
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        struct PublicationCacheCloser<'a> {
-            p: PublicationCache<'a>,
-        }
-        impl Resolvable for PublicationCacheCloser<'_> {
-            type Output = ZResult<()>;
-        }
-        impl SyncResolve for PublicationCacheCloser<'_> {
-            fn res_sync(self) -> Self::Output {
-                drop(self);
-                Ok(())
-            }
-        }
-        impl<'a> AsyncResolve for PublicationCacheCloser<'a> {
-            type Future = Pin<Box<dyn Future<Output = ZResult<()>> + Send + 'a>>;
-            fn res_async(self) -> Self::Future {
-                Box::pin(async move {
-                    self.p._queryable.undeclare().res_async().await?;
-                    self.p._local_sub.undeclare().res_async().await?;
-                    drop(self.p._stoptx);
-                    Ok(())
-                })
-            }
-        }
-        PublicationCacheCloser { p: self }
+        ResolveFuture(async move {
+            let PublicationCache {
+                _queryable,
+                _local_sub,
+                _stoptx,
+            } = self;
+            _queryable.undeclare().res_async().await?;
+            _local_sub.undeclare().res_async().await?;
+            drop(_stoptx);
+            Ok(())
+        })
     }
 }

@@ -360,7 +360,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
         let handle = task::spawn(async move {
-            // Wait for the accept loop to terminate
+            // SyncResolve for the accept loop to terminate
             let res = accept_read_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
@@ -503,7 +503,7 @@ async fn accept_read_task(
     let pool = RecyclingObjectPool::new(1, || vec![0_u8; UDP_MAX_MTU as usize].into_boxed_slice());
     while active.load(Ordering::Acquire) {
         let mut buff = pool.take().await;
-        // Wait for incoming connections
+        // SyncResolve for incoming connections
         let (n, dst_addr) = match receive(socket.clone(), &mut buff)
             .race(stop(signal.clone()))
             .await

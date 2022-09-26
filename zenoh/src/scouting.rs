@@ -16,6 +16,7 @@ use crate::net::runtime::{orchestrator::Loop, Runtime};
 
 use async_std::net::UdpSocket;
 use futures::StreamExt;
+use std::future::{IntoFuture, Ready};
 use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
@@ -36,7 +37,7 @@ pub use zenoh_protocol::proto::Hello;
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).res().await.unwrap();
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
@@ -61,7 +62,6 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback(|hello| { println!("{}", hello); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -97,7 +97,6 @@ impl ScoutBuilder<DefaultHandler> {
     /// let mut n = 0;
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback_mut(move |_hello| { n += 1; })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -123,7 +122,6 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(hello) = receiver.recv_async().await {
@@ -151,31 +149,45 @@ impl ScoutBuilder<DefaultHandler> {
 
 impl<Handler> Resolvable for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
-{
-    type Output = ZResult<Scout<Handler::Receiver>>;
-}
-
-impl<Handler> AsyncResolve for ScoutBuilder<Handler>
-where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
-
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
+    type To = ZResult<Scout<Handler::Receiver>>;
 }
 
 impl<Handler> SyncResolve for ScoutBuilder<Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
+    }
+}
+
+impl<Handler> AsyncResolve for ScoutBuilder<Handler>
+where
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
+    Handler::Receiver: Send,
+{
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl<Handler> IntoFuture for ScoutBuilder<Handler>
+where
+    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
+    Handler::Receiver: Send,
+{
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
     }
 }
 
@@ -189,7 +201,6 @@ where
 ///
 /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
 ///     .callback(|hello| { println!("{}", hello); })
-///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -210,7 +221,6 @@ impl ScoutInner {
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
     ///     .callback(|hello| { println!("{}", hello); })
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// scout.stop();
@@ -237,7 +247,6 @@ impl fmt::Debug for ScoutInner {
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
 ///     .with(flume::bounded(32))
-///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
@@ -271,7 +280,6 @@ impl<Receiver> Scout<Receiver> {
     ///
     /// let scout = zenoh::scout(WhatAmI::Router, config::default())
     ///     .with(flume::bounded(32))
-    ///     .res()
     ///     .await
     ///     .unwrap();
     /// let _router = scout.recv_async().await;

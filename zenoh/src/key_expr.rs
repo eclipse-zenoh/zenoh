@@ -16,6 +16,7 @@
 
 use std::{
     convert::{TryFrom, TryInto},
+    future::{IntoFuture, Ready},
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
@@ -528,10 +529,8 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
-    type Output = ZResult<()>;
-    type Undeclaration = KeyExprUndeclaration<'a>;
-    fn undeclare(self, session: &'a Session) -> Self::Undeclaration {
+impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
+    fn undeclare(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
         KeyExprUndeclaration {
             session,
             expr: self,
@@ -546,26 +545,22 @@ impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
 /// # async_std::task::block_on(async {
 /// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
-/// session.undeclare(key_expr).res().await.unwrap();
+/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
+/// session.undeclare(key_expr).await.unwrap();
 /// # })
 /// ```
 pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
     expr: KeyExpr<'a>,
 }
+
 impl Resolvable for KeyExprUndeclaration<'_> {
-    type Output = ZResult<()>;
+    type To = ZResult<()>;
 }
-impl AsyncResolve for KeyExprUndeclaration<'_> {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
-}
+
 impl SyncResolve for KeyExprUndeclaration<'_> {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let KeyExprUndeclaration { session, expr } = self;
         let expr_id = match &expr.0 {
             KeyExprInner::Wire {
@@ -603,6 +598,23 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         primitives.forget_resource(expr_id);
 
         Ok(())
+    }
+}
+
+impl AsyncResolve for KeyExprUndeclaration<'_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+impl IntoFuture for KeyExprUndeclaration<'_> {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = <Self as AsyncResolve>::Future;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.res_async()
     }
 }
 

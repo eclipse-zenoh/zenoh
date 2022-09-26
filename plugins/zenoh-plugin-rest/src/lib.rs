@@ -22,13 +22,13 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
 use zenoh_cfg_properties::Properties;
-use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
+use zenoh_core::{zerror, Result as ZResult};
 
 mod config;
 pub use config::Config;
@@ -287,13 +287,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                         async_std::task::current().id()
                     );
                     let sender = &sender;
-                    let sub = req
-                        .state()
-                        .0
-                        .declare_subscriber(&key_expr)
-                        .res_async()
-                        .await
-                        .unwrap();
+                    let sub = req.state().0.declare_subscriber(&key_expr).await.unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         match sender
@@ -308,7 +302,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -318,7 +312,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
                                     "SSE timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -357,7 +351,6 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             .0
             .get(&selector)
             .consolidation(consolidation)
-            .res_async()
             .await
         {
             Ok(receiver) => {
@@ -410,7 +403,6 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 .put(&key_expr, bytes)
                 .encoding(encoding)
                 .kind(method_to_kind(req.method()))
-                .res_async()
                 .await
             {
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
@@ -436,7 +428,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     let _ = env_logger::try_init();
 
     let zid = runtime.zid.to_string();
-    let session = zenoh::init(runtime).res_async().await.unwrap();
+    let session = zenoh::init(runtime).await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));
     app.with(

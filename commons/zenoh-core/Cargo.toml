@@ -30,5 +30,6 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 anyhow = { version = "1.0.65", default-features = false, features = ["std"] }
+async-std = "=1.12.0"
 lazy_static = "1.4.0"
 zenoh-macros = { path = "../zenoh-macros/" }

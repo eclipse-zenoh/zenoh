@@ -377,7 +377,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let c_listeners = self.listeners.clone();
         let c_path = local_path_str.to_owned();
         let handle = task::spawn(async move {
-            // Wait for the accept loop to terminate
+            // SyncResolve for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_path);
             res
@@ -486,7 +486,7 @@ async fn accept_task(
         src_path
     );
     while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
+        // SyncResolve for incoming connections
         let stream = match accept(&socket).race(stop(signal.clone())).await {
             Ok(action) => match action {
                 Action::Accept(stream) => stream,

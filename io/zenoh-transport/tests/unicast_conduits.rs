@@ -248,13 +248,13 @@ async fn close_transport(
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
-    // Wait a little bit
+    // SyncResolve a little bit
     task::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
-    // Wait a little bit
+    // SyncResolve a little bit
     task::sleep(SLEEP).await;
 }
 
@@ -290,14 +290,14 @@ async fn single_run(
         client_transport.schedule(message.clone()).unwrap();
     }
 
-    // Wait for the messages to arrive to the other side
+    // SyncResolve for the messages to arrive to the other side
     ztimeout!(async {
         while router_handler.get_count() != MSG_COUNT {
             task::sleep(SLEEP_COUNT).await;
         }
     });
 
-    // Wait a little bit
+    // SyncResolve a little bit
     task::sleep(SLEEP).await;
 }
 

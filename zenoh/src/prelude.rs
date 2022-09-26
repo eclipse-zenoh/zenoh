@@ -26,6 +26,7 @@ pub use common::*;
 pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     pub use zenoh_buffers::SplitBuffer;
+    pub use zenoh_core::Resolve;
 
     pub(crate) type Id = usize;
 
@@ -62,10 +63,9 @@ pub(crate) mod common {
 /// Prelude to import when using Zenoh's sync API.
 pub mod sync {
     pub use super::common::*;
-    pub use zenoh_core::SyncResolve;
 }
 /// Prelude to import when using Zenoh's async API.
 pub mod r#async {
     pub use super::common::*;
-    pub use zenoh_core::AsyncResolve;
+    pub use std::future::IntoFuture;
 }

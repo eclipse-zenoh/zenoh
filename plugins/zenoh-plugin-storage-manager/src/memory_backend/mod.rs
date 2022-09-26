@@ -21,10 +21,9 @@ use std::time::{Duration, Instant};
 use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
-use zenoh_backend_traits::StorageInsertionResult;
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
-use zenoh_core::{AsyncResolve, Result as ZResult};
+use zenoh_core::Result as ZResult;
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))
@@ -228,14 +227,14 @@ impl Storage for MemoryStorage {
             if let Some(Present { sample, ts: _ }) =
                 self.map.read().await.get(query.key_expr().as_keyexpr())
             {
-                query.reply(sample.clone()).res_async().await?;
+                query.reply(sample.clone()).await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
                     if query.key_expr().intersects(&sample.key_expr) {
                         let s: Sample = sample.clone();
-                        query.reply(s).res_async().await?;
+                        query.reply(s).await?;
                     }
                 }
             }
