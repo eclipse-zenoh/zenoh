@@ -22,7 +22,7 @@ use std::fmt;
 use std::future::{IntoFuture, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use zenoh_core::{IntoFutureSend, Resolvable, Resolve};
+use zenoh_core::{IntoFutureSend, Resolvable, Wait};
 use zenoh_protocol_core::SubInfo;
 
 /// The subscription mode.
@@ -127,7 +127,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
+    pub fn pull(&self) -> impl Wait<ZResult<()>> + '_ {
         self.inner.session.pull(&self.inner.state.key_expr)
     }
 
@@ -153,7 +153,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Wait<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self.inner, ())
     }
 }
@@ -214,7 +214,7 @@ impl Resolvable for SubscriberUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl Resolve<<Self as Resolvable>::To> for SubscriberUndeclaration<'_> {
+impl Wait<<Self as Resolvable>::To> for SubscriberUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.subscriber.alive = false;
         self.subscriber
@@ -490,7 +490,7 @@ where
     type To = ZResult<Subscriber<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> Resolve<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> Wait<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
@@ -554,7 +554,7 @@ where
     type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> Resolve<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PullMode, Handler>
+impl<'a, Handler> Wait<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
@@ -709,7 +709,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
+    pub fn pull(&self) -> impl Wait<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
 
@@ -729,7 +729,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Wait<ZResult<()>> + 'a {
         self.subscriber.undeclare()
     }
 }

@@ -19,7 +19,7 @@ use std::{
     future::{IntoFuture, Ready},
     str::FromStr,
 };
-use zenoh_core::{IntoFutureSend, Resolvable, Resolve, Result as ZResult};
+use zenoh_core::{IntoFutureSend, Resolvable, Result as ZResult, Wait};
 use zenoh_protocol_core::key_expr::canon::Canonizable;
 pub use zenoh_protocol_core::key_expr::*;
 use zenoh_transport::Primitives;
@@ -559,7 +559,7 @@ impl Resolvable for KeyExprUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl Resolve<<Self as Resolvable>::To> for KeyExprUndeclaration<'_> {
+impl Wait<<Self as Resolvable>::To> for KeyExprUndeclaration<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let KeyExprUndeclaration { session, expr } = self;
         let expr_id = match &expr.0 {

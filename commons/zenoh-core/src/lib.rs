@@ -26,21 +26,23 @@ pub mod zresult;
 pub use zresult::Error;
 pub use zresult::ZResult as Result;
 
-/// Zenoh's trait for resolving builder patterns with a synchronous operation.
-///
-/// Many builder patterns in Zenoh can be resolved with either [`Resolve`] or [`IntoFuture`],
-/// we advise sticking to either one or the other, rather than mixing them up.
 pub trait Resolvable {
     type To: Sized + Send;
 }
 
+/// This trait is needed to prove to rustc that [`IntoFuture`] returns a [`Send`] [`Future`].
 pub trait IntoFutureSend: Resolvable + IntoFuture {
     type Future: Future<Output = <Self as Resolvable>::To> + Send;
 
     fn into_future_send(self) -> Self::Future;
 }
 
-pub trait Resolve<Output>:
+/// Zenoh's trait for resolving builder patterns.
+///
+/// Many builder patterns in Zenoh can be resolved with [`IntoFuture`] in async context and [`Wait`] in sync context.
+/// We advise to prefer the usage of [`IntoFuture`] and to use [`Wait`] with caution.
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` in async context and `.wait()` in sync context."]
+pub trait Wait<Output>:
     Resolvable<To = Output> + IntoFuture<Output = Output> + IntoFutureSend + Send
 {
     fn wait(self) -> <Self as Resolvable>::To
@@ -74,7 +76,7 @@ where
     }
 }
 
-impl<F, To> Resolve<To> for ResolveClosure<F, To>
+impl<F, To> Wait<To> for ResolveClosure<F, To>
 where
     To: Sized + Send,
     F: FnOnce() -> To + Send,
@@ -123,7 +125,7 @@ where
     }
 }
 
-impl<F, To> Resolve<To> for ResolveFuture<F, To>
+impl<F, To> Wait<To> for ResolveFuture<F, To>
 where
     To: Sized + Send,
     F: Future<Output = To> + Send,

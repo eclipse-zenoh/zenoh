@@ -86,7 +86,7 @@ use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::{IntoFuture, Ready};
 use zenoh_core::{zerror, IntoFutureSend, Result as ZResult};
-use zenoh_core::{Resolvable, Resolve};
+use zenoh_core::{Resolvable, Wait};
 
 /// A zenoh error.
 pub use zenoh_core::Error;
@@ -257,7 +257,7 @@ where
     type To = ZResult<Session>;
 }
 
-impl<TryIntoConfig> Resolve<<Self as Resolvable>::To> for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> Wait<<Self as Resolvable>::To> for OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
@@ -338,7 +338,7 @@ impl Resolvable for InitBuilder {
 }
 
 #[zenoh_core::unstable]
-impl Resolve<<Self as Resolvable>::To> for InitBuilder {
+impl Wait<<Self as Resolvable>::To> for InitBuilder {
     fn wait(self) -> <Self as IntoFuture>::Output {
         Ok(Session::init(
             self.runtime,

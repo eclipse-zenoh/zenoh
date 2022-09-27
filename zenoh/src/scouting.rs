@@ -21,7 +21,7 @@ use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
-use zenoh_core::{IntoFutureSend, Resolvable, Resolve, Result as ZResult};
+use zenoh_core::{IntoFutureSend, Resolvable, Result as ZResult, Wait};
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub use zenoh_protocol_core::WhatAmI;
@@ -155,7 +155,7 @@ where
     type To = ZResult<Scout<Handler::Receiver>>;
 }
 
-impl<Handler> Resolve<<Self as Resolvable>::To> for ScoutBuilder<Handler>
+impl<Handler> Wait<<Self as Resolvable>::To> for ScoutBuilder<Handler>
 where
     Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
     Handler::Receiver: Send,

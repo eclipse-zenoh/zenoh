@@ -16,7 +16,7 @@
 use crate::SessionRef;
 use std::future::{IntoFuture, Ready};
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::{IntoFutureSend, Resolvable, Resolve};
+use zenoh_core::{IntoFutureSend, Resolvable, Wait};
 
 /// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
@@ -38,7 +38,7 @@ impl<'a> Resolvable for ZidBuilder<'a> {
     type To = ZenohId;
 }
 
-impl<'a> Resolve<<Self as Resolvable>::To> for ZidBuilder<'a> {
+impl<'a> Wait<<Self as Resolvable>::To> for ZidBuilder<'a> {
     fn wait(self) -> Self::To {
         self.session.runtime.zid
     }
@@ -83,7 +83,7 @@ impl<'a> Resolvable for RoutersZidBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Resolve<<Self as Resolvable>::To> for RoutersZidBuilder<'a> {
+impl<'a> Wait<<Self as Resolvable>::To> for RoutersZidBuilder<'a> {
     fn wait(self) -> Self::To {
         Box::new(
             self.session
@@ -140,7 +140,7 @@ impl<'a> Resolvable for PeersZidBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> Resolve<<Self as Resolvable>::To> for PeersZidBuilder<'a> {
+impl<'a> Wait<<Self as Resolvable>::To> for PeersZidBuilder<'a> {
     fn wait(self) -> <Self as Resolvable>::To {
         Box::new(
             self.session

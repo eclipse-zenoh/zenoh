@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::{IntoFutureSend, Resolvable, Resolve, Result as ZResult};
+use zenoh_core::{IntoFutureSend, Resolvable, Result as ZResult, Wait};
 use zenoh_protocol_core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
@@ -127,7 +127,7 @@ impl<'a> Resolvable for ReplyBuilder<'a> {
     type To = ZResult<()>;
 }
 
-impl Resolve<<Self as Resolvable>::To> for ReplyBuilder<'_> {
+impl Wait<<Self as Resolvable>::To> for ReplyBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
         match self.result {
             Ok(sample) => {
@@ -267,7 +267,7 @@ impl Resolvable for QueryableUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl Resolve<<Self as Resolvable>::To> for QueryableUndeclaration<'_> {
+impl Wait<<Self as Resolvable>::To> for QueryableUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.alive = false;
         self.queryable
@@ -482,7 +482,7 @@ pub struct Queryable<'a, Receiver> {
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> impl Wait<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
 }
@@ -509,7 +509,7 @@ where
     type To = ZResult<Queryable<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> Resolve<<Self as Resolvable>::To> for QueryableBuilder<'a, '_, Handler>
+impl<'a, Handler> Wait<<Self as Resolvable>::To> for QueryableBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Query> + Send,
     Handler::Receiver: Send,

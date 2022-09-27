@@ -24,7 +24,7 @@
 
 pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
 pub use zenoh_buffers::SplitBuffer;
-pub use zenoh_core::Resolve;
+pub use zenoh_core::Wait;
 
 pub(crate) type Id = usize;
 

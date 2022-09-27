@@ -23,7 +23,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, IntoFutureSend, Resolvable, Resolve};
+use zenoh_core::{zlock, IntoFutureSend, Resolvable, Wait};
 
 use crate::session_ext::SessionRef;
 
@@ -232,7 +232,7 @@ where
     type To = ZResult<QueryingSubscriber<'a, Handler::Receiver>>;
 }
 
-impl<Handler> Resolve<<Self as Resolvable>::To> for QueryingSubscriberBuilder<'_, '_, Handler>
+impl<Handler> Wait<<Self as Resolvable>::To> for QueryingSubscriberBuilder<'_, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
@@ -424,13 +424,13 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
 
     /// Close this QueryingSubscriber
     #[inline]
-    pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn close(self) -> impl Wait<ZResult<()>> + 'a {
         self._subscriber.undeclare()
     }
 
     /// Issue a new query using the configured selector.
     #[inline]
-    pub fn query(&mut self) -> impl Resolve<ZResult<()>> + '_ {
+    pub fn query(&mut self) -> impl Wait<ZResult<()>> + '_ {
         self.query_on_selector(
             self.query_key_expr
                 .clone()
@@ -449,7 +449,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         target: QueryTarget,
         consolidation: IntoQueryConsolidation,
         timeout: Duration,
-    ) -> impl Resolve<ZResult<()>> + 'c
+    ) -> impl Wait<ZResult<()>> + 'c
     where
         IntoSelector: Into<Selector<'c>>,
         IntoQueryConsolidation: Into<QueryConsolidation>,
@@ -464,7 +464,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         target: QueryTarget,
         consolidation: QueryConsolidation,
         timeout: Duration,
-    ) -> impl Resolve<ZResult<()>> + 'c {
+    ) -> impl Wait<ZResult<()>> + 'c {
         zlock!(self.state).pending_queries += 1;
         // pending queries will be decremented in RepliesHandler drop()
         let handler = RepliesHandler {

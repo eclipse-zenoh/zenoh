@@ -52,7 +52,7 @@ use uhlc::HLC;
 use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
-use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult};
+use zenoh_core::{zconfigurable, zread, ResolveClosure, ResolveFuture, Result as ZResult, Wait};
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
@@ -283,14 +283,14 @@ impl fmt::Debug for SessionRef<'_> {
 /// A trait implemented by types that can be undeclared.
 pub trait Undeclarable<S, O, T = ZResult<()>>
 where
-    O: Resolve<T> + Send,
+    O: Wait<T> + Send,
 {
     fn undeclare_inner(self, session: S) -> O;
 }
 
 impl<'a, O, T, G> Undeclarable<&'a Session, O, T> for G
 where
-    O: Resolve<T> + Send,
+    O: Wait<T> + Send,
     G: Undeclarable<(), O, T>,
 {
     fn undeclare_inner(self, _: &'a Session) -> O {
@@ -313,7 +313,7 @@ impl Session {
         runtime: Runtime,
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
-    ) -> impl Resolve<Session> {
+    ) -> impl Wait<Session> {
         ResolveClosure(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
@@ -416,7 +416,7 @@ impl Session {
     /// session.close().await.unwrap();
     /// # })
     /// ```
-    pub fn close(self) -> impl Resolve<ZResult<()>> {
+    pub fn close(self) -> impl Wait<ZResult<()>> {
         ResolveFuture(async move {
             trace!("close()");
             self.runtime.close().await?;
@@ -430,7 +430,7 @@ impl Session {
 
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
-        O: Resolve<ZResult<()>>,
+        O: Wait<ZResult<()>>,
         T: Undeclarable<&'a Self, O, ZResult<()>>,
     {
         Undeclarable::undeclare_inner(decl, self)
@@ -609,7 +609,7 @@ impl Session {
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a
+    ) -> impl Wait<ZResult<KeyExpr<'b>>> + 'a
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
@@ -621,7 +621,7 @@ impl Session {
     fn _declare_keyexpr<'a, 'b: 'a>(
         &'a self,
         key_expr: ZResult<KeyExpr<'b>>,
-    ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
+    ) -> impl Wait<ZResult<KeyExpr<'b>>> + 'a {
         let sid = self.id;
         ResolveClosure(move || {
             let key_expr: KeyExpr = key_expr?;
@@ -766,7 +766,7 @@ impl Session {
     }
 
     #[allow(clippy::new_ret_no_self)]
-    pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> + Send {
+    pub(super) fn new(config: Config) -> impl Wait<ZResult<Session>> + Send {
         ResolveFuture(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
@@ -786,7 +786,7 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<u64> + Send + 'a {
+    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Wait<u64> + Send + 'a {
         ResolveClosure(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -838,7 +838,7 @@ impl Session {
     pub(crate) fn declare_publication_intent<'a>(
         &'a self,
         key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
+    ) -> impl Wait<Result<(), std::convert::Infallible>> + Send + 'a {
         ResolveClosure(move || {
             log::trace!("declare_publication({:?})", key_expr);
             let mut state = zwrite!(self.state);
@@ -874,7 +874,7 @@ impl Session {
     pub(crate) fn undeclare_publication_intent<'a>(
         &'a self,
         key_expr: KeyExpr<'a>,
-    ) -> impl Resolve<ZResult<()>> + 'a {
+    ) -> impl Wait<ZResult<()>> + 'a {
         ResolveClosure(move || {
             let mut state = zwrite!(self.state);
             if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
@@ -1255,7 +1255,7 @@ impl Session {
         }
     }
 
-    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
+    pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Wait<ZResult<()>> + 'a {
         ResolveClosure(move || {
             trace!("pull({:?})", key_expr);
             let state = zread!(self.state);
