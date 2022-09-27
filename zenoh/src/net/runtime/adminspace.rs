@@ -518,16 +518,11 @@ pub async fn router_data(
     let transport_mgr = context.runtime.manager().clone();
 
     // plugins info
-    let plugins: Vec<serde_json::Value> = {
+    let plugins: serde_json::Value = {
         zlock!(context.plugins_mgr)
             .running_plugins_info()
-            .iter()
-            .map(|(name, path)| {
-                json!({
-                    "name": name,
-                    "path": path
-                })
-            })
+            .into_iter()
+            .map(|(k, v)| (k, json!({ "path": v })))
             .collect()
     };
 
