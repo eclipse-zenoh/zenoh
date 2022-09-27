@@ -292,6 +292,22 @@ validated_struct::validator! {
                 },
             },
         },
+        /// Configuration of the admin space.
+        pub adminspace: #[derive(Default)]
+        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        AdminSpaceConf {
+            /// Permissions on the admin space
+            pub permissions:
+            PermissionsConf {
+                /// Whether the admin space replies to queries (true by default).
+                #[serde(default = "set_true")]
+                pub read: bool,
+                /// Whether the admin space accepts config changes at runtime (false by default).
+                #[serde(default = "set_false")]
+                pub write: bool,
+            },
+
+        },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
         plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)
@@ -301,6 +317,22 @@ validated_struct::validator! {
         /// Please refer to [`PluginsConfig`]'s documentation for further details.
         plugins: PluginsConfig,
     }
+}
+
+impl Default for PermissionsConf {
+    fn default() -> Self {
+        PermissionsConf {
+            read: true,
+            write: false,
+        }
+    }
+}
+
+fn set_true() -> bool {
+    true
+}
+fn set_false() -> bool {
+    false
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
