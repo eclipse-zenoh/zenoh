@@ -16,7 +16,7 @@ use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::buffers::SharedMemoryManager;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 const N: usize = 10;
 const K: u32 = 3;
@@ -29,14 +29,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (config, path, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Shared Memory Manager...");
     let id = session.zid();
     let mut shm = SharedMemoryManager::make(id.to_string(), N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
-    let publisher = session.declare_publisher(&path).await.unwrap();
+    let publisher = session.declare_publisher(&path).res().await.unwrap();
 
     for idx in 0..(K * N as u32) {
         let mut sbuf = match shm.alloc(1024) {
@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             path,
             String::from_utf8_lossy(&slice[0..slice_len])
         );
-        publisher.put(sbuf.clone()).await?;
+        publisher.put(sbuf.clone()).res().await?;
         if idx % K == 0 {
             let freed = shm.garbage_collect();
             println!("The Gargabe collector freed {} bytes", freed);

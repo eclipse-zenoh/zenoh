@@ -20,16 +20,12 @@
 pub use lazy_static::lazy_static;
 pub mod macros;
 pub use macros::*;
-use std::future::{Future, IntoFuture, Ready};
+use std::future::{Future, Ready};
 pub use zenoh_macros::*;
 pub mod zresult;
 pub use zresult::Error;
 pub use zresult::ZResult as Result;
 
-/// Zenoh's trait for resolving builder patterns with a synchronous operation.
-///
-/// Many builder patterns in Zenoh can be resolved with either [`SyncResolve`] or [`IntoFuture`],
-/// we advise sticking to either one or the other, rather than mixing them up.
 pub trait Resolvable {
     type To: Sized + Send;
 }
@@ -38,16 +34,19 @@ pub trait AsyncResolve: Resolvable {
     type Future: Future<Output = <Self as Resolvable>::To> + Send;
 
     fn res_async(self) -> Self::Future;
+
+    fn res(self) -> Self::Future
+    where
+        Self: Sized,
+    {
+        self.res_async()
+    }
 }
 
 pub trait SyncResolve: Resolvable {
     fn res_sync(self) -> <Self as Resolvable>::To;
-}
 
-pub trait Resolve<Output>:
-    Resolvable<To = Output> + SyncResolve + AsyncResolve + IntoFuture<Output = Output> + Send
-{
-    fn wait(self) -> <Self as Resolvable>::To
+    fn res(self) -> <Self as Resolvable>::To
     where
         Self: Sized,
     {
@@ -55,8 +54,18 @@ pub trait Resolve<Output>:
     }
 }
 
+/// Zenoh's trait for resolving builder patterns.
+///
+/// Builder patterns in Zenoh can be resolved with [`AsyncResolve`] in async context and [`SyncResolve`] in sync context.
+/// In both async and sync context calling `.res()` resolves the builder.
+/// `.res()` maps to `.res_async()` in async context.
+/// `.res()` maps to `.res_sync()` in sync context.
+/// We advise to prefer the usage of [`AsyncResolve`] and to use [`SyncResolve`] with caution.
+#[must_use = "Resolvables do nothing unless you resolve them using `.res()`."]
+pub trait Resolve<Output>: Resolvable<To = Output> + SyncResolve + AsyncResolve + Send {}
+
 impl<T, Output> Resolve<Output> for T where
-    T: Resolvable<To = Output> + SyncResolve + AsyncResolve + IntoFuture<Output = Output> + Send
+    T: Resolvable<To = Output> + SyncResolve + AsyncResolve + Send
 {
 }
 
@@ -96,19 +105,6 @@ where
     }
 }
 
-impl<F, To> IntoFuture for ResolveClosure<F, To>
-where
-    To: Sized + Send,
-    F: FnOnce() -> To + Send,
-{
-    type Output = To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 // Future to wait
 pub struct ResolveFuture<F, To>(pub F)
 where
@@ -142,18 +138,5 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         async_std::task::block_on(self.0)
-    }
-}
-
-impl<F, To> IntoFuture for ResolveFuture<F, To>
-where
-    To: Sized + Send,
-    F: Future<Output = To> + Send,
-{
-    type Output = To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }

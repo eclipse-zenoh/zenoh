@@ -17,8 +17,8 @@ use futures::select;
 use futures::{FutureExt, StreamExt};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::future::{IntoFuture, Ready};
-use zenoh::prelude::*;
+use std::future::Ready;
+use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
@@ -101,15 +101,6 @@ impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
     }
 }
 
-impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 pub struct PublicationCache<'a> {
     _local_sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
@@ -149,14 +140,14 @@ impl<'a> PublicationCache<'a> {
             .session
             .declare_subscriber(&key_expr)
             .allowed_origin(Locality::SessionLocal)
-            .wait()?;
+            .res_sync()?;
 
         // declare the queryable that will answer to queries on cache
         let queryable = conf
             .session
             .declare_queryable(&queryable_key_expr)
             .allowed_origin(conf.queryable_origin)
-            .wait()?;
+            .res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();
@@ -204,7 +195,7 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_expr.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
-                                        if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
                                     }
@@ -213,7 +204,7 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
-                                            if let Err(e) = query.reply(Ok(sample.clone())).await {
+                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
                                         }

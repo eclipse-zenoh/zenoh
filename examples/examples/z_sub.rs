@@ -18,7 +18,7 @@ use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -28,11 +28,11 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", &key_expr);
 
-    let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();

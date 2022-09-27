@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use clap::{App, Arg};
-use zenoh::prelude::*;
+use std::time::Duration;
+use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
 use zenoh::{config::Config, key_expr::keyexpr};
 
@@ -40,16 +40,20 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key);
-    let queryable = session.declare_queryable(key).wait().unwrap();
+    let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
         let receiver = queryable.receiver.clone();
         async move {
             while let Ok(request) = receiver.recv_async().await {
-                request.reply(Ok(Sample::new(key, HTML))).await.unwrap();
+                request
+                    .reply(Ok(Sample::new(key, HTML)))
+                    .res()
+                    .await
+                    .unwrap();
             }
         }
     });
@@ -60,6 +64,7 @@ async fn main() {
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
+        .res()
         .await
         .unwrap();
 
@@ -75,9 +80,10 @@ async fn main() {
     loop {
         publisher
             .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
+            .res()
             .await
             .unwrap();
-        async_std::task::sleep(std::time::Duration::new(1, 0)).await;
+        async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }
 

@@ -23,7 +23,7 @@ use crate::Undeclarable;
 
 use futures::FutureExt;
 use std::fmt;
-use std::future::{Future, IntoFuture, Ready};
+use std::future::{Future, Ready};
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -184,15 +184,6 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
     }
 }
 
-impl<'a> IntoFuture for ReplyBuilder<'a> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 pub(crate) struct QueryableState {
     pub(crate) id: Id,
     pub(crate) key_expr: WireExpr<'static>,
@@ -224,13 +215,16 @@ impl fmt::Debug for QueryableState {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::prelude::*;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///         .res()
+///         .await
+///         .unwrap();
 /// }
 /// # })
 /// ```
@@ -252,11 +246,11 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
-/// queryable.undeclare().await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
+/// queryable.undeclare().res().await.unwrap();
 /// # })
 /// ```
 pub struct QueryableUndeclaration<'a> {
@@ -284,15 +278,6 @@ impl<'a> AsyncResolve for QueryableUndeclaration<'a> {
     }
 }
 
-impl<'a> IntoFuture for QueryableUndeclaration<'a> {
-    type Output = ZResult<()>;
-    type IntoFuture = Ready<Self::Output>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 impl Drop for CallbackQueryable<'_> {
     fn drop(&mut self) {
         if self.alive {
@@ -306,11 +291,11 @@ impl Drop for CallbackQueryable<'_> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::queryable;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let queryable = session.declare_queryable("key/expression").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
 #[derive(Debug)]
@@ -329,12 +314,13 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .callback(|query| {println!(">> Handling query '{}'", query.selector());})
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -368,13 +354,14 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .callback_mut(move |query| {n += 1;})
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -395,12 +382,13 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .declare_queryable("key/expression")
     ///     .with(flume::bounded(32))
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(query) = queryable.recv_async().await {
@@ -459,17 +447,21 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
 ///     .with(flume::bounded(32))
+///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///         .res()
+///         .await
+///         .unwrap();
 /// }
 /// # })
 /// ```
@@ -544,18 +536,5 @@ where
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl<'a, Handler> IntoFuture for QueryableBuilder<'a, '_, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
-    Handler::Receiver: Send,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }

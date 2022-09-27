@@ -19,7 +19,7 @@ use futures::select;
 use log::{error, trace, warn};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::{Query, StorageInsertionResult};
@@ -65,7 +65,7 @@ impl StorageService {
         self.initialize_if_empty().await;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(&self.key_expr).await {
+        let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
                 error!("Error starting storage {} : {}", self.name, e);
@@ -74,7 +74,7 @@ impl StorageService {
         };
 
         // answer to queries on key_expr
-        let storage_queryable = match self.session.declare_queryable(&self.key_expr).await {
+        let storage_queryable = match self.session.declare_queryable(&self.key_expr).res().await {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", self.name, e);
@@ -238,6 +238,7 @@ impl StorageService {
                 .get(KeyExpr::from(&self.key_expr).with_parameters("_time=[..]"))
                 .target(QueryTarget::All)
                 .consolidation(ConsolidationMode::None)
+                .res()
                 .await
             {
                 Ok(replies) => replies,

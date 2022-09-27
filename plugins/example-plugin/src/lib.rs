@@ -22,7 +22,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::{bail, zlock, Result as ZResult};
 
@@ -149,7 +149,7 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
     env_logger::init();
 
     // create a zenoh Session that shares the same Runtime than zenohd
-    let session = zenoh::init(runtime).await.unwrap();
+    let session = zenoh::init(runtime).res().await.unwrap();
 
     // the HasMap used as a storage by this example of storage plugin
     let mut stored: HashMap<String, Sample> = HashMap::new();
@@ -158,31 +158,31 @@ async fn run(runtime: Runtime, selector: KeyExpr<'_>, flag: Arc<AtomicBool>) {
 
     // This storage plugin subscribes to the selector and will store in HashMap the received samples
     debug!("Create Subscriber on {}", selector);
-    let sub = session.declare_subscriber(&selector).await.unwrap();
+    let sub = session.declare_subscriber(&selector).res().await.unwrap();
 
     // This storage plugin declares a Queryable that will reply to queries with the samples stored in the HashMap
     debug!("Create Queryable on {}", selector);
-    let queryable = session.declare_queryable(&selector).await.unwrap();
+    let queryable = session.declare_queryable(&selector).res().await.unwrap();
 
     // Plugin's event loop, while the flag is true
     while flag.load(Relaxed) {
         select!(
-        // on sample received by the Subscriber
-                    sample = sub.recv_async() => {
-                        let sample = sample.unwrap();
-                        info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
-                        stored.insert(sample.key_expr.to_string(), sample);
-                    },
-        // on query received by the Queryable
-                    query = queryable.recv_async() => {
-                        let query = query.unwrap();
-                        info!("Handling query '{}'", query.selector());
-                        for (key_expr, sample) in stored.iter() {
-                            if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
-                                query.reply(Ok(sample.clone())).await.unwrap();
-                            }
-                        }
+            // on sample received by the Subscriber
+            sample = sub.recv_async() => {
+                let sample = sample.unwrap();
+                info!("Received data ('{}': '{}')", sample.key_expr, sample.value);
+                stored.insert(sample.key_expr.to_string(), sample);
+            },
+            // on query received by the Queryable
+            query = queryable.recv_async() => {
+                let query = query.unwrap();
+                info!("Handling query '{}'", query.selector());
+                for (key_expr, sample) in stored.iter() {
+                    if query.selector().key_expr.intersects(unsafe{keyexpr::from_str_unchecked(key_expr)}) {
+                        query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
-                );
+                }
+            }
+        );
     }
 }

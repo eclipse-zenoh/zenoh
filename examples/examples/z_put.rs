@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -22,10 +23,10 @@ async fn main() {
     let (config, key_expr, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Putting Data ('{}': '{}')...", key_expr, value);
-    session.put(&key_expr, value).await.unwrap();
+    session.put(&key_expr, value).res().await.unwrap();
 }
 
 fn parse_args() -> (Config, String, String) {

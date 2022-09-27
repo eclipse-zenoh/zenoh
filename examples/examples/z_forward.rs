@@ -13,6 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::SubscriberForward;
 
 #[async_std::main]
@@ -23,12 +24,12 @@ async fn main() {
     let (config, key_expr, forward) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let mut subscriber = session.declare_subscriber(&key_expr).await.unwrap();
+    let mut subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
     println!("Creating Publisher on '{}'...", forward);
-    let publisher = session.declare_publisher(&forward).await.unwrap();
+    let publisher = session.declare_publisher(&forward).res().await.unwrap();
     println!("Forwarding data from '{}' to '{}'...", key_expr, forward);
     subscriber.forward(publisher).await.unwrap();
 }

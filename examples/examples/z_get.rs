@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_std::prelude::FutureExt;
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -25,14 +26,16 @@ async fn main() {
     let (config, selector, target, timeout) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{}'...", selector);
     let replies = session
         .get(&selector)
         .target(target)
+        .res()
         .timeout(timeout)
         .await
+        .unwrap()
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {

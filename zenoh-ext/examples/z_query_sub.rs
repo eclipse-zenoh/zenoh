@@ -18,6 +18,7 @@ use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -28,7 +29,7 @@ async fn main() {
     let (config, key_expr, query) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!(
         "Creating a QueryingSubscriber on {} with an initial query on {}",
@@ -39,10 +40,15 @@ async fn main() {
         session
             .declare_querying_subscriber(key_expr)
             .query_selector(&selector)
+            .res()
             .await
             .unwrap()
     } else {
-        session.declare_querying_subscriber(key_expr).await.unwrap()
+        session
+            .declare_querying_subscriber(key_expr)
+            .res()
+            .await
+            .unwrap()
     };
 
     println!("Enter 'd' to issue the query again, or 'q' to quit...");
@@ -61,7 +67,7 @@ async fn main() {
                     b'q' => break,
                     b'd' => {
                         println!("Do query again");
-                        subscriber.query().await.unwrap()
+                        subscriber.query().res().await.unwrap()
                     }
                     0 => sleep(Duration::from_secs(1)).await,
                     _ => (),

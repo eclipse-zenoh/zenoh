@@ -15,6 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
+use zenoh::prelude::r#async::*;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -25,7 +26,7 @@ async fn main() {
     let (config, key_expr, value, history, prefix) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating PublicationCache on {}", &key_expr);
     let mut publication_cache_builder = session
@@ -34,13 +35,13 @@ async fn main() {
     if let Some(prefix) = prefix {
         publication_cache_builder = publication_cache_builder.queryable_prefix(prefix);
     }
-    let _publication_cache = publication_cache_builder.await.unwrap();
+    let _publication_cache = publication_cache_builder.res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Put Data ('{}': '{}')", &key_expr, buf);
-        session.put(&key_expr, buf).await.unwrap();
+        session.put(&key_expr, buf).res().await.unwrap();
     }
 }
 

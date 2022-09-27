@@ -15,6 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -24,16 +25,16 @@ async fn main() {
     let (config, key_expr, value) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring a publisher for '{}'...", key_expr);
-    let publisher = session.declare_publisher(&key_expr).await.unwrap();
+    let publisher = session.declare_publisher(&key_expr).res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{:4}] {}", idx, value);
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        publisher.put(buf).await.unwrap();
+        publisher.put(buf).res().await.unwrap();
     }
 }
 

@@ -20,7 +20,7 @@ use futures::select;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -32,13 +32,13 @@ async fn main() {
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
-    let subscriber = session.declare_subscriber(&key_expr).await.unwrap();
+    let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Creating Queryable on '{}'...", key_expr);
-    let queryable = session.declare_queryable(&key_expr).await.unwrap();
+    let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -61,7 +61,7 @@ async fn main() {
                 println!(">> [Queryable ] Received Query '{}'", query.selector());
                 for (stored_name, sample) in stored.iter() {
                     if query.selector().key_expr.intersects(unsafe {keyexpr::from_str_unchecked(stored_name)}) {
-                        query.reply(Ok(sample.clone())).await.unwrap();
+                        query.reply(Ok(sample.clone())).res().await.unwrap();
                     }
                 }
             },

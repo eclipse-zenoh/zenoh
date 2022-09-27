@@ -20,7 +20,7 @@ use log::{error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::query::QueryConsolidation;
 use zenoh::time::Timestamp;
 use zenoh::Session;
@@ -263,6 +263,7 @@ impl Aligner {
             .get(&selector)
             .consolidation(QueryConsolidation::AUTO)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
+            .res()
             .await
             .unwrap();
         while let Ok(reply) = replies.recv_async().await {

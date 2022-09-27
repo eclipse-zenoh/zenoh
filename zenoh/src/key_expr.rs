@@ -16,7 +16,7 @@
 
 use std::{
     convert::{TryFrom, TryInto},
-    future::{IntoFuture, Ready},
+    future::Ready,
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
@@ -543,11 +543,11 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();
-/// session.undeclare(key_expr).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
+/// session.undeclare(key_expr).res().await.unwrap();
 /// # })
 /// ```
 pub struct KeyExprUndeclaration<'a> {
@@ -606,15 +606,6 @@ impl AsyncResolve for KeyExprUndeclaration<'_> {
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl IntoFuture for KeyExprUndeclaration<'_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }
 

@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -23,17 +23,17 @@ async fn main() {
     let config = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     let info = session.info();
-    println!("zid : {}", info.zid().await);
+    println!("zid : {}", info.zid().res().await);
     println!(
         "routers zid : {:?}",
-        info.routers_zid().await.collect::<Vec<ZenohId>>()
+        info.routers_zid().res().await.collect::<Vec<ZenohId>>()
     );
     println!(
         "peers zid : {:?}",
-        info.peers_zid().await.collect::<Vec<ZenohId>>()
+        info.peers_zid().res().await.collect::<Vec<ZenohId>>()
     );
 }
 

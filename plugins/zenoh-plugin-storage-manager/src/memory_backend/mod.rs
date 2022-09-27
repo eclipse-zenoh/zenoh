@@ -18,7 +18,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
@@ -227,14 +227,14 @@ impl Storage for MemoryStorage {
             if let Some(Present { sample, ts: _ }) =
                 self.map.read().await.get(query.key_expr().as_keyexpr())
             {
-                query.reply(sample.clone()).await?;
+                query.reply(sample.clone()).res().await?;
             }
         } else {
             for (_, stored_value) in self.map.read().await.iter() {
                 if let Present { sample, ts: _ } = stored_value {
                     if query.key_expr().intersects(&sample.key_expr) {
                         let s: Sample = sample.clone();
-                        query.reply(s).await?;
+                        query.reply(s).res().await?;
                     }
                 }
             }

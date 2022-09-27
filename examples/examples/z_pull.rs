@@ -17,6 +17,7 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -26,13 +27,14 @@ async fn main() {
     let (config, key_expr) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Subscriber on '{}'...", key_expr);
 
     let subscriber = session
         .declare_subscriber(&key_expr)
         .pull_mode()
+        .res()
         .await
         .unwrap();
 
@@ -59,7 +61,7 @@ async fn main() {
             match input[0] {
                 b'q' => break,
                 0 => sleep(Duration::from_secs(1)).await,
-                _ => subscriber.pull().await.unwrap(),
+                _ => subscriber.pull().res().await.unwrap(),
             }
         }
     };

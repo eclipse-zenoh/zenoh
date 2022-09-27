@@ -15,12 +15,13 @@ use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::group::*;
 
 #[async_std::main]
 async fn main() {
     env_logger::init();
-    let z = Arc::new(zenoh::open(Config::default()).await.unwrap());
+    let z = Arc::new(zenoh::open(Config::default()).res().await.unwrap());
     let member = Member::new(z.zid().to_string())
         .unwrap()
         .lease(Duration::from_secs(3));

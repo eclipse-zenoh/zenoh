@@ -19,8 +19,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use zenoh::prelude::Sample;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -71,6 +70,7 @@ impl AlignQueryable {
         let queryable = self
             .session
             .declare_queryable(&self.digest_key)
+            .res()
             .await
             .unwrap();
 
@@ -98,25 +98,25 @@ impl AlignQueryable {
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
                             let sample = Sample::new(
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Content(i, c) => {
                             let sample = Sample::new(
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
                             let sample = Sample::new(k, v).with_timestamp(ts);
-                            query.reply(Ok(sample)).await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                     }
                 }
@@ -223,7 +223,7 @@ impl AlignQueryable {
         }
 
         if key.is_some() {
-            let replies = self.session.get(&key.unwrap()).await.unwrap();
+            let replies = self.session.get(&key.unwrap()).res().await.unwrap();
             if let Ok(reply) = replies.recv_async().await {
                 match reply.sample {
                     Ok(sample) => {

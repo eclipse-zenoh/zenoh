@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
@@ -176,7 +176,7 @@ async fn keep_alive_task(state: Arc<GroupState>) {
     loop {
         async_std::task::sleep(period).await;
         log::trace!("Sending Keep Alive for: {}", &state.local_member.mid);
-        let _ = state.group_publisher.put(buf.clone()).await;
+        let _ = state.group_publisher.put(buf.clone()).res().await;
     }
 }
 
@@ -221,12 +221,13 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
     .unwrap();
     log::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
-    let queryable = z.declare_queryable(&qres).await.unwrap();
+    let queryable = z.declare_queryable(&qres).res().await.unwrap();
 
     while let Ok(query) = queryable.recv_async().await {
         log::trace!("Serving query for: {}", &qres);
         query
             .reply(Ok(Sample::new(qres.clone(), buf.clone())))
+            .res()
             .await
             .unwrap();
     }
@@ -235,6 +236,7 @@ async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
 async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
     let sub = z
         .declare_subscriber(state.group_publisher.key_expr())
+        .res()
         .await
         .unwrap();
     while let Ok(s) = sub.recv_async().await {
@@ -292,7 +294,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                 // @TODO: we could also send this member info
                                 let qc = ConsolidationMode::None;
                                 log::trace!("Issuing Query for {}", &qres);
-                                let receiver = z.get(&qres).consolidation(qc).await.unwrap();
+                                let receiver = z.get(&qres).consolidation(qc).res().await.unwrap();
 
                                 while let Ok(reply) = receiver.recv_async().await {
                                     match reply.sample {
@@ -362,6 +364,7 @@ impl Group {
         let publisher = z
             .declare_publisher(event_expr)
             .priority(with.priority)
+            .res()
             .await
             .unwrap();
         let state = Arc::new(GroupState {
@@ -378,7 +381,7 @@ impl Group {
         log::debug!("Sending Join Message for local member: {:?}", &with);
         let join_evt = GroupNetEvent::Join(JoinEvent { member: with });
         let buf = bincode::serialize(&join_evt).unwrap();
-        let _ = state.group_publisher.put(buf).await;
+        let _ = state.group_publisher.put(buf).res().await;
 
         // If the liveliness is manual it is the user who has to assert it.
         if is_auto_liveliness {

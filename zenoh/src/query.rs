@@ -21,7 +21,7 @@ use crate::Session;
 use crate::SessionState;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::future::{IntoFuture, Ready};
+use std::future::Ready;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_collections::Timed;
@@ -129,14 +129,15 @@ pub(crate) struct QueryState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::query::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let replies = session
 ///     .get("key/expression?value>1")
 ///     .target(QueryTarget::All)
 ///     .consolidation(ConsolidationMode::None)
+///     .res()
 ///     .await
 ///     .unwrap();
 /// while let Ok(reply) = replies.recv_async().await {
@@ -160,12 +161,13 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -201,13 +203,14 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
     /// let queryable = session
     ///     .get("key/expression")
     ///     .callback_mut(move |reply| {n += 1;})
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// # })
@@ -228,12 +231,13 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session
     ///     .get("key/expression")
     ///     .with(flume::bounded(32))
+    ///     .res()
     ///     .await
     ///     .unwrap();
     /// while let Ok(reply) = replies.recv_async().await {
@@ -367,18 +371,5 @@ where
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl<Handler> IntoFuture for GetBuilder<'_, '_, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
-    Handler::Receiver: Send,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }

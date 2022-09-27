@@ -13,6 +13,7 @@
 //
 use async_std::prelude::FutureExt;
 use zenoh::config::Config;
+use zenoh::prelude::r#async::*;
 use zenoh::scouting::WhatAmI;
 
 #[async_std::main]
@@ -22,6 +23,7 @@ async fn main() {
 
     println!("Scouting...");
     let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, Config::default())
+        .res()
         .await
         .unwrap();
 

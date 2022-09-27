@@ -20,7 +20,7 @@ use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
-use std::future::{IntoFuture, Ready};
+use std::future::Ready;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::AsyncResolve;
 use zenoh_core::Resolvable;
@@ -37,12 +37,13 @@ pub use zenoh_protocol_core::CongestionControl;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .delete("key/expression")
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -54,14 +55,15 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// session
 ///     .put("key/expression", "value")
 ///     .encoding(KnownEncoding::TextPlain)
 ///     .congestion_control(CongestionControl::Block)
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -162,15 +164,6 @@ impl AsyncResolve for PutBuilder<'_, '_> {
     }
 }
 
-impl IntoFuture for PutBuilder<'_, '_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 use futures::Sink;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -185,11 +178,11 @@ use zenoh_core::zresult::Error;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let publisher = session.declare_publisher("key/expression").await.unwrap();
-/// publisher.put("value").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.put("value").res().await.unwrap();
 /// # })
 /// ```
 ///
@@ -199,11 +192,11 @@ use zenoh_core::zresult::Error;
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::StreamExt;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-/// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
-/// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let mut subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
+/// let publisher = session.declare_publisher("another/key/expression").res().await.unwrap();
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # })
 /// ```
@@ -247,11 +240,11 @@ impl<'a> Publisher<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// publisher.write(SampleKind::Put, "value").await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
     /// # })
     /// ```
     pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
@@ -266,11 +259,11 @@ impl<'a> Publisher<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// publisher.put("value").await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
     #[inline]
@@ -286,11 +279,11 @@ impl<'a> Publisher<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// publisher.delete().await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.delete().res().await.unwrap();
     /// # })
     /// ```
     pub fn delete(&self) -> Publication {
@@ -302,11 +295,11 @@ impl<'a> Publisher<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
-    /// let session = zenoh::open(config::peer()).await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression").await.unwrap();
-    /// publisher.undeclare().await.unwrap();
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.undeclare().res().await.unwrap();
     /// # })
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
@@ -325,11 +318,11 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
-/// let publisher = session.declare_publisher("key/expression").await.unwrap();
-/// publisher.undeclare().await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// publisher.undeclare().res().await.unwrap();
 /// # })
 /// ```
 pub struct PublisherUndeclaration<'a> {
@@ -358,15 +351,6 @@ impl AsyncResolve for PublisherUndeclaration<'_> {
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl IntoFuture for PublisherUndeclaration<'_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }
 
@@ -446,15 +430,6 @@ impl AsyncResolve for Publication<'_> {
     }
 }
 
-impl IntoFuture for Publication<'_> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 impl<'a, IntoValue> Sink<IntoValue> for Publisher<'a>
 where
     IntoValue: Into<Value>,
@@ -468,7 +443,7 @@ where
 
     #[inline]
     fn start_send(self: Pin<&mut Self>, item: IntoValue) -> Result<(), Self::Error> {
-        self.put(item.into()).wait()
+        self.put(item.into()).res_sync()
     }
 
     #[inline]
@@ -487,13 +462,14 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
-/// let session = zenoh::open(config::peer()).await.unwrap();
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session
 ///     .declare_publisher("key/expression")
 ///     .congestion_control(CongestionControl::Block)
+///     .res()
 ///     .await
 ///     .unwrap();
 /// # })
@@ -590,15 +566,6 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
-    }
-}
-
-impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
     }
 }
 

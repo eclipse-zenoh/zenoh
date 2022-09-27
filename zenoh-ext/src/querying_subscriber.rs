@@ -13,12 +13,12 @@
 //
 use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::convert::TryInto;
-use std::future::{IntoFuture, Ready};
+use std::future::Ready;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
@@ -254,19 +254,6 @@ where
     }
 }
 
-impl<'a, Handler> IntoFuture for QueryingSubscriberBuilder<'a, '_, Handler>
-where
-    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
-    Handler::Receiver: Send,
-{
-    type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
-
-    fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
-    }
-}
-
 // Collects samples in their Timestamp order, if any,
 // and ignores repeating samples with duplicate timestamps.
 // Samples without Timestamps are kept in a separate Vector,
@@ -394,13 +381,13 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .allowed_origin(conf.origin)
-                .wait()?,
+                .res_sync()?,
             SessionRef::Shared(session) => session
                 .declare_subscriber(&key_expr)
                 .callback(sub_callback)
                 .reliability(conf.reliability)
                 .allowed_origin(conf.origin)
-                .wait()?,
+                .res_sync()?,
         };
 
         let mut query_subscriber = QueryingSubscriber {
@@ -417,7 +404,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         };
 
         // start query
-        query_subscriber.query().wait()?;
+        query_subscriber.query().res_sync()?;
 
         Ok(query_subscriber)
     }

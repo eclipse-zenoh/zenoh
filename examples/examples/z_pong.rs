@@ -15,7 +15,7 @@ use std::io::{stdin, Read};
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::*;
+use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {
@@ -24,7 +24,7 @@ fn main() {
 
     let config = parse_args();
 
-    let session = zenoh::open(config).wait().unwrap().into_arc();
+    let session = zenoh::open(config).res().unwrap().into_arc();
 
     // The key expression to read the data from
     let key_expr_ping = keyexpr::new("test/ping").unwrap();
@@ -35,13 +35,13 @@ fn main() {
     let publisher = session
         .declare_publisher(key_expr_pong)
         .congestion_control(CongestionControl::Block)
-        .wait()
+        .res()
         .unwrap();
 
     let _sub = session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.value).wait().unwrap())
-        .wait()
+        .callback(move |sample| publisher.put(sample.value).res().unwrap())
+        .res()
         .unwrap();
     for _ in stdin().bytes().take_while(|b| !matches!(b, Ok(b'q'))) {}
 }

@@ -13,7 +13,7 @@
 //
 use async_std::sync::Arc;
 use log::trace;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::ReplicaConfig;
 use zenoh_core::Result as ZResult;
