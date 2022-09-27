@@ -37,8 +37,7 @@ pub use zenoh_protocol_core::CongestionControl;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -55,8 +54,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -201,8 +199,7 @@ use zenoh_core::zresult::Error;
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::StreamExt;
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
@@ -328,8 +325,7 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
@@ -491,8 +487,7 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::publication::CongestionControl;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();

@@ -129,8 +129,7 @@ pub(crate) struct QueryState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();

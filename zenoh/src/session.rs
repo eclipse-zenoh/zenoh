@@ -1833,8 +1833,7 @@ impl fmt::Debug for Session {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use r#async::AsyncResolve;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
 /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();
@@ -1884,8 +1883,7 @@ pub trait SessionDeclarations {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use r#async::AsyncResolve;
-    /// use zenoh::prelude::*;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap().into_arc();
     /// let queryable = session.declare_queryable("key/expression").await.unwrap();
