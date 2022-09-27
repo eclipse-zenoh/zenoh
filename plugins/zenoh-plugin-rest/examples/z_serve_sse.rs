@@ -43,7 +43,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res_async().await.unwrap();
 
-    println!("Creating Queryable on '{}'...", key);
+    println!("Declaring Queryable on '{}'...", key);
     let queryable = session.declare_queryable(key).res_sync().unwrap();
 
     async_std::task::spawn({
@@ -61,7 +61,7 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Declaring publisher on '{}'...", event_key);
+    print!("Declaring Publisher on '{}'...", event_key);
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
