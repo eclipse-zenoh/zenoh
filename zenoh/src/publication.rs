@@ -310,12 +310,12 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare(self, ())
+        Undeclarable::undeclare_inner(self, ())
     }
 }
 
 impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
-    fn undeclare(self, _: ()) -> PublisherUndeclaration<'a> {
+    fn undeclare_inner(self, _: ()) -> PublisherUndeclaration<'a> {
         PublisherUndeclaration { publisher: self }
     }
 }

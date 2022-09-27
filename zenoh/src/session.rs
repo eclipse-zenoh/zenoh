@@ -287,7 +287,7 @@ pub trait Undeclarable<S, O, T = ZResult<()>>
 where
     O: Resolve<T> + Send,
 {
-    fn undeclare(self, session: S) -> O;
+    fn undeclare_inner(self, session: S) -> O;
 }
 
 impl<'a, O, T, G> Undeclarable<&'a Session, O, T> for G
@@ -295,8 +295,8 @@ where
     O: Resolve<T> + Send,
     G: Undeclarable<(), O, T>,
 {
-    fn undeclare(self, _: &'a Session) -> O {
-        self.undeclare(())
+    fn undeclare_inner(self, _: &'a Session) -> O {
+        self.undeclare_inner(())
     }
 }
 
@@ -433,9 +433,9 @@ impl Session {
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
         O: Resolve<ZResult<()>>,
-        T: Undeclarable<&'a Self, O>,
+        T: Undeclarable<&'a Self, O, ZResult<()>>,
     {
-        decl.undeclare(self)
+        Undeclarable::undeclare_inner(decl, self)
     }
 
     /// Get the current configuration of the zenoh [`Session`](Session).

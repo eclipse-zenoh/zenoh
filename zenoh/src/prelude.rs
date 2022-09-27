@@ -32,7 +32,6 @@ pub use crate::config::{self, Config, ValidatedMap};
 pub use crate::handlers::IntoCallbackReceiverPair;
 pub use crate::selector::{Parameter, Parameters, Selector};
 pub use crate::session::{Session, SessionDeclarations};
-pub use crate::Undeclarable;
 
 pub use crate::query::{QueryConsolidation, QueryTarget};
 

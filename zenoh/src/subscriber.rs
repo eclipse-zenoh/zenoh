@@ -154,7 +154,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// ```
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare(self.inner, ())
+        Undeclarable::undeclare_inner(self.inner, ())
     }
 }
 
@@ -181,12 +181,12 @@ impl<'a> SubscriberInner<'a> {
     /// ```
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
-        Undeclarable::undeclare(self, ())
+        Undeclarable::undeclare_inner(self, ())
     }
 }
 
 impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
-    fn undeclare(self, _: ()) -> SubscriberUndeclaration<'a> {
+    fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
         SubscriberUndeclaration { subscriber: self }
     }
 }
@@ -762,8 +762,8 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
 }
 
 impl<'a, T> Undeclarable<(), SubscriberUndeclaration<'a>> for Subscriber<'a, T> {
-    fn undeclare(self, _: ()) -> SubscriberUndeclaration<'a> {
-        Undeclarable::undeclare(self.subscriber, ())
+    fn undeclare_inner(self, _: ()) -> SubscriberUndeclaration<'a> {
+        Undeclarable::undeclare_inner(self.subscriber, ())
     }
 }
 

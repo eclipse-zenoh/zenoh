@@ -530,7 +530,7 @@ impl<'a> KeyExpr<'a> {
 }
 
 impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
-    fn undeclare(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
+    fn undeclare_inner(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
         KeyExprUndeclaration {
             session,
             expr: self,

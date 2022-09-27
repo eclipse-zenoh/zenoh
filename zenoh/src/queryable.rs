@@ -242,7 +242,7 @@ pub(crate) struct CallbackQueryable<'a> {
 }
 
 impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
-    fn undeclare(self, _: ()) -> QueryableUndeclaration<'a> {
+    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
         QueryableUndeclaration { queryable: self }
     }
 }
@@ -483,13 +483,13 @@ pub struct Queryable<'a, Receiver> {
 impl<'a, Receiver> Queryable<'a, Receiver> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
-        Undeclarable::undeclare(self, ())
+        Undeclarable::undeclare_inner(self, ())
     }
 }
 
 impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
-    fn undeclare(self, _: ()) -> QueryableUndeclaration<'a> {
-        Undeclarable::undeclare(self.queryable, ())
+    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
+        Undeclarable::undeclare_inner(self.queryable, ())
     }
 }
 
