@@ -32,7 +32,7 @@
 //! ### Publishing Data
 //! The example below shows how to produce a value for a key expression.
 //! ```
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
@@ -46,7 +46,7 @@
 //! The example below shows how to consume values for a key expresison.
 //! ```no_run
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
@@ -63,7 +63,7 @@
 //! resources whose key match the given *key expression*.
 //! ```
 //! use futures::prelude::*;
-//! use zenoh::prelude::r#async::*;
+//! use zenoh::prelude::*;
 //!
 //! #[async_std::main]
 //! async fn main() {
@@ -171,7 +171,7 @@ pub mod scouting;
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
@@ -204,7 +204,7 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// # })
@@ -213,7 +213,7 @@ where
 /// ```
 /// # async_std::task::block_on(async {
 /// use std::str::FromStr;
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let mut config = config::peer();
 /// config.set_id(ZenohId::from_str("F000").unwrap());
@@ -235,7 +235,7 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// # })

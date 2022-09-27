@@ -14,7 +14,7 @@
 
 //! Subscribing primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::prelude::sync::Locality;
+use crate::prelude::Locality;
 use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
@@ -59,7 +59,7 @@ impl fmt::Debug for SubscriberState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -91,7 +91,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -113,7 +113,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -139,7 +139,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
@@ -167,7 +167,7 @@ impl<'a> SubscriberInner<'a> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// # fn data_handler(_sample: Sample) { };
@@ -196,7 +196,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -275,7 +275,7 @@ impl From<PushMode> for SubMode {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -303,7 +303,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
@@ -344,7 +344,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -371,7 +371,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session
@@ -623,7 +623,7 @@ where
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -658,7 +658,7 @@ pub struct Subscriber<'a, Receiver> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let subscriber = session
@@ -695,7 +695,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::subscriber::SubMode;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -721,7 +721,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression").pull_mode().await.unwrap();
@@ -748,7 +748,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression").await.unwrap();

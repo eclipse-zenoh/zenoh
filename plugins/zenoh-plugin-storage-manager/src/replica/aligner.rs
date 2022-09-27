@@ -20,7 +20,7 @@ use log::{error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::query::QueryConsolidation;
 use zenoh::time::Timestamp;
 use zenoh::Session;

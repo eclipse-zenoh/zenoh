@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;

@@ -224,7 +224,7 @@ impl fmt::Debug for QueryableState {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::prelude::*;
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -252,7 +252,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").await.unwrap();
@@ -306,7 +306,7 @@ impl Drop for CallbackQueryable<'_> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -329,7 +329,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let queryable = session
@@ -368,7 +368,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -395,7 +395,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let queryable = session
@@ -459,7 +459,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let queryable = session

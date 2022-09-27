@@ -22,7 +22,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::{bail, zlock, Result as ZResult};
 

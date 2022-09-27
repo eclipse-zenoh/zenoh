@@ -65,7 +65,7 @@ pub trait SessionExt {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh_ext::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();

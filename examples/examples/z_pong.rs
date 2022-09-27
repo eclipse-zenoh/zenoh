@@ -15,7 +15,7 @@ use std::io::{stdin, Read};
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {

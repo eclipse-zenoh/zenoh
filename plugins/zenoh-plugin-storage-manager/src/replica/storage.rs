@@ -19,7 +19,7 @@ use futures::select;
 use log::{error, trace, warn};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::{Query, StorageInsertionResult};

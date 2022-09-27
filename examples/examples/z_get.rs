@@ -15,7 +15,7 @@ use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 #[async_std::main]
 async fn main() {

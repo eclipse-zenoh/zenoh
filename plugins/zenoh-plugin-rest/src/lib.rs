@@ -22,7 +22,7 @@ use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;

@@ -24,7 +24,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let zid = session.info().zid().await;
@@ -68,7 +68,7 @@ impl<'a> IntoFuture for ZidBuilder<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let mut routers_zid = session.info().routers_zid().await;
@@ -124,7 +124,7 @@ impl<'a> IntoFuture for RoutersZidBuilder<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let zid = session.info().zid().await;
@@ -181,7 +181,7 @@ impl<'a> IntoFuture for PeersZidBuilder<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let info = session.info();
@@ -198,7 +198,7 @@ impl SessionInfo<'_> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let zid = session.info().zid().await;
@@ -216,7 +216,7 @@ impl SessionInfo<'_> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut routers_zid = session.info().routers_zid().await;
@@ -234,7 +234,7 @@ impl SessionInfo<'_> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut peers_zid = session.info().peers_zid().await;

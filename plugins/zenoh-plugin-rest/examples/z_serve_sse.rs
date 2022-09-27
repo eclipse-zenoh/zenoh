@@ -13,7 +13,7 @@
 //
 
 use clap::{App, Arg};
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 use zenoh::{config::Config, key_expr::keyexpr};
 

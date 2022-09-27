@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;

@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use zenoh::buffers::SharedMemoryManager;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
 #[async_std::main]

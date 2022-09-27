@@ -34,7 +34,7 @@ pub use zenoh_protocol::proto::Hello;
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).await.unwrap();
@@ -57,7 +57,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::scouting::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
@@ -91,7 +91,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::scouting::WhatAmI;
     ///
     /// let mut n = 0;
@@ -117,7 +117,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::scouting::WhatAmI;
     ///
     /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
@@ -196,7 +196,7 @@ where
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
 /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
@@ -216,7 +216,7 @@ impl ScoutInner {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::scouting::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
@@ -242,7 +242,7 @@ impl fmt::Debug for ScoutInner {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::scouting::WhatAmI;
 ///
 /// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
@@ -275,7 +275,7 @@ impl<Receiver> Scout<Receiver> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     /// use zenoh::scouting::WhatAmI;
     ///
     /// let scout = zenoh::scout(WhatAmI::Router, config::default())

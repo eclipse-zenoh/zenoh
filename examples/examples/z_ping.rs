@@ -14,7 +14,7 @@
 use clap::{App, Arg};
 use std::time::{Duration, Instant};
 use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {

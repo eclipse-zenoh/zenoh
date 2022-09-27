@@ -129,7 +129,7 @@ pub(crate) struct QueryState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 /// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
@@ -160,7 +160,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let queryable = session
@@ -201,7 +201,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let mut n = 0;
@@ -228,7 +228,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::prelude::*;
     ///
     /// let session = zenoh::open(config::peer()).await.unwrap();
     /// let replies = session

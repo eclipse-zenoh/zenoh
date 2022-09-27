@@ -24,7 +24,7 @@ use zenoh_protocol_core::key_expr::canon::Canonizable;
 pub use zenoh_protocol_core::key_expr::*;
 use zenoh_transport::Primitives;
 
-use crate::{prelude::sync::Selector, Session, Undeclarable};
+use crate::{prelude::Selector, Session, Undeclarable};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -543,7 +543,7 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
+/// use zenoh::prelude::*;
 ///
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// let key_expr = session.declare_keyexpr("key/expression").await.unwrap();

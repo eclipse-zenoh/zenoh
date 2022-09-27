@@ -29,7 +29,7 @@ use zenoh_protocol_core::{
     ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
 };
 
-use crate::prelude::sync::KeyExpr;
+use crate::prelude::KeyExpr;
 
 use super::face::FaceState;
 use super::network::Network;

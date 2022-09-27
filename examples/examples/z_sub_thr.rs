@@ -15,7 +15,7 @@ use clap::{App, Arg};
 use std::io::{stdin, Read};
 use std::time::Instant;
 use zenoh::config::Config;
-use zenoh::prelude::sync::*;
+use zenoh::prelude::*;
 
 struct Stats {
     round_count: usize,

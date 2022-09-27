@@ -20,7 +20,7 @@ use futures::select;
 use std::collections::HashMap;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
+use zenoh::prelude::*;
 
 #[async_std::main]
 async fn main() {
