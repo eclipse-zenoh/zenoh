@@ -392,7 +392,7 @@ mod tests {
             handle.clone().defuse();
             handle.defuse();
 
-            // SyncResolve a bit more to verify that not more events have been fired
+            // Wait a bit more to verify that not more events have been fired
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value
@@ -417,7 +417,7 @@ mod tests {
             // Stop the timer
             timer.stop_async().await;
 
-            // SyncResolve some time
+            // Wait some time
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value
