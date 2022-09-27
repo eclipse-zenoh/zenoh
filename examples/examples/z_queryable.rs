@@ -32,7 +32,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating Queryable on '{}'...", key_expr);
+    println!("Declaring Queryable on '{}'...", key_expr);
     let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
 
     println!("Enter 'q' to quit...");
