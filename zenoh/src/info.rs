@@ -16,7 +16,7 @@
 use crate::SessionRef;
 use std::future::{IntoFuture, Ready};
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::{AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{IntoFutureSend, Resolvable, Resolve};
 
 /// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
@@ -44,20 +44,20 @@ impl<'a> Resolve<<Self as Resolvable>::To> for ZidBuilder<'a> {
     }
 }
 
-impl<'a> AsyncResolve for ZidBuilder<'a> {
+impl<'a> IntoFutureSend for ZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl<'a> IntoFuture for ZidBuilder<'a> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -101,20 +101,20 @@ impl<'a> Resolve<<Self as Resolvable>::To> for RoutersZidBuilder<'a> {
     }
 }
 
-impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
+impl<'a> IntoFutureSend for RoutersZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl<'a> IntoFuture for RoutersZidBuilder<'a> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -158,10 +158,10 @@ impl<'a> Resolve<<Self as Resolvable>::To> for PeersZidBuilder<'a> {
     }
 }
 
-impl<'a> AsyncResolve for PeersZidBuilder<'a> {
+impl<'a> IntoFutureSend for PeersZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -171,7 +171,7 @@ impl<'a> IntoFuture for PeersZidBuilder<'a> {
     type IntoFuture = std::future::Ready<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 

@@ -63,7 +63,7 @@ use zenoh_protocol::{
 };
 use zenoh_protocol_core::ZenohId;
 use zenoh_protocol_core::EMPTY_EXPR_ID;
-use zenoh_util::core::AsyncResolve;
+use zenoh_util::core::IntoFutureSend;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -775,7 +775,7 @@ impl Session {
                 Ok(runtime) => {
                     let session =
                         Self::init(runtime, aggregated_subscribers, aggregated_publishers)
-                            .res_async()
+                            .into_future_send()
                             .await;
                     // Workaround for the declare_and_shoot problem
                     task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;

@@ -22,7 +22,7 @@ use std::fmt;
 use std::future::{IntoFuture, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use zenoh_core::{AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{IntoFutureSend, Resolvable, Resolve};
 use zenoh_protocol_core::SubInfo;
 
 /// The subscription mode.
@@ -223,20 +223,20 @@ impl Resolve<<Self as Resolvable>::To> for SubscriberUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for SubscriberUndeclaration<'_> {
+impl IntoFutureSend for SubscriberUndeclaration<'_> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl IntoFuture for SubscriberUndeclaration<'_> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -520,14 +520,14 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> IntoFutureSend for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -538,10 +538,10 @@ where
     Handler::Receiver: Send,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -586,14 +586,14 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
+impl<'a, Handler> IntoFutureSend for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -604,10 +604,10 @@ where
     Handler::Receiver: Send,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 

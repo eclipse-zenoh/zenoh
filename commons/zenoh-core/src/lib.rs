@@ -34,13 +34,14 @@ pub trait Resolvable {
     type To: Sized + Send;
 }
 
-pub trait AsyncResolve: Resolvable {
+pub trait IntoFutureSend: Resolvable + IntoFuture {
     type Future: Future<Output = <Self as Resolvable>::To> + Send;
 
-    fn res_async(self) -> Self::Future;
+    fn into_future_send(self) -> Self::Future;
 }
+
 pub trait Resolve<Output>:
-    Resolvable<To = Output> + AsyncResolve + IntoFuture<Output = Output> + Send
+    Resolvable<To = Output> + IntoFuture<Output = Output> + IntoFutureSend + Send
 {
     fn wait(self) -> <Self as Resolvable>::To
     where
@@ -61,14 +62,14 @@ where
     type To = To;
 }
 
-impl<F, To> AsyncResolve for ResolveClosure<F, To>
+impl<F, To> IntoFutureSend for ResolveClosure<F, To>
 where
     To: Sized + Send,
     F: FnOnce() -> To + Send,
 {
     type Future = Ready<<Self as Resolvable>::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -89,10 +90,10 @@ where
     F: FnOnce() -> To + Send,
 {
     type Output = To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -110,14 +111,14 @@ where
     type To = To;
 }
 
-impl<F, To> AsyncResolve for ResolveFuture<F, To>
+impl<F, To> IntoFutureSend for ResolveFuture<F, To>
 where
     To: Sized + Send,
     F: Future<Output = To> + Send,
 {
     type Future = F;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         self.0
     }
 }
@@ -138,9 +139,9 @@ where
     F: Future<Output = To> + Send,
 {
     type Output = To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }

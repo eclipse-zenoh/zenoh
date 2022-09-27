@@ -22,7 +22,7 @@ use crate::SessionRef;
 use crate::Undeclarable;
 use std::future::{IntoFuture, Ready};
 use zenoh_core::zresult::ZResult;
-use zenoh_core::AsyncResolve;
+use zenoh_core::IntoFutureSend;
 use zenoh_core::Resolvable;
 use zenoh_core::{zread, Resolve};
 use zenoh_protocol::proto::{DataInfo, Options};
@@ -153,20 +153,20 @@ impl Resolve<<Self as Resolvable>::To> for PutBuilder<'_, '_> {
     }
 }
 
-impl AsyncResolve for PutBuilder<'_, '_> {
+impl IntoFutureSend for PutBuilder<'_, '_> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl IntoFuture for PutBuilder<'_, '_> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -352,20 +352,20 @@ impl Resolve<<Self as Resolvable>::To> for PublisherUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for PublisherUndeclaration<'_> {
+impl IntoFutureSend for PublisherUndeclaration<'_> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl IntoFuture for PublisherUndeclaration<'_> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -437,20 +437,20 @@ impl Resolve<<Self as Resolvable>::To> for Publication<'_> {
     }
 }
 
-impl AsyncResolve for Publication<'_> {
+impl IntoFutureSend for Publication<'_> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl IntoFuture for Publication<'_> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -584,20 +584,20 @@ impl<'a, 'b> Resolve<<Self as Resolvable>::To> for PublisherBuilder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
+impl<'a, 'b> IntoFutureSend for PublisherBuilder<'a, 'b> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl<'a, 'b> IntoFuture for PublisherBuilder<'a, 'b> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 

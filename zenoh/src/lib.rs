@@ -85,7 +85,7 @@ use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::{IntoFuture, Ready};
-use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
+use zenoh_core::{zerror, IntoFutureSend, Result as ZResult};
 use zenoh_core::{Resolvable, Resolve};
 
 /// A zenoh error.
@@ -271,14 +271,14 @@ where
     }
 }
 
-impl<TryIntoConfig> AsyncResolve for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> IntoFutureSend for OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -292,7 +292,7 @@ where
     type IntoFuture = Ready<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -350,10 +350,10 @@ impl Resolve<<Self as Resolvable>::To> for InitBuilder {
 }
 
 #[zenoh_core::unstable]
-impl AsyncResolve for InitBuilder {
+impl IntoFutureSend for InitBuilder {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -361,9 +361,9 @@ impl AsyncResolve for InitBuilder {
 #[zenoh_core::unstable]
 impl IntoFuture for InitBuilder {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }

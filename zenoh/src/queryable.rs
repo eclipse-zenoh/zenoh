@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult};
+use zenoh_core::{IntoFutureSend, Resolvable, Resolve, Result as ZResult};
 use zenoh_protocol_core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
@@ -163,10 +163,10 @@ impl Future for ReplyFuture<'_> {
     }
 }
 
-impl<'a> AsyncResolve for ReplyBuilder<'a> {
+impl<'a> IntoFutureSend for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         ReplyFuture(match self.result {
             Ok(sample) => {
                 if !self.query._accepts_any_replies().unwrap_or(false)
@@ -186,10 +186,10 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
 
 impl<'a> IntoFuture for ReplyBuilder<'a> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -276,10 +276,10 @@ impl Resolve<<Self as Resolvable>::To> for QueryableUndeclaration<'_> {
     }
 }
 
-impl<'a> AsyncResolve for QueryableUndeclaration<'a> {
+impl<'a> IntoFutureSend for QueryableUndeclaration<'a> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -289,7 +289,7 @@ impl<'a> IntoFuture for QueryableUndeclaration<'a> {
     type IntoFuture = Ready<Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -535,14 +535,14 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for QueryableBuilder<'a, '_, Handler>
+impl<'a, Handler> IntoFutureSend for QueryableBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Query> + Send,
     Handler::Receiver: Send,
 {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -553,9 +553,9 @@ where
     Handler::Receiver: Send,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }

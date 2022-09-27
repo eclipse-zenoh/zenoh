@@ -23,7 +23,7 @@ use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve};
+use zenoh_core::{zlock, IntoFutureSend, Resolvable, Resolve};
 
 use crate::session_ext::SessionRef;
 
@@ -242,14 +242,14 @@ where
     }
 }
 
-impl<'a, Handler> AsyncResolve for QueryingSubscriberBuilder<'a, '_, Handler>
+impl<'a, Handler> IntoFutureSend for QueryingSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
@@ -260,10 +260,10 @@ where
     Handler::Receiver: Send,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 

@@ -22,7 +22,7 @@ use zenoh::prelude::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve, Result as ZResult};
+use zenoh_core::{bail, IntoFutureSend, Resolvable, Resolve, Result as ZResult};
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -93,20 +93,20 @@ impl Resolve<<Self as Resolvable>::To> for PublicationCacheBuilder<'_, '_, '_> {
     }
 }
 
-impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
+impl<'a> IntoFutureSend for PublicationCacheBuilder<'a, '_, '_> {
     type Future = Ready<Self::To>;
 
-    fn res_async(self) -> Self::Future {
+    fn into_future_send(self) -> Self::Future {
         std::future::ready(self.wait())
     }
 }
 
 impl<'a> IntoFuture for PublicationCacheBuilder<'a, '_, '_> {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = <Self as AsyncResolve>::Future;
+    type IntoFuture = <Self as IntoFutureSend>::Future;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.res_async()
+        self.into_future_send()
     }
 }
 
@@ -247,8 +247,8 @@ impl<'a> PublicationCache<'a> {
                 _local_sub,
                 _stoptx,
             } = self;
-            _queryable.undeclare().res_async().await?;
-            _local_sub.undeclare().res_async().await?;
+            _queryable.undeclare().into_future_send().await?;
+            _local_sub.undeclare().into_future_send().await?;
             drop(_stoptx);
             Ok(())
         })
