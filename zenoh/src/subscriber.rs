@@ -22,7 +22,7 @@ use std::fmt;
 use std::future::{IntoFuture, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve};
 use zenoh_protocol_core::SubInfo;
 
 /// The subscription mode.
@@ -214,8 +214,8 @@ impl Resolvable for SubscriberUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for SubscriberUndeclaration<'_> {
-    fn res_sync(mut self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for SubscriberUndeclaration<'_> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
         self.subscriber.alive = false;
         self.subscriber
             .session
@@ -227,7 +227,7 @@ impl AsyncResolve for SubscriberUndeclaration<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -287,7 +287,7 @@ impl From<PushMode> for SubMode {
 /// # })
 /// ```
 #[derive(Debug)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `Resolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
@@ -490,12 +490,12 @@ where
     type To = ZResult<Subscriber<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PushMode, Handler>
+impl<'a, Handler> Resolve<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PushMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
@@ -528,7 +528,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -554,12 +554,12 @@ where
     type To = ZResult<PullSubscriber<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> SyncResolve for SubscriberBuilder<'a, '_, PullMode, Handler>
+impl<'a, Handler> Resolve<<Self as Resolvable>::To> for SubscriberBuilder<'a, '_, PullMode, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
@@ -594,7 +594,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

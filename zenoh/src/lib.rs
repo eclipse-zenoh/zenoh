@@ -86,7 +86,7 @@ use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::{IntoFuture, Ready};
 use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
-use zenoh_core::{Resolvable, SyncResolve};
+use zenoh_core::{Resolvable, Resolve};
 
 /// A zenoh error.
 pub use zenoh_core::Error;
@@ -240,7 +240,7 @@ where
 /// let session = zenoh::open(config::peer()).await.unwrap();
 /// # })
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `Resolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -257,17 +257,17 @@ where
     type To = ZResult<Session>;
 }
 
-impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
+impl<TryIntoConfig> Resolve<<Self as Resolvable>::To> for OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let config: crate::config::Config = self
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
+        Session::new(config).wait()
     }
 }
 
@@ -279,7 +279,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -338,14 +338,14 @@ impl Resolvable for InitBuilder {
 }
 
 #[zenoh_core::unstable]
-impl SyncResolve for InitBuilder {
-    fn res_sync(self) -> <Self as IntoFuture>::Output {
+impl Resolve<<Self as Resolvable>::To> for InitBuilder {
+    fn wait(self) -> <Self as IntoFuture>::Output {
         Ok(Session::init(
             self.runtime,
             self.aggregated_subscribers,
             self.aggregated_publishers,
         )
-        .res_sync())
+        .wait())
     }
 }
 
@@ -354,7 +354,7 @@ impl AsyncResolve for InitBuilder {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

@@ -315,7 +315,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
         let handle = task::spawn(async move {
-            // SyncResolve for the accept loop to terminate
+            // Resolve for the accept loop to terminate
             let res = accept_read_task(
                 link,
                 c_active,
@@ -398,7 +398,7 @@ async fn accept_read_task(
         while active.load(Ordering::Acquire) {
             if !is_connected.load(Ordering::Acquire) {
                 if !link.is_ready() {
-                    // SyncResolveing to be ready, if not sleep some time.
+                    // Resolveing to be ready, if not sleep some time.
                     task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
                     continue;
                 }

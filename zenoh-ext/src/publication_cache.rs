@@ -22,7 +22,7 @@ use zenoh::prelude::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve, Result as ZResult};
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
@@ -87,8 +87,8 @@ impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
     type To = ZResult<PublicationCache<'a>>;
 }
 
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for PublicationCacheBuilder<'_, '_, '_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         PublicationCache::new(self)
     }
 }
@@ -97,7 +97,7 @@ impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

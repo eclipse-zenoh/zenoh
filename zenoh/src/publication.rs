@@ -24,8 +24,7 @@ use std::future::{IntoFuture, Ready};
 use zenoh_core::zresult::ZResult;
 use zenoh_core::AsyncResolve;
 use zenoh_core::Resolvable;
-use zenoh_core::Resolve;
-use zenoh_core::{zread, SyncResolve};
+use zenoh_core::{zread, Resolve};
 use zenoh_protocol::proto::{DataInfo, Options};
 use zenoh_protocol_core::Channel;
 
@@ -107,9 +106,9 @@ impl Resolvable for PutBuilder<'_, '_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for PutBuilder<'_, '_> {
+impl Resolve<<Self as Resolvable>::To> for PutBuilder<'_, '_> {
     #[inline]
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let PutBuilder {
             publisher,
             value,
@@ -158,7 +157,7 @@ impl AsyncResolve for PutBuilder<'_, '_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -340,14 +339,14 @@ impl Resolvable for PublisherUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for PublisherUndeclaration<'_> {
-    fn res_sync(mut self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for PublisherUndeclaration<'_> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
         let Publisher {
             session, key_expr, ..
         } = &self.publisher;
         session
             .undeclare_publication_intent(key_expr.clone())
-            .res_sync()?;
+            .wait()?;
         self.publisher.key_expr = unsafe { keyexpr::from_str_unchecked("") }.into();
         Ok(())
     }
@@ -357,7 +356,7 @@ impl AsyncResolve for PublisherUndeclaration<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -376,7 +375,7 @@ impl Drop for Publisher<'_> {
             let _ = self
                 .session
                 .undeclare_publication_intent(self.key_expr.clone())
-                .res_sync();
+                .wait();
         }
     }
 }
@@ -393,8 +392,8 @@ impl Resolvable for Publication<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for Publication<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for Publication<'_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         let Publication {
             publisher,
             value,
@@ -442,7 +441,7 @@ impl AsyncResolve for Publication<'_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -540,12 +539,12 @@ impl<'a, 'b> Resolvable for PublisherBuilder<'a, 'b> {
     type To = ZResult<Publisher<'a>>;
 }
 
-impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl<'a, 'b> Resolve<<Self as Resolvable>::To> for PublisherBuilder<'a, 'b> {
+    fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         if !key_expr.is_fully_optimized(&self.session) {
             let session_id = self.session.id;
-            let expr_id = self.session.declare_prefix(key_expr.as_str()).res_sync();
+            let expr_id = self.session.declare_prefix(key_expr.as_str()).wait();
             let prefix_len = key_expr
                 .len()
                 .try_into()
@@ -573,7 +572,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         }
         self.session
             .declare_publication_intent(key_expr.clone())
-            .res_sync()?;
+            .wait()?;
         let publisher = Publisher {
             session: self.session,
             key_expr,
@@ -589,7 +588,7 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

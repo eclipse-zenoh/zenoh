@@ -90,14 +90,14 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     );
     client_transport.schedule(message.clone()).unwrap();
 
-    // SyncResolve that the client transport has been closed
+    // Resolve that the client transport has been closed
     ztimeout!(async {
         while client_transport.get_zid().is_ok() {
             task::sleep(SLEEP).await;
         }
     });
 
-    // SyncResolve on the router manager that the transport has been closed
+    // Resolve on the router manager that the transport has been closed
     ztimeout!(async {
         while !router_manager.get_transports_unicast().is_empty() {
             task::sleep(SLEEP).await;
@@ -108,7 +108,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     println!("Del locator: {}", endpoint);
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
             task::sleep(SLEEP).await;
@@ -120,7 +120,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 }
 

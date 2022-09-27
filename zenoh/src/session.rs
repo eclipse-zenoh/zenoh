@@ -52,9 +52,7 @@ use uhlc::HLC;
 use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
-use zenoh_core::{
-    zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
-};
+use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult};
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
@@ -628,7 +626,7 @@ impl Session {
         ResolveClosure(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
-            let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+            let expr_id = self.declare_prefix(key_expr.as_str()).wait();
             let key_expr = match key_expr.0 {
                 KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                     KeyExpr(KeyExprInner::BorrowedWire {
@@ -979,14 +977,14 @@ impl Session {
                 match key_expr.as_str().find('*') {
                     Some(0) => key_expr.to_wire(self),
                     Some(pos) => {
-                        let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).res_sync();
+                        let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).wait();
                         WireExpr {
                             scope: expr_id,
                             suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
                         }
                     }
                     None => {
-                        let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+                        let expr_id = self.declare_prefix(key_expr.as_str()).wait();
                         WireExpr {
                             scope: expr_id,
                             suffix: std::borrow::Cow::Borrowed(""),
@@ -1810,7 +1808,7 @@ impl Primitives for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.alive {
-            let _ = self.clone().close().res_sync();
+            let _ = self.clone().close().wait();
         }
     }
 }

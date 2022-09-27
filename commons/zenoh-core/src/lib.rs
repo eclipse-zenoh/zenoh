@@ -28,7 +28,7 @@ pub use zresult::ZResult as Result;
 
 /// Zenoh's trait for resolving builder patterns with a synchronous operation.
 ///
-/// Many builder patterns in Zenoh can be resolved with either [`SyncResolve`] or [`IntoFuture`],
+/// Many builder patterns in Zenoh can be resolved with either [`Resolve`] or [`IntoFuture`],
 /// we advise sticking to either one or the other, rather than mixing them up.
 pub trait Resolvable {
     type To: Sized + Send;
@@ -39,25 +39,12 @@ pub trait AsyncResolve: Resolvable {
 
     fn res_async(self) -> Self::Future;
 }
-
-pub trait SyncResolve: Resolvable {
-    fn res_sync(self) -> <Self as Resolvable>::To;
-}
-
 pub trait Resolve<Output>:
-    Resolvable<To = Output> + SyncResolve + AsyncResolve + IntoFuture<Output = Output> + Send
+    Resolvable<To = Output> + AsyncResolve + IntoFuture<Output = Output> + Send
 {
     fn wait(self) -> <Self as Resolvable>::To
     where
-        Self: Sized,
-    {
-        self.res_sync()
-    }
-}
-
-impl<T, Output> Resolve<Output> for T where
-    T: Resolvable<To = Output> + SyncResolve + AsyncResolve + IntoFuture<Output = Output> + Send
-{
+        Self: Sized;
 }
 
 // Closure to wait
@@ -82,16 +69,16 @@ where
     type Future = Ready<<Self as Resolvable>::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
-impl<F, To> SyncResolve for ResolveClosure<F, To>
+impl<F, To> Resolve<To> for ResolveClosure<F, To>
 where
     To: Sized + Send,
     F: FnOnce() -> To + Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         self.0()
     }
 }
@@ -135,12 +122,12 @@ where
     }
 }
 
-impl<F, To> SyncResolve for ResolveFuture<F, To>
+impl<F, To> Resolve<To> for ResolveFuture<F, To>
 where
     To: Sized + Send,
     F: Future<Output = To> + Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         async_std::task::block_on(self.0)
     }
 }

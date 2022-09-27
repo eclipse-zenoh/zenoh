@@ -32,7 +32,7 @@ pub(super) async fn recv(
     auth_link: &AuthenticatedPeerLink,
     _input: super::open_syn::Output,
 ) -> OResult<Output> {
-    // SyncResolve to read an OpenAck
+    // Resolve to read an OpenAck
     let mut messages = link
         .read_transport_message()
         .await

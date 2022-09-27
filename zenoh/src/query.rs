@@ -26,7 +26,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_collections::Timed;
 use zenoh_core::zresult::ZResult;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol_core::QueryTarget;
@@ -338,12 +338,12 @@ where
     type To = ZResult<Handler::Receiver>;
 }
 
-impl<Handler> SyncResolve for GetBuilder<'_, '_, Handler>
+impl<Handler> Resolve<<Self as Resolvable>::To> for GetBuilder<'_, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
 
         self.session
@@ -366,7 +366,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

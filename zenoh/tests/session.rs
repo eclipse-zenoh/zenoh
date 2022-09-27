@@ -79,7 +79,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         }))
         .unwrap();
 
-        // SyncResolve for the declaration to propagate
+        // Resolve for the declaration to propagate
         task::sleep(SLEEP).await;
 
         // Put data
@@ -109,7 +109,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         println!("[PS][03b] Unsubscribing on peer01 session");
         ztimeout!(sub.undeclare()).unwrap();
 
-        // SyncResolve for the declaration to propagate
+        // Resolve for the declaration to propagate
         task::sleep(SLEEP).await;
     }
 }
@@ -132,7 +132,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         }))
         .unwrap();
 
-        // SyncResolve for the declaration to propagate
+        // Resolve for the declaration to propagate
         task::sleep(SLEEP).await;
 
         // Get data
@@ -155,7 +155,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         println!("[PS][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare()).unwrap();
 
-        // SyncResolve for the declaration to propagate
+        // Resolve for the declaration to propagate
         task::sleep(SLEEP).await;
     }
 }

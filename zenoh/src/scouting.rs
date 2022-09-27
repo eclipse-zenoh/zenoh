@@ -21,7 +21,7 @@ use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult};
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub use zenoh_protocol_core::WhatAmI;
@@ -43,7 +43,7 @@ pub use zenoh_protocol::proto::Hello;
 /// }
 /// # })
 /// ```
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `Resolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ScoutBuilder<Handler> {
     pub(crate) what: WhatAmIMatcher,
@@ -155,12 +155,12 @@ where
     type To = ZResult<Scout<Handler::Receiver>>;
 }
 
-impl<Handler> SyncResolve for ScoutBuilder<Handler>
+impl<Handler> Resolve<<Self as Resolvable>::To> for ScoutBuilder<Handler>
 where
     Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         scout(self.what, self.config?, callback).map(|scout| Scout { scout, receiver })
     }
@@ -174,7 +174,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

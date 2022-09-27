@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult};
 use zenoh_protocol_core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
@@ -117,7 +117,7 @@ impl fmt::Display for Query {
 }
 
 /// A builder returned by [`Query::reply()`](Query::reply).
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `Resolve` or `AsyncResolve`"]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
     result: Result<Sample, Value>,
@@ -127,8 +127,8 @@ impl<'a> Resolvable for ReplyBuilder<'a> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for ReplyBuilder<'_> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for ReplyBuilder<'_> {
+    fn wait(self) -> <Self as Resolvable>::To {
         match self.result {
             Ok(sample) => {
                 if !self.query._accepts_any_replies().unwrap_or(false)
@@ -267,8 +267,8 @@ impl Resolvable for QueryableUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-impl SyncResolve for QueryableUndeclaration<'_> {
-    fn res_sync(mut self) -> <Self as Resolvable>::To {
+impl Resolve<<Self as Resolvable>::To> for QueryableUndeclaration<'_> {
+    fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.alive = false;
         self.queryable
             .session
@@ -280,7 +280,7 @@ impl<'a> AsyncResolve for QueryableUndeclaration<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -314,7 +314,7 @@ impl Drop for CallbackQueryable<'_> {
 /// # })
 /// ```
 #[derive(Debug)]
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `Resolve` or `AsyncResolve`"]
 pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
@@ -509,12 +509,12 @@ where
     type To = ZResult<Queryable<'a, Handler::Receiver>>;
 }
 
-impl<'a, Handler> SyncResolve for QueryableBuilder<'a, '_, Handler>
+impl<'a, Handler> Resolve<<Self as Resolvable>::To> for QueryableBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Query> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+    fn wait(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
@@ -543,7 +543,7 @@ where
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

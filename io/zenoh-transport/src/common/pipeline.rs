@@ -617,7 +617,7 @@ impl TransmissionPipelineConsumer {
                 }
             }
 
-            // SyncResolve for the backoff to expire or for a new message
+            // Resolve for the backoff to expire or for a new message
             let _ = self
                 .n_out_r
                 .recv_async()
@@ -872,7 +872,7 @@ mod tests {
         });
 
         task::block_on(async {
-            // SyncResolve to have sent enough messages and to have blocked
+            // Resolve to have sent enough messages and to have blocked
             println!(
                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
                 CONFIG.queue_size[Priority::MAX as usize]

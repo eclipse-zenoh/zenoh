@@ -16,7 +16,7 @@
 use crate::SessionRef;
 use std::future::{IntoFuture, Ready};
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Resolve};
 
 /// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).
@@ -38,8 +38,8 @@ impl<'a> Resolvable for ZidBuilder<'a> {
     type To = ZenohId;
 }
 
-impl<'a> SyncResolve for ZidBuilder<'a> {
-    fn res_sync(self) -> Self::To {
+impl<'a> Resolve<<Self as Resolvable>::To> for ZidBuilder<'a> {
+    fn wait(self) -> Self::To {
         self.session.runtime.zid
     }
 }
@@ -48,7 +48,7 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -83,8 +83,8 @@ impl<'a> Resolvable for RoutersZidBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> SyncResolve for RoutersZidBuilder<'a> {
-    fn res_sync(self) -> Self::To {
+impl<'a> Resolve<<Self as Resolvable>::To> for RoutersZidBuilder<'a> {
+    fn wait(self) -> Self::To {
         Box::new(
             self.session
                 .runtime
@@ -105,7 +105,7 @@ impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 
@@ -140,8 +140,8 @@ impl<'a> Resolvable for PeersZidBuilder<'a> {
     type To = Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
 }
 
-impl<'a> SyncResolve for PeersZidBuilder<'a> {
-    fn res_sync(self) -> <Self as Resolvable>::To {
+impl<'a> Resolve<<Self as Resolvable>::To> for PeersZidBuilder<'a> {
+    fn wait(self) -> <Self as Resolvable>::To {
         Box::new(
             self.session
                 .runtime
@@ -162,7 +162,7 @@ impl<'a> AsyncResolve for PeersZidBuilder<'a> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        std::future::ready(self.wait())
     }
 }
 

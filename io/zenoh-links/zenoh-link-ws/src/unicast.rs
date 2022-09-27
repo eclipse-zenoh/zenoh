@@ -357,7 +357,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let c_listeners = self.listeners.clone();
         let c_addr = local_addr;
         let handle = task::spawn(async move {
-            // SyncResolve for the accept loop to terminate
+            // Resolve for the accept loop to terminate
             let res = accept_task(socket, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
@@ -479,7 +479,7 @@ async fn accept_task(
         src_addr
     );
     while active.load(Ordering::Acquire) {
-        // SyncResolve for incoming connections
+        // Resolve for incoming connections
         let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
             Ok(action) => match action {
                 Action::Accept((stream, addr)) => (stream, addr),

@@ -236,13 +236,13 @@ async fn close_transport(
         }
     });
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 }
 
@@ -295,7 +295,7 @@ async fn test_transport(
         }
     };
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 }
 

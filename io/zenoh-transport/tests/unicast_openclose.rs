@@ -426,14 +426,14 @@ async fn openclose_transport(endpoint: &EndPoint) {
         }
     });
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
     ztimeout!(client02_manager.close());
 
-    // SyncResolve a little bit
+    // Resolve a little bit
     task::sleep(SLEEP).await;
 }
 
