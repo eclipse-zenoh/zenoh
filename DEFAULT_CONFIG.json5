@@ -198,7 +198,7 @@
   },
 
   /// Configure the Admin Space
-  /// [unstable]: this configuration part might change in the future
+  /// Unstable: this configuration part works as advertised, but may change in a future release
   adminspace: {
     // read and/or write permissions on the admin space
     permissions: {

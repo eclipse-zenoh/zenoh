@@ -293,10 +293,10 @@ validated_struct::validator! {
             },
         },
         /// Configuration of the admin space.
-        /// [unstable]: this configuration may change in the future.
         pub adminspace: #[derive(Default)]
+        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
         AdminSpaceConf {
-            /// Perimissions on the admin space
+            /// Permissions on the admin space
             pub permissions:
             PermissionsConf {
                 /// Whether the admin space replies to queries (true by default).
