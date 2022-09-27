@@ -716,7 +716,7 @@ impl Runtime {
             .iter()
             .filter_map(|sock| sock.local_addr().ok())
             .collect();
-        log::debug!("SyncResolveing for UDP datagram...");
+        log::debug!("Waiting for UDP datagram...");
         loop {
             let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
             if local_addrs.iter().any(|addr| *addr == peer) {

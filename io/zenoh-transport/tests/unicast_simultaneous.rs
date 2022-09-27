@@ -226,7 +226,7 @@ mod tests {
                 tp02.unwrap()
             });
 
-            // SyncResolve for the links to be properly established
+            // Wait for the links to be properly established
             ztimeout!(async {
                 let expected = endpoint01.len() + c_ep02.len();
                 let mut tl02 = vec![];
@@ -237,7 +237,7 @@ mod tests {
                 }
             });
 
-            // SyncResolve for the messages to arrive to peer 01
+            // Wait for the messages to arrive to peer 01
             ztimeout!(async {
                 let mut check = 0;
                 while check != MSG_COUNT {
@@ -265,7 +265,7 @@ mod tests {
                 assert!(res.is_err());
             }
 
-            // SyncResolve a little bit
+            // Wait a little bit
             task::sleep(SLEEP).await;
 
             let tp01 = ztimeout!(async {
@@ -281,7 +281,7 @@ mod tests {
                 tp01.unwrap()
             });
 
-            // SyncResolve for the links to be properly established
+            // Wait for the links to be properly established
             ztimeout!(async {
                 let expected = c_ep01.len() + endpoint02.len();
                 let mut tl01 = vec![];
@@ -292,7 +292,7 @@ mod tests {
                 }
             });
 
-            // SyncResolve for the messages to arrive to peer 02
+            // Wait for the messages to arrive to peer 02
             ztimeout!(async {
                 let mut check = 0;
                 while check != MSG_COUNT {
@@ -303,11 +303,11 @@ mod tests {
             });
         });
 
-        println!("[Simultaneous] => SyncResolveing for peer01 and peer02 tasks...");
+        println!("[Simultaneous] => Waiting for peer01 and peer02 tasks...");
         peer01_task.join(peer02_task).await;
-        println!("[Simultaneous] => SyncResolveing for peer01 and peer02 tasks... DONE\n");
+        println!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
 
-        // SyncResolve a little bit
+        // Wait a little bit
         task::sleep(SLEEP).await;
     }
 

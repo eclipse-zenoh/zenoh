@@ -370,7 +370,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     println!("\nTransport Intermittent [7a1]");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
-    // SyncResolve a little bit
+    // Wait a little bit
     task::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
@@ -378,7 +378,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     ztimeout!(client02_manager.close());
     ztimeout!(client03_manager.close());
 
-    // SyncResolve a little bit
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 

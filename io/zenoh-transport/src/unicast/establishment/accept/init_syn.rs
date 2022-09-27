@@ -36,7 +36,7 @@ pub(super) async fn recv(
     manager: &TransportManager,
     auth_link: &mut AuthenticatedPeerLink,
 ) -> AResult<Output> {
-    // SyncResolve to read an InitSyn
+    // Wait to read an InitSyn
     let mut messages = link
         .read_transport_message()
         .await

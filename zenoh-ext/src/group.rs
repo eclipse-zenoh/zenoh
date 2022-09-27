@@ -427,7 +427,7 @@ impl Group {
         ms
     }
 
-    /// SyncResolve for a view size to be established or times out. The resulting selector parameters
+    /// Wait for a view size to be established or times out. The resulting selector parameters
     /// indicates whether the desired view size has been established.
     pub async fn wait_for_view_size(&self, size: usize, timeout: Duration) -> bool {
         if self.state.members.lock().await.len() + 1 >= size {

@@ -511,7 +511,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     ztimeout!(client01_manager.close());
     ztimeout!(client01_spoof_manager.close());
 
-    // SyncResolve a little bit
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 
@@ -693,7 +693,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         }
     });
 
-    // SyncResolve a little bit
+    // Wait a little bit
     task::sleep(SLEEP).await;
 }
 

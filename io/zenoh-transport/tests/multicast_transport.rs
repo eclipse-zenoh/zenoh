@@ -174,7 +174,7 @@ mod tests {
             .is_some());
         println!("\t{:?}", peer02_manager.get_transports_multicast());
 
-        // SyncResolve to for peer 01 and 02 to join each other
+        // Wait to for peer 01 and 02 to join each other
         let peer01_transport = peer01_manager
             .get_transport_multicast(&endpoint.locator)
             .unwrap();
@@ -223,7 +223,7 @@ mod tests {
         ztimeout!(peer02.transport.close()).unwrap();
         assert!(peer02.manager.get_transports_multicast().is_empty());
 
-        // SyncResolve a little bit
+        // Wait a little bit
         task::sleep(SLEEP).await;
     }
 
@@ -276,7 +276,7 @@ mod tests {
             }
         };
 
-        // SyncResolve a little bit
+        // Wait a little bit
         task::sleep(SLEEP).await;
     }
 
