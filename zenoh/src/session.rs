@@ -461,11 +461,12 @@ impl Session {
     /// use r#async::AsyncResolve;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
+    /// let mut config = session.config().clone();
+    /// let _ = config.insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
-    pub fn config(&self) -> Notifier<Config> {
-        self.runtime.config.clone()
+    pub fn config(&self) -> &Notifier<Config> {
+        &self.runtime.config
     }
 
     /// Get informations about the zenoh [`Session`](Session).
