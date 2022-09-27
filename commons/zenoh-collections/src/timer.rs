@@ -340,7 +340,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // SyncResolve for the event to occur
+            // Wait for the event to occur
             task::sleep(3 * interval).await;
 
             // Load and reset the counter value
@@ -359,7 +359,7 @@ mod tests {
             //
             handle.defuse();
 
-            // SyncResolve for the event to occur
+            // Wait for the event to occur
             task::sleep(3 * interval).await;
 
             // Load and reset the counter value
@@ -381,7 +381,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // SyncResolve for the events to occur
+            // Wait for the events to occur
             task::sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
@@ -407,7 +407,7 @@ mod tests {
             // Add the event to the timer
             timer.add_async(event).await;
 
-            // SyncResolve for the events to occur
+            // Wait for the events to occur
             task::sleep(to_elapse + interval).await;
 
             // Load and reset the counter value
@@ -427,7 +427,7 @@ mod tests {
             // Restart the timer
             timer.start_async(false).await;
 
-            // SyncResolve for the events to occur
+            // Wait for the events to occur
             task::sleep(to_elapse).await;
 
             // Load and reset the counter value
