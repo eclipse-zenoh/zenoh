@@ -61,6 +61,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install latest Rust toolchain
+        uses: actions-rs/toolchain@v1
+
       - name: Build
         uses: actions-rs/cargo@v1
         with:
