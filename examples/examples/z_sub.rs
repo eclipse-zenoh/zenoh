@@ -30,7 +30,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating Subscriber on '{}'...", &key_expr);
+    println!("Declaring Subscriber on '{}'...", &key_expr);
 
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 

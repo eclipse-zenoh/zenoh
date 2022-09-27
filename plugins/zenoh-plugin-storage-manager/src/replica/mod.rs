@@ -183,7 +183,7 @@ impl Replica {
             .unwrap();
 
         debug!(
-            "[DIGEST_SUB] Creating Subscriber named {} on '{}'",
+            "[DIGEST_SUB] Declaring Subscriber named {} on '{}'",
             self.name, digest_key
         );
         let subscriber = self
@@ -249,7 +249,7 @@ impl Replica {
             .join(&self.name)
             .unwrap();
 
-        debug!("[DIGEST_PUB] Declaring publication on '{}'...", digest_key);
+        debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
         let publisher = self
             .session
             .declare_publisher(digest_key)

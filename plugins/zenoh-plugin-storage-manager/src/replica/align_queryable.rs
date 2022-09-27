@@ -64,7 +64,7 @@ impl AlignQueryable {
 
     async fn start(&self) -> Self {
         debug!(
-            "[ALIGN QUERYABLE] Creating Eval on '{}'...",
+            "[ALIGN QUERYABLE] Declaring Queryable on '{}'...",
             self.digest_key
         );
         let queryable = self

@@ -28,7 +28,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating PublicationCache on {}", &key_expr);
+    println!("Declaring PublicationCache on {}", &key_expr);
     let mut publication_cache_builder = session
         .declare_publication_cache(&key_expr)
         .history(history);
