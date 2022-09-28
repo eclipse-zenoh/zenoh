@@ -83,21 +83,21 @@ jobs:
       ZENOH_VERSION: ${{ steps.env.outputs.ZENOH_VERSION }}
       PKG_VERSION: ${{ steps.env.outputs.PKG_VERSION }}
 
-  tests:
-    name: Tests
-    needs: checks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-      - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --verbose
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
+  # tests:
+  #   name: Tests
+  #   needs: checks
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Install Rust toolchain
+  #       uses: actions-rs/toolchain@v1
+  #     - name: Run tests
+  #       uses: actions-rs/cargo@v1
+  #       with:
+  #         command: test
+  #         args: --release --verbose
+  #       env:
+  #         ASYNC_STD_THREAD_COUNT: 4
 
   doc:
     name: Doc generation
@@ -161,6 +161,7 @@ jobs:
               use-cross: true,
             }
           - { target: x86_64-apple-darwin, arch: darwin, os: macos-latest }
+          - { target: aarch64-apple-darwin, arch: darwin, os: macos-latest }
           - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019 }
           # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
     steps:
@@ -353,7 +354,7 @@ jobs:
 
   docker:
     name: Docker build and push
-    needs: [checks, builds, tests, doc]
+    needs: [checks, builds, doc]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
