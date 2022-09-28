@@ -608,13 +608,6 @@ impl<T: ValidatedMap> Notifier<T> {
     pub fn lock(&self) -> MutexGuard<T> {
         zlock!(self.inner.inner)
     }
-    /// Since this type is fully interior-mutable, this method can be used to obtain a mutable reference for trait-compatibility with [`validated_struct::ValidatedMap`]
-    /// # Safety
-    /// Despite transmuting an ref to a mut-ref, all operations on this type require locking a Mutex. Compiler optimisations won't change that.
-    #[allow(mutable_transmutes, clippy::mut_from_ref)]
-    pub fn mutable(&self) -> &mut Self {
-        unsafe { std::mem::transmute(self) }
-    }
 }
 
 impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
