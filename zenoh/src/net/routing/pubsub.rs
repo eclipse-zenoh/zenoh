@@ -320,10 +320,10 @@ pub fn declare_client_subscription(
             Resource::match_resource(tables, &mut res);
 
             register_client_subscription(tables, face, &mut res, sub_info);
+            let mut propa_sub_info = sub_info.clone();
+            propa_sub_info.mode = SubMode::Push;
             match tables.whatami {
                 WhatAmI::Router => {
-                    let mut propa_sub_info = sub_info.clone();
-                    propa_sub_info.mode = SubMode::Push;
                     register_router_subscription(
                         tables,
                         face,
@@ -334,8 +334,6 @@ pub fn declare_client_subscription(
                 }
                 WhatAmI::Peer => {
                     if tables.full_net(WhatAmI::Peer) {
-                        let mut propa_sub_info = sub_info.clone();
-                        propa_sub_info.mode = SubMode::Push;
                         register_peer_subscription(
                             tables,
                             face,
@@ -344,11 +342,11 @@ pub fn declare_client_subscription(
                             tables.zid,
                         );
                     } else {
-                        propagate_simple_subscription(tables, &res, sub_info, face);
+                        propagate_simple_subscription(tables, &res, &propa_sub_info, face);
                     }
                 }
                 _ => {
-                    propagate_simple_subscription(tables, &res, sub_info, face);
+                    propagate_simple_subscription(tables, &res, &propa_sub_info, face);
                 }
             }
 
