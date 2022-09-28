@@ -344,8 +344,7 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = self.context.runtime.config.clone().insert_json5(key, json)
-                        {
+                        if let Err(e) = (&self.context.runtime.config).insert_json5(key, json) {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{}:{} - {}",
                                 &self.context.zid_str, key, json, e
