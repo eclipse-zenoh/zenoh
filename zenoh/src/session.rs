@@ -465,8 +465,7 @@ impl Session {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let mut config = session.config().clone();
-    /// let _ = config.insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
+    /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
     pub fn config(&self) -> &Notifier<Config> {

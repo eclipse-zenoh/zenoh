@@ -613,7 +613,50 @@ impl<T: ValidatedMap> Notifier<T> {
 impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for Notifier<T> {
     type Accessor = GetGuard<'a, T>;
 }
+impl<'a, T: 'a> ValidatedMapAssociatedTypes<'a> for &Notifier<T> {
+    type Accessor = GetGuard<'a, T>;
+}
 impl<T: ValidatedMap + 'static> ValidatedMap for Notifier<T>
+where
+    T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
+{
+    fn insert<'d, D: serde::Deserializer<'d>>(
+        &mut self,
+        key: &str,
+        value: D,
+    ) -> Result<(), validated_struct::InsertionError>
+    where
+        validated_struct::InsertionError: From<D::Error>,
+    {
+        {
+            let mut guard = zlock!(self.inner.inner);
+            guard.insert(key, value)?;
+        }
+        self.notify(key);
+        Ok(())
+    }
+    fn get<'a>(
+        &'a self,
+        key: &str,
+    ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
+    {
+        let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
+        // Safety: MutexGuard pins the mutex behind which the value is held.
+        let subref = guard.get(key.as_ref())? as *const _;
+        Ok(GetGuard {
+            _guard: guard,
+            subref,
+        })
+    }
+    fn get_json(&self, key: &str) -> Result<String, GetError> {
+        self.lock().get_json(key)
+    }
+    type Keys = T::Keys;
+    fn keys(&self) -> Self::Keys {
+        self.lock().keys()
+    }
+}
+impl<T: ValidatedMap + 'static> ValidatedMap for &Notifier<T>
 where
     T: for<'a> ValidatedMapAssociatedTypes<'a, Accessor = &'a dyn Any>,
 {
