@@ -34,7 +34,7 @@ description = "Internal crate for zenoh."
 proc-macro2 = "1.0.43"
 quote = "1.0.21"
 rustc_version = "0.4.0"
-syn = { version = "1.0.100", features = ["full"] }
+syn = { version = "1.0.101", features = ["full"] }
 unzip-n = "0.1.2"
 
 [lib]

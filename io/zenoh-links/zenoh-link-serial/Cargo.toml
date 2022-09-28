@@ -40,7 +40,7 @@ async-std = { version = "=1.12.0", default-features = false, features = [
 async-trait = "0.1.57"
 futures = "0.3.24"
 log = "0.4.17"
-tokio = { version = "1.21.1", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
+tokio = { version = "1.21.2", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
 uuid = { version = "1.1.2", features = ["v4"] }
 z-serial = "0.2.0 "
 zenoh-cfg-properties = { path = "../../../commons/zenoh-cfg-properties/" }

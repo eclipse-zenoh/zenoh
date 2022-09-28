@@ -33,7 +33,7 @@ description = "Internal crate for zenoh."
 flume = "0.10.14"
 json5 = "0.4.1"
 num_cpus = "1.13.1"
-serde = "1.0.144"
+serde = "1.0.145"
 serde_json = "1.0.85"
 serde_yaml = "0.9.13"
 validated_struct = { version = "2.1.0", features = ["json5", "json_get"] }

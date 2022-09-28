@@ -49,7 +49,7 @@ git-version = "0.3.5"
 http-types = "2.12.0"
 lazy_static = "1.4.0"
 log = "0.4.17"
-serde = "1.0.144"
+serde = "1.0.145"
 serde_json = "1.0.85"
 tide = "0.16.0"
 zenoh = { path = "../../zenoh/", default-features = false }

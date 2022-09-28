@@ -40,7 +40,7 @@ env_logger = "0.9.1"
 flume = "0.10.14"
 futures = "0.3.24"
 log = "0.4.17"
-serde = "1.0.144"
+serde = "1.0.145"
 zenoh = { path = "../zenoh", default-features = false, features = ["unstable"] }
 zenoh-core = { path = "../commons/zenoh-core/" }
 zenoh-sync = { path = "../commons/zenoh-sync" }
