@@ -70,23 +70,33 @@ impl<T, Output> Resolve<Output> for T where
 }
 
 // Closure to wait
-pub struct ResolveClosure<F, To>(pub F)
+pub struct ResolveClosure<C, To>(C)
 where
     To: Sized + Send,
-    F: FnOnce() -> To + Send;
+    C: FnOnce() -> To + Send;
 
-impl<F, To> Resolvable for ResolveClosure<F, To>
+impl<C, To> ResolveClosure<C, To>
 where
     To: Sized + Send,
-    F: FnOnce() -> To + Send,
+    C: FnOnce() -> To + Send,
+{
+    pub fn new(c: C) -> Self {
+        Self(c)
+    }
+}
+
+impl<C, To> Resolvable for ResolveClosure<C, To>
+where
+    To: Sized + Send,
+    C: FnOnce() -> To + Send,
 {
     type To = To;
 }
 
-impl<F, To> AsyncResolve for ResolveClosure<F, To>
+impl<C, To> AsyncResolve for ResolveClosure<C, To>
 where
     To: Sized + Send,
-    F: FnOnce() -> To + Send,
+    C: FnOnce() -> To + Send,
 {
     type Future = Ready<<Self as Resolvable>::To>;
 
@@ -95,10 +105,10 @@ where
     }
 }
 
-impl<F, To> SyncResolve for ResolveClosure<F, To>
+impl<C, To> SyncResolve for ResolveClosure<C, To>
 where
     To: Sized + Send,
-    F: FnOnce() -> To + Send,
+    C: FnOnce() -> To + Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         self.0()
@@ -106,10 +116,20 @@ where
 }
 
 // Future to wait
-pub struct ResolveFuture<F, To>(pub F)
+pub struct ResolveFuture<F, To>(F)
 where
     To: Sized + Send,
     F: Future<Output = To> + Send;
+
+impl<F, To> ResolveFuture<F, To>
+where
+    To: Sized + Send,
+    F: Future<Output = To> + Send,
+{
+    pub fn new(f: F) -> Self {
+        Self(f)
+    }
+}
 
 impl<F, To> Resolvable for ResolveFuture<F, To>
 where

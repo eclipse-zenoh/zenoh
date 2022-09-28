@@ -35,7 +35,7 @@ async fn main() {
         .res()
         .timeout(timeout)
         .await
-        .unwrap()
+        .unwrap_or_else(|_| panic!("Query has timed out after {:?}", timeout))
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {

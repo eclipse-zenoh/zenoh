@@ -316,7 +316,7 @@ impl Session {
         aggregated_subscribers: Vec<OwnedKeyExpr>,
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
                 aggregated_subscribers,
@@ -422,7 +422,7 @@ impl Session {
     /// # })
     /// ```
     pub fn close(self) -> impl Resolve<ZResult<()>> {
-        ResolveFuture(async move {
+        ResolveFuture::new(async move {
             trace!("close()");
             self.runtime.close().await?;
 
@@ -631,7 +631,7 @@ impl Session {
         key_expr: ZResult<KeyExpr<'b>>,
     ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a {
         let sid = self.id;
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             let key_expr: KeyExpr = key_expr?;
             let prefix_len = key_expr.len() as u32;
             let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
@@ -776,7 +776,7 @@ impl Session {
 
     #[allow(clippy::new_ret_no_self)]
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> + Send {
-        ResolveFuture(async move {
+        ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
@@ -796,7 +796,7 @@ impl Session {
     }
 
     pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<u64> + Send + 'a {
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
             match state
@@ -848,7 +848,7 @@ impl Session {
         &'a self,
         key_expr: KeyExpr<'a>,
     ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             log::trace!("declare_publication({:?})", key_expr);
             let mut state = zwrite!(self.state);
             if !state.publications.iter().any(|p| **p == **key_expr) {
@@ -884,7 +884,7 @@ impl Session {
         &'a self,
         key_expr: KeyExpr<'a>,
     ) -> impl Resolve<ZResult<()>> + 'a {
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             let mut state = zwrite!(self.state);
             if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
                 trace!("undeclare_publication({:?})", key_expr);
@@ -1265,7 +1265,7 @@ impl Session {
     }
 
     pub(crate) fn pull<'a>(&'a self, key_expr: &'a KeyExpr) -> impl Resolve<ZResult<()>> + 'a {
-        ResolveClosure(move || {
+        ResolveClosure::new(move || {
             trace!("pull({:?})", key_expr);
             let state = zread!(self.state);
             let primitives = state.primitives.as_ref().unwrap().clone();
