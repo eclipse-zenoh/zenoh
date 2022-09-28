@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-plugin-trait"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -36,9 +37,9 @@ no_mangle = []
 default = ["no_mangle"]
 
 [dependencies]
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-util = { path = "../../commons/zenoh-util" }
-zenoh-macros = { path = "../../commons/zenoh-macros/" }
 libloading = "0.7.3"
 log = "0.4.17"
 serde_json = "1.0.85"
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-macros = { path = "../../commons/zenoh-macros/" }
+zenoh-util = { path = "../../commons/zenoh-util" }

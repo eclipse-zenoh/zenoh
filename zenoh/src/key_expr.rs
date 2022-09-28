@@ -16,6 +16,7 @@
 
 use std::{
     convert::{TryFrom, TryInto},
+    future::Ready,
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
@@ -23,7 +24,7 @@ use zenoh_protocol_core::key_expr::canon::Canonizable;
 pub use zenoh_protocol_core::key_expr::*;
 use zenoh_transport::Primitives;
 
-use crate::{prelude::sync::Selector, Session, Undeclarable};
+use crate::{prelude::Selector, Session, Undeclarable};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {
@@ -528,10 +529,8 @@ impl<'a> KeyExpr<'a> {
     }
 }
 
-impl<'a> Undeclarable<&'a Session> for KeyExpr<'a> {
-    type Output = ZResult<()>;
-    type Undeclaration = KeyExprUndeclaration<'a>;
-    fn undeclare(self, session: &'a Session) -> Self::Undeclaration {
+impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
+    fn undeclare_inner(self, session: &'a Session) -> KeyExprUndeclaration<'a> {
         KeyExprUndeclaration {
             session,
             expr: self,
@@ -555,17 +554,13 @@ pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
     expr: KeyExpr<'a>,
 }
+
 impl Resolvable for KeyExprUndeclaration<'_> {
-    type Output = ZResult<()>;
+    type To = ZResult<()>;
 }
-impl AsyncResolve for KeyExprUndeclaration<'_> {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
-    }
-}
+
 impl SyncResolve for KeyExprUndeclaration<'_> {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let KeyExprUndeclaration { session, expr } = self;
         let expr_id = match &expr.0 {
             KeyExprInner::Wire {
@@ -603,6 +598,14 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         primitives.forget_resource(expr_id);
 
         Ok(())
+    }
+}
+
+impl AsyncResolve for KeyExprUndeclaration<'_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }
 

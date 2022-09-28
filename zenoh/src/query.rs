@@ -21,6 +21,7 @@ use crate::Session;
 use crate::SessionState;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::future::Ready;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_collections::Timed;
@@ -128,8 +129,7 @@ pub(crate) struct QueryState {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::query::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -161,8 +161,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
@@ -204,8 +203,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
@@ -233,8 +231,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let replies = session
@@ -251,7 +248,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Reply>,
+        Handler: IntoCallbackReceiverPair<'static, Reply>,
     {
         let GetBuilder {
             session,
@@ -318,6 +315,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         }
     }
 }
+
 pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 #[zenoh_core::unstable]
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
@@ -338,17 +336,18 @@ impl Default for ReplyKeyExpr {
 
 impl<Handler> Resolvable for GetBuilder<'_, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Reply>,
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
+    Handler::Receiver: Send,
 {
-    type Output = ZResult<Handler::Receiver>;
+    type To = ZResult<Handler::Receiver>;
 }
 
 impl<Handler> SyncResolve for GetBuilder<'_, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Reply>,
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
 
         self.session
@@ -365,12 +364,12 @@ where
 
 impl<Handler> AsyncResolve for GetBuilder<'_, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Reply>,
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
     }
 }

@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-transport"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -27,7 +28,6 @@ edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -50,17 +50,6 @@ transport_serial = ["zenoh-link/transport_serial"]
 stats = []
 
 [dependencies]
-zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
-zenoh-sync = { path = "../../commons/zenoh-sync/" }
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
-zenoh-config = { path = "../../commons/zenoh-config/" }
-zenoh-protocol-core = { path = "../../commons/zenoh-protocol-core/" }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
-
-zenoh-link = { path = "../zenoh-link/" }
 
 async-executor = "1.4.1"
 async-global-executor = "2.3.0"
@@ -73,6 +62,17 @@ rand = "0.8.3"
 ringbuffer-spsc = "0.1.6"
 rsa = { version = "0.6.1", optional = true }
 serde = "1.0.144"
+zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
+zenoh-collections = { path = "../../commons/zenoh-collections/" }
+zenoh-config = { path = "../../commons/zenoh-config/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
+
+zenoh-link = { path = "../zenoh-link/" }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
+zenoh-protocol-core = { path = "../../commons/zenoh-protocol-core/" }
+zenoh-sync = { path = "../../commons/zenoh-sync/" }
 
 [dev-dependencies]
 env_logger = "0.9.1"

@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-protocol-core"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -27,7 +28,6 @@ edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
@@ -35,15 +35,15 @@ complete_n = []
 fuzzer = []
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core/" }
 
 hex = "0.4.3"
+itertools = "0.10.5"
 lazy_static = "1.4.0"
+rand = "0.8.5"
+serde = "1.0.144"
 uhlc = "0.5.1"
 uuid = { version = "1.1.2", features = ["v4"] }
-serde = "1.0.144"
-rand = "0.8.5"
-itertools = "0.10.5"
+zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
 criterion = "0.4.0"

@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_std::prelude::FutureExt;
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::query::*;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
@@ -32,9 +32,10 @@ async fn main() {
     let replies = session
         .get(&selector)
         .target(target)
-        .timeout(timeout)
         .res()
+        .timeout(timeout)
         .await
+        .unwrap_or_else(|_| panic!("Query has timed out after {:?}", timeout))
         .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {

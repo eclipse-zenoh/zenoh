@@ -3618,6 +3618,7 @@ name = "zenoh-core"
 version = "0.6.0-dev.0"
 dependencies = [
  "anyhow",
+ "async-std",
  "lazy_static",
  "zenoh-macros",
 ]

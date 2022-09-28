@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-examples"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -28,15 +29,12 @@ license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 readme = "README.md"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-zenoh = { path = "../zenoh/" , default-features = false }
-zenoh-ext = { path = "../zenoh-ext/" }
 
 async-std = { version = "=1.12.0", default-features = false, features = [
   "attributes",
@@ -48,6 +46,8 @@ futures = "0.3.24"
 git-version = "0.3.5"
 json5 = "0.4.1"
 log = "0.4.17"
+zenoh = { path = "../zenoh/", default-features = false }
+zenoh-ext = { path = "../zenoh-ext/" }
 
 [dev-dependencies]
 rand = "0.8.5"
@@ -69,7 +69,6 @@ assets = [
   # service
   [".service/zenohd.service", "/lib/systemd/system/zenohd.service", "644"],
 ]
-
 
 [[example]]
 name = "z_scout"

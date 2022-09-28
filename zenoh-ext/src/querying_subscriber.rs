@@ -13,17 +13,17 @@
 //
 use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::convert::TryInto;
+use std::future::Ready;
 use std::mem::swap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
-use zenoh::prelude::*;
-
+use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
-use zenoh_core::{zlock, AsyncResolve, Resolvable, Resolve, SyncResolve};
+use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
 
 use crate::session_ext::SessionRef;
 
@@ -224,30 +224,33 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
     }
 }
 
-impl<'a, 'b, Handler: IntoCallbackReceiverPair<'static, Sample>> Resolvable
-    for QueryingSubscriberBuilder<'a, 'b, Handler>
-{
-    type Output = ZResult<QueryingSubscriber<'a, Handler::Receiver>>;
-}
-
-impl<Handler: IntoCallbackReceiverPair<'static, Sample>> AsyncResolve
-    for QueryingSubscriberBuilder<'_, '_, Handler>
+impl<'a, Handler> Resolvable for QueryingSubscriberBuilder<'a, '_, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample>,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+    type To = ZResult<QueryingSubscriber<'a, Handler::Receiver>>;
+}
+
+impl<Handler> SyncResolve for QueryingSubscriberBuilder<'_, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        QueryingSubscriber::new(self.with_static_keys())
     }
 }
 
-impl<Handler: IntoCallbackReceiverPair<'static, Sample>> SyncResolve
-    for QueryingSubscriberBuilder<'_, '_, Handler>
+impl<'a, Handler> AsyncResolve for QueryingSubscriberBuilder<'a, '_, Handler>
 where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
-        QueryingSubscriber::new(self.with_static_keys())
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }
 
@@ -338,7 +341,7 @@ impl<Receiver> std::ops::DerefMut for QueryingSubscriber<'_, Receiver> {
 impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
     fn new<Handler>(conf: QueryingSubscriberBuilder<'a, 'a, Handler>) -> ZResult<Self>
     where
-        Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver>,
+        Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver> + Send,
     {
         let state = Arc::new(Mutex::new(InnerState {
             pending_queries: 0,

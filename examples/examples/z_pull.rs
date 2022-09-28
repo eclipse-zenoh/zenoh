@@ -17,7 +17,7 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
+use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {

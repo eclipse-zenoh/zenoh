@@ -13,7 +13,7 @@
 //
 use clap::{App, Arg};
 use zenoh::config::Config;
-use zenoh::prelude::r#async::AsyncResolve;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::SubscriberForward;
 
 #[async_std::main]

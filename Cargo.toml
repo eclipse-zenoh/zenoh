@@ -14,35 +14,35 @@
 [workspace]
 
 members = [
-  "commons/zenoh-config",
   "commons/zenoh-buffers",
-  "commons/zenoh-protocol-core",
-  "commons/zenoh-protocol",
   "commons/zenoh-cfg-properties",
   "commons/zenoh-collections",
+  "commons/zenoh-config",
   "commons/zenoh-core",
   "commons/zenoh-crypto",
+  "commons/zenoh-macros",
+  "commons/zenoh-protocol",
+  "commons/zenoh-protocol-core",
   "commons/zenoh-sync",
   "commons/zenoh-util",
-  "commons/zenoh-macros",
+  "examples",
+  "io/zenoh-link",
   "io/zenoh-link-commons",
-  "io/zenoh-links/zenoh-link-udp/",
+  "io/zenoh-links/zenoh-link-quic/",
   "io/zenoh-links/zenoh-link-tcp/",
   "io/zenoh-links/zenoh-link-tls/",
-  "io/zenoh-links/zenoh-link-quic/",
+  "io/zenoh-links/zenoh-link-udp/",
   "io/zenoh-links/zenoh-link-unixsock_stream/",
   "io/zenoh-links/zenoh-link-ws/",
-  "io/zenoh-link",
   "io/zenoh-transport",
+  "plugins/example-plugin",
+  "plugins/zenoh-backend-traits",
+  "plugins/zenoh-plugin-rest",
+  "plugins/zenoh-plugin-storage-manager",
+  "plugins/zenoh-plugin-trait",
   "zenoh",
   "zenoh-ext",
   "zenohd",
-  "examples",
-  "plugins/zenoh-plugin-trait",
-  "plugins/example-plugin",
-  "plugins/zenoh-plugin-rest",
-  "plugins/zenoh-plugin-storage-manager",
-  "plugins/zenoh-backend-traits",
 ]
 
 [profile.dev]
@@ -51,11 +51,11 @@ opt-level = 0
 
 [profile.fast]
 inherits = "release"
-opt-level=3
-debug=true
+opt-level = 3
+debug = true
 debug-assertions = true
 overflow-checks = true
-lto=false
+lto = false
 
 [profile.release]
 debug = false     # If you want debug symbol in release mode, set the env variable: RUSTFLAGS=-g

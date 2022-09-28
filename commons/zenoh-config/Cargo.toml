@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-config"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -28,10 +29,6 @@ license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 [dependencies]
-zenoh-core = { path = "../zenoh-core" }
-zenoh-cfg-properties = { path = "../zenoh-cfg-properties" }
-zenoh-util = { path = "../zenoh-util" }
-zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
 
 flume = "0.10.14"
 json5 = "0.4.1"
@@ -40,3 +37,7 @@ serde = "1.0.144"
 serde_json = "1.0.85"
 serde_yaml = "0.9.13"
 validated_struct = { version = "2.1.0", features = ["json5", "json_get"] }
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties" }
+zenoh-core = { path = "../zenoh-core" }
+zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
+zenoh-util = { path = "../zenoh-util" }

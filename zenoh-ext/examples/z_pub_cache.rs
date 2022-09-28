@@ -15,7 +15,7 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
-use zenoh_core::AsyncResolve;
+use zenoh::prelude::r#async::*;
 use zenoh_ext::*;
 
 #[async_std::main]

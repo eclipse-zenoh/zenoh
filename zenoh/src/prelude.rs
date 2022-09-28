@@ -19,13 +19,14 @@
 //! library's prelude you'll have to do so manually. An example of using this is:
 //!
 //! ```
-//! use zenoh::prelude::*;
+//! use zenoh::prelude::r#async::*;
 //! ```
 
 pub use common::*;
 pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
     pub use zenoh_buffers::SplitBuffer;
+    pub use zenoh_core::Resolve;
 
     pub(crate) type Id = usize;
 
@@ -33,7 +34,6 @@ pub(crate) mod common {
     pub use crate::handlers::IntoCallbackReceiverPair;
     pub use crate::selector::{Parameter, Parameters, Selector};
     pub use crate::session::{Session, SessionDeclarations};
-    pub use crate::Undeclarable;
 
     pub use crate::query::{QueryConsolidation, QueryTarget};
 

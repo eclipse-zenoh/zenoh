@@ -13,18 +13,17 @@
 //
 use async_std::channel::{bounded, Sender};
 use async_std::task;
-use futures::FutureExt;
-use futures::StreamExt;
-use futures::{select, Future};
+use futures::select;
+use futures::{FutureExt, StreamExt};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
-use std::pin::Pin;
-use zenoh::prelude::*;
+use std::future::Ready;
+use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Resolve};
-use zenoh_core::{Result as ZResult, SyncResolve};
+use zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
@@ -85,17 +84,20 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
 }
 
 impl<'a> Resolvable for PublicationCacheBuilder<'a, '_, '_> {
-    type Output = ZResult<PublicationCache<'a>>;
+    type To = ZResult<PublicationCache<'a>>;
 }
-impl AsyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    type Future = futures::future::Ready<Self::Output>;
-    fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+
+impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        PublicationCache::new(self)
     }
 }
-impl SyncResolve for PublicationCacheBuilder<'_, '_, '_> {
-    fn res_sync(self) -> Self::Output {
-        PublicationCache::new(self)
+
+impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }
 
@@ -230,29 +232,16 @@ impl<'a> PublicationCache<'a> {
     /// Close this PublicationCache
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        struct PublicationCacheCloser<'a> {
-            p: PublicationCache<'a>,
-        }
-        impl Resolvable for PublicationCacheCloser<'_> {
-            type Output = ZResult<()>;
-        }
-        impl SyncResolve for PublicationCacheCloser<'_> {
-            fn res_sync(self) -> Self::Output {
-                drop(self);
-                Ok(())
-            }
-        }
-        impl<'a> AsyncResolve for PublicationCacheCloser<'a> {
-            type Future = Pin<Box<dyn Future<Output = ZResult<()>> + Send + 'a>>;
-            fn res_async(self) -> Self::Future {
-                Box::pin(async move {
-                    self.p._queryable.undeclare().res_async().await?;
-                    self.p._local_sub.undeclare().res_async().await?;
-                    drop(self.p._stoptx);
-                    Ok(())
-                })
-            }
-        }
-        PublicationCacheCloser { p: self }
+        ResolveFuture::new(async move {
+            let PublicationCache {
+                _queryable,
+                _local_sub,
+                _stoptx,
+            } = self;
+            _queryable.undeclare().res_async().await?;
+            _local_sub.undeclare().res_async().await?;
+            drop(_stoptx);
+            Ok(())
+        })
     }
 }

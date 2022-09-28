@@ -23,11 +23,12 @@ use crate::Undeclarable;
 
 use futures::FutureExt;
 use std::fmt;
+use std::future::{Future, Ready};
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::{AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
 use zenoh_protocol_core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
@@ -122,11 +123,12 @@ pub struct ReplyBuilder<'a> {
     result: Result<Sample, Value>,
 }
 
-impl Resolvable for ReplyBuilder<'_> {
-    type Output = zenoh_core::Result<()>;
+impl<'a> Resolvable for ReplyBuilder<'a> {
+    type To = ZResult<()>;
 }
+
 impl SyncResolve for ReplyBuilder<'_> {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         match self.result {
             Ok(sample) => {
                 if !self.query._accepts_any_replies().unwrap_or(false)
@@ -148,8 +150,9 @@ impl SyncResolve for ReplyBuilder<'_> {
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct ReplyFuture<'a>(Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_core::Error>>);
 
-impl std::future::Future for ReplyFuture<'_> {
-    type Output = zenoh_core::Result<()>;
+impl Future for ReplyFuture<'_> {
+    type Output = ZResult<()>;
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match &mut self.get_mut().0 {
             Ok(sender) => sender.poll_unpin(cx).map_err(|e| zerror!(e).into()),
@@ -162,6 +165,7 @@ impl std::future::Future for ReplyFuture<'_> {
 
 impl<'a> AsyncResolve for ReplyBuilder<'a> {
     type Future = ReplyFuture<'a>;
+
     fn res_async(self) -> Self::Future {
         ReplyFuture(match self.result {
             Ok(sample) => {
@@ -211,14 +215,16 @@ impl fmt::Debug for QueryableState {
 /// ```no_run
 /// # async_std::task::block_on(async {
 /// use futures::prelude::*;
-/// use r#async::AsyncResolve;
-/// use zenoh::prelude::*;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///         .res()
+///         .await
+///         .unwrap();
 /// }
 /// # })
 /// ```
@@ -229,10 +235,8 @@ pub(crate) struct CallbackQueryable<'a> {
     pub(crate) alive: bool,
 }
 
-impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
-    type Output = ZResult<()>;
-    type Undeclaration = QueryableUndeclaration<'a>;
-    fn undeclare(self, _: ()) -> Self::Undeclaration {
+impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> {
+    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
         QueryableUndeclaration { queryable: self }
     }
 }
@@ -242,8 +246,7 @@ impl<'a> Undeclarable<()> for CallbackQueryable<'a> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
@@ -254,12 +257,12 @@ pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
 
-impl<'a> Resolvable for QueryableUndeclaration<'a> {
-    type Output = ZResult<()>;
+impl Resolvable for QueryableUndeclaration<'_> {
+    type To = ZResult<()>;
 }
 
 impl SyncResolve for QueryableUndeclaration<'_> {
-    fn res_sync(mut self) -> Self::Output {
+    fn res_sync(mut self) -> <Self as Resolvable>::To {
         self.queryable.alive = false;
         self.queryable
             .session
@@ -267,11 +270,11 @@ impl SyncResolve for QueryableUndeclaration<'_> {
     }
 }
 
-impl AsyncResolve for QueryableUndeclaration<'_> {
-    type Future = futures::future::Ready<Self::Output>;
+impl<'a> AsyncResolve for QueryableUndeclaration<'a> {
+    type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
     }
 }
 
@@ -288,8 +291,7 @@ impl Drop for CallbackQueryable<'_> {
 /// # Examples
 /// ```
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 /// use zenoh::queryable;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
@@ -312,8 +314,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
@@ -353,8 +354,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let mut n = 0;
@@ -382,8 +382,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// # Examples
     /// ```no_run
     /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::*;
-    /// use r#async::AsyncResolve;
+    /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let queryable = session
@@ -448,8 +447,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// # Examples
 /// ```no_run
 /// # async_std::task::block_on(async {
-/// use zenoh::prelude::*;
-/// use r#async::AsyncResolve;
+/// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let queryable = session
@@ -460,7 +458,10 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap())).res().await.unwrap();
+///     query.reply(Ok(Sample::try_from("key/expression", "value").unwrap()))
+///         .res()
+///         .await
+///         .unwrap();
 /// }
 /// # })
 /// ```
@@ -473,15 +474,14 @@ pub struct Queryable<'a, Receiver> {
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<crate::Result<()>> + 'a {
-        Undeclarable::undeclare(self, ())
+    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+        Undeclarable::undeclare_inner(self, ())
     }
 }
-impl<'a, T> Undeclarable<()> for Queryable<'a, T> {
-    type Output = ZResult<()>;
-    type Undeclaration = QueryableUndeclaration<'a>;
-    fn undeclare(self, _: ()) -> Self::Undeclaration {
-        Undeclarable::undeclare(self.queryable, ())
+
+impl<'a, T> Undeclarable<(), QueryableUndeclaration<'a>> for Queryable<'a, T> {
+    fn undeclare_inner(self, _: ()) -> QueryableUndeclaration<'a> {
+        Undeclarable::undeclare_inner(self.queryable, ())
     }
 }
 
@@ -495,17 +495,18 @@ impl<Receiver> Deref for Queryable<'_, Receiver> {
 
 impl<'a, Handler> Resolvable for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
+    Handler::Receiver: Send,
 {
-    type Output = crate::Result<Queryable<'a, Handler::Receiver>>;
+    type To = ZResult<Queryable<'a, Handler::Receiver>>;
 }
 
 impl<'a, Handler> SyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
     Handler::Receiver: Send,
 {
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
@@ -525,13 +526,15 @@ where
             })
     }
 }
-impl<Handler> AsyncResolve for QueryableBuilder<'_, '_, Handler>
+
+impl<'a, Handler> AsyncResolve for QueryableBuilder<'a, '_, Handler>
 where
-    Handler: crate::prelude::IntoCallbackReceiverPair<'static, Query>,
+    Handler: IntoCallbackReceiverPair<'static, Query> + Send,
     Handler::Receiver: Send,
 {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
     }
 }

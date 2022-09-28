@@ -11,12 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use clap::{App, Arg};
-use zenoh::prelude::*;
+use std::time::Duration;
+use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
 use zenoh::{config::Config, key_expr::keyexpr};
-use zenoh_core::{AsyncResolve, SyncResolve};
 
 const HTML: &str = r#"
 <div id="result"></div>
@@ -41,10 +40,10 @@ async fn main() {
     let value = "Pub from sse server!";
 
     println!("Opening session...");
-    let session = zenoh::open(config).res_async().await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring Queryable on '{}'...", key);
-    let queryable = session.declare_queryable(key).res_sync().unwrap();
+    let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
         let receiver = queryable.receiver.clone();
@@ -52,7 +51,7 @@ async fn main() {
             while let Ok(request) = receiver.recv_async().await {
                 request
                     .reply(Ok(Sample::new(key, HTML)))
-                    .res_async()
+                    .res()
                     .await
                     .unwrap();
             }
@@ -65,7 +64,7 @@ async fn main() {
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
-        .res_async()
+        .res()
         .await
         .unwrap();
 
@@ -81,10 +80,10 @@ async fn main() {
     loop {
         publisher
             .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
-            .res_async()
+            .res()
             .await
             .unwrap();
-        async_std::task::sleep(std::time::Duration::new(1, 0)).await;
+        async_std::task::sleep(Duration::from_secs(1)).await;
     }
 }
 

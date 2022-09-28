@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-plugin-storage-manager"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -35,28 +36,27 @@ default = ["no_mangle"]
 name = "zplugin_storage_manager"
 crate-type = ["cdylib"]
 
-
 [dependencies]
 async-std = "=1.12.0"
 async-trait = "0.1.57"
 clap = "3.2.22"
+crc = "3.0.0"
+derive-new = "0.5.9"
 env_logger = "0.9.1"
+flume = "0.10.14"
 futures = "0.3.24"
 git-version = "0.3.5"
+lazy_static = "1.4.0"
 libloading = "0.7.3"
 log = "0.4.17"
 serde = { version = "1.0.144", features = ["derive"] }
 serde_json = "1.0.85"
-crc = "3.0.0"
-derive-new = "0.5.9"
-flume = "0.10.14"
 urlencoding = "2.1.2"
-lazy_static = "1.4.0"
-zenoh = { path = "../../zenoh/" , default-features = false }
+zenoh = { path = "../../zenoh/", default-features = false }
+zenoh-collections = { path = "../../commons/zenoh-collections/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { path = "../../commons/zenoh-util" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
 
 [build-dependencies]

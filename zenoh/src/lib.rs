@@ -77,16 +77,16 @@
 #[macro_use]
 extern crate zenoh_core;
 
-use handlers::DefaultHandler;
-use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-
 use git_version::git_version;
+use handlers::DefaultHandler;
 #[zenoh_core::unstable]
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
-use zenoh_core::{zerror, Result as ZResult};
+use std::future::Ready;
+use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
+use zenoh_core::{Resolvable, SyncResolve};
 
 /// A zenoh error.
 pub use zenoh_core::Error;
@@ -114,7 +114,6 @@ pub mod query;
 pub mod queryable;
 pub mod sample;
 pub mod subscriber;
-pub mod utils;
 pub mod value;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
@@ -175,7 +174,10 @@ pub mod scouting;
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
-/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default()).res().await.unwrap();
+/// let receiver = zenoh::scout(WhatAmI::Peer | WhatAmI::Router, config::default())
+///     .res()
+///     .await
+///     .unwrap();
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
@@ -255,7 +257,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    type Output = ZResult<Session>;
+    type To = ZResult<Session>;
 }
 
 impl<TryIntoConfig> SyncResolve for OpenBuilder<TryIntoConfig>
@@ -263,8 +265,7 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    #[inline]
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         let config: crate::config::Config = self
             .config
             .try_into()
@@ -278,16 +279,10 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    type Future = zenoh_sync::PinBoxFuture<Self::Output>;
+    type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        zenoh_sync::pinbox(async move {
-            let config: crate::config::Config = self
-                .config
-                .try_into()
-                .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-            Session::new(config).res_async().await
-        })
+        std::future::ready(self.res_sync())
     }
 }
 
@@ -329,12 +324,12 @@ impl InitBuilder {
 
 #[zenoh_core::unstable]
 impl Resolvable for InitBuilder {
-    type Output = ZResult<Session>;
+    type To = ZResult<Session>;
 }
+
 #[zenoh_core::unstable]
 impl SyncResolve for InitBuilder {
-    #[inline]
-    fn res_sync(self) -> Self::Output {
+    fn res_sync(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
             self.runtime,
             self.aggregated_subscribers,
@@ -346,8 +341,9 @@ impl SyncResolve for InitBuilder {
 
 #[zenoh_core::unstable]
 impl AsyncResolve for InitBuilder {
-    type Future = futures::future::Ready<Self::Output>;
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
-        futures::future::ready(self.res_sync())
+        std::future::ready(self.res_sync())
     }
 }

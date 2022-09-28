@@ -31,15 +31,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
-use zenoh::prelude::*;
+use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
-use zenoh_core::Result as ZResult;
-use zenoh_core::SyncResolve;
-use zenoh_core::{bail, zlock};
+use zenoh_core::{bail, zlock, Result as ZResult};
 use zenoh_util::LibLoader;
 
 mod backends_mgt;

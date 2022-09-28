@@ -19,9 +19,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::prelude::Sample;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 
@@ -100,25 +98,25 @@ impl AlignQueryable {
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).res_async().await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Subinterval(i, c) => {
                             let sample = Sample::new(
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).res_async().await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Content(i, c) => {
                             let sample = Sample::new(
                                 query.key_expr().clone(),
                                 serde_json::to_string(&(i, c)).unwrap(),
                             );
-                            query.reply(Ok(sample)).res_async().await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                         AlignData::Data(k, (v, ts)) => {
                             let sample = Sample::new(k, v).with_timestamp(ts);
-                            query.reply(Ok(sample)).res_async().await.unwrap();
+                            query.reply(Ok(sample)).res().await.unwrap();
                         }
                     }
                 }

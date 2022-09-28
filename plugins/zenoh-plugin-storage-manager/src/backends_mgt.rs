@@ -15,7 +15,7 @@ use super::storages_mgt::*;
 use flume::Sender;
 use log::trace;
 use std::sync::Arc;
-use zenoh::prelude::*;
+use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_core::Result as ZResult;

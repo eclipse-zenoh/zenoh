@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zenoh-util"
 version = "0.6.0-dev.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -39,11 +40,6 @@ default = ["compat"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-zenoh-core = { path = "../zenoh-core" }
-zenoh-cfg-properties = { path = "../zenoh-cfg-properties", optional = true }
-zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
-zenoh-sync = { path = "../zenoh-sync/", optional = true }
-zenoh-collections = { path = "../zenoh-collections/", optional = true }
 async-std = { version = "=1.12.0" }
 clap = "3.2.22"
 futures = "0.3.24"
@@ -54,6 +50,11 @@ lazy_static = "1.4.0"
 libloading = "0.7.3"
 log = "0.4.17"
 shellexpand = "2.1.2"
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties", optional = true }
+zenoh-collections = { path = "../zenoh-collections/", optional = true }
+zenoh-core = { path = "../zenoh-core" }
+zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
+zenoh-sync = { path = "../zenoh-sync/", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }

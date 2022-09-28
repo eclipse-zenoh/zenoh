@@ -14,8 +14,7 @@
 use clap::{App, Arg};
 use std::convert::TryInto;
 use zenoh::config::Config;
-use zenoh::prelude::sync::SyncResolve;
-use zenoh::prelude::*;
+use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 
 fn main() {

@@ -12,6 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
+rust-version = "1.62.1"
 name = "zplugin-example"
 version = "0.6.0-dev.0"
 authors = [
@@ -33,15 +34,14 @@ name = "zplugin_example"
 # This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
-
 [dependencies]
 async-std = "=1.12.0"
 clap = "3.2.22"
 env_logger = "0.9.1"
 futures = "0.3.24"
 log = "0.4.17"
-zenoh = { path = "../../zenoh", default-features = false}
-zenoh-util = { path = "../../commons/zenoh-util" }
+serde_json = "1.0.85"
+zenoh = { path = "../../zenoh", default-features = false }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait" }
-serde_json = "1.0.85"
+zenoh-util = { path = "../../commons/zenoh-util" }
