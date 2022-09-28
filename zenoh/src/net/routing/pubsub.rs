@@ -889,7 +889,7 @@ fn compute_data_route(
                 );
             }
 
-            if master || source_type != WhatAmI::Router {
+            if (master || source_type != WhatAmI::Router) && tables.full_net(WhatAmI::Peer) {
                 let net = tables.peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
                     WhatAmI::Peer => source.unwrap(),
