@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zplugin-example"
-version = "0.6.0-dev.0"
+version = "0.6.0-beta.1"
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",

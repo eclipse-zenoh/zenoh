@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-plugin-storage-manager"
-version = "0.6.0-dev.0"
+version = "0.6.0-beta.1"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -68,4 +68,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2022 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.6.0~dev.0)"
+depends = "zenohd (=0.6.0~beta.1)"

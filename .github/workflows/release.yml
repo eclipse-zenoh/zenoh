@@ -347,6 +347,8 @@ jobs:
           cd zenoh-ext && cargo publish && cd - && sleep 30
           cd zenohd && cargo publish && cd - && sleep 30
           cd plugins/zenoh-plugin-trait && cargo publish && cd - && sleep 30
+          cd plugins/zenoh-plugin-rest && cargo publish && cd - && sleep 30
+          cd plugins/zenoh-plugin-storage-manager && cargo publish && cd - && sleep 30
           cd plugins/zenoh-backend-traits && cargo publish && cd - && sleep 30
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
