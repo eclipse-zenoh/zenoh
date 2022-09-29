@@ -52,7 +52,7 @@ log = "0.4.17"
 serde = "1.0.145"
 serde_json = "1.0.85"
 tide = "0.16.0"
-zenoh = { version = "0.6.0-beta.1", path = "../../zenoh/", default-features = false }
+zenoh = { version = "0.6.0-beta.1", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../zenoh-plugin-trait", default-features = false }
