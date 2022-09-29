@@ -36,8 +36,8 @@ async-std = { version = "=1.12.0", default-features = false }
 async-trait = "0.1.57"
 flume = "0.10.14"
 
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
-zenoh-protocol-core = { path = "../../commons/zenoh-protocol-core/" }
+zenoh-buffers = { version = "0.6.0-beta.1", path = "../../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
+zenoh-protocol = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol/" }
+zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol-core/" }

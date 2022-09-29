@@ -40,6 +40,6 @@ default = ["no_mangle"]
 libloading = "0.7.3"
 log = "0.4.17"
 serde_json = "1.0.85"
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-macros = { path = "../../commons/zenoh-macros/" }
-zenoh-util = { path = "../../commons/zenoh-util" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
+zenoh-macros = { version = "0.6.0-beta.1", path = "../../commons/zenoh-macros/" }
+zenoh-util = { version = "0.6.0-beta.1", path = "../../commons/zenoh-util" }

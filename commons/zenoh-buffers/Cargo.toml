@@ -41,5 +41,5 @@ hex = "0.4.3"
 log = { version = "0.4.17", optional = true }
 serde = { version = "1.0.145", optional = true }
 shared_memory = { version = "=0.12.4", optional = true }
-zenoh-collections = { path = "../zenoh-collections/" }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-collections = { version = "0.6.0-beta.1", path = "../zenoh-collections/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }

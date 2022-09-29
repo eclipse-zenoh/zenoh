@@ -52,12 +52,12 @@ log = "0.4.17"
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
 urlencoding = "2.1.2"
-zenoh = { path = "../../zenoh/", default-features = false }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { path = "../../commons/zenoh-util" }
-zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
+zenoh = { version = "0.6.0-beta.1", path = "../../zenoh/", default-features = false }
+zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-collections/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../zenoh-plugin-trait", default-features = false }
+zenoh-util = { version = "0.6.0-beta.1", path = "../../commons/zenoh-util" }
+zenoh_backend_traits = { version = "0.6.0-beta.1", path = "../zenoh-backend-traits/" }
 
 [build-dependencies]
 rustc_version = "0.4.0"

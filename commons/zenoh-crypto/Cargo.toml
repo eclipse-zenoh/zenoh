@@ -34,4 +34,4 @@ hmac = { version = "0.12.1", features = ["std"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 sha3 = "0.10.5"
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }

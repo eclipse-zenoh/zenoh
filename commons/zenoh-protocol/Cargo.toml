@@ -37,10 +37,10 @@ complete_n = ["zenoh-protocol-core/complete_n"]
 
 log = "0.4.17"
 uhlc = "0.5.1"
-zenoh-buffers = { path = "../zenoh-buffers/" }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
 
-zenoh-protocol-core = { path = "../zenoh-protocol-core/" }
+zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../zenoh-protocol-core/" }
 
 [dev-dependencies]
 criterion = "0.4.0"

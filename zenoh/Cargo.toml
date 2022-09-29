@@ -91,21 +91,21 @@ stop-token = "0.7.0"
 uhlc = "0.5.0"
 uuid = { version = "1.1.2", features = ["v4"] }
 vec_map = "0.8.2"
-zenoh-buffers = { path = "../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
-zenoh-collections = { path = "../commons/zenoh-collections/" }
-zenoh-config = { path = "../commons/zenoh-config/" }
-zenoh-core = { path = "../commons/zenoh-core/" }
-zenoh-crypto = { path = "../commons/zenoh-crypto/" }
+zenoh-buffers = { version = "0.6.0-beta.1", path = "../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../commons/zenoh-cfg-properties/" }
+zenoh-collections = { version = "0.6.0-beta.1", path = "../commons/zenoh-collections/" }
+zenoh-config = { version = "0.6.0-beta.1", path = "../commons/zenoh-config/" }
+zenoh-core = { version = "0.6.0-beta.1", path = "../commons/zenoh-core/" }
+zenoh-crypto = { version = "0.6.0-beta.1", path = "../commons/zenoh-crypto/" }
 
-zenoh-link = { path = "../io/zenoh-link/" }
+zenoh-link = { version = "0.6.0-beta.1", path = "../io/zenoh-link/" }
 
-zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait", default-features = false }
-zenoh-protocol = { path = "../commons/zenoh-protocol/" }
-zenoh-protocol-core = { path = "../commons/zenoh-protocol-core/" }
-zenoh-sync = { path = "../commons/zenoh-sync/" }
-zenoh-transport = { path = "../io/zenoh-transport/" }
-zenoh-util = { path = "../commons/zenoh-util" }
+zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../plugins/zenoh-plugin-trait", default-features = false }
+zenoh-protocol = { version = "0.6.0-beta.1", path = "../commons/zenoh-protocol/" }
+zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../commons/zenoh-protocol-core/" }
+zenoh-sync = { version = "0.6.0-beta.1", path = "../commons/zenoh-sync/" }
+zenoh-transport = { version = "0.6.0-beta.1", path = "../io/zenoh-transport/" }
+zenoh-util = { version = "0.6.0-beta.1", path = "../commons/zenoh-util" }
 
 [build-dependencies]
 rustc_version = "0.4.0"
