@@ -405,9 +405,8 @@ impl Primitives for Face {
         pull_id: ZInt,
         max_samples: &Option<ZInt>,
     ) {
-        let mut tables = zwrite!(self.tables);
         pull_data(
-            &mut tables,
+            &self.tables,
             &self.state.clone(),
             is_final,
             key_expr,

@@ -1319,13 +1319,14 @@ pub fn full_reentrant_route_data(
 }
 
 pub fn pull_data(
-    tables: &mut Tables,
+    tables_ref: &RwLock<Tables>,
     face: &Arc<FaceState>,
     _is_final: bool,
     expr: &WireExpr,
     _pull_id: ZInt,
     _max_samples: &Option<ZInt>,
 ) {
+    let tables = zread!(tables_ref);
     match tables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
@@ -1333,24 +1334,34 @@ pub fn pull_data(
                 match res.session_ctxs.get_mut(&face.id) {
                     Some(ctx) => match &ctx.subs {
                         Some(subinfo) => {
+                            let reliability = subinfo.reliability;
                             let lock = zlock!(tables.pull_caches_lock);
-                            for (name, (info, data)) in &ctx.last_values {
-                                let key_expr =
-                                    Resource::get_best_key(&tables.root_res, name, face.id);
+                            let route = get_mut_unchecked(ctx)
+                                .last_values
+                                .drain()
+                                .map(|(name, sample)| {
+                                    (
+                                        Resource::get_best_key(&tables.root_res, &name, face.id)
+                                            .to_owned(),
+                                        sample,
+                                    )
+                                })
+                                .collect::<Vec<(WireExpr, (Option<DataInfo>, ZBuf))>>();
+                            drop(lock);
+                            drop(tables);
+                            for (key_expr, (info, data)) in route {
                                 face.primitives.send_data(
                                     &key_expr,
-                                    data.clone(),
+                                    data,
                                     Channel {
                                         priority: Priority::default(), // @TODO: Default value for the time being
-                                        reliability: subinfo.reliability,
+                                        reliability,
                                     },
                                     CongestionControl::default(), // @TODO: Default value for the time being
-                                    info.clone(),
+                                    info,
                                     None,
                                 );
                             }
-                            get_mut_unchecked(ctx).last_values.clear();
-                            drop(lock);
                         }
                         None => {
                             log::error!(
