@@ -18,10 +18,7 @@
 #[macro_export]
 macro_rules! zlock {
     ($var:expr) => {
-        match $var.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => $var.lock().unwrap(),
-        }
+        $var.lock().unwrap()
     };
 }
 
@@ -31,10 +28,7 @@ macro_rules! zlock {
 #[macro_export]
 macro_rules! zread {
     ($var:expr) => {
-        match $var.try_read() {
-            Ok(guard) => guard,
-            Err(_) => $var.read().unwrap(),
-        }
+        $var.read().unwrap()
     };
 }
 
@@ -44,10 +38,7 @@ macro_rules! zread {
 #[macro_export]
 macro_rules! zwrite {
     ($var:expr) => {
-        match $var.try_write() {
-            Ok(guard) => guard,
-            Err(_) => $var.write().unwrap(),
-        }
+        $var.write().unwrap()
     };
 }
 
