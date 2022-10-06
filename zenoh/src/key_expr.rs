@@ -300,7 +300,7 @@ impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
         Self(KeyExprInner::Borrowed(ke))
     }
 }
-impl From<OwnedKeyExpr> for KeyExpr<'static> {
+impl<'a> From<OwnedKeyExpr> for KeyExpr<'a> {
     fn from(v: OwnedKeyExpr) -> Self {
         Self(KeyExprInner::Owned(v))
     }
@@ -350,7 +350,7 @@ impl<'a> From<KeyExpr<'a>> for String {
         }
     }
 }
-impl TryFrom<String> for KeyExpr<'static> {
+impl<'a> TryFrom<String> for KeyExpr<'a> {
     type Error = zenoh_core::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Owned(value.try_into()?)))
