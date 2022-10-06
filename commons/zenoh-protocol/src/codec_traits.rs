@@ -11,23 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub trait WCodec<Buffer, Message> {
+    type Output;
+    fn write(self, buffer: Buffer, message: Message) -> Self::Output;
+}
 
-//! Provide [ZBuf] and [WBuf] as convenient buffers used for serialization and deserialization.
-pub mod traits;
-pub use traits::*;
-
-mod zslice;
-pub use zslice::*;
-
-mod zbuf;
-pub use zbuf::*;
-
-mod wbuf;
-pub use wbuf::*;
-
-#[cfg(feature = "shared-memory")]
-mod shm;
-#[cfg(feature = "shared-memory")]
-pub use shm::*;
-
-mod trait_impls;
+pub trait RCodec<Buffer, Message> {
+    type Error;
+    fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
+}

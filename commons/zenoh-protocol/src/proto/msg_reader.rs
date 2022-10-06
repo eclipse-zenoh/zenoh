@@ -13,8 +13,6 @@
 //
 use super::defaults::SEQ_NUM_RES;
 use super::msg::*;
-#[allow(deprecated)]
-use crate::io::ZBufCodec;
 use std::convert::TryInto;
 use std::time::Duration;
 use zenoh_buffers::{reader::Reader, ZBufReader};

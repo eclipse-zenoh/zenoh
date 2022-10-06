@@ -19,5 +19,6 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
 pub use zenoh_protocol_core as core;
-pub mod io;
+pub mod codec_traits;
 pub mod proto;
+mod zenoh_070;

@@ -14,7 +14,6 @@
 use std::borrow::Cow;
 
 pub mod buffer {
-    use std::num::NonZeroUsize;
     pub trait ConstructibleBuffer {
         /// Constructs a split buffer that may accept `slice_capacity` segments without allocating.
         /// It may also accept receiving cached writes for `cache_capacity` bytes before needing to reallocate its cache.
@@ -25,14 +24,6 @@ pub mod buffer {
         fn remaining_capacity(&self) -> usize;
     }
 
-    pub trait CopyBuffer {
-        /// Copies as much of `bytes` as possible inside its cache, returning the amount actually written.
-        /// Will return `None` if the write was refused.
-        fn write(&mut self, bytes: &[u8]) -> Option<NonZeroUsize>;
-        fn write_byte(&mut self, byte: u8) -> Option<NonZeroUsize> {
-            self.write(&[byte])
-        }
-    }
     pub trait Indexable {
         type Index;
         /// Returns an index-like mark that may be used for future operations at the current buffer-end
@@ -42,9 +33,15 @@ pub mod buffer {
         /// This is an exact size operation, to avoid invalidating other marks that may have been made.
         fn replace(&mut self, from: &Self::Index, with: &[u8]) -> bool;
     }
-    pub trait InsertBuffer<T> {
-        /// Appends a slice to the buffer without copying its data.
-        fn append(&mut self, slice: T) -> Option<NonZeroUsize>;
+
+    #[derive(Debug, Clone, Copy)]
+    pub struct DidntWrite;
+    pub trait Buffer {
+        fn write(&mut self, bytes: &[u8]) -> Result<(), DidntWrite>;
+        fn write_byte(&mut self, byte: u8) -> Result<(), DidntWrite>;
+        fn append(&mut self, slice: crate::zslice::ZSlice) -> Result<(), DidntWrite> {
+            self.write(slice.as_slice())
+        }
     }
 }
 
@@ -97,6 +94,7 @@ pub trait SplitBuffer<'a> {
 }
 
 pub mod reader {
+    use crate::ZSlice;
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> usize;
         #[must_use = "returns true upon success"]
@@ -108,6 +106,20 @@ pub mod reader {
         fn remaining(&self) -> usize;
         fn can_read(&self) -> bool {
             self.remaining() != 0
+        }
+        /// Reads the current ZSlice up to len, updating the reader by the size of the returned ZSlice
+        fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+            // We'll be truncating the vector immediately, and u8 is Copy and therefore doesn't have `Drop`
+            let mut buffer: Vec<u8> = Vec::with_capacity(len);
+            let b = buffer.spare_capacity_mut();
+            unsafe {
+                let len = self.read(std::mem::transmute(b));
+                if len == 0 {
+                    return None;
+                }
+                buffer.set_len(len);
+            }
+            Some(buffer.into())
         }
     }
     pub trait HasReader {

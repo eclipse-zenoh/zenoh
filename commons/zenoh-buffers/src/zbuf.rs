@@ -17,6 +17,7 @@ use super::ZSlice;
 #[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use crate::reader::Reader;
+use crate::traits::buffer::{Buffer, DidntWrite};
 use crate::SplitBuffer;
 use std::fmt;
 use std::io;
@@ -50,6 +51,16 @@ enum ZBufInner {
 impl Default for ZBufInner {
     fn default() -> ZBufInner {
         ZBufInner::Empty
+    }
+}
+
+impl AsRef<[ZSlice]> for ZBufInner {
+    fn as_ref(&self) -> &[ZSlice] {
+        match self {
+            ZBufInner::Single(s) => std::slice::from_ref(s),
+            ZBufInner::Multiple(s) => s,
+            ZBufInner::Empty => &[],
+        }
     }
 }
 
@@ -639,6 +650,11 @@ impl<'a> crate::traits::reader::Reader for ZBufReader<'a> {
     fn remaining(&self) -> usize {
         self.inner.len - self.read
     }
+    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+        let slice = self.slices.as_ref().get(self.slice)?.clone();
+
+        todo!()
+    }
 }
 impl<'a> crate::traits::reader::HasReader for &'a ZBuf {
     type Reader = ZBufReader<'a>;
@@ -658,19 +674,8 @@ impl crate::traits::buffer::ConstructibleBuffer for ZBuf {
 }
 
 impl ZBuf {
-    fn append_zslice(&mut self, slice: ZSlice) -> Option<NonZeroUsize> {
-        let len = slice.len();
-        if len > 0 {
-            self.add_zslice(slice);
-            Some(unsafe { NonZeroUsize::new_unchecked(len) })
-        } else {
-            None
-        }
-    }
-}
-impl<T: Into<ZSlice>> crate::traits::buffer::InsertBuffer<T> for ZBuf {
-    fn append(&mut self, slice: T) -> Option<NonZeroUsize> {
-        self.append_zslice(slice.into())
+    pub fn append_zslice(&mut self, slice: ZSlice) {
+        self.add_zslice(slice);
     }
 }
 

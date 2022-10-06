@@ -25,4 +25,3 @@ pub use msg_shm::*;
 pub use msg_writer::*;
 
 use super::core;
-use super::io;

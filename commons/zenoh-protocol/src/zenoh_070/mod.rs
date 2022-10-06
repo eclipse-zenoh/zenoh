@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod zint;
+mod zslice;
 
-pub use zenoh_buffers::*;
-
-mod codec;
-pub use codec::*;
+#[derive(Clone, Default)]
+#[non_exhaustive]
+pub struct Zenoh070;

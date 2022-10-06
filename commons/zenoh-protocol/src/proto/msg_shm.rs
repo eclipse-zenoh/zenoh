@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use super::io::SharedMemoryReader;
-#[cfg(feature = "shared-memory")]
 use super::msg::*;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
+#[cfg(feature = "shared-memory")]
+use zenoh_buffers::SharedMemoryReader;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
