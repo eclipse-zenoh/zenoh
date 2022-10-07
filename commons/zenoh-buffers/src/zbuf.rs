@@ -17,12 +17,10 @@ use super::ZSlice;
 #[cfg(feature = "shared-memory")]
 use super::ZSliceBuffer;
 use crate::reader::Reader;
-use crate::traits::buffer::{Buffer, DidntWrite};
 use crate::SplitBuffer;
 use std::fmt;
 use std::io;
 use std::io::IoSlice;
-use std::num::NonZeroUsize;
 #[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
 #[cfg(feature = "shared-memory")]
@@ -651,9 +649,25 @@ impl<'a> crate::traits::reader::Reader for ZBufReader<'a> {
         self.inner.len - self.read
     }
     fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
-        let slice = self.slices.as_ref().get(self.slice)?.clone();
-
-        todo!()
+        let ZSlice {
+            buf,
+            mut start,
+            end,
+        } = self.slices.as_ref().get(self.slice)?.clone();
+        start += self.byte;
+        let wanted_end = start + len;
+        if end <= wanted_end {
+            self.slice += 1;
+            self.byte = 0;
+            Some(ZSlice { buf, start, end })
+        } else {
+            self.byte += len;
+            Some(ZSlice {
+                buf,
+                start,
+                end: wanted_end,
+            })
+        }
     }
 }
 impl<'a> crate::traits::reader::HasReader for &'a ZBuf {

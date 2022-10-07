@@ -210,8 +210,8 @@ impl fmt::Display for ZSliceKind {
 #[derive(Clone)]
 pub struct ZSlice {
     pub buf: ZSliceBuffer,
-    start: usize,
-    end: usize,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
 }
 
 impl ZSlice {

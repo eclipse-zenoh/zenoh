@@ -401,7 +401,7 @@ impl io::Write for WBuf {
     #[inline]
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.write_bytes(buf)
-            .map_err(|e| io::Error::new(io::ErrorKind::WriteZero, "failed to write whole buffer"))
+            .map_err(|_| io::Error::new(io::ErrorKind::WriteZero, "failed to write whole buffer"))
     }
 
     #[inline]
@@ -409,9 +409,9 @@ impl io::Write for WBuf {
         let mut nwritten = 0;
         for buf in bufs {
             let len = buf.len();
-            self.write_zslice(buf.into()).map_err(|e| {
+            self.write_zslice(buf.into()).map_err(|_| {
                 io::Error::new(io::ErrorKind::WriteZero, "failed to write whole buffer")
-            });
+            })?;
             nwritten += len;
         }
         Ok(nwritten)
@@ -608,6 +608,41 @@ impl<'a> crate::traits::reader::Reader for WBufReader<'a> {
         let mut byte = 0;
         (self.read(std::slice::from_mut(&mut byte)) != 0).then_some(byte)
     }
+    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+        match self.inner.slices.get(self.slice)? {
+            Slice::External(ZSlice { buf, start, end }) => {
+                let start = *start + self.byte;
+                let wanted_end = start + len;
+                let end = *end;
+                let buf = buf.clone();
+                if end <= wanted_end {
+                    self.slice += 1;
+                    self.byte = 0;
+                    Some(ZSlice { buf, start, end })
+                } else {
+                    self.byte += len;
+                    Some(ZSlice {
+                        buf,
+                        start,
+                        end: wanted_end,
+                    })
+                }
+            }
+            Slice::Internal(start, end) => {
+                let mut buf =
+                    &self.inner.buf[start + self.byte..end.unwrap_or(self.inner.buf.len())];
+                let before = buf.len();
+                let ret = buf.read_zslice(len);
+                if buf.is_empty() {
+                    self.slice += 1;
+                    self.byte = 0;
+                } else {
+                    self.byte += before - buf.len();
+                }
+                ret
+            }
+        }
+    }
 }
 
 impl Buffer for WBuf {
@@ -732,7 +767,7 @@ mod tests {
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(!buf.write_bytes(&[5, 6]).is_ok());
+        assert!(buf.write_bytes(&[5, 6]).is_err());
         assert_eq!(buf.len(), 5);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
@@ -763,7 +798,7 @@ mod tests {
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);
 
-        assert!(!buf.write_zslice(ZSlice::from(vec![5_u8, 6])).is_ok());
+        assert!(buf.write_zslice(ZSlice::from(vec![5_u8, 6])).is_err());
         assert_eq!(buf.len(), 5);
         assert_eq!(buf.capacity(), 6);
         assert_eq!(to_vec_vec!(buf), [[0, 1, 2, 3, 4]]);

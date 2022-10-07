@@ -35,6 +35,17 @@ where
     }
 }
 
+impl<B> RCodec<&mut B, ZSlice> for &Zenoh070
+where
+    B: Reader,
+{
+    type Error = ();
+    fn read(self, buffer: &mut B) -> Result<ZSlice, Self::Error> {
+        let len: usize = self.read(buffer).map_err(|_| ())?;
+        buffer.read_zslice(len).ok_or(())
+    }
+}
+
 // fn read_from_socket(link: Link) {
 //     loop {
 //         let mut buff = vec![0u8; u16::MAX as usize];
