@@ -48,29 +48,61 @@ pub mod writer {
         ) -> Result<usize, DidntWrite>;
     }
 
-    pub trait ReserveWriter<'a, const LEN: usize> {
-        // type Reserver
-        // where
-        //     (Reserver, &mut Self): Writer;
-        type Mark: 'a;
-
-        fn reserve<
-            Len,
-            F: FnOnce(Reservation<'a, Self::Mark, Len>) -> Reservation<'a, Self::Mark, typenum::Z0>,
-        >(
-            &mut self,
-        );
-    }
-    pub struct Reservation<'a, Writer, Len> {
+    pub struct Reservation<'a, 'b, Len> {
+        buf: &'b mut [u8],
         len: std::marker::PhantomData<Len>,
-        marker: std::marker::PhantomData<fn(&'a Writer) -> &'a Writer>,
+        marker: std::marker::PhantomData<fn(&'a ()) -> &'a ()>,
+    }
+    impl<'a, 'b, Len> Reservation<'a, 'b, Len> {
+        pub fn write<WLen>(
+            self,
+            bytes: &[u8],
+        ) -> Reservation<'a, 'b, <Len as std::ops::Sub<WLen>>::Output>
+        where
+            Len: std::ops::Sub<WLen>,
+            WLen: typenum::Unsigned,
+        {
+            assert_eq!(bytes.len(), WLen::USIZE);
+            self.buf[..bytes.len()].copy_from_slice(bytes);
+            Reservation {
+                buf: &mut self.buf[bytes.len()..],
+                len: Default::default(),
+                marker: self.marker,
+            }
+        }
     }
 
-    pub trait BacktrackableWriter {
+    pub trait BacktrackableWriter: Writer {
         type Mark;
 
         fn mark(&mut self) -> Self::Mark;
         fn rewind(&mut self, mark: Self::Mark) -> bool;
+        fn with_reservation<'a, Len, F>(&mut self, f: F) -> Result<(), DidntWrite>
+        where
+            Len: typenum::Unsigned,
+            F: for<'b> FnOnce(
+                Reservation<'a, 'b, Len>,
+            ) -> Result<Reservation<'a, 'b, typenum::U0>, DidntWrite>,
+        {
+            let mark = self.mark();
+            let mut buf: &mut [u8] = [].as_mut();
+            if let Err(DidntWrite) = (|| {
+                self.with_slot(Len::USIZE, |s| {
+                    buf = unsafe { std::mem::transmute(s) };
+                    Len::USIZE
+                })?;
+                f(Reservation {
+                    buf,
+                    len: Default::default(),
+                    marker: Default::default(),
+                })
+            })() {
+                self.rewind(mark);
+                Err(DidntWrite)
+            } else {
+                Ok(())
+            }
+        }
     }
 
     pub trait HasWriter {
