@@ -204,7 +204,7 @@ impl SerializationBatch {
             self.current_frame = CurrentFrame::None;
         } else {
             // Revert the write operation
-            self.buffer.revert();
+            self.buffer.rewind();
         }
 
         #[cfg(feature = "stats")]
@@ -296,7 +296,7 @@ impl SerializationBatch {
 
         if !res {
             // Revert the write operation
-            self.buffer.revert();
+            self.buffer.rewind();
         }
 
         res
@@ -344,7 +344,7 @@ impl SerializationBatch {
                 // Check if it is really the final fragment
                 if !is_final && (to_write <= space_left) {
                     // Revert the buffer
-                    self.buffer.revert();
+                    self.buffer.rewind();
                     // It is really the finally fragment, reserialize the header
                     is_final = true;
                     continue;
@@ -369,7 +369,7 @@ impl SerializationBatch {
             } else {
                 // Revert the buffer and the SN
                 sn_gen.set(sn).unwrap();
-                self.buffer.revert();
+                self.buffer.rewind();
                 return 0;
             }
         }

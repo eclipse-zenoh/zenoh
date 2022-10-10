@@ -16,35 +16,35 @@ use crate::codec_traits::{RCodec, WCodec};
 use std::num::NonZeroUsize;
 use zenoh_buffers::{
     traits::{
-        buffer::{Buffer, DidntWrite},
         reader::Reader,
+        writer::{DidntWrite, Writer},
     },
     ZSlice,
 };
 
 impl<B> WCodec<&mut B, ZSlice> for &Zenoh070
 where
-    B: Buffer,
+    B: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut B, x: ZSlice) -> Self::Output {
         self.write(writer, x.len())?;
-        writer.append(x)?;
+        writer.write_zslice(x)?;
         Ok(())
     }
 }
 
-impl<B> RCodec<&mut B, ZSlice> for &Zenoh070
-where
-    B: Reader,
-{
-    type Error = ();
-    fn read(self, buffer: &mut B) -> Result<ZSlice, Self::Error> {
-        let len: usize = self.read(buffer).map_err(|_| ())?;
-        buffer.read_zslice(len).ok_or(())
-    }
-}
+// impl<B> RCodec<&mut B, ZSlice> for &Zenoh070
+// where
+//     B: Reader,
+// {
+//     type Error = ();
+//     fn read(self, buffer: &mut B) -> Result<ZSlice, Self::Error> {
+//         let len: usize = self.read(buffer).map_err(|_| ())?;
+//         buffer.read_zslices(len).ok_or(())
+//     }
+// }
 
 // fn read_from_socket(link: Link) {
 //     loop {

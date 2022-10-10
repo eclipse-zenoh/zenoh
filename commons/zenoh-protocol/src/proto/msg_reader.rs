@@ -95,7 +95,7 @@ impl MessageReader for ZBufReader<'_> {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read_byte()?;
+            let header = self.read_u8()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -169,7 +169,7 @@ impl MessageReader for ZBufReader<'_> {
         let payload = if imsg::has_flag(header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by
             // any other frame in the same batch. Read all the bytes.
-            let buffer = self.read_zslice(self.remaining())?;
+            let buffer = self.read_zslices(self.remaining())?;
             let is_final = imsg::has_flag(header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {
@@ -234,7 +234,7 @@ impl MessageReader for ZBufReader<'_> {
         } else {
             0
         };
-        let version = self.read_byte()?;
+        let version = self.read_u8()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let zid = self.read_zid()?;
         let sn_resolution = if imsg::has_flag(header, tmsg::flag::S) {
@@ -313,7 +313,7 @@ impl MessageReader for ZBufReader<'_> {
         } else {
             0
         };
-        let version = self.read_byte()?;
+        let version = self.read_u8()?;
         let whatami = WhatAmI::try_from(self.read_zint()?)?;
         let zid = self.read_zid()?;
         let lease = self.read_zint()?;
@@ -359,7 +359,7 @@ impl MessageReader for ZBufReader<'_> {
         } else {
             None
         };
-        let reason = self.read_byte()?;
+        let reason = self.read_u8()?;
 
         Some(TransportBody::Close(Close {
             zid,
@@ -457,7 +457,7 @@ impl MessageReader for ZBufReader<'_> {
         // Read the message
         let body = loop {
             // Read the header
-            let header = self.read_byte()?;
+            let header = self.read_u8()?;
 
             // Read the body
             match imsg::mid(header) {
@@ -651,7 +651,7 @@ impl MessageReader for ZBufReader<'_> {
     fn read_declaration(&mut self) -> Option<Declaration> {
         use super::zmsg::declaration::id::*;
 
-        let header = self.read_byte()?;
+        let header = self.read_u8()?;
         match imsg::mid(header) {
             RESOURCE => {
                 let expr_id = self.read_zint()?;
@@ -779,7 +779,7 @@ impl MessageReader for ZBufReader<'_> {
         use super::zmsg::declaration::flag::*;
         use super::zmsg::declaration::id::*;
 
-        let mode_flag = self.read_byte()?;
+        let mode_flag = self.read_u8()?;
         let mode = match mode_flag & !PERIOD {
             MODE_PUSH => SubMode::Push,
             MODE_PULL => SubMode::Pull,

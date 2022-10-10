@@ -76,7 +76,7 @@ pub struct SharedMemoryBufInfo {
     pub length: usize,
     /// The identifier of the shm manager that manages the shm segment this buffer points to.
     pub shm_manager: String,
-    /// The kiond of buffer.
+    /// The kind of buffer.
     pub kind: u8,
 }
 

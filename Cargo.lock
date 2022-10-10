@@ -3568,8 +3568,10 @@ dependencies = [
  "log",
  "serde",
  "shared_memory",
+ "typenum",
  "zenoh-collections",
  "zenoh-core",
+ "zenoh-sync",
 ]
 
 [[package]]

@@ -16,8 +16,8 @@ use std::num::NonZeroU8;
 
 use crate::codec_traits::{RCodec, WCodec};
 use zenoh_buffers::traits::{
-    buffer::{Buffer, DidntWrite},
     reader::Reader,
+    writer::{DidntWrite, Writer},
 };
 
 use super::Zenoh070;
@@ -92,7 +92,7 @@ where
 
 impl<B> WCodec<&mut B, u64> for &Zenoh070
 where
-    B: Buffer,
+    B: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
@@ -108,31 +108,34 @@ where
             0, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111,
         ];
         const VLE_LEN: usize = 9;
-        let mut buffer = [0; VLE_LEN];
-        // since leading_zeros will jump conditionally on 0 anyway (`asm {bsr 0}` is UB), might as well jump to return
-        let x = match std::num::NonZeroU64::new(x) {
-            Some(x) => x,
-            None => {
-                return writer.write_byte(0);
-            }
-        };
-        let needed_bits = u64::BITS - x.leading_zeros();
-        let payload_size = VLE_SHIFT[needed_bits as usize];
-        let shift_payload = payload_size == 0;
-        let mut x: u64 = x.into();
-        x <<= payload_size;
-        let serialized = x.to_le_bytes();
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                serialized.as_ptr(),
-                buffer.as_mut_ptr().offset(shift_payload as isize),
-                u64::BITS as usize / 8,
-            )
-        };
-        let needed_bytes = payload_size as usize;
-        buffer[0] |= VLE_MASK[needed_bytes];
-        let to_write = if shift_payload { VLE_LEN } else { needed_bytes };
-        writer.write(&buffer[..to_write])
+        writer.with_slot(VLE_LEN, move |mut buffer| {
+            // since leading_zeros will jump conditionally on 0 anyway (`asm {bsr 0}` is UB), might as well jump to return
+            let x = match std::num::NonZeroU64::new(x) {
+                Some(x) => x,
+                None => {
+                    buffer[0] = 0;
+                    return 1;
+                }
+            };
+            let needed_bits = u64::BITS - x.leading_zeros();
+            let payload_size = VLE_SHIFT[needed_bits as usize];
+            let shift_payload = payload_size == 0;
+            let mut x: u64 = x.into();
+            x <<= payload_size;
+            let serialized = x.to_le_bytes();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    serialized.as_ptr(),
+                    buffer.as_mut_ptr().offset(shift_payload as isize),
+                    u64::BITS as usize / 8,
+                )
+            };
+            let needed_bytes = payload_size as usize;
+            buffer[0] |= VLE_MASK[needed_bytes];
+            let to_write = if shift_payload { VLE_LEN } else { needed_bytes };
+            to_write
+        })?;
+        Ok(())
     }
 }
 impl<R> RCodec<&mut R, u64> for &Zenoh070
@@ -142,7 +145,7 @@ where
     type Error = ();
     fn read(self, reader: &mut R) -> Result<u64, Self::Error> {
         let mut buffer = [0; 8];
-        buffer[0] = match reader.read_byte() {
+        buffer[0] = match reader.read_u8() {
             None => return Err(()),
             Some(x) => x,
         };

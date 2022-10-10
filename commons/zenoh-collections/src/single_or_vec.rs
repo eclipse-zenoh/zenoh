@@ -66,6 +66,13 @@ impl<T> SingleOrVec<T> {
     pub fn push(&mut self, value: T) {
         self.0.push(value)
     }
+    pub fn truncate(&mut self, len: usize) {
+        if let SingleOrVecInner::Vec(v) = &mut self.0 {
+            v.truncate(len)
+        } else if len == 0 {
+            self.0 = SingleOrVecInner::Vec(Vec::new())
+        }
+    }
     pub fn len(&self) -> usize {
         match &self.0 {
             SingleOrVecInner::Single(_) => 1,
@@ -132,5 +139,17 @@ impl<T> Iterator for IntoIter<T> {
     type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         self.drain.next().or_else(|| self.last.take())
+    }
+}
+impl<T> std::ops::Index<usize> for SingleOrVec<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.as_ref()[index]
+    }
+}
+impl<T> std::ops::IndexMut<usize> for SingleOrVec<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.as_mut()[index]
     }
 }
