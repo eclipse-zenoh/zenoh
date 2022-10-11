@@ -29,13 +29,13 @@ impl Writer for Vec<u8> {
         &mut self,
         mut len: usize,
         f: F,
-    ) -> Result<usize, DidntWrite> {
+    ) -> Result<(), DidntWrite> {
         self.reserve(len);
         unsafe {
             len = f(std::mem::transmute(&mut self.spare_capacity_mut()[..len]));
             self.set_len(self.len() + len);
         }
-        Ok(len)
+        Ok(())
     }
 }
 
@@ -72,7 +72,7 @@ impl Writer for &mut [u8] {
         &mut self,
         mut len: usize,
         f: F,
-    ) -> Result<usize, DidntWrite> {
+    ) -> Result<(), DidntWrite> {
         if len > self.len() {
             return Err(DidntWrite);
         }
@@ -81,7 +81,7 @@ impl Writer for &mut [u8] {
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
         *self = unsafe { std::mem::transmute(&mut self[len..]) };
-        Ok(len)
+        Ok(())
     }
 }
 

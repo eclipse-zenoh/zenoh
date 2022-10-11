@@ -168,7 +168,7 @@ impl Writer for ZBufWriter<'_> {
         &mut self,
         mut len: usize,
         f: F,
-    ) -> Result<usize, crate::writer::DidntWrite> {
+    ) -> Result<(), crate::writer::DidntWrite> {
         let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.reserve(len);
@@ -189,7 +189,7 @@ impl Writer for ZBufWriter<'_> {
                 end: cache_len,
             }),
         }
-        Ok(len)
+        Ok(())
     }
 }
 impl BacktrackableWriter for ZBufWriter<'_> {

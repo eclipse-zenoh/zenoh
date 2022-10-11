@@ -45,7 +45,7 @@ pub mod writer {
             &mut self,
             len: usize,
             f: F,
-        ) -> Result<usize, DidntWrite>;
+        ) -> Result<(), DidntWrite>;
     }
 
     pub struct Reservation<'a, 'b, Len> {
