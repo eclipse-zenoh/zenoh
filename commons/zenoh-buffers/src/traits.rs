@@ -49,11 +49,28 @@ pub mod writer {
     }
 
     pub struct Reservation<'a, 'b, Len> {
-        buf: &'b mut [u8],
+        pub buf: &'b mut [u8],
         len: std::marker::PhantomData<Len>,
         marker: std::marker::PhantomData<fn(&'a ()) -> &'a ()>,
     }
     impl<'a, 'b, Len> Reservation<'a, 'b, Len> {
+        /// Advances the reservation by the specified length.
+        /// # Safety
+        /// The WLen first bytes of `self.buf` will be considered initialized from then on.
+        pub unsafe fn advance<WLen>(
+            self,
+        ) -> Reservation<'a, 'b, <Len as std::ops::Sub<WLen>>::Output>
+        where
+            Len: std::ops::Sub<WLen>,
+            WLen: typenum::Unsigned,
+        {
+            Reservation {
+                buf: &mut self.buf[WLen::USIZE..],
+                len: Default::default(),
+                marker: self.marker,
+            }
+        }
+        /// Writes `byte` into the reservation, asserting that `byte.len()` equals `WLen`.
         pub fn write<WLen>(
             self,
             bytes: &[u8],
@@ -63,12 +80,8 @@ pub mod writer {
             WLen: typenum::Unsigned,
         {
             assert_eq!(bytes.len(), WLen::USIZE);
-            self.buf[..bytes.len()].copy_from_slice(bytes);
-            Reservation {
-                buf: &mut self.buf[bytes.len()..],
-                len: Default::default(),
-                marker: self.marker,
-            }
+            self.buf[..WLen::USIZE].copy_from_slice(bytes);
+            unsafe { self.advance::<WLen>() }
         }
     }
 
@@ -126,9 +139,11 @@ pub mod reader {
             let mut byte = 0;
             (self.read(std::slice::from_mut(&mut byte)) != 0).then_some(byte)
         }
-        type ZSliceIterator: IntoIterator<Item = ZSlice>;
+        type ZSliceIterator: Iterator<Item = ZSlice> + ExactSizeIterator;
         /// Returns an iterator of ZSlices such that the sum of their length is _exactly_ `len`.
         fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator;
+        /// Reads exactly `len` bytes, returning them as a single ZSlice.
+        fn read_zslice(&mut self, len: usize) -> Option<ZSlice>;
         fn can_read(&self) -> bool {
             self.remaining() != 0
         }

@@ -83,6 +83,30 @@ impl<T> SingleOrVec<T> {
     pub fn is_empty(&self) -> bool {
         matches!(&self.0, SingleOrVecInner::Vec(v) if v.is_empty())
     }
+    pub fn get(&self, index: usize) -> Option<&T> {
+        match &self.0 {
+            SingleOrVecInner::Single(v) => (index == 0).then_some(v),
+            SingleOrVecInner::Vec(v) => v.get(index),
+        }
+    }
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+        match &mut self.0 {
+            SingleOrVecInner::Single(v) => (index == 0).then_some(v),
+            SingleOrVecInner::Vec(v) => v.get_mut(index),
+        }
+    }
+    pub fn last(&self) -> Option<&T> {
+        match &self.0 {
+            SingleOrVecInner::Single(v) => Some(v),
+            SingleOrVecInner::Vec(v) => v.last(),
+        }
+    }
+    pub fn last_mut(&mut self) -> Option<&mut T> {
+        match &mut self.0 {
+            SingleOrVecInner::Single(v) => Some(v),
+            SingleOrVecInner::Vec(v) => v.last_mut(),
+        }
+    }
 }
 impl<T> Default for SingleOrVec<T> {
     fn default() -> Self {

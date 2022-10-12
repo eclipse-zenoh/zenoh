@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod zint;
-mod zslice;
 
 #[derive(Clone, Default)]
 #[non_exhaustive]

@@ -114,13 +114,16 @@ impl Reader for &[u8] {
         }
     }
 
-    type ZSliceIterator = Option<ZSlice>;
+    type ZSliceIterator = std::option::IntoIter<ZSlice>;
+    fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator {
+        self.read_zslice(len).into_iter()
+    }
     #[allow(clippy::uninit_vec)]
     // SAFETY: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
     // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
     // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
     // Therefore, it is safe to suppress the `clippy::uninit_vec` lint.
-    fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator {
+    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
         // We'll be truncating the vector immediately, and u8 is Copy and therefore doesn't have `Drop`
         let mut buffer: Vec<u8> = Vec::with_capacity(len);
         unsafe {

@@ -30,6 +30,36 @@ impl<'a> SplitBuffer<'a> for ZBuf {
         len
     }
 }
+impl PartialEq for ZBuf {
+    fn eq(&self, other: &Self) -> bool {
+        let mut self_slices = self.slices();
+        let mut other_slices = other.slices();
+        let mut current_self = self_slices.next();
+        let mut current_other = other_slices.next();
+        loop {
+            match (current_self, current_other) {
+                (None, None) => return true,
+                (None, _) | (_, None) => return false,
+                (Some(l), Some(r)) => {
+                    let cmp_len = l.len().min(r.len());
+                    if l[..cmp_len] != r[..cmp_len] {
+                        return false;
+                    }
+                    if cmp_len == l.len() {
+                        current_self = self_slices.next()
+                    } else {
+                        current_self = Some(&l[cmp_len..])
+                    }
+                    if cmp_len == r.len() {
+                        current_other = other_slices.next()
+                    } else {
+                        current_other = Some(&r[cmp_len..])
+                    }
+                }
+            }
+        }
+    }
+}
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {
     slice: usize,
@@ -101,6 +131,36 @@ impl<'a> Reader for ZBufReader<'a> {
             end: cursor,
         }
     }
+
+    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+        let slice = self.inner.slices.get(self.cursor.slice)?;
+        match (slice.len() - self.cursor.byte).cmp(&len) {
+            std::cmp::Ordering::Less => {
+                let start = self.cursor.byte;
+                self.cursor.byte += len;
+                slice.new_sub_slice(start, self.cursor.byte)
+            }
+            std::cmp::Ordering::Equal => {
+                self.cursor.slice += 1;
+                self.cursor.byte = 0;
+                Some(slice.clone())
+            }
+            std::cmp::Ordering::Greater => {
+                self.cursor.slice += 1;
+                self.cursor.byte = 0;
+                let mut buffer = Vec::with_capacity(len);
+                buffer.extend_from_slice(slice.as_slice());
+                unsafe {
+                    if self.read_exact(std::mem::transmute(buffer.spare_capacity_mut())) {
+                        buffer.set_len(len)
+                    } else {
+                        return None;
+                    }
+                }
+                Some(buffer.into())
+            }
+        }
+    }
 }
 
 pub struct ZBufSliceIterator<'a> {
@@ -124,6 +184,15 @@ impl Iterator for ZBufSliceIterator<'_> {
         self.cursor.byte = 0;
         Some(ret)
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+}
+impl ExactSizeIterator for ZBufSliceIterator<'_> {
+    fn len(&self) -> usize {
+        self.end.slice - self.cursor.slice + 1
+    }
 }
 #[derive(Debug)]
 pub struct ZBufWriter<'a> {
@@ -140,7 +209,7 @@ impl Writer for ZBufWriter<'_> {
         let prev_cache_len = cache.len();
         cache.extend_from_slice(bytes);
         let cache_len = cache.len();
-        match self.inner.slices.as_mut().last_mut() {
+        match self.inner.slices.last_mut() {
             Some(ZSlice {
                 buf: ZSliceBuffer::NetOwnedBuffer(buf),
                 end,
@@ -177,7 +246,7 @@ impl Writer for ZBufWriter<'_> {
             cache.set_len(prev_cache_len + len);
         }
         let cache_len = cache.len();
-        match self.inner.slices.as_mut().last_mut() {
+        match self.inner.slices.last_mut() {
             Some(ZSlice {
                 buf: ZSliceBuffer::NetOwnedBuffer(buf),
                 end,
@@ -195,7 +264,7 @@ impl Writer for ZBufWriter<'_> {
 impl BacktrackableWriter for ZBufWriter<'_> {
     type Mark = ZBufPos;
     fn mark(&mut self) -> Self::Mark {
-        if let Some(slice) = self.inner.slices.as_ref().last() {
+        if let Some(slice) = self.inner.slices.last() {
             ZBufPos {
                 slice: self.inner.slices.len(),
                 byte: slice.end,
@@ -208,7 +277,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
         self.inner
             .slices
             .truncate(mark.slice + (mark.byte != 0) as usize);
-        if let Some(slice) = self.inner.slices.as_mut().last_mut() {
+        if let Some(slice) = self.inner.slices.last_mut() {
             slice.end = mark.byte
         }
         true
