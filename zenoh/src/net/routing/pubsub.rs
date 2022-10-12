@@ -851,6 +851,12 @@ fn compute_data_route(
     if key_expr.ends_with('/') {
         return Arc::new(route);
     }
+    log::trace!(
+        "compute_data_route({}, {:?}, {:?})",
+        key_expr,
+        source,
+        source_type
+    );
     let key_expr = match OwnedKeyExpr::try_from(key_expr) {
         Ok(ke) => ke,
         Err(e) => {
@@ -1002,6 +1008,9 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                 routers_data_routes[idx.index()] =
                     compute_data_route(tables, res, "", Some(idx.index()), WhatAmI::Router);
             }
+
+            res_mut.context_mut().peer_data_route =
+                Some(compute_data_route(tables, res, "", None, WhatAmI::Peer));
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && tables.full_net(WhatAmI::Peer)
@@ -1148,7 +1157,7 @@ fn get_data_route(
                         })
                 } else {
                     res.as_ref()
-                        .and_then(|res| res.client_data_route(face.whatami))
+                        .and_then(|res| res.peer_data_route())
                         .unwrap_or_else(|| {
                             compute_data_route(tables, prefix, suffix, None, face.whatami)
                         })
@@ -1187,7 +1196,10 @@ fn get_data_route(
                 }
             } else {
                 res.as_ref()
-                    .and_then(|res| res.client_data_route(face.whatami))
+                    .and_then(|res| match face.whatami {
+                        WhatAmI::Client => res.client_data_route(),
+                        _ => res.peer_data_route(),
+                    })
                     .unwrap_or_else(|| {
                         compute_data_route(tables, prefix, suffix, None, face.whatami)
                     })
@@ -1195,7 +1207,7 @@ fn get_data_route(
         }
         _ => res
             .as_ref()
-            .and_then(|res| res.client_data_route(face.whatami))
+            .and_then(|res| res.client_data_route())
             .unwrap_or_else(|| compute_data_route(tables, prefix, suffix, None, face.whatami)),
     }
 }
