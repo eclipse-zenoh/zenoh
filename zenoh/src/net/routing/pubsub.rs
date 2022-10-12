@@ -1131,20 +1131,28 @@ fn get_data_route(
                     })
             }
             WhatAmI::Peer => {
-                let peers_net = tables.peers_net.as_ref().unwrap();
-                let local_context =
-                    peers_net.get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
-                res.as_ref()
-                    .and_then(|res| res.peers_data_route(local_context))
-                    .unwrap_or_else(|| {
-                        compute_data_route(
-                            tables,
-                            prefix,
-                            suffix,
-                            Some(local_context),
-                            face.whatami,
-                        )
-                    })
+                if tables.full_net(WhatAmI::Peer) {
+                    let peers_net = tables.peers_net.as_ref().unwrap();
+                    let local_context = peers_net
+                        .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                    res.as_ref()
+                        .and_then(|res| res.peers_data_route(local_context))
+                        .unwrap_or_else(|| {
+                            compute_data_route(
+                                tables,
+                                prefix,
+                                suffix,
+                                Some(local_context),
+                                face.whatami,
+                            )
+                        })
+                } else {
+                    res.as_ref()
+                        .and_then(|res| res.client_data_route(face.whatami))
+                        .unwrap_or_else(|| {
+                            compute_data_route(tables, prefix, suffix, None, face.whatami)
+                        })
+                }
             }
             _ => res
                 .as_ref()
