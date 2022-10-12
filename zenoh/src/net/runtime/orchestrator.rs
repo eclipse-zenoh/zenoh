@@ -394,14 +394,14 @@ impl Runtime {
             } // See UNIX Network Programmping p.212
             #[cfg(windows)]
             {
-                Ipv4Addr::UNSPECIFIED.into()
+                std::net::Ipv4Addr::UNSPECIFIED.into()
             }
         };
         match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
             Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
-                log::error!("Unable to bind udp port {} : {}", sockaddr, err);
-                bail!(err => "Unable to bind udp port {}", sockaddr);
+                log::error!("Unable to bind UDP port {} : {}", sockaddr, err);
+                bail!(err => "Unable to bind UDP port {}", sockaddr);
             }
         }
 
