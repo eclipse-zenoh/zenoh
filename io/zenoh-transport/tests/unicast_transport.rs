@@ -346,7 +346,7 @@ fn transport_unicast_tcp_only() {
     let endpoints: Vec<EndPoint> = vec![
         "tcp/127.0.0.1:10447".parse().unwrap(),
         "tcp/[::1]:10447".parse().unwrap(),
-        "tcp/localhost:10448".parse().unwrap(),
+        "tcp/localhost:10453".parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -382,7 +382,7 @@ fn transport_unicast_udp_only() {
     let endpoints: Vec<EndPoint> = vec![
         "udp/127.0.0.1:10447".parse().unwrap(),
         "udp/[::1]:10447".parse().unwrap(),
-        "udp/localhost:10448".parse().unwrap(),
+        "udp/localhost:10453".parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [

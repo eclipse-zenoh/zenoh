@@ -344,7 +344,11 @@ impl LinkManagerUnicastUdp {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addrs = get_udp_addrs(&endpoint.locator).await?;
+        let dst_addrs = get_udp_addrs(&endpoint.locator)
+            .await?
+            .drain(..)
+            .filter(|a| !a.ip().is_multicast())
+            .collect::<Vec<SocketAddr>>();
 
         let mut errs: Vec<ZError> = vec![];
         for da in dst_addrs.iter() {
@@ -365,6 +369,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     errs.push(e);
                 }
             }
+        }
+
+        if errs.is_empty() {
+            errs.push(zerror!("No unicast addresses available").into());
         }
 
         bail!(

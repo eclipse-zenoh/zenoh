@@ -307,7 +307,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
 
         if errs.is_empty() {
-            errs.push(zerror!("No multicast address available").into());
+            errs.push(zerror!("No multicast addresses available").into());
         }
 
         bail!(
