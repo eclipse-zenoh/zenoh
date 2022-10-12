@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{config::*, UDP_DEFAULT_MTU};
-use crate::{get_udp_addr, socket_addr_to_udp_locator};
+use crate::{get_udp_addrs, socket_addr_to_udp_locator};
 use async_std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use std::sync::Arc;
 use std::{borrow::Cow, fmt};
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
 use zenoh_protocol_core::{EndPoint, Locator};
 
@@ -150,23 +150,16 @@ impl fmt::Debug for LinkMulticastUdp {
 #[derive(Default)]
 pub struct LinkManagerMulticastUdp;
 
-#[async_trait]
-impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
-    async fn new_link(&self, ep: &EndPoint) -> ZResult<LinkMulticast> {
-        let locator = &ep.locator;
-        let mcast_addr = get_udp_addr(locator).await?;
+impl LinkManagerMulticastUdp {
+    async fn new_link_inner(
+        &self,
+        mcast_addr: &SocketAddr,
+        iface: Option<&str>,
+    ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
         };
-
-        macro_rules! zerrmsg {
-            ($err:expr) => {{
-                let e = zerror!("Can not create a new UDP link bound to {}: {}", mcast_addr, $err);
-                log::warn!("{}", e);
-                e
-            }};
-        }
 
         // Defaults
         let _default_ipv4_iface = Ipv4Addr::new(0, 0, 0, 0);
@@ -176,11 +169,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;
-        if let Some(iface) = if let Some(config) = &ep.config {
-            config.get(UDP_MULTICAST_SRC_IFACE)
-        } else {
-            None
-        } {
+        if let Some(iface) = iface {
             iface_addr = match iface.parse() {
                 Ok(addr) => Some(addr),
                 Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
@@ -230,14 +219,14 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         // Establish a unicast UDP socket
         let ucast_sock = UdpSocket::bind(SocketAddr::new(local_addr, 0))
             .await
-            .map_err(|e| zerrmsg!(e))?;
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Establish a multicast UDP socket
-        let mcast_sock =
-            Socket::new(domain, Type::DGRAM, Some(Protocol::UDP)).map_err(|e| zerrmsg!(e))?;
+        let mcast_sock = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         mcast_sock
             .set_reuse_address(true)
-            .map_err(|e| zerrmsg!(e))?;
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Bind the socket
         let default_mcast_addr = {
@@ -256,9 +245,9 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
                 }
             }
         };
-        let _ = mcast_sock
+        mcast_sock
             .bind(&SocketAddr::new(default_mcast_addr, mcast_addr.port()).into())
-            .map_err(|e| zerrmsg!(e))?;
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Join the multicast group
         match mcast_addr.ip() {
@@ -268,18 +257,63 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
             },
             IpAddr::V6(dst_ip6) => mcast_sock.join_multicast_v6(&dst_ip6, default_ipv6_iface),
         }
-        .map_err(|e| zerrmsg!(e))?;
+        .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Build the async_std multicast UdpSocket
         let mcast_sock: UdpSocket = std::net::UdpSocket::from(mcast_sock).into();
 
-        let ucast_addr = ucast_sock.local_addr().map_err(|e| zerrmsg!(e))?;
+        let ucast_addr = ucast_sock
+            .local_addr()
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
         assert_eq!(ucast_addr.ip(), local_addr);
 
-        let link = Arc::new(LinkMulticastUdp::new(
-            ucast_addr, ucast_sock, mcast_addr, mcast_sock,
-        ));
+        Ok((mcast_sock, ucast_sock, ucast_addr))
+    }
+}
 
-        Ok(LinkMulticast(link))
+#[async_trait]
+impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
+    async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast> {
+        let locator = &endpoint.locator;
+        let mut mcast_addrs = get_udp_addrs(locator)
+            .await?
+            .drain(..)
+            .filter(|a| a.ip().is_multicast())
+            .collect::<Vec<SocketAddr>>();
+
+        let iface = if let Some(config) = &endpoint.config {
+            config.get(UDP_MULTICAST_SRC_IFACE)
+        } else {
+            None
+        };
+
+        let mut errs: Vec<ZError> = vec![];
+        for mcast_addr in mcast_addrs.drain(..) {
+            match self
+                .new_link_inner(&mcast_addr, iface.map(|x| x.as_str()))
+                .await
+            {
+                Ok((mcast_sock, ucast_sock, ucast_addr)) => {
+                    let link = Arc::new(LinkMulticastUdp::new(
+                        ucast_addr, ucast_sock, mcast_addr, mcast_sock,
+                    ));
+
+                    return Ok(LinkMulticast(link));
+                }
+                Err(e) => {
+                    errs.push(e);
+                }
+            }
+        }
+
+        if errs.is_empty() {
+            errs.push(zerror!("No multicast address available").into());
+        }
+
+        bail!(
+            "Can not create a new UDP link bound to {}: {:?}",
+            endpoint,
+            errs
+        )
     }
 }

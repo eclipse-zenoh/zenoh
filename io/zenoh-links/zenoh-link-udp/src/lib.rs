@@ -26,7 +26,7 @@ use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 pub use multicast::*;
 pub use unicast::*;
-use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol_core::Locator;
 
@@ -75,8 +75,14 @@ impl LocatorInspector for UdpLocatorInspector {
     fn protocol(&self) -> &str {
         UDP_LOCATOR_PREFIX
     }
+
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
-        Ok(get_udp_addr(locator).await?.ip().is_multicast())
+        let mut is_multicast = false;
+        let addrs = get_udp_addrs(locator).await?;
+        for a in addrs.iter() {
+            is_multicast |= a.ip().is_multicast();
+        }
+        Ok(is_multicast)
     }
 }
 
@@ -84,14 +90,9 @@ pub mod config {
     pub const UDP_MULTICAST_SRC_IFACE: &str = "src_iface";
 }
 
-pub(crate) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    let addr = locator.address();
-    let mut addrs = addr.to_socket_addrs().await?;
-    if let Some(addr) = addrs.next() {
-        Ok(addr)
-    } else {
-        bail!("Couldn't resolve UDP locator address: {}", addr);
-    }
+pub(crate) async fn get_udp_addrs(locator: &Locator) -> ZResult<Vec<SocketAddr>> {
+    let addrs = locator.address().to_socket_addrs().await?;
+    Ok(addrs.collect())
 }
 
 pub(crate) fn socket_addr_to_udp_locator(addr: &SocketAddr) -> Locator {
