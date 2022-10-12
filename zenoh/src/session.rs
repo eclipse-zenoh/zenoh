@@ -678,14 +678,14 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, TryIntoKeyExpr, IntoValue>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
         &'a self,
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> PutBuilder<'a, 'a>
+    ) -> PutBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
@@ -711,10 +711,13 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, TryIntoKeyExpr>(&'a self, key_expr: TryIntoKeyExpr) -> DeleteBuilder<'a, 'a>
+    pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> DeleteBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -743,7 +746,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoSelector>(
+    pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
