@@ -169,10 +169,10 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
 
         // Defaults
-        let _default_ipv4_iface = Ipv4Addr::new(0, 0, 0, 0);
+        let _default_ipv4_iface = Ipv4Addr::UNSPECIFIED;
         let default_ipv6_iface = 0;
-        let default_ipv4_addr = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6_addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+        let default_ipv4_addr = Ipv4Addr::UNSPECIFIED;
+        let default_ipv6_addr = Ipv6Addr::UNSPECIFIED;
 
         // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;

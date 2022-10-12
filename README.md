@@ -94,7 +94,7 @@ See other examples of zenoh usage in [examples/](examples)
   * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file. All properties of this configuration are optional, so you may not need such a large configuration for your use-case.
   * `--cfg <KEY>:<VALUE>` : allows you to change specific parts of the configuration right after it has been constructed. VALUE must be a valid JSON5 value, and key must be a path through the configuration file, where each element is separated by a `/`. When inserting in parts of the config that are arrays, you may use indexes, or may use `+` to indicate that you want to append your value to the array. `--cfg` passed values will always override any previously existing value for their key in the configuration.
   * `-l, --listen <ENDPOINT>...`: An endpoint on which this router will listen for incoming sessions. 
-    Repeat this option to open several listeners. By default, `tcp/0.0.0.0:7447` is used. The following endpoints are currently supported:
+    Repeat this option to open several listeners. By default, `tcp/[::]:7447` is used. The following endpoints are currently supported:
       - TCP: `tcp/<host_name_or_IPv4_or_IPv6>:<port>`
       - UDP: `udp/<host_name_or_IPv4_or_IPv6>:<port>`
       - [TCP+TLS](https://zenoh.io/docs/manual/tls/): `tls/<host_name>:<port>`
@@ -119,7 +119,7 @@ See other examples of zenoh usage in [examples/](examples)
       - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
       - `"None"` to desactivate the REST plugin
 
-    If not specified, the REST plugin will be active on any interface (`0.0.0.0`) and port `8000`.
+    If not specified, the REST plugin will be active on any interface (`[::]`) and port `8000`.
 
 -------------------------------
 ## Plugins

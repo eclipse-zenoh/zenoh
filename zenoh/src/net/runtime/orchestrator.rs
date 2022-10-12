@@ -15,7 +15,7 @@ use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
@@ -30,16 +30,16 @@ use zenoh_protocol::proto::{MessageReader, MessageWriter};
 use zenoh_protocol_core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_transport::TransportUnicast;
 
-const RCV_BUF_SIZE: usize = 65536;
+const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SEND_BUF_INITIAL_SIZE: usize = 8;
-const SCOUT_INITIAL_PERIOD: u64 = 1000; //ms
-const SCOUT_MAX_PERIOD: u64 = 8000; //ms
-const SCOUT_PERIOD_INCREASE_FACTOR: u64 = 2;
-const CONNECTION_RETRY_INITIAL_PERIOD: u64 = 1000; //ms
-const CONNECTION_RETRY_MAX_PERIOD: u64 = 4000; //ms
-const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u64 = 2;
-const ROUTER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
-const PEER_DEFAULT_LISTENER: &str = "tcp/0.0.0.0:0";
+const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
+const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
+const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+const CONNECTION_RETRY_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
+const CONNECTION_RETRY_MAX_PERIOD: Duration = Duration::from_millis(4_000);
+const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u32 = 2;
+const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
+const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
 pub enum Loop {
     Continue,
@@ -154,7 +154,7 @@ impl Runtime {
                     .map(AsRef::as_ref)
                     .unwrap_or_else(|| ZN_MULTICAST_INTERFACE_DEFAULT)
                     .to_string(),
-                std::time::Duration::from_millis(guard.scouting().delay().unwrap_or(200)),
+                Duration::from_millis(guard.scouting().delay().unwrap_or(200)),
             )
         };
 
@@ -336,7 +336,7 @@ impl Runtime {
         let mut locators = self.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
-            log::info!("zenohd can be reached on {}", locator);
+            log::info!("zenohd can be reached at {}", locator);
         }
         Ok(())
     }
@@ -346,9 +346,9 @@ impl Runtime {
             let ifaces = zenoh_util::net::get_multicast_interfaces();
             if ifaces.is_empty() {
                 log::warn!(
-                    "Unable to find active, non-loopback multicast interface. Will use 0.0.0.0"
+                    "Unable to find active, non-loopback multicast interface. Will use [::]."
                 );
-                vec![IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))]
+                vec![Ipv6Addr::UNSPECIFIED.into()]
             } else {
                 ifaces
             }
@@ -387,14 +387,14 @@ impl Runtime {
             log::error!("Unable to set SO_REUSEADDR option : {}", err);
             bail!(err => "Unable to set SO_REUSEADDR option");
         }
-        let addr = {
+        let addr: IpAddr = {
             #[cfg(unix)]
             {
                 sockaddr.ip()
             } // See UNIX Network Programmping p.212
             #[cfg(windows)]
             {
-                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0))
+                Ipv4Addr::UNSPECIFIED.into()
             }
         };
         match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
@@ -497,14 +497,14 @@ impl Runtime {
                 }
                 Err(e) => {
                     log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {} ms.",
+                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
                         peer,
                         e,
                         delay
                     );
                 }
             }
-            async_std::task::sleep(Duration::from_millis(delay)).await;
+            async_std::task::sleep(delay).await;
             delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
             if delay > CONNECTION_RETRY_MAX_PERIOD {
                 delay = CONNECTION_RETRY_MAX_PERIOD;
@@ -551,7 +551,7 @@ impl Runtime {
                         );
                     }
                 }
-                async_std::task::sleep(Duration::from_millis(delay)).await;
+                async_std::task::sleep(delay).await;
                 if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
                     delay *= SCOUT_PERIOD_INCREASE_FACTOR;
                 }
@@ -775,7 +775,7 @@ impl Runtime {
                 session.runtime.spawn(async move {
                     let mut delay = CONNECTION_RETRY_INITIAL_PERIOD;
                     while runtime.start_client().await.is_err() {
-                        async_std::task::sleep(std::time::Duration::from_millis(delay)).await;
+                        async_std::task::sleep(delay).await;
                         delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
                         if delay > CONNECTION_RETRY_MAX_PERIOD {
                             delay = CONNECTION_RETRY_MAX_PERIOD;

@@ -399,8 +399,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
     fn get_locators(&self) -> Vec<Locator> {
         let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
+        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
