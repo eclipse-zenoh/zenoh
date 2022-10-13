@@ -383,7 +383,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addrs = get_udp_addrs(&endpoint.locator).await?;
+        let addrs = get_udp_addrs(&endpoint.locator)
+            .await?
+            .drain(..)
+            .filter(|a| !a.ip().is_multicast())
+            .collect::<Vec<SocketAddr>>();
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs.iter() {
