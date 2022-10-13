@@ -425,6 +425,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             }
         }
 
+        if errs.is_empty() {
+            errs.push(zerror!("No unicast addresses available").into());
+        }
+
         bail!(
             "Can not create a new UDP listener bound to {}: {:?}",
             endpoint,
