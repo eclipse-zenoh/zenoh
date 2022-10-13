@@ -58,8 +58,9 @@ impl From<EndPoint> for String {
 impl EndPoint {
     #[must_use = "returns true on success"]
     pub fn set_addr(&mut self, addr: &str) -> bool {
-        unsafe { std::mem::transmute::<_, &mut Locator>(self) }.set_addr(addr)
+        self.locator.set_addr(addr)
     }
+
     pub fn extend_configuration(&mut self, extension: impl IntoIterator<Item = (String, String)>) {
         match self.config.is_some() {
             true => match &mut self.config {
