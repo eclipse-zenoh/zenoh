@@ -274,9 +274,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let ip_addr: IpAddr = if addr.is_ipv4() {
-            Ipv4Addr::new(0, 0, 0, 0).into()
+            Ipv4Addr::UNSPECIFIED.into()
         } else {
-            Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into()
+            Ipv6Addr::UNSPECIFIED.into()
         };
         let mut quic_endpoint = quinn::Endpoint::client(SocketAddr::new(ip_addr, 0))
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
@@ -439,8 +439,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
     fn get_locators(&self) -> Vec<Locator> {
         let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
+        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {

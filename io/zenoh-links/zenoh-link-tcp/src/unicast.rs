@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener, TcpStream};
+use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::*;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -383,44 +383,32 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+        let mut locators = vec![];
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
-            if key.ip() == default_ipv4 {
+            let (kip, kpt) = (key.ip(), key.port());
+            // Either ipv4/0.0.0.0 or ipv6/[::]
+            if kip.is_unspecified() {
                 match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let mut l = Locator::new(
-                                    TCP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
-                                locators.push(l);
-                            }
-                        }
+                    Ok(mut ipaddrs) => {
+                        let iter = ipaddrs
+                            .drain(..)
+                            .filter(|x| {
+                                ((kip.is_ipv4() && x.is_ipv4()) || kip.is_ipv6())
+                                    && !x.is_loopback()
+                                    && !x.is_multicast()
+                            })
+                            .map(|x| {
+                                let mut l =
+                                    Locator::new(TCP_LOCATOR_PREFIX, &SocketAddr::new(x, kpt));
+                                l.metadata = listener_locator.metadata.clone();
+                                l
+                            });
+                        locators.extend(iter);
                     }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let mut l = Locator::new(
-                                    TCP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                    Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else {
                 locators.push(listener_locator.clone());

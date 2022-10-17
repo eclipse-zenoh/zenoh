@@ -195,8 +195,8 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     }
     #[cfg(windows)]
     {
-        // On windows, bind to 0.0.0.0, the system will select the default interface
-        vec![IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))]
+        // On windows, bind to [::], the system will select the default interface
+        vec![IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)]
     }
 }
 
@@ -279,7 +279,7 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
     }
     #[cfg(windows)]
     {
-        // On windows, bind to 0.0.0.0 or [::], the system will select the default interface
+        // On windows, bind to [::] or [::], the system will select the default interface
         vec![]
     }
 }

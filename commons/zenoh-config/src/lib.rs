@@ -116,7 +116,7 @@ validated_struct::validator! {
         ConnectConfig {
             pub endpoints: Vec<EndPoint>,
         },
-        /// Which endpoints to listen on. `zenohd` will add `tcp/0.0.0.0:7447` to these locators if left empty.
+        /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
         pub listen: #[derive(Default)]
         ListenConfig {
             pub endpoints: Vec<EndPoint>,

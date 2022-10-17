@@ -27,7 +27,7 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-const DEFAULT_LISTENER: &str = "tcp/0.0.0.0:7447";
+const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 
 fn main() {
     task::block_on(async {
@@ -45,7 +45,7 @@ fn main() {
             .long_version(LONG_VERSION.as_str()).args(
                 &[
 clap::arg!(-c --config [FILE] "The configuration file. Currently, this file must be a valid JSON5 or YAML file."),
-clap::Arg::new("listen").short('l').long("listen").value_name("ENDPOINT]").help(r"A locator on which this router will listen for incoming sessions.
+clap::Arg::new("listen").short('l').long("listen").value_name("ENDPOINT").help(r"A locator on which this router will listen for incoming sessions.
 Repeat this option to open several listeners.").takes_value(true).multiple_occurrences(true),
 clap::Arg::new("connect").short('e').long("connect").value_name("ENDPOINT").help(r"A peer locator this router will try to connect to.
 Repeat this option to connect to several peers.").takes_value(true).multiple_occurrences(true),
