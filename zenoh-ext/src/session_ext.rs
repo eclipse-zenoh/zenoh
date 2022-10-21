@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
+use super::{
+    PublicationCacheBuilder, QueryingSubscriberBuilder, ReliabilityCacheBuilder,
+    ReliablePublisherBuilder, ReliableSubscriberBuilder,
+};
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
@@ -93,6 +96,22 @@ pub trait SessionExt {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
+
+    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliabilityCacheBuilder<'a, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
+
+    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliablePublisherBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 }
 
 impl SessionExt for Session {
@@ -120,6 +139,37 @@ impl SessionExt for Session {
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
+
+    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliabilityCacheBuilder<'a, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        ReliabilityCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+
+    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliablePublisherBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        ReliablePublisherBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+}
+pub trait ArcSessionExt {
+    fn declare_reliable_subscriber<'b, TryIntoKeyExpr>(
+        &self,
+        sub_key_expr: TryIntoKeyExpr,
+    ) -> ReliableSubscriberBuilder<'b, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 }
 
 impl SessionExt for Arc<Session> {
@@ -146,5 +196,40 @@ impl SessionExt for Arc<Session> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+
+    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliabilityCacheBuilder<'a, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        ReliabilityCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+
+    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> ReliablePublisherBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        ReliablePublisherBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+}
+
+impl ArcSessionExt for Arc<Session> {
+    fn declare_reliable_subscriber<'b, TryIntoKeyExpr>(
+        &self,
+        sub_key_expr: TryIntoKeyExpr,
+    ) -> ReliableSubscriberBuilder<'b, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        ReliableSubscriberBuilder::new(self.clone(), sub_key_expr.try_into().map_err(Into::into))
     }
 }

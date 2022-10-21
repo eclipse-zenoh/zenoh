@@ -14,9 +14,15 @@
 pub mod group;
 mod publication_cache;
 mod querying_subscriber;
+mod reliability_cache;
+mod reliable_publisher;
+mod reliable_subscriber;
 mod session_ext;
 mod subscriber_ext;
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
-pub use session_ext::SessionExt;
+pub use reliability_cache::{ReliabilityCache, ReliabilityCacheBuilder};
+pub use reliable_publisher::{ReliablePublisher, ReliablePublisherBuilder};
+pub use reliable_subscriber::{ReliableSubscriber, ReliableSubscriberBuilder};
+pub use session_ext::{ArcSessionExt, SessionExt};
 pub use subscriber_ext::SubscriberForward;

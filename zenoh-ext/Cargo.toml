@@ -43,6 +43,7 @@ log = "0.4.17"
 serde = "1.0.145"
 zenoh = { version = "0.6.0-beta.1", path = "../zenoh", default-features = false, features = ["unstable"] }
 zenoh-core = { version = "0.6.0-beta.1", path = "../commons/zenoh-core/" }
+zenoh-protocol = { version = "0.6.0-beta.1", path = "../commons/zenoh-protocol" }
 zenoh-sync = { version = "0.6.0-beta.1", path = "../commons/zenoh-sync" }
 zenoh-util = { version = "0.6.0-beta.1", path = "../commons/zenoh-util" }
 
@@ -65,3 +66,15 @@ path = "examples/z_member.rs"
 [[example]]
 name = "z_view_size"
 path = "examples/z_view_size.rs"
+
+[[example]]
+name = "z_rel_sub"
+path = "examples/z_rel_sub.rs"
+
+[[example]]
+name = "z_rel_pub"
+path = "examples/z_rel_pub.rs"
+
+[[example]]
+name = "z_rel_cache"
+path = "examples/z_rel_cache.rs"
