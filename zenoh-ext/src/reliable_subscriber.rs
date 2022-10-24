@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::future::Ready;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -20,7 +19,7 @@ use zenoh::buffers::reader::{HasReader, Reader};
 use zenoh::buffers::ZBuf;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
-use zenoh::query::{QueryConsolidation, QueryTarget, Reply, ReplyKeyExpr};
+use zenoh::query::{QueryTarget, Reply, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::Result as ZResult;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
@@ -32,9 +31,7 @@ pub struct ReliableSubscriberBuilder<'b, Handler> {
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
     origin: Locality,
-    query_selector: Option<ZResult<Selector<'b>>>,
     query_target: QueryTarget,
-    query_consolidation: QueryConsolidation,
     query_timeout: Duration,
     handler: Handler,
 }
@@ -44,21 +41,12 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
         session: Arc<Session>,
         key_expr: ZResult<KeyExpr<'b>>,
     ) -> ReliableSubscriberBuilder<'b, DefaultHandler> {
-        // By default query all matching publication caches and storages
-        let query_target = QueryTarget::All;
-
-        // By default no query consolidation, to receive more than 1 sample per-resource
-        // (if history of publications is available)
-        let query_consolidation = QueryConsolidation::from(zenoh::query::ConsolidationMode::None);
-
         ReliableSubscriberBuilder {
             session,
             key_expr,
             reliability: Reliability::default(),
             origin: Locality::default(),
-            query_selector: None,
-            query_target,
-            query_consolidation,
+            query_target: QueryTarget::BestMatching,
             query_timeout: Duration::from_secs(10),
             handler: DefaultHandler,
         }
@@ -75,9 +63,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
-            query_selector,
             query_target,
-            query_consolidation,
             query_timeout,
             handler: _,
         } = self;
@@ -86,9 +72,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
-            query_selector,
             query_target,
-            query_consolidation,
             query_timeout,
             handler: callback,
         }
@@ -120,9 +104,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
-            query_selector,
             query_target,
-            query_consolidation,
             query_timeout,
             handler: _,
         } = self;
@@ -131,9 +113,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             key_expr,
             reliability,
             origin,
-            query_selector,
             query_target,
-            query_consolidation,
             query_timeout,
             handler,
         }
@@ -170,31 +150,10 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
         self
     }
 
-    /// Change the selector to be used for queries.
-    #[inline]
-    pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
-    where
-        IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        self.query_selector = Some(query_selector.try_into().map_err(Into::into));
-        self
-    }
-
     /// Change the target to be used for queries.
     #[inline]
     pub fn query_target(mut self, query_target: QueryTarget) -> Self {
         self.query_target = query_target;
-        self
-    }
-
-    /// Change the consolidation mode to be used for queries.
-    #[inline]
-    pub fn query_consolidation<QC: Into<QueryConsolidation>>(
-        mut self,
-        query_consolidation: QC,
-    ) -> Self {
-        self.query_consolidation = query_consolidation.into();
         self
     }
 
@@ -211,9 +170,7 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
             origin: self.origin,
-            query_selector: self.query_selector.map(|s| s.map(|s| s.into_owned())),
             query_target: self.query_target,
-            query_consolidation: self.query_consolidation,
             query_timeout: self.query_timeout,
             handler: self.handler,
         }
@@ -322,6 +279,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
         let statesref = Arc::new(Mutex::new(HashMap::new()));
         let (callback, receiver) = conf.handler.into_cb_receiver_pair();
         let key_expr = conf.key_expr?;
+        let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
 
         let sub_callback = {
@@ -356,6 +314,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                             })
                             .consolidation(ConsolidationMode::None)
                             .accept_replies(ReplyKeyExpr::Any)
+                            .target(query_target)
                             .timeout(query_timeout)
                             .res_sync();
                     }
