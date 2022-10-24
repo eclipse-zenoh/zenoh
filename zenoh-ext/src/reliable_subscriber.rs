@@ -305,6 +305,15 @@ fn handle_sample(
     id
 }
 
+fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
+    match (start, end) {
+        (Some(start), Some(end)) => format!("_sn={}..{}", start, end),
+        (Some(start), None) => format!("_sn={}..", start),
+        (None, Some(end)) => format!("_sn=..{}", end),
+        (None, None) => "_sn=..".to_string(),
+    }
+}
+
 impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
     fn new<Handler>(conf: ReliableSubscriberBuilder<'a, Handler>) -> ZResult<Self>
     where
@@ -326,15 +335,17 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                 if let Some(state) = states.get_mut(&id) {
                     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
                         state.pending_queries += 1;
-                        drop(states);
                         let key_expr = (&id.into_keyexpr()) / &key_expr;
+                        let seq_num_range =
+                            seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
+                        drop(states);
                         let handler = RepliesHandler {
                             id,
                             statesref: statesref.clone(),
                             callback: callback.clone(),
                         };
                         let _ = session
-                            .get(key_expr)
+                            .get(Selector::from(key_expr).with_parameters(&seq_num_range))
                             .callback({
                                 move |r: Reply| {
                                     if let Ok(s) = r.sample {

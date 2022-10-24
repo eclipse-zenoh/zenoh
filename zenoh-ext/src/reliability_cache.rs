@@ -18,11 +18,13 @@ use futures::{FutureExt, StreamExt};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
+use zenoh::buffers::reader::HasReader;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
 use zenoh::Session;
 use zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_protocol::io::ZBufCodec;
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of ReliabilityCache, allowing to configure it.
@@ -109,6 +111,29 @@ impl<'a> AsyncResolve for ReliabilityCacheBuilder<'a, '_, '_> {
     }
 }
 
+fn decode_range(range: &str) -> (Option<ZInt>, Option<ZInt>) {
+    let mut split = range.split("..");
+    let start = split.next().and_then(|s| s.parse::<u64>().ok());
+    let end = split.next().map(|s| s.parse::<u64>().ok()).unwrap_or(start);
+    (start, end)
+}
+
+fn sample_in_range(sample: &Sample, start: Option<ZInt>, end: Option<ZInt>) -> bool {
+    if start.is_none() && end.is_none() {
+        true
+    } else {
+        let mut buf = sample.value.payload.reader();
+        let _id = buf.read_zid().unwrap(); //TODO
+        let seq_num = buf.read_zint().unwrap(); //TODO
+        match (start, end) {
+            (Some(start), Some(end)) => seq_num >= start && seq_num <= end,
+            (Some(start), None) => seq_num >= start,
+            (None, Some(end)) => seq_num <= end,
+            (None, None) => true,
+        }
+    }
+}
+
 pub struct ReliabilityCache<'a> {
     _sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
@@ -192,11 +217,14 @@ impl<'a> ReliabilityCache<'a> {
                     // on query, reply with cach content
                     query = quer_recv.recv_async() => {
                         if let Ok(query) = query {
+                            let (start, end) = query.selector().parameters_cowmap().ok().and_then(|map| map.get("_sn").map(|range|decode_range(range))).unwrap_or((None, None));
                             if !query.selector().key_expr.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
-                                        if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
-                                            log::warn!("Error replying to query: {}", e);
+                                        if sample_in_range(sample, start, end) {
+                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                                log::warn!("Error replying to query: {}", e);
+                                            }
                                         }
                                     }
                                 }
@@ -204,8 +232,10 @@ impl<'a> ReliabilityCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
-                                            if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
-                                                log::warn!("Error replying to query: {}", e);
+                                            if sample_in_range(sample, start, end) {
+                                                if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
+                                                    log::warn!("Error replying to query: {}", e);
+                                                }
                                             }
                                         }
                                     }
