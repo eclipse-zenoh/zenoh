@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_trait::async_trait;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::future::Ready;
 use std::sync::{Arc, Mutex};
@@ -22,6 +24,8 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::{QueryTarget, Reply, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::Result as ZResult;
+use zenoh_collections::timer::Timer;
+use zenoh_collections::{Timed, TimedEvent};
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::io::ZBufCodec;
 
@@ -33,6 +37,7 @@ pub struct ReliableSubscriberBuilder<'b, Handler> {
     origin: Locality,
     query_target: QueryTarget,
     query_timeout: Duration,
+    period: Option<Duration>,
     handler: Handler,
 }
 
@@ -48,6 +53,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             origin: Locality::default(),
             query_target: QueryTarget::BestMatching,
             query_timeout: Duration::from_secs(10),
+            period: None,
             handler: DefaultHandler,
         }
     }
@@ -65,6 +71,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             origin,
             query_target,
             query_timeout,
+            period,
             handler: _,
         } = self;
         ReliableSubscriberBuilder {
@@ -74,6 +81,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             origin,
             query_target,
             query_timeout,
+            period,
             handler: callback,
         }
     }
@@ -106,6 +114,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             origin,
             query_target,
             query_timeout,
+            period,
             handler: _,
         } = self;
         ReliableSubscriberBuilder {
@@ -115,6 +124,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             origin,
             query_target,
             query_timeout,
+            period,
             handler,
         }
     }
@@ -164,6 +174,13 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
         self
     }
 
+    /// Enable periodic queries and specify queries period.
+    #[inline]
+    pub fn periodic_queries(mut self, period: Option<Duration>) -> Self {
+        self.period = period;
+        self
+    }
+
     fn with_static_keys(self) -> ReliableSubscriberBuilder<'static, Handler> {
         ReliableSubscriberBuilder {
             session: self.session,
@@ -172,6 +189,7 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
             origin: self.origin,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
+            period: self.period,
             handler: self.handler,
         }
     }
@@ -232,7 +250,7 @@ fn handle_sample(
     states: &mut HashMap<ZenohId, InnerState>,
     sample: Sample,
     callback: &Arc<dyn Fn(Sample) + Send + Sync>,
-) -> ZenohId {
+) -> (ZenohId, bool) {
     let mut buf = sample.value.payload.reader();
     let id = buf.read_zid().unwrap(); //TODO
     let seq_num = buf.read_zint().unwrap(); //TODO
@@ -240,7 +258,9 @@ fn handle_sample(
     buf.read_into_zbuf(&mut payload, buf.remaining());
     let value = Value::new(payload).encoding(sample.encoding.clone());
     let s = Sample::new(sample.key_expr, value);
-    let state = states.entry(id).or_insert(InnerState {
+    let entry = states.entry(id);
+    let new = matches!(&entry, Entry::Occupied(_));
+    let state = entry.or_insert(InnerState {
         last_seq_num: None,
         pending_queries: 0,
         pending_samples: HashMap::new(),
@@ -259,7 +279,7 @@ fn handle_sample(
             state.last_seq_num = Some(last_seq_num);
         }
     }
-    id
+    (id, new)
 }
 
 fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
@@ -268,6 +288,50 @@ fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
         (Some(start), None) => format!("_sn={}..", start),
         (None, Some(end)) => format!("_sn=..{}", end),
         (None, None) => "_sn=..".to_string(),
+    }
+}
+
+struct PeriodicQuery {
+    id: ZenohId,
+    statesref: Arc<Mutex<HashMap<ZenohId, InnerState>>>,
+    key_expr: KeyExpr<'static>,
+    session: Arc<Session>,
+    query_target: QueryTarget,
+    query_timeout: Duration,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+}
+
+#[async_trait]
+impl Timed for PeriodicQuery {
+    async fn run(&mut self) {
+        let mut states = zlock!(self.statesref);
+        if let Some(state) = states.get_mut(&self.id) {
+            state.pending_queries += 1;
+            let key_expr = (&self.id.into_keyexpr()) / &self.key_expr;
+            let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
+            drop(states);
+            let handler = RepliesHandler {
+                id: self.id,
+                statesref: self.statesref.clone(),
+                callback: self.callback.clone(),
+            };
+            let _ = self
+                .session
+                .get(Selector::from(key_expr).with_parameters(&seq_num_range))
+                .callback({
+                    move |r: Reply| {
+                        if let Ok(s) = r.sample {
+                            let states = &mut zlock!(handler.statesref);
+                            handle_sample(states, s, &handler.callback);
+                        }
+                    }
+                })
+                .consolidation(ConsolidationMode::None)
+                .accept_replies(ReplyKeyExpr::Any)
+                .target(self.query_target)
+                .timeout(self.query_timeout)
+                .res_sync();
+        }
     }
 }
 
@@ -286,10 +350,31 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
             let session = conf.session.clone();
             let callback = callback.clone();
             let key_expr = key_expr.clone().into_owned();
+            let timing = conf
+                .period
+                .map(|period| (Arc::new(Timer::new(false)), period));
 
             move |s: Sample| {
                 let mut states = zlock!(statesref);
-                let id = handle_sample(&mut states, s, &callback);
+                let (id, new) = handle_sample(&mut states, s, &callback);
+
+                if new {
+                    if let Some((timer, period)) = timing.as_ref() {
+                        timer.add(TimedEvent::periodic(
+                            *period,
+                            PeriodicQuery {
+                                id,
+                                statesref: statesref.clone(),
+                                key_expr: key_expr.clone(),
+                                session: session.clone(),
+                                query_target,
+                                query_timeout,
+                                callback: callback.clone(),
+                            },
+                        ))
+                    }
+                }
+
                 if let Some(state) = states.get_mut(&id) {
                     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
                         state.pending_queries += 1;

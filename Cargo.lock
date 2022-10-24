@@ -3654,6 +3654,7 @@ name = "zenoh-ext"
 version = "0.6.0-beta.1"
 dependencies = [
  "async-std",
+ "async-trait",
  "bincode",
  "clap",
  "env_logger",
@@ -3662,6 +3663,7 @@ dependencies = [
  "log",
  "serde",
  "zenoh",
+ "zenoh-collections",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-sync",
