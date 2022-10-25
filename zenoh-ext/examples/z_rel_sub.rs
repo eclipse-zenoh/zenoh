@@ -26,7 +26,7 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, key_expr, period) = parse_args();
+    let (config, key_expr, history, period) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap().into_arc();
@@ -34,6 +34,7 @@ async fn main() {
     println!("Declaring ReliableSubscriber on {}", key_expr);
     let subscriber = session
         .declare_reliable_subscriber(key_expr)
+        .history(history)
         .periodic_queries(period)
         .res()
         .await
@@ -61,7 +62,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, Option<Duration>) {
+fn parse_args() -> (Config, String, bool, Option<Duration>) {
     let args = App::new("zenoh-ext reliable sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -77,6 +78,9 @@ fn parse_args() -> (Config, String, Option<Duration>) {
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
                 .default_value("demo/reliable/example/**"),
         )
+        .arg(Arg::from_usage(
+            "-h, --history   'Query for historical samples at startup.'",
+        ))
         .arg(Arg::from_usage(
             "-p, --period=[PERIOD]...   'Query for missing samples periodically with given period in seconds.'",
         ))
@@ -116,6 +120,7 @@ fn parse_args() -> (Config, String, Option<Duration>) {
     let period = args
         .value_of("period")
         .map(|p| Duration::from_secs(p.parse::<u64>().unwrap()));
+    let history = args.is_present("history");
 
-    (config, key_expr, period)
+    (config, key_expr, history, period)
 }

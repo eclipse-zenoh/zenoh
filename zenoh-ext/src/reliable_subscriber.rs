@@ -14,6 +14,7 @@
 use async_trait::async_trait;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::future::Ready;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -38,6 +39,7 @@ pub struct ReliableSubscriberBuilder<'b, Handler> {
     query_target: QueryTarget,
     query_timeout: Duration,
     period: Option<Duration>,
+    history: bool,
     handler: Handler,
 }
 
@@ -54,6 +56,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             query_target: QueryTarget::BestMatching,
             query_timeout: Duration::from_secs(10),
             period: None,
+            history: false,
             handler: DefaultHandler,
         }
     }
@@ -72,6 +75,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             query_target,
             query_timeout,
             period,
+            history,
             handler: _,
         } = self;
         ReliableSubscriberBuilder {
@@ -82,6 +86,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             query_target,
             query_timeout,
             period,
+            history,
             handler: callback,
         }
     }
@@ -115,6 +120,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             query_target,
             query_timeout,
             period,
+            history,
             handler: _,
         } = self;
         ReliableSubscriberBuilder {
@@ -125,6 +131,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             query_target,
             query_timeout,
             period,
+            history,
             handler,
         }
     }
@@ -181,6 +188,13 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
         self
     }
 
+    /// Enable/Disable query for historical data.
+    #[inline]
+    pub fn history(mut self, history: bool) -> Self {
+        self.history = history;
+        self
+    }
+
     fn with_static_keys(self) -> ReliableSubscriberBuilder<'static, Handler> {
         ReliableSubscriberBuilder {
             session: self.session,
@@ -190,6 +204,7 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
             query_target: self.query_target,
             query_timeout: self.query_timeout,
             period: self.period,
+            history: self.history,
             handler: self.handler,
         }
     }
@@ -248,6 +263,7 @@ impl<Receiver> std::ops::DerefMut for ReliableSubscriber<'_, Receiver> {
 
 fn handle_sample(
     states: &mut HashMap<ZenohId, InnerState>,
+    wait: bool,
     sample: Sample,
     callback: &Arc<dyn Fn(Sample) + Send + Sync>,
 ) -> (ZenohId, bool) {
@@ -265,7 +281,9 @@ fn handle_sample(
         pending_queries: 0,
         pending_samples: HashMap::new(),
     });
-    if state.last_seq_num.is_some() && seq_num != state.last_seq_num.unwrap() + 1 {
+    if wait {
+        state.pending_samples.insert(seq_num, s);
+    } else if state.last_seq_num.is_some() && seq_num != state.last_seq_num.unwrap() + 1 {
         if seq_num > state.last_seq_num.unwrap() {
             state.pending_samples.insert(seq_num, s);
         }
@@ -291,9 +309,10 @@ fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
     }
 }
 
+#[derive(Clone)]
 struct PeriodicQuery {
     id: ZenohId,
-    statesref: Arc<Mutex<HashMap<ZenohId, InnerState>>>,
+    statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
     key_expr: KeyExpr<'static>,
     session: Arc<Session>,
     query_target: QueryTarget,
@@ -301,15 +320,23 @@ struct PeriodicQuery {
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
+impl PeriodicQuery {
+    fn with_id(mut self, id: ZenohId) -> Self {
+        self.id = id;
+        self
+    }
+}
+
 #[async_trait]
 impl Timed for PeriodicQuery {
     async fn run(&mut self) {
-        let mut states = zlock!(self.statesref);
+        let mut lock = zlock!(self.statesref);
+        let (states, _wait) = &mut *lock;
         if let Some(state) = states.get_mut(&self.id) {
             state.pending_queries += 1;
             let key_expr = (&self.id.into_keyexpr()) / &self.key_expr;
             let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
-            drop(states);
+            drop(lock);
             let handler = RepliesHandler {
                 id: self.id,
                 statesref: self.statesref.clone(),
@@ -321,8 +348,8 @@ impl Timed for PeriodicQuery {
                 .callback({
                     move |r: Reply| {
                         if let Ok(s) = r.sample {
-                            let states = &mut zlock!(handler.statesref);
-                            handle_sample(states, s, &handler.callback);
+                            let (ref mut states, wait) = &mut *zlock!(handler.statesref);
+                            handle_sample(states, *wait, s, &handler.callback);
                         }
                     }
                 })
@@ -340,38 +367,43 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
     where
         Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver> + Send,
     {
-        let statesref = Arc::new(Mutex::new(HashMap::new()));
+        let statesref = Arc::new(Mutex::new((HashMap::new(), conf.history)));
         let (callback, receiver) = conf.handler.into_cb_receiver_pair();
         let key_expr = conf.key_expr?;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
+        let session = conf.session.clone();
+        let periodic_query = conf.period.map(|period| {
+            (
+                Arc::new(Timer::new(false)),
+                period,
+                PeriodicQuery {
+                    id: ZenohId::try_from([1]).unwrap(),
+                    statesref: statesref.clone(),
+                    key_expr: key_expr.clone().into_owned(),
+                    session,
+                    query_target,
+                    query_timeout,
+                    callback: callback.clone(),
+                },
+            )
+        });
 
         let sub_callback = {
+            let statesref = statesref.clone();
             let session = conf.session.clone();
             let callback = callback.clone();
             let key_expr = key_expr.clone().into_owned();
-            let timing = conf
-                .period
-                .map(|period| (Arc::new(Timer::new(false)), period));
+            let periodic_query = periodic_query.clone();
 
             move |s: Sample| {
-                let mut states = zlock!(statesref);
-                let (id, new) = handle_sample(&mut states, s, &callback);
+                let mut lock = zlock!(statesref);
+                let (states, wait) = &mut *lock;
+                let (id, new) = handle_sample(states, *wait, s, &callback);
 
                 if new {
-                    if let Some((timer, period)) = timing.as_ref() {
-                        timer.add(TimedEvent::periodic(
-                            *period,
-                            PeriodicQuery {
-                                id,
-                                statesref: statesref.clone(),
-                                key_expr: key_expr.clone(),
-                                session: session.clone(),
-                                query_target,
-                                query_timeout,
-                                callback: callback.clone(),
-                            },
-                        ))
+                    if let Some((timer, period, query)) = periodic_query.as_ref() {
+                        timer.add(TimedEvent::periodic(*period, query.clone().with_id(id)))
                     }
                 }
 
@@ -381,7 +413,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                         let key_expr = (&id.into_keyexpr()) / &key_expr;
                         let seq_num_range =
                             seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
-                        drop(states);
+                        drop(lock);
                         let handler = RepliesHandler {
                             id,
                             statesref: statesref.clone(),
@@ -392,8 +424,9 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                             .callback({
                                 move |r: Reply| {
                                     if let Ok(s) = r.sample {
-                                        let states = &mut zlock!(handler.statesref);
-                                        handle_sample(states, s, &handler.callback);
+                                        let (ref mut states, wait) =
+                                            &mut *zlock!(handler.statesref);
+                                        handle_sample(states, *wait, s, &handler.callback);
                                     }
                                 }
                             })
@@ -415,6 +448,33 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
             .allowed_origin(conf.origin)
             .res_sync()?;
 
+        if conf.history {
+            let handler = InitialRepliesHandler {
+                statesref,
+                periodic_query,
+                callback,
+            };
+            let _ = conf
+                .session
+                .get(
+                    Selector::from(KeyExpr::try_from("*").unwrap() / &key_expr)
+                        .with_parameters("0.."),
+                )
+                .callback({
+                    move |r: Reply| {
+                        if let Ok(s) = r.sample {
+                            let (ref mut states, wait) = &mut *zlock!(handler.statesref);
+                            handle_sample(states, *wait, s, &handler.callback);
+                        }
+                    }
+                })
+                .consolidation(ConsolidationMode::None)
+                .accept_replies(ReplyKeyExpr::Any)
+                .target(query_target)
+                .timeout(query_timeout)
+                .res_sync();
+        }
+
         let reliable_subscriber = ReliableSubscriber {
             _subscriber: subscriber,
             receiver,
@@ -431,18 +491,46 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
 }
 
 #[derive(Clone)]
+struct InitialRepliesHandler {
+    statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
+    periodic_query: Option<(Arc<Timer>, Duration, PeriodicQuery)>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+}
+
+impl Drop for InitialRepliesHandler {
+    fn drop(&mut self) {
+        let (states, wait) = &mut *zlock!(self.statesref);
+        for (id, state) in states.iter_mut() {
+            let mut pending_samples = state
+                .pending_samples
+                .drain()
+                .collect::<Vec<(ZInt, Sample)>>();
+            pending_samples.sort_by_key(|(k, _s)| *k);
+            for (seq_num, sample) in pending_samples {
+                state.last_seq_num = Some(seq_num);
+                (self.callback)(sample);
+            }
+            if let Some((timer, period, query)) = self.periodic_query.as_ref() {
+                timer.add(TimedEvent::periodic(*period, query.clone().with_id(*id)))
+            }
+        }
+        *wait = false;
+    }
+}
+
+#[derive(Clone)]
 struct RepliesHandler {
     id: ZenohId,
-    statesref: Arc<Mutex<HashMap<ZenohId, InnerState>>>,
+    statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
 impl Drop for RepliesHandler {
     fn drop(&mut self) {
-        let mut states = zlock!(self.statesref);
+        let (states, wait) = &mut *zlock!(self.statesref);
         if let Some(state) = states.get_mut(&self.id) {
             state.pending_queries -= 1;
-            if !state.pending_samples.is_empty() {
+            if !state.pending_samples.is_empty() && !*wait {
                 log::error!("Sample missed: unable to retrieve some missing samples.");
                 let mut pending_samples = state
                     .pending_samples
