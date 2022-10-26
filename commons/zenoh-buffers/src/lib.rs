@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Provide [ZBuf] and [WBuf] as convenient buffers used for serialization and deserialization.
+//! Provide [ZBuf] as convenient buffers used for serialization and deserialization.
 pub mod traits;
 pub use traits::*;
 

@@ -58,19 +58,19 @@ impl ZenohMessage {
     pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
 
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
-        }
+        // if let Some(attachment) = self.attachment.as_mut() {
+        //     res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
+        // }
 
-        if let ZenohBody::Data(Data {
-            payload, data_info, ..
-        }) = &mut self.body
-        {
-            if payload.has_shminfo() {
-                res = res || payload.map_to_shmbuf(shmr)?;
-                unset_sliced!(self, data_info);
-            }
-        }
+        // if let ZenohBody::Data(Data {
+        //     payload, data_info, ..
+        // }) = &mut self.body
+        // {
+        //     if payload.has_shminfo() {
+        //         res = res || payload.map_to_shmbuf(shmr)?;
+        //         unset_sliced!(self, data_info);
+        //     }
+        // }
 
         Ok(res)
     }
@@ -78,19 +78,19 @@ impl ZenohMessage {
     pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
         let mut res = false;
 
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shminfo()?;
-        }
+        // if let Some(attachment) = self.attachment.as_mut() {
+        //     res = attachment.buffer.map_to_shminfo()?;
+        // }
 
-        if let ZenohBody::Data(Data {
-            payload, data_info, ..
-        }) = &mut self.body
-        {
-            if payload.has_shmbuf() {
-                res = res || payload.map_to_shminfo()?;
-                set_sliced!(self, data_info);
-            }
-        }
+        // if let ZenohBody::Data(Data {
+        //     payload, data_info, ..
+        // }) = &mut self.body
+        // {
+        //     if payload.has_shmbuf() {
+        //         res = res || payload.map_to_shminfo()?;
+        //         set_sliced!(self, data_info);
+        //     }
+        // }
 
         Ok(res)
     }
@@ -102,9 +102,9 @@ impl TransportMessage {
     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
 
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shmbuf(shmr)?;
-        }
+        // if let Some(attachment) = self.attachment.as_mut() {
+        //     res = attachment.buffer.map_to_shmbuf(shmr)?;
+        // }
 
         Ok(res)
     }
@@ -112,9 +112,9 @@ impl TransportMessage {
     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
         let mut res = false;
 
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shminfo()?;
-        }
+        // if let Some(attachment) = self.attachment.as_mut() {
+        //     res = attachment.buffer.map_to_shminfo()?;
+        // }
 
         Ok(res)
     }

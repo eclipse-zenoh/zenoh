@@ -34,12 +34,10 @@ shared-memory = ["zenoh-buffers/shared-memory"]
 complete_n = ["zenoh-protocol-core/complete_n"]
 
 [dependencies]
-
 log = "0.4.17"
 uhlc = "0.5.1"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
-
 zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../zenoh-protocol-core/" }
 
 [dev-dependencies]

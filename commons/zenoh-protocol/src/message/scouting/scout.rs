@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_buffers::{buffer::CopyBuffer, WBuf, ZBufReader};
-use zenoh_core::zcheck;
 use zenoh_protocol_core::whatami::WhatAmIMatcher;
 
 /// # Scout message
@@ -37,49 +35,4 @@ use zenoh_protocol_core::whatami::WhatAmIMatcher;
 pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
     pub zid_request: bool,
-}
-
-impl Header for Scout {
-    #[inline(always)]
-    fn header(&self) -> u8 {
-        let mut header = tmsg::id::SCOUT;
-        if self.zid_request {
-            header |= tmsg::flag::I;
-        }
-        if self.what.is_some() {
-            header |= tmsg::flag::W;
-        }
-        header
-    }
-}
-
-pub trait ScoutRead {
-    fn read_scout(&mut self, header: u8) -> Option<TransportBody>;
-}
-
-pub trait ScoutWrite {
-    fn write_scout(&mut self, scout: &Scout) -> bool;
-}
-
-impl ScoutRead for ZBufReader<'_> {
-    fn read_scout(&mut self, header: u8) -> Option<TransportBody> {
-        let zid_request = imsg::has_flag(header, tmsg::flag::I);
-        let what = if imsg::has_flag(header, tmsg::flag::W) {
-            WhatAmIMatcher::try_from(self.read_zint()?)
-        } else {
-            None
-        };
-        // Some(TransportBody::Scout(Scout { what, zid_request }))
-        None
-    }
-}
-
-impl ScoutWrite for WBuf {
-    fn write_scout(&mut self, scout: &Scout) -> bool {
-        zcheck!(self.write_byte(scout.header()).is_some());
-        match scout.what {
-            Some(w) => self.write_zint(w.into()),
-            None => true,
-        }
-    }
 }

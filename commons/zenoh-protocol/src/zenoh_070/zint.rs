@@ -14,7 +14,7 @@
 use std::convert::TryInto;
 use std::num::NonZeroU8;
 
-use crate::codec_traits::{RCodec, WCodec};
+use crate::codec::{RCodec, WCodec};
 use zenoh_buffers::traits::{
     reader::Reader,
     writer::{DidntWrite, Writer},
@@ -57,6 +57,7 @@ macro_rules! impl_unsigned_codec {
                 self.write(writer, x as u64)
             }
         }
+
         impl<Codec, Reader> RCodec<Reader, $t> for Codec
         where
             Codec: RCodec<Reader, u64>,
@@ -90,13 +91,13 @@ where
     ConversionError(<T as TryInto<U>>::Error),
 }
 
-impl<B> WCodec<&mut B, u64> for &Zenoh070
+impl<W> WCodec<&mut W, u64> for &Zenoh070
 where
-    B: Writer,
+    W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut B, x: u64) -> Self::Output {
+    fn write(self, writer: &mut W, x: u64) -> Self::Output {
         const VLE_SHIFT: [u8; 65] = [
             1, // This is padding to avoid needless subtractions on index access
             1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5,
@@ -169,7 +170,7 @@ where
 mod test {
     #[test]
     fn zint_fuzz() {
-        use crate::codec_traits::*;
+        use crate::codec::*;
         use rand::Rng;
         let codec = crate::zenoh_070::Zenoh070::default();
         let mut rng = rand::thread_rng();

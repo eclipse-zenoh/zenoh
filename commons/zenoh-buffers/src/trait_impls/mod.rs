@@ -1,10 +1,22 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use crate::{
-    traits::{
-        reader::{HasReader, Reader},
-        writer::{DidntWrite, Writer},
-    },
+    reader::{DidntRead, HasReader, Reader},
+    writer::{BacktrackableWriter, DidntWrite, Writer},
     ZSlice,
 };
+use std::marker::PhantomData;
 
 impl Writer for Vec<u8> {
     fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
@@ -85,51 +97,90 @@ impl Writer for &mut [u8] {
     }
 }
 
-impl Reader for &[u8] {
-    fn read(&mut self, into: &mut [u8]) -> usize {
-        let len = self.len().min(into.len());
-        into[..len].copy_from_slice(&self[..len]);
-        *self = &self[len..];
-        len
+impl BacktrackableWriter for Vec<u8> {
+    type Mark = usize;
+
+    fn mark(&mut self) -> Self::Mark {
+        self.len()
     }
 
-    fn read_exact(&mut self, into: &mut [u8]) -> bool {
-        let len = into.len();
-        if self.len() < len {
-            false
-        } else {
-            into.copy_from_slice(&self[..len]);
-            *self = &self[len..];
-            true
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        self.truncate(mark);
+        true
+    }
+}
+
+pub struct SliceMark<'s> {
+    ptr: *const u8,
+    len: usize,
+    _phantom: PhantomData<&'s u8>,
+}
+
+impl<'s> BacktrackableWriter for &'s mut [u8] {
+    type Mark = SliceMark<'s>;
+
+    fn mark(&mut self) -> Self::Mark {
+        SliceMark {
+            ptr: self.as_ptr(),
+            len: self.len(),
+            _phantom: PhantomData,
         }
     }
 
-    fn read_u8(&mut self) -> Option<u8> {
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        *self = unsafe { std::slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
+        true
+    }
+}
+
+impl Reader for &[u8] {
+    fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
+        let len = self.len().min(into.len());
+        into[..len].copy_from_slice(&self[..len]);
+        *self = &self[len..];
+        Ok(len)
+    }
+
+    fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
+        let len = into.len();
+        if self.len() < len {
+            Err(DidntRead)
+        } else {
+            into.copy_from_slice(&self[..len]);
+            *self = &self[len..];
+            Ok(())
+        }
+    }
+
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
         if self.can_read() {
             let ret = self[0];
             *self = &self[1..];
-            Some(ret)
+            Ok(ret)
         } else {
-            None
+            Err(DidntRead)
         }
     }
 
     type ZSliceIterator = std::option::IntoIter<ZSlice>;
-    fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator {
-        self.read_zslice(len).into_iter()
+    fn read_zslices(&mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
+        let zslice = self.read_zslice(len)?;
+        Ok(Some(zslice).into_iter())
     }
+
     #[allow(clippy::uninit_vec)]
     // SAFETY: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
     // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
     // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
     // Therefore, it is safe to suppress the `clippy::uninit_vec` lint.
-    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
+    fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         // We'll be truncating the vector immediately, and u8 is Copy and therefore doesn't have `Drop`
         let mut buffer: Vec<u8> = Vec::with_capacity(len);
         unsafe {
             buffer.set_len(len);
         }
-        self.read_exact(&mut buffer).then_some(buffer.into())
+        self.read_exact(&mut buffer)?;
+        Ok(buffer.into())
     }
 
     fn remaining(&self) -> usize {

@@ -1,35 +1,100 @@
-use std::sync::Arc;
-
-use zenoh_collections::SingleOrVec;
-
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use crate::{
-    reader::{HasReader, Reader},
-    writer::{BacktrackableWriter, Writer},
-    SplitBuffer, ZSlice, ZSliceBuffer,
+    reader::{DidntRead, HasReader, Reader},
+    writer::{BacktrackableWriter, HasWriter, Writer},
+    SharedMemoryReader, SplitBuffer, ZSlice, ZSliceBuffer,
 };
+use std::sync::{Arc, RwLock};
+use zenoh_collections::SingleOrVec;
+use zenoh_core::Result as ZResult;
 
 #[derive(Debug, Clone, Default)]
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
 }
+
+impl ZBuf {
+    pub fn zslices(&self) -> impl Iterator<Item = ZSlice> + '_ {
+        self.slices.as_ref().iter().map(ZSlice::clone)
+    }
+
+    pub fn push_zslice(&mut self, zslice: ZSlice) {
+        self.slices.push(zslice);
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[inline(always)]
+    pub fn has_shminfo(&self) -> bool {
+        self.slices
+            .as_ref()
+            .iter()
+            .any(|s| matches!(&s.buf, ZSliceBuffer::ShmInfo(_)))
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[inline(never)]
+    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let mut res = false;
+        for s in self.slices.as_mut().iter_mut() {
+            res |= s.map_to_shminfo()?;
+        }
+
+        Ok(res)
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[inline(always)]
+    pub fn has_shmbuf(&self) -> bool {
+        self.slices
+            .as_ref()
+            .iter()
+            .any(|s| matches!(&s.buf, ZSliceBuffer::ShmBuffer(_)))
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[inline(never)]
+    pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
+        let mut res = false;
+        for s in self.slices.as_mut().iter_mut() {
+            res |= s.map_to_shmbuf(shmr.clone())?;
+        }
+        Ok(res)
+    }
+}
+
 impl<'a> SplitBuffer<'a> for ZBuf {
     type Slices = std::iter::Map<std::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+
     fn slices(&'a self) -> Self::Slices {
         self.slices.as_ref().iter().map(ZSlice::as_slice)
     }
+
     #[inline(always)]
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
     #[inline(always)]
     fn len(&self) -> usize {
-        let mut len = 0;
-        for slice in self.slices() {
-            len += slice.len();
-        }
-        len
+        self.slices
+            .as_ref()
+            .iter()
+            .fold(0, |len, slice| len + slice.len())
     }
 }
+
 impl PartialEq for ZBuf {
     fn eq(&self, other: &Self) -> bool {
         let mut self_slices = self.slices();
@@ -60,16 +125,20 @@ impl PartialEq for ZBuf {
         }
     }
 }
+
+// Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {
     slice: usize,
     byte: usize,
 }
+
 #[derive(Debug, Clone)]
 pub struct ZBufReader<'a> {
     inner: &'a ZBuf,
     cursor: ZBufPos,
 }
+
 impl<'a> HasReader for &'a ZBuf {
     type Reader = ZBufReader<'a>;
 
@@ -80,8 +149,9 @@ impl<'a> HasReader for &'a ZBuf {
         }
     }
 }
+
 impl<'a> Reader for ZBufReader<'a> {
-    fn read(&mut self, mut into: &mut [u8]) -> usize {
+    fn read(&mut self, mut into: &mut [u8]) -> Result<usize, DidntRead> {
         let mut read = 0;
         let slices = self.inner.slices.as_ref();
         while let Some(slice) = slices.get(self.cursor.slice) {
@@ -96,11 +166,16 @@ impl<'a> Reader for ZBufReader<'a> {
                 self.cursor.byte = 0;
             }
         }
-        read
+        Ok(read)
     }
 
-    fn read_exact(&mut self, into: &mut [u8]) -> bool {
-        self.read(into) == into.len()
+    fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
+        let len = self.read(into)?;
+        if len == into.len() {
+            Ok(())
+        } else {
+            Err(DidntRead)
+        }
     }
 
     fn remaining(&self) -> usize {
@@ -111,8 +186,11 @@ impl<'a> Reader for ZBufReader<'a> {
     }
 
     type ZSliceIterator = ZBufSliceIterator<'a>;
+    fn read_zslices(&mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
+        if self.remaining() < len {
+            return Err(DidntRead);
+        }
 
-    fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator {
         let Self { inner, cursor } = *self;
         let mut remaining = (len + cursor.byte) as isize;
         let mut end = cursor;
@@ -120,30 +198,32 @@ impl<'a> Reader for ZBufReader<'a> {
             remaining -= slice.len() as isize;
             if remaining <= 0 {
                 end.byte = (slice.len() as isize + remaining) as usize;
-                return ZBufSliceIterator { inner, cursor, end };
+                return Ok(ZBufSliceIterator { inner, cursor, end });
             } else {
                 end.slice += 1
             }
         }
-        ZBufSliceIterator {
+        Ok(ZBufSliceIterator {
             inner,
             cursor,
             end: cursor,
-        }
+        })
     }
 
-    fn read_zslice(&mut self, len: usize) -> Option<ZSlice> {
-        let slice = self.inner.slices.get(self.cursor.slice)?;
+    fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+        let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {
             std::cmp::Ordering::Less => {
                 let start = self.cursor.byte;
                 self.cursor.byte += len;
-                slice.new_sub_slice(start, self.cursor.byte)
+                slice
+                    .new_sub_slice(start, self.cursor.byte)
+                    .ok_or(DidntRead)
             }
             std::cmp::Ordering::Equal => {
                 self.cursor.slice += 1;
                 self.cursor.byte = 0;
-                Some(slice.clone())
+                Ok(slice.clone())
             }
             std::cmp::Ordering::Greater => {
                 self.cursor.slice += 1;
@@ -151,23 +231,22 @@ impl<'a> Reader for ZBufReader<'a> {
                 let mut buffer = Vec::with_capacity(len);
                 buffer.extend_from_slice(slice.as_slice());
                 unsafe {
-                    if self.read_exact(std::mem::transmute(buffer.spare_capacity_mut())) {
-                        buffer.set_len(len)
-                    } else {
-                        return None;
-                    }
+                    self.read_exact(std::mem::transmute(buffer.spare_capacity_mut()))?;
+                    buffer.set_len(len);
                 }
-                Some(buffer.into())
+                Ok(buffer.into())
             }
         }
     }
 }
 
+// ZSlice iterator
 pub struct ZBufSliceIterator<'a> {
     inner: &'a ZBuf,
     cursor: ZBufPos,
     end: ZBufPos,
 }
+
 impl Iterator for ZBufSliceIterator<'_> {
     type Item = ZSlice;
 
@@ -184,26 +263,43 @@ impl Iterator for ZBufSliceIterator<'_> {
         self.cursor.byte = 0;
         Some(ret)
     }
+
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.len();
         (len, Some(len))
     }
 }
+
 impl ExactSizeIterator for ZBufSliceIterator<'_> {
     fn len(&self) -> usize {
         self.end.slice - self.cursor.slice + 1
     }
 }
+
+// Writer
 #[derive(Debug)]
 pub struct ZBufWriter<'a> {
     inner: &'a mut ZBuf,
     cache: Arc<Vec<u8>>,
 }
+
+impl<'a> HasWriter for &'a mut ZBuf {
+    type Writer = ZBufWriter<'a>;
+
+    fn writer(self) -> Self::Writer {
+        ZBufWriter {
+            inner: self,
+            cache: Arc::new(vec![]),
+        }
+    }
+}
+
 impl Writer for ZBufWriter<'_> {
     fn write(&mut self, bytes: &[u8]) -> Result<usize, crate::writer::DidntWrite> {
         self.write_exact(bytes)?;
         Ok(bytes.len())
     }
+
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), crate::writer::DidntWrite> {
         let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
@@ -223,9 +319,11 @@ impl Writer for ZBufWriter<'_> {
         }
         Ok(())
     }
+
     fn remaining(&self) -> usize {
         usize::MAX
     }
+
     fn write_zslice(
         &mut self,
         slice: crate::zslice::ZSlice,
@@ -233,6 +331,7 @@ impl Writer for ZBufWriter<'_> {
         self.inner.slices.push(slice);
         Ok(())
     }
+
     fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
         &mut self,
         mut len: usize,
@@ -261,8 +360,10 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 }
+
 impl BacktrackableWriter for ZBufWriter<'_> {
     type Mark = ZBufPos;
+
     fn mark(&mut self) -> Self::Mark {
         if let Some(slice) = self.inner.slices.last() {
             ZBufPos {
@@ -273,6 +374,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
             ZBufPos { slice: 0, byte: 0 }
         }
     }
+
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         self.inner
             .slices

@@ -53,6 +53,7 @@ pub mod writer {
         len: std::marker::PhantomData<Len>,
         marker: std::marker::PhantomData<fn(&'a ()) -> &'a ()>,
     }
+
     impl<'a, 'b, Len> Reservation<'a, 'b, Len> {
         /// Advances the reservation by the specified length.
         /// # Safety
@@ -70,6 +71,7 @@ pub mod writer {
                 marker: self.marker,
             }
         }
+
         /// Writes `byte` into the reservation, asserting that `byte.len()` equals `WLen`.
         pub fn write<WLen>(
             self,
@@ -129,21 +131,29 @@ pub mod writer {
 pub mod reader {
     use crate::ZSlice;
 
+    #[derive(Debug, Clone, Copy)]
+    pub struct DidntRead;
+
     pub trait Reader {
-        fn read(&mut self, into: &mut [u8]) -> usize;
-        #[must_use = "returns true upon success"]
-        fn read_exact(&mut self, into: &mut [u8]) -> bool;
+        fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead>;
+        fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
 
-        fn read_u8(&mut self) -> Option<u8> {
-            let mut byte = 0;
-            (self.read(std::slice::from_mut(&mut byte)) != 0).then_some(byte)
-        }
         type ZSliceIterator: Iterator<Item = ZSlice> + ExactSizeIterator;
         /// Returns an iterator of ZSlices such that the sum of their length is _exactly_ `len`.
-        fn read_zslices(&mut self, len: usize) -> Self::ZSliceIterator;
+        fn read_zslices(&mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead>;
         /// Reads exactly `len` bytes, returning them as a single ZSlice.
-        fn read_zslice(&mut self, len: usize) -> Option<ZSlice>;
+        fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead>;
+
+        fn read_u8(&mut self) -> Result<u8, DidntRead> {
+            let mut byte = 0;
+            let read = self.read(std::slice::from_mut(&mut byte))?;
+            if read == 1 {
+                Ok(byte)
+            } else {
+                Err(DidntRead)
+            }
+        }
         fn can_read(&self) -> bool {
             self.remaining() != 0
         }

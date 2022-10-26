@@ -371,10 +371,10 @@ impl Header for Attachment {
     fn header(&self) -> u8 {
         #[allow(unused_mut)]
         let mut header = tmsg::id::ATTACHMENT;
-        #[cfg(feature = "shared-memory")]
-        if self.buffer.has_shminfo() {
-            header |= tmsg::flag::Z;
-        }
+        // #[cfg(feature = "shared-memory")]
+        // if self.buffer.has_shminfo() {
+        //     header |= tmsg::flag::Z;
+        // }
         header
     }
 }

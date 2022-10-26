@@ -13,7 +13,8 @@
 //
 use super::core::*;
 use super::msg::*;
-use zenoh_buffers::{writer::Writer, WBuf};
+use zenoh_buffers::ZBufWriter;
+use zenoh_buffers::{writer::Writer, ZBuf};
 use zenoh_core::zcheck;
 
 pub trait MessageWriter {
@@ -62,35 +63,39 @@ pub trait MessageWriter {
     fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool;
 }
 
-impl MessageWriter for WBuf {
+impl<'a> MessageWriter for ZBufWriter<'a> {
     #[inline(always)]
     fn write_deco_attachment(&mut self, attachment: &Attachment) -> bool {
-        zcheck!(self.write_u8(attachment.header()).is_ok());
-        #[cfg(feature = "shared-memory")]
-        {
-            self.write_zbuf(&attachment.buffer, attachment.buffer.has_shminfo())
-        }
+        // zcheck!(self.write_u8(attachment.header()).is_ok());
+        // #[cfg(feature = "shared-memory")]
+        // {
+        //     // self.write_zbuf(&attachment.buffer, attachment.buffer.has_shminfo())
+        //     self.write_zbuf(&attachment.buffer, false)
+        // }
 
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            self.write_zbuf(&attachment.buffer)
-        }
+        // #[cfg(not(feature = "shared-memory"))]
+        // {
+        //     self.write_zbuf(&attachment.buffer)
+        // }
+        false
     }
 
     #[inline(always)]
     fn write_deco_routing_context(&mut self, routing_context: &RoutingContext) -> bool {
-        zcheck!(self.write_u8(routing_context.header()).is_ok());
-        self.write_zint(routing_context.tree_id)
+        // zcheck!(self.write_u8(routing_context.header()).is_ok());
+        // self.write_zint(routing_context.tree_id)
+        false
     }
 
     #[inline(always)]
     fn write_deco_reply_context(&mut self, reply_context: &ReplyContext) -> bool {
-        zcheck!(self.write_u8(reply_context.header()).is_ok());
-        zcheck!(self.write_zint(reply_context.qid));
-        if let Some(replier) = reply_context.replier.as_ref() {
-            zcheck!(self.write_zid(&replier.id));
-        }
-        true
+        // zcheck!(self.write_u8(reply_context.header()).is_ok());
+        // zcheck!(self.write_zint(reply_context.qid));
+        // if let Some(replier) = reply_context.replier.as_ref() {
+        //     zcheck!(self.write_zid(&replier.id));
+        // }
+        // true
+        false
     }
 
     #[inline(always)]
@@ -137,172 +142,186 @@ impl MessageWriter for WBuf {
     }
 
     fn write_frame(&mut self, frame: &mut Frame) -> bool {
-        if frame.channel.priority != Priority::default() {
-            zcheck!(self.write_deco_priority(frame.channel.priority))
-        }
+        // if frame.channel.priority != Priority::default() {
+        //     zcheck!(self.write_deco_priority(frame.channel.priority))
+        // }
 
-        zcheck!(self.write_u8(frame.header()).is_ok());
-        zcheck!(self.write_zint(frame.sn));
-        match &mut frame.payload {
-            FramePayload::Fragment { buffer, .. } => self.write_zslice(buffer.clone()).is_ok(),
-            FramePayload::Messages { messages } => {
-                for m in messages.iter_mut() {
-                    zcheck!(self.write_zenoh_message(m));
-                }
-                true
-            }
-        }
+        // zcheck!(self.write_u8(frame.header()).is_ok());
+        // zcheck!(self.write_zint(frame.sn));
+        // match &mut frame.payload {
+        //     FramePayload::Fragment { buffer, .. } => self.write_zslice(buffer.clone()).is_ok(),
+        //     FramePayload::Messages { messages } => {
+        //         for m in messages.iter_mut() {
+        //             zcheck!(self.write_zenoh_message(m));
+        //         }
+        //         true
+        //     }
+        // }
+        false
     }
 
     fn write_scout(&mut self, scout: &Scout) -> bool {
-        zcheck!(self.write_u8(scout.header()).is_ok());
-        match scout.what {
-            Some(w) => self.write_zint(w.into()),
-            None => true,
-        }
+        // zcheck!(self.write_u8(scout.header()).is_ok());
+        // match scout.what {
+        //     Some(w) => self.write_zint(w.into()),
+        //     None => true,
+        // }
+        false
     }
 
     fn write_hello(&mut self, hello: &Hello) -> bool {
-        zcheck!(self.write_u8(hello.header()).is_ok());
-        if let Some(zid) = hello.zid.as_ref() {
-            zcheck!(self.write_zid(zid));
-        }
-        if let Some(w) = hello.whatami {
-            if w != WhatAmI::Router {
-                zcheck!(self.write_zint(w.into()));
-            }
-        }
-        if let Some(locs) = hello.locators.as_ref() {
-            zcheck!(self.write_locators(locs));
-        }
-        true
+        // zcheck!(self.write_u8(hello.header()).is_ok());
+        // if let Some(zid) = hello.zid.as_ref() {
+        //     zcheck!(self.write_zid(zid));
+        // }
+        // if let Some(w) = hello.whatami {
+        //     if w != WhatAmI::Router {
+        //         zcheck!(self.write_zint(w.into()));
+        //     }
+        // }
+        // if let Some(locs) = hello.locators.as_ref() {
+        //     zcheck!(self.write_locators(locs));
+        // }
+        // true
+        false
     }
 
     fn write_init_syn(&mut self, init_syn: &InitSyn) -> bool {
-        let header = init_syn.header();
-        zcheck!(self.write_u8(header).is_ok());
-        if init_syn.has_options() {
-            zcheck!(self.write_zint(init_syn.options()));
-        }
-        zcheck!(self.write_u8(init_syn.version).is_ok());
-        zcheck!(self.write_zint(init_syn.whatami.into()));
-        zcheck!(self.write_zid(&init_syn.zid));
-        if imsg::has_flag(header, tmsg::flag::S) {
-            zcheck!(self.write_zint(init_syn.sn_resolution));
-        }
-        true
+        // let header = init_syn.header();
+        // zcheck!(self.write_u8(header).is_ok());
+        // if init_syn.has_options() {
+        //     zcheck!(self.write_zint(init_syn.options()));
+        // }
+        // zcheck!(self.write_u8(init_syn.version).is_ok());
+        // zcheck!(self.write_zint(init_syn.whatami.into()));
+        // zcheck!(self.write_zid(&init_syn.zid));
+        // if imsg::has_flag(header, tmsg::flag::S) {
+        //     zcheck!(self.write_zint(init_syn.sn_resolution));
+        // }
+        // true
+        false
     }
 
     fn write_init_ack(&mut self, init_ack: &InitAck) -> bool {
-        zcheck!(self.write_u8(init_ack.header()).is_ok());
-        if init_ack.has_options() {
-            zcheck!(self.write_zint(init_ack.options()));
-        }
-        zcheck!(self.write_zint(init_ack.whatami.into()));
-        zcheck!(self.write_zid(&init_ack.zid));
-        if let Some(snr) = init_ack.sn_resolution {
-            zcheck!(self.write_zint(snr));
-        }
-        self.write_zslice_array(init_ack.cookie.clone())
+        // zcheck!(self.write_u8(init_ack.header()).is_ok());
+        // if init_ack.has_options() {
+        //     zcheck!(self.write_zint(init_ack.options()));
+        // }
+        // zcheck!(self.write_zint(init_ack.whatami.into()));
+        // zcheck!(self.write_zid(&init_ack.zid));
+        // if let Some(snr) = init_ack.sn_resolution {
+        //     zcheck!(self.write_zint(snr));
+        // }
+        // self.write_zslice_array(init_ack.cookie.clone())
+        false
     }
 
     fn write_open_syn(&mut self, open_syn: &OpenSyn) -> bool {
-        let header = open_syn.header();
-        zcheck!(self.write_u8(header).is_ok());
-        if imsg::has_flag(header, tmsg::flag::T2) {
-            zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
-        }
-        zcheck!(self.write_zint(open_syn.initial_sn));
-        self.write_zslice_array(open_syn.cookie.clone())
+        // let header = open_syn.header();
+        // zcheck!(self.write_u8(header).is_ok());
+        // if imsg::has_flag(header, tmsg::flag::T2) {
+        //     zcheck!(self.write_zint(open_syn.lease.as_secs() as ZInt));
+        // } else {
+        //     zcheck!(self.write_zint(open_syn.lease.as_millis() as ZInt));
+        // }
+        // zcheck!(self.write_zint(open_syn.initial_sn));
+        // self.write_zslice_array(open_syn.cookie.clone())
+        false
     }
 
     fn write_open_ack(&mut self, open_ack: &OpenAck) -> bool {
-        let header = open_ack.header();
-        zcheck!(self.write_u8(header).is_ok());
-        if imsg::has_flag(header, tmsg::flag::T2) {
-            zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
-        }
-        self.write_zint(open_ack.initial_sn)
+        // let header = open_ack.header();
+        // zcheck!(self.write_u8(header).is_ok());
+        // if imsg::has_flag(header, tmsg::flag::T2) {
+        //     zcheck!(self.write_zint(open_ack.lease.as_secs() as ZInt));
+        // } else {
+        //     zcheck!(self.write_zint(open_ack.lease.as_millis() as ZInt));
+        // }
+        // self.write_zint(open_ack.initial_sn)
+        false
     }
 
     fn write_join(&mut self, join: &Join) -> bool {
-        let header = join.header();
-        zcheck!(self.write_u8(header).is_ok());
-        if join.has_options() {
-            zcheck!(self.write_zint(join.options()));
-        }
-        zcheck!(self.write_u8(join.version).is_ok());
-        zcheck!(self.write_zint(join.whatami.into()));
-        zcheck!(self.write_zid(&join.zid));
-        if imsg::has_flag(header, tmsg::flag::T1) {
-            zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
-        } else {
-            zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
-        }
-        if imsg::has_flag(header, tmsg::flag::S) {
-            zcheck!(self.write_zint(join.sn_resolution));
-        }
-        match &join.next_sns {
-            ConduitSnList::Plain(sn) => {
-                zcheck!(self.write_zint(sn.reliable));
-                zcheck!(self.write_zint(sn.best_effort));
-            }
-            ConduitSnList::QoS(sns) => {
-                for sn in sns.iter() {
-                    zcheck!(self.write_zint(sn.reliable));
-                    zcheck!(self.write_zint(sn.best_effort));
-                }
-            }
-        }
-        true
+        // let header = join.header();
+        // zcheck!(self.write_u8(header).is_ok());
+        // if join.has_options() {
+        //     zcheck!(self.write_zint(join.options()));
+        // }
+        // zcheck!(self.write_u8(join.version).is_ok());
+        // zcheck!(self.write_zint(join.whatami.into()));
+        // zcheck!(self.write_zid(&join.zid));
+        // if imsg::has_flag(header, tmsg::flag::T1) {
+        //     zcheck!(self.write_zint(join.lease.as_secs() as ZInt));
+        // } else {
+        //     zcheck!(self.write_zint(join.lease.as_millis() as ZInt));
+        // }
+        // if imsg::has_flag(header, tmsg::flag::S) {
+        //     zcheck!(self.write_zint(join.sn_resolution));
+        // }
+        // match &join.next_sns {
+        //     ConduitSnList::Plain(sn) => {
+        //         zcheck!(self.write_zint(sn.reliable));
+        //         zcheck!(self.write_zint(sn.best_effort));
+        //     }
+        //     ConduitSnList::QoS(sns) => {
+        //         for sn in sns.iter() {
+        //             zcheck!(self.write_zint(sn.reliable));
+        //             zcheck!(self.write_zint(sn.best_effort));
+        //         }
+        //     }
+        // }
+        // true
+        false
     }
 
     fn write_close(&mut self, close: &Close) -> bool {
-        zcheck!(self.write_u8(close.header()).is_ok());
-        if let Some(p) = close.zid.as_ref() {
-            zcheck!(self.write_zid(p));
-        }
-        self.write_u8(close.reason).is_ok()
+        // zcheck!(self.write_u8(close.header()).is_ok());
+        // if let Some(p) = close.zid.as_ref() {
+        //     zcheck!(self.write_zid(p));
+        // }
+        // self.write_u8(close.reason).is_ok()
+        false
     }
 
     fn write_sync(&mut self, sync: &Sync) -> bool {
-        zcheck!(self.write_u8(sync.header()).is_ok());
-        zcheck!(self.write_zint(sync.sn));
-        if let Some(c) = sync.count {
-            zcheck!(self.write_zint(c));
-        }
-        true
+        // zcheck!(self.write_u8(sync.header()).is_ok());
+        // zcheck!(self.write_zint(sync.sn));
+        // if let Some(c) = sync.count {
+        //     zcheck!(self.write_zint(c));
+        // }
+        // true
+        false
     }
 
     fn write_ack_nack(&mut self, ack_nack: &AckNack) -> bool {
-        zcheck!(self.write_u8(ack_nack.header()).is_ok());
-        zcheck!(self.write_zint(ack_nack.sn));
-        if let Some(m) = ack_nack.mask {
-            zcheck!(self.write_zint(m));
-        }
-        true
+        // zcheck!(self.write_u8(ack_nack.header()).is_ok());
+        // zcheck!(self.write_zint(ack_nack.sn));
+        // if let Some(m) = ack_nack.mask {
+        //     zcheck!(self.write_zint(m));
+        // }
+        // true
+        false
     }
 
     fn write_keep_alive(&mut self, keep_alive: &KeepAlive) -> bool {
-        zcheck!(self.write_u8(keep_alive.header()).is_ok());
-        if let Some(p) = keep_alive.zid.as_ref() {
-            zcheck!(self.write_zid(p));
-        }
-        true
+        // zcheck!(self.write_u8(keep_alive.header()).is_ok());
+        // if let Some(p) = keep_alive.zid.as_ref() {
+        //     zcheck!(self.write_zid(p));
+        // }
+        // true
+        false
     }
 
     fn write_ping(&mut self, ping: &Ping) -> bool {
-        zcheck!(self.write_u8(ping.header()).is_ok());
-        self.write_zint(ping.hash)
+        // zcheck!(self.write_u8(ping.header()).is_ok());
+        // self.write_zint(ping.hash)
+        false
     }
 
     fn write_pong(&mut self, pong: &Pong) -> bool {
-        zcheck!(self.write_u8(pong.header()).is_ok());
-        self.write_zint(pong.hash)
+        // zcheck!(self.write_u8(pong.header()).is_ok());
+        // self.write_zint(pong.hash)
+        false
     }
 
     #[inline(always)]
@@ -314,15 +333,16 @@ impl MessageWriter for WBuf {
         is_fragment: Option<bool>,
         attachment: Option<Attachment>,
     ) -> bool {
-        if let Some(attachment) = attachment {
-            zcheck!(self.write_deco_attachment(&attachment));
-        }
-        if priority != Priority::default() {
-            zcheck!(self.write_deco_priority(priority))
-        }
+        // if let Some(attachment) = attachment {
+        //     zcheck!(self.write_deco_attachment(&attachment));
+        // }
+        // if priority != Priority::default() {
+        //     zcheck!(self.write_deco_priority(priority))
+        // }
 
-        let header = Frame::make_header(reliability, is_fragment);
-        self.write_u8(header).is_ok() && self.write_zint(sn)
+        // let header = Frame::make_header(reliability, is_fragment);
+        // self.write_u8(header).is_ok() && self.write_zint(sn)
+        false
     }
 
     /*************************************/
@@ -330,235 +350,249 @@ impl MessageWriter for WBuf {
     /*************************************/
     #[allow(clippy::let_and_return)]
     fn write_zenoh_message(&mut self, msg: &mut ZenohMessage) -> bool {
-        #[cfg(feature = "stats")]
-        let start_written = self.len();
-        if let Some(attachment) = msg.attachment.as_ref() {
-            zcheck!(self.write_deco_attachment(attachment));
-        }
-        if let Some(routing_context) = msg.routing_context.as_ref() {
-            zcheck!(self.write_deco_routing_context(routing_context));
-        }
-        if msg.channel.priority != Priority::default() {
-            zcheck!(self.write_deco_priority(msg.channel.priority));
-        }
+        // #[cfg(feature = "stats")]
+        // let start_written = self.len();
+        // if let Some(attachment) = msg.attachment.as_ref() {
+        //     zcheck!(self.write_deco_attachment(attachment));
+        // }
+        // if let Some(routing_context) = msg.routing_context.as_ref() {
+        //     zcheck!(self.write_deco_routing_context(routing_context));
+        // }
+        // if msg.channel.priority != Priority::default() {
+        //     zcheck!(self.write_deco_priority(msg.channel.priority));
+        // }
 
-        let res = match &msg.body {
-            ZenohBody::Data(data) => self.write_data(data),
-            ZenohBody::Declare(declare) => self.write_declare(declare),
-            ZenohBody::Unit(unit) => self.write_unit(unit),
-            ZenohBody::Pull(pull) => self.write_pull(pull),
-            ZenohBody::Query(query) => self.write_query(query),
-            ZenohBody::LinkStateList(link_state_list) => {
-                self.write_link_state_list(link_state_list)
-            }
-        };
+        // let res = match &msg.body {
+        //     ZenohBody::Data(data) => self.write_data(data),
+        //     ZenohBody::Declare(declare) => self.write_declare(declare),
+        //     ZenohBody::Unit(unit) => self.write_unit(unit),
+        //     ZenohBody::Pull(pull) => self.write_pull(pull),
+        //     ZenohBody::Query(query) => self.write_query(query),
+        //     ZenohBody::LinkStateList(link_state_list) => {
+        //         self.write_link_state_list(link_state_list)
+        //     }
+        // };
 
-        #[cfg(feature = "stats")]
-        {
-            let stop_written = self.len();
-            msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
-        }
+        // #[cfg(feature = "stats")]
+        // {
+        //     let stop_written = self.len();
+        //     msg.size = std::num::NonZeroUsize::new(stop_written - start_written);
+        // }
 
-        res
+        // res
+        false
     }
 
     #[inline(always)]
     fn write_data(&mut self, data: &Data) -> bool {
-        if let Some(reply_context) = data.reply_context.as_ref() {
-            zcheck!(self.write_deco_reply_context(reply_context));
-        }
+        // if let Some(reply_context) = data.reply_context.as_ref() {
+        //     zcheck!(self.write_deco_reply_context(reply_context));
+        // }
 
-        zcheck!(self.write_u8(data.header()).is_ok());
-        zcheck!(self.write_key_expr(&data.key));
+        // zcheck!(self.write_u8(data.header()).is_ok());
+        // zcheck!(self.write_key_expr(&data.key));
 
-        #[cfg(feature = "shared-memory")]
-        let mut sliced = false;
+        // #[cfg(feature = "shared-memory")]
+        // let mut sliced = false;
 
-        if let Some(data_info) = data.data_info.as_ref() {
-            zcheck!(self.write_data_info(data_info));
-            #[cfg(feature = "shared-memory")]
-            {
-                sliced = data_info.sliced
-            }
-        }
+        // if let Some(data_info) = data.data_info.as_ref() {
+        //     zcheck!(self.write_data_info(data_info));
+        //     #[cfg(feature = "shared-memory")]
+        //     {
+        //         sliced = data_info.sliced
+        //     }
+        // }
 
-        #[cfg(feature = "shared-memory")]
-        {
-            self.write_zbuf(&data.payload, sliced)
-        }
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            self.write_zbuf(&data.payload)
-        }
+        // #[cfg(feature = "shared-memory")]
+        // {
+        //     self.write_zbuf(&data.payload, sliced)
+        // }
+        // #[cfg(not(feature = "shared-memory"))]
+        // {
+        //     self.write_zbuf(&data.payload)
+        // }
+        false
     }
 
     #[inline(always)]
     fn write_key_expr(&mut self, key: &WireExpr) -> bool {
-        if key.has_suffix() {
-            self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
-        } else {
-            self.write_zint(key.scope)
-        }
+        // if key.has_suffix() {
+        //     self.write_zint(key.scope) && self.write_string(key.suffix.as_ref())
+        // } else {
+        //     self.write_zint(key.scope)
+        // }
+        false
     }
 
     #[inline(always)]
     fn write_data_info(&mut self, info: &DataInfo) -> bool {
-        zcheck!(self.write_zint(info.options()));
+        // zcheck!(self.write_zint(info.options()));
 
-        if info.kind != SampleKind::Put {
-            zcheck!(self.write_zint(info.kind as u64));
-        }
-        if let Some(enc) = info.encoding.as_ref() {
-            zcheck!(self.write_u8(u8::from(*enc.prefix())).is_ok());
-            zcheck!(self.write_string(enc.suffix()));
-        }
-        if let Some(ts) = info.timestamp.as_ref() {
-            zcheck!(self.write_timestamp(ts));
-        }
-        true
+        // if info.kind != SampleKind::Put {
+        //     zcheck!(self.write_zint(info.kind as u64));
+        // }
+        // if let Some(enc) = info.encoding.as_ref() {
+        //     zcheck!(self.write_u8(u8::from(*enc.prefix())).is_ok());
+        //     zcheck!(self.write_string(enc.suffix()));
+        // }
+        // if let Some(ts) = info.timestamp.as_ref() {
+        //     zcheck!(self.write_timestamp(ts));
+        // }
+        // true
+        false
     }
 
     #[inline(always)]
     fn write_queryable_info(&mut self, info: &QueryableInfo) -> bool {
-        zcheck!(self.write_zint(info.complete));
-        zcheck!(self.write_zint(info.distance));
-        true
+        // zcheck!(self.write_zint(info.complete));
+        // zcheck!(self.write_zint(info.distance));
+        // true
+        false
     }
 
     fn write_declare(&mut self, declare: &Declare) -> bool {
-        zcheck!(self.write_u8(declare.header()).is_ok());
-        zcheck!(self.write_usize_as_zint(declare.declarations.len()));
-        for l in declare.declarations.iter() {
-            zcheck!(self.write_declaration(l));
-        }
-        true
+        // zcheck!(self.write_u8(declare.header()).is_ok());
+        // zcheck!(self.write_usize_as_zint(declare.declarations.len()));
+        // for l in declare.declarations.iter() {
+        //     zcheck!(self.write_declaration(l));
+        // }
+        // true
+        false
     }
 
     fn write_declaration(&mut self, declaration: &Declaration) -> bool {
-        match declaration {
-            Declaration::Resource(r) => {
-                self.write_u8(r.header()).is_ok()
-                    && self.write_zint(r.expr_id)
-                    && self.write_key_expr(&r.key)
-            }
-            Declaration::ForgetResource(fr) => {
-                self.write_u8(fr.header()).is_ok() && self.write_zint(fr.expr_id)
-            }
-            Declaration::Subscriber(s) => {
-                let header = s.header();
-                zcheck!(self.write_u8(header).is_ok());
-                zcheck!(self.write_key_expr(&s.key));
-                if imsg::has_flag(header, zmsg::flag::S) {
-                    zcheck!(self.write_submode(&s.info.mode))
-                }
-                true
-            }
-            Declaration::ForgetSubscriber(fs) => {
-                self.write_u8(fs.header()).is_ok() && self.write_key_expr(&fs.key)
-            }
-            Declaration::Publisher(p) => {
-                self.write_u8(p.header()).is_ok() && self.write_key_expr(&p.key)
-            }
-            Declaration::ForgetPublisher(fp) => {
-                self.write_u8(fp.header()).is_ok() && self.write_key_expr(&fp.key)
-            }
-            Declaration::Queryable(q) => {
-                let header = q.header();
-                zcheck!(self.write_u8(header).is_ok());
-                zcheck!(self.write_key_expr(&q.key));
-                if imsg::has_flag(header, zmsg::flag::Q) {
-                    zcheck!(self.write_queryable_info(&q.info));
-                }
-                true
-            }
-            Declaration::ForgetQueryable(fq) => {
-                self.write_u8(fq.header()).is_ok() && self.write_key_expr(&fq.key)
-            }
-        }
+        // match declaration {
+        //     Declaration::Resource(r) => {
+        //         self.write_u8(r.header()).is_ok()
+        //             && self.write_zint(r.expr_id)
+        //             && self.write_key_expr(&r.key)
+        //     }
+        //     Declaration::ForgetResource(fr) => {
+        //         self.write_u8(fr.header()).is_ok() && self.write_zint(fr.expr_id)
+        //     }
+        //     Declaration::Subscriber(s) => {
+        //         let header = s.header();
+        //         zcheck!(self.write_u8(header).is_ok());
+        //         zcheck!(self.write_key_expr(&s.key));
+        //         if imsg::has_flag(header, zmsg::flag::S) {
+        //             zcheck!(self.write_submode(&s.info.mode))
+        //         }
+        //         true
+        //     }
+        //     Declaration::ForgetSubscriber(fs) => {
+        //         self.write_u8(fs.header()).is_ok() && self.write_key_expr(&fs.key)
+        //     }
+        //     Declaration::Publisher(p) => {
+        //         self.write_u8(p.header()).is_ok() && self.write_key_expr(&p.key)
+        //     }
+        //     Declaration::ForgetPublisher(fp) => {
+        //         self.write_u8(fp.header()).is_ok() && self.write_key_expr(&fp.key)
+        //     }
+        //     Declaration::Queryable(q) => {
+        //         let header = q.header();
+        //         zcheck!(self.write_u8(header).is_ok());
+        //         zcheck!(self.write_key_expr(&q.key));
+        //         if imsg::has_flag(header, zmsg::flag::Q) {
+        //             zcheck!(self.write_queryable_info(&q.info));
+        //         }
+        //         true
+        //     }
+        //     Declaration::ForgetQueryable(fq) => {
+        //         self.write_u8(fq.header()).is_ok() && self.write_key_expr(&fq.key)
+        //     }
+        // }
+        false
     }
 
     fn write_submode(&mut self, mode: &SubMode) -> bool {
-        let period_mask: u8 = 0;
-        zcheck!(match mode {
-            SubMode::Push => self
-                .write_u8(zmsg::declaration::id::MODE_PUSH | period_mask)
-                .is_ok(),
-            SubMode::Pull => self
-                .write_u8(zmsg::declaration::id::MODE_PULL | period_mask)
-                .is_ok(),
-        });
-        true
+        // let period_mask: u8 = 0;
+        // zcheck!(match mode {
+        //     SubMode::Push => self
+        //         .write_u8(zmsg::declaration::id::MODE_PUSH | period_mask)
+        //         .is_ok(),
+        //     SubMode::Pull => self
+        //         .write_u8(zmsg::declaration::id::MODE_PULL | period_mask)
+        //         .is_ok(),
+        // });
+        // true
+        false
     }
 
     fn write_unit(&mut self, unit: &Unit) -> bool {
-        if let Some(reply_context) = unit.reply_context.as_ref() {
-            zcheck!(self.write_deco_reply_context(reply_context));
-        }
+        // if let Some(reply_context) = unit.reply_context.as_ref() {
+        //     zcheck!(self.write_deco_reply_context(reply_context));
+        // }
 
-        self.write_u8(unit.header()).is_ok()
+        // self.write_u8(unit.header()).is_ok()
+        false
     }
 
     fn write_pull(&mut self, pull: &Pull) -> bool {
-        zcheck!(self.write_u8(pull.header()).is_ok());
-        zcheck!(self.write_key_expr(&pull.key));
-        zcheck!(self.write_zint(pull.pull_id));
-        if let Some(n) = pull.max_samples {
-            zcheck!(self.write_zint(n));
-        }
-        true
+        // zcheck!(self.write_u8(pull.header()).is_ok());
+        // zcheck!(self.write_key_expr(&pull.key));
+        // zcheck!(self.write_zint(pull.pull_id));
+        // if let Some(n) = pull.max_samples {
+        //     zcheck!(self.write_zint(n));
+        // }
+        // true
+        false
     }
 
     fn write_query(&mut self, query: &Query) -> bool {
-        zcheck!(self.write_u8(query.header()).is_ok());
-        zcheck!(self.write_key_expr(&query.key));
-        zcheck!(self.write_string(&query.parameters));
-        zcheck!(self.write_zint(query.qid));
-        if let Some(t) = query.target.as_ref() {
-            zcheck!(self.write_query_target(t));
-        }
-        self.write_consolidation(query.consolidation)
+        // zcheck!(self.write_u8(query.header()).is_ok());
+        // zcheck!(self.write_key_expr(&query.key));
+        // zcheck!(self.write_string(&query.parameters));
+        // zcheck!(self.write_zint(query.qid));
+        // if let Some(t) = query.target.as_ref() {
+        //     zcheck!(self.write_query_target(t));
+        // }
+        // self.write_consolidation(query.consolidation)
+        false
     }
 
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool {
-        zcheck!(self.write_u8(link_state_list.header()).is_ok());
-        zcheck!(self.write_usize_as_zint(link_state_list.link_states.len()));
-        for link_state in link_state_list.link_states.iter() {
-            zcheck!(self.write_link_state(link_state));
-        }
-        true
+        // zcheck!(self.write_u8(link_state_list.header()).is_ok());
+        // zcheck!(self.write_usize_as_zint(link_state_list.link_states.len()));
+        // for link_state in link_state_list.link_states.iter() {
+        //     zcheck!(self.write_link_state(link_state));
+        // }
+        // true
+        false
     }
 
     fn write_link_state(&mut self, link_state: &LinkState) -> bool {
-        zcheck!(self.write_zint(link_state.options()));
-        zcheck!(self.write_zint(link_state.psid));
-        zcheck!(self.write_zint(link_state.sn));
-        if let Some(zid) = link_state.zid.as_ref() {
-            zcheck!(self.write_zid(zid));
-        }
-        if let Some(&whatami) = link_state.whatami.as_ref() {
-            zcheck!(self.write_zint(whatami.into()));
-        }
-        if let Some(locators) = link_state.locators.as_ref() {
-            zcheck!(self.write_locators(locators));
-        }
-        zcheck!(self.write_usize_as_zint(link_state.links.len()));
-        for link in &link_state.links {
-            zcheck!(self.write_zint(*link));
-        }
+        // zcheck!(self.write_zint(link_state.options()));
+        // zcheck!(self.write_zint(link_state.psid));
+        // zcheck!(self.write_zint(link_state.sn));
+        // if let Some(zid) = link_state.zid.as_ref() {
+        //     zcheck!(self.write_zid(zid));
+        // }
+        // if let Some(&whatami) = link_state.whatami.as_ref() {
+        //     zcheck!(self.write_zint(whatami.into()));
+        // }
+        // if let Some(locators) = link_state.locators.as_ref() {
+        //     zcheck!(self.write_locators(locators));
+        // }
+        // zcheck!(self.write_usize_as_zint(link_state.links.len()));
+        // for link in &link_state.links {
+        //     zcheck!(self.write_zint(*link));
+        // }
 
-        true
+        // true
+        false
     }
 
     fn write_query_target(&mut self, target: &QueryTarget) -> bool {
-        // Note: desactivate Clippy check here because cast to ZInt can't be changed since ZInt size might change
-        #![allow(clippy::unnecessary_cast)]
-        match target {
-            QueryTarget::BestMatching => self.write_zint(0 as ZInt),
-            QueryTarget::All => self.write_zint(1 as ZInt),
-            QueryTarget::AllComplete => self.write_zint(2 as ZInt),
-            #[cfg(feature = "complete_n")]
-            QueryTarget::Complete(n) => self.write_zint(3 as ZInt) && self.write_zint(*n),
-        }
+        // // Note: desactivate Clippy check here because cast to ZInt can't be changed since ZInt size might change
+        // #![allow(clippy::unnecessary_cast)]
+        // match target {
+        //     QueryTarget::BestMatching => self.write_zint(0 as ZInt),
+        //     QueryTarget::All => self.write_zint(1 as ZInt),
+        //     QueryTarget::AllComplete => self.write_zint(2 as ZInt),
+        //     #[cfg(feature = "complete_n")]
+        //     QueryTarget::Complete(n) => self.write_zint(3 as ZInt) && self.write_zint(*n),
+        // }
+        false
     }
 
     fn write_consolidation_mode(mode: ConsolidationMode) -> ZInt {
@@ -570,6 +604,7 @@ impl MessageWriter for WBuf {
     }
 
     fn write_consolidation(&mut self, consolidation: ConsolidationMode) -> bool {
-        self.write_zint(WBuf::write_consolidation_mode(consolidation))
+        // self.write_zint(WBuf::write_consolidation_mode(consolidation))
+        false
     }
 }

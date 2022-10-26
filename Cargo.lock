@@ -3697,6 +3697,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "flume",
+ "typenum",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-core",

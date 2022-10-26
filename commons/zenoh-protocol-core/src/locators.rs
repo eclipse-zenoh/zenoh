@@ -109,11 +109,13 @@ pub struct Locator {
     #[serde(skip)]
     pub metadata: Option<ArcProperties>,
 }
+
 impl From<Locator> for String {
     fn from(val: Locator) -> Self {
         val.inner
     }
 }
+
 impl core::fmt::Display for Locator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.inner)?;
@@ -129,6 +131,7 @@ impl core::fmt::Display for Locator {
         Ok(())
     }
 }
+
 impl TryFrom<String> for Locator {
     type Error = zenoh_core::Error;
     fn try_from(mut inner: String) -> Result<Self, Self::Error> {
@@ -142,6 +145,7 @@ impl TryFrom<String> for Locator {
         Ok(Locator { inner, metadata })
     }
 }
+
 impl FromStr for Locator {
     type Err = zenoh_core::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -161,6 +165,7 @@ impl Locator {
     pub fn new<Addr: std::fmt::Display>(protocol: &str, addr: &Addr) -> Self {
         Locator::try_from(format!("{}{}{}", protocol, PROTO_SEPARATOR, addr)).unwrap()
     }
+
     #[must_use = "returns true if successful"]
     pub fn set_addr(&mut self, addr: &str) -> bool {
         let addr_start = self.inner.find(PROTO_SEPARATOR).unwrap() + 1;

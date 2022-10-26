@@ -18,17 +18,21 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
+use core::slice::SlicePattern;
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::sync::Arc;
-use zenoh_buffers::buffer::CopyBuffer;
-use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_buffers::{SplitBuffer, WBuf, ZBuf};
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    writer::{BacktrackableWriter, Reservation},
+};
+use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_cfg_properties::Properties;
 use zenoh_core::{bail, Result as ZResult};
+use zenoh_protocol::codec::Zenoh060;
 use zenoh_protocol::proto::{MessageReader, MessageWriter, TransportMessage};
 use zenoh_protocol_core::{EndPoint, Locator};
 
@@ -145,35 +149,26 @@ pub trait LinkUnicastTrait: Send + Sync {
 impl LinkUnicast {
     pub async fn write_transport_message(&self, msg: &mut TransportMessage) -> ZResult<usize> {
         // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        let mut wbuf = vec![0u8; WBUF_SIZE];
+        let mut codec = Zenoh060::default();
+
         if self.is_streamed() {
             // Reserve 16 bits to write the length
-            wbuf.write(&[0_u8, 0_u8]);
+            wbuf.with_reservation::<typenum::U2, _>(|reservation| {
+                // Serialize the message
+                codec.write(&mut wbuf, msg)?;
+                let len = wbuf.len() as u16 - 2;
+                let reservation = reservation.write::<typenum::U2>(len.to_le_bytes().as_slice());
+                Ok(reservation)
+            });
+        } else {
+            // Serialize the message
+            codec.write(&mut wbuf, msg)?;
         }
-        // Serialize the message
-        wbuf.write_transport_message(msg);
-        if self.is_streamed() {
-            // Write the length on the first 16 bits
-            let length: u16 = wbuf.len() as u16 - 2;
-            let bits = wbuf.get_first_slice_mut(..2);
-            bits.copy_from_slice(&length.to_le_bytes());
-        }
-        let contiguous = wbuf.contiguous();
+
         // Send the message on the link
-        self.0.write_all(&contiguous).await?;
-        let len = contiguous.len();
-        #[cfg(test)]
-        {
-            let zbuf = ZBuf::from(contiguous.into_owned());
-            dbg!(&zbuf);
-            let mut reader = zbuf.reader();
-            if self.is_streamed() {
-                let mut lenbuf = [0; 2];
-                assert!(reader.read_exact(&mut lenbuf));
-            }
-            assert_eq!(reader.read_transport_message().as_ref(), Some(&*msg));
-        }
-        Ok(len)
+        self.0.write_all(wbuf.as_slice()).await?;
+        Ok(wbuf.len())
     }
 
     pub async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
