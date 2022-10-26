@@ -37,6 +37,8 @@ pub struct Query {
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
     pub(crate) parameters: String,
+    /// This Query's body.
+    pub(crate) value: Option<Value>,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
     pub(crate) replies_sender: flume::Sender<Sample>,
@@ -62,6 +64,13 @@ impl Query {
     #[inline(always)]
     pub fn parameters(&self) -> &str {
         &self.parameters
+    }
+
+    /// This Query's value.
+    #[zenoh_core::unstable]
+    #[inline(always)]
+    pub fn value(&self) -> Option<&Value> {
+        self.value.as_ref()
     }
 
     /// Sends a reply to this Query.

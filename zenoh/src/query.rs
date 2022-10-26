@@ -153,6 +153,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
+    pub(crate) value: Option<Value>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -183,6 +184,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             target,
             consolidation,
             timeout,
+            value,
             handler: _,
         } = self;
         GetBuilder {
@@ -191,6 +193,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             target,
             consolidation,
             timeout,
+            value,
             handler: callback,
         }
     }
@@ -256,6 +259,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             target,
             consolidation,
             timeout,
+            value,
             handler: _,
         } = self;
         GetBuilder {
@@ -264,6 +268,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             target,
             consolidation,
             timeout,
+            value,
             handler,
         }
     }
@@ -290,27 +295,51 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
+    /// Set query value.
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
+    where
+        IntoValue: Into<Value>,
+    {
+        self.value = Some(value.into());
+        self
+    }
+
+    /// Set/Unset query value.
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn with_value_opt<IntoValue>(mut self, value: Option<IntoValue>) -> Self
+    where
+        IntoValue: Into<Value>,
+    {
+        self.value = value.map(Into::into);
+        self
+    }
+
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///
     /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
     /// expressions that don't intersect with the query's.
     #[zenoh_core::unstable]
-    pub fn accept_replies(self, value: ReplyKeyExpr) -> Self {
+    pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         let Self {
             session,
             selector,
             target,
             consolidation,
             timeout,
+            value,
             handler,
         } = self;
         Self {
             session,
-            selector: selector.and_then(|s| s.accept_any_keyexpr(value == ReplyKeyExpr::Any)),
+            selector: selector.and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
             target,
             consolidation,
             timeout,
+            value,
             handler,
         }
     }
@@ -356,6 +385,7 @@ where
                 self.target,
                 self.consolidation,
                 self.timeout,
+                self.value,
                 callback,
             )
             .map(|_| receiver)

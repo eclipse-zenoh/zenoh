@@ -27,6 +27,7 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
+use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_protocol_core::key_expr::OwnedKeyExpr;
 use zenoh_protocol_core::ConsolidationMode;
@@ -367,6 +368,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
