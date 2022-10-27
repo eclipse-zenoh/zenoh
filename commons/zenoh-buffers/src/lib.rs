@@ -119,6 +119,7 @@ pub mod writer {
             Len: typenum::Unsigned,
             F: for<'b> FnOnce(
                 Reservation<'a, 'b, Len>,
+                &mut Self,
             ) -> Result<Reservation<'a, 'b, typenum::U0>, DidntWrite>,
         {
             let mark = self.mark();
@@ -128,11 +129,14 @@ pub mod writer {
                     buf = unsafe { std::mem::transmute(s) };
                     Len::USIZE
                 })?;
-                f(Reservation {
-                    buf,
-                    len: Default::default(),
-                    marker: Default::default(),
-                })
+                f(
+                    Reservation {
+                        buf,
+                        len: Default::default(),
+                        marker: Default::default(),
+                    },
+                    self,
+                )
             })() {
                 self.rewind(mark);
                 Err(DidntWrite)

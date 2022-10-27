@@ -47,21 +47,14 @@ macro_rules! run {
             })
             .unwrap();
 
-        // let wbs4: [u8; 4] = [18, 19, 20, 21];
-        // writer
-        //     .with_reservation::<typenum::U2, _>(|reservation| {
-        //         writer.write_exact(&wbs4[2..]).unwrap();
-        //         let r = reservation.write::<typenum::U2>(&wbs4[..2]);
-        //         Ok(r)
-        //     })
-        //     .unwrap();
-
-        //     wbuf.with_reservation::<typenum::U2, _>(|reservation| {
-        //         // Serialize the message
-        //         codec.write(&mut wbuf, msg)?;
-        //         let len = wbuf.len() as u16 - 2;
-        //         let reservation = reservation.write::<typenum::U2>(len.to_le_bytes().as_slice());
-        //         Ok(reservation)
+        let wbs4: [u8; 4] = [18, 19, 20, 21];
+        writer
+            .with_reservation::<typenum::U2, _>(|reservation, writer| {
+                writer.write_exact(&wbs4[2..]).unwrap();
+                let r = reservation.write::<typenum::U2>(&wbs4[..2]);
+                Ok(r)
+            })
+            .unwrap();
 
         println!(">>> Read");
         let mut reader = $buffer.reader();
