@@ -17,7 +17,7 @@ mod hello;
 mod scout;
 
 use crate::codec::*;
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };

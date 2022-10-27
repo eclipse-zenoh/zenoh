@@ -15,7 +15,7 @@ mod core;
 mod scouting;
 mod transport;
 
-pub(crate) const TEST_ITER: usize = 1_000_000;
+pub(crate) const TEST_ITER: usize = 1_000;
 
 pub trait WCodec<Buffer, Message> {
     type Output;

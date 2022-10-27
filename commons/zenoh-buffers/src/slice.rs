@@ -13,41 +13,17 @@
 //
 use crate::{
     reader::{DidntRead, HasReader, Reader},
-    writer::{BacktrackableWriter, DidntWrite, Writer},
+    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
 use std::marker::PhantomData;
 
-impl Writer for Vec<u8> {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
-        self.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
+// Writer
+impl HasWriter for &mut [u8] {
+    type Writer = Self;
 
-    fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
-        self.write(bytes).map(|_| ())
-    }
-
-    fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
-        self.push(byte);
-        Ok(())
-    }
-
-    fn remaining(&self) -> usize {
-        usize::MAX
-    }
-
-    fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
-        &mut self,
-        mut len: usize,
-        f: F,
-    ) -> Result<(), DidntWrite> {
-        self.reserve(len);
-        unsafe {
-            len = f(std::mem::transmute(&mut self.spare_capacity_mut()[..len]));
-            self.set_len(self.len() + len);
-        }
-        Ok(())
+    fn writer(self) -> Self::Writer {
+        self
     }
 }
 
@@ -97,22 +73,10 @@ impl Writer for &mut [u8] {
     }
 }
 
-impl BacktrackableWriter for Vec<u8> {
-    type Mark = usize;
-
-    fn mark(&mut self) -> Self::Mark {
-        self.len()
-    }
-
-    fn rewind(&mut self, mark: Self::Mark) -> bool {
-        self.truncate(mark);
-        true
-    }
-}
-
 pub struct SliceMark<'s> {
     ptr: *const u8,
     len: usize,
+    // Enforce lifetime for the pointer
     _phantom: PhantomData<&'s u8>,
 }
 
@@ -130,6 +94,15 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         *self = unsafe { std::slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
         true
+    }
+}
+
+// Reader
+impl HasReader for &[u8] {
+    type Reader = Self;
+
+    fn reader(self) -> Self::Reader {
+        self
     }
 }
 
@@ -192,10 +165,3 @@ impl Reader for &[u8] {
     }
 }
 
-impl HasReader for &[u8] {
-    type Reader = Self;
-
-    fn reader(self) -> Self::Reader {
-        self
-    }
-}

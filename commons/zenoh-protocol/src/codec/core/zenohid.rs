@@ -14,7 +14,7 @@ use std::convert::TryFrom;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::codec::{RCodec, WCodec, Zenoh060};
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
@@ -46,5 +46,44 @@ where
         let mut id = [0; ZenohId::MAX_SIZE];
         reader.read_exact(&mut id[..size])?;
         ZenohId::try_from(&id[..size]).map_err(|_| DidntRead)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::codec::*;
+    use zenoh_buffers::reader::{HasReader, Reader};
+    use zenoh_buffers::writer::HasWriter;
+    use zenoh_buffers::ZBuf;
+    use zenoh_protocol_core::ZenohId;
+
+    #[test]
+    fn codec_zid() {
+        let codec = Zenoh060::default();
+
+        macro_rules! run {
+            ($buf:expr) => {
+                for _ in 0..TEST_ITER {
+                    $buf.clear();
+                    let mut writer = $buf.writer();
+                    let x = ZenohId::default();
+                    codec.write(&mut writer, &x).unwrap();
+
+                    let mut reader = $buf.reader();
+                    let y: ZenohId = codec.read(&mut reader).unwrap();
+                    assert!(!reader.can_read());
+
+                    assert_eq!(x, y);
+                }
+            };
+        }
+
+        println!("ZInt: encoding on Vec<u8>");
+        let mut buffer = Vec::with_capacity(ZenohId::MAX_SIZE);
+        run!(buffer);
+
+        println!("ZInt: encoding on ZBuf");
+        let mut buffer = ZBuf::default();
+        run!(buffer);
     }
 }

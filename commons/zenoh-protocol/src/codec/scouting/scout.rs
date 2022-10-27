@@ -15,7 +15,7 @@ use crate::codec::{RCodec, WCodec, Zenoh060, Zenoh060RCodec};
 use crate::message::scouting::Scout;
 use crate::message::transport::tmsg;
 use crate::message::{imsg, Header};
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };

@@ -13,10 +13,8 @@
 //
 use crate::codec::*;
 use zenoh_buffers::{
-    traits::{
-        reader::{DidntRead, Reader},
-        writer::{DidntWrite, Writer},
-    },
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
     SplitBuffer, ZBuf,
 };
 

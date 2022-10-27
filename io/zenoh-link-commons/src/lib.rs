@@ -18,7 +18,6 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
-use core::slice::SlicePattern;
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::fmt;
@@ -148,61 +147,63 @@ pub trait LinkUnicastTrait: Send + Sync {
 
 impl LinkUnicast {
     pub async fn write_transport_message(&self, msg: &mut TransportMessage) -> ZResult<usize> {
-        // Create the buffer for serializing the message
-        let mut wbuf = vec![0u8; WBUF_SIZE];
-        let mut codec = Zenoh060::default();
+        // // Create the buffer for serializing the message
+        // let mut wbuf = vec![0u8; WBUF_SIZE];
+        // let mut codec = Zenoh060::default();
 
-        if self.is_streamed() {
-            // Reserve 16 bits to write the length
-            wbuf.with_reservation::<typenum::U2, _>(|reservation| {
-                // Serialize the message
-                codec.write(&mut wbuf, msg)?;
-                let len = wbuf.len() as u16 - 2;
-                let reservation = reservation.write::<typenum::U2>(len.to_le_bytes().as_slice());
-                Ok(reservation)
-            });
-        } else {
-            // Serialize the message
-            codec.write(&mut wbuf, msg)?;
-        }
+        // if self.is_streamed() {
+        //     // Reserve 16 bits to write the length
+        //     wbuf.with_reservation::<typenum::U2, _>(|reservation| {
+        //         // Serialize the message
+        //         codec.write(&mut wbuf, msg)?;
+        //         let len = wbuf.len() as u16 - 2;
+        //         let reservation = reservation.write::<typenum::U2>(len.to_le_bytes().as_slice());
+        //         Ok(reservation)
+        //     });
+        // } else {
+        //     // Serialize the message
+        //     codec.write(&mut wbuf, msg)?;
+        // }
 
-        // Send the message on the link
-        self.0.write_all(wbuf.as_slice()).await?;
-        Ok(wbuf.len())
+        // // Send the message on the link
+        // self.0.write_all(wbuf.as_slice()).await?;
+        // Ok(wbuf.len())
+        panic!();
     }
 
     pub async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
-        // Read from the link
-        let buffer = if self.is_streamed() {
-            // Read and decode the message length
-            let mut length_bytes = [0_u8; 2];
-            self.read_exact(&mut length_bytes).await?;
-            let to_read = u16::from_le_bytes(length_bytes) as usize;
-            // Read the message
-            let mut buffer = vec![0_u8; to_read];
-            self.read_exact(&mut buffer).await?;
-            buffer
-        } else {
-            // Read the message
-            let mut buffer = vec![0_u8; self.get_mtu() as usize];
-            let n = self.read(&mut buffer).await?;
-            buffer.truncate(n);
-            buffer
-        };
+        // // Read from the link
+        // let buffer = if self.is_streamed() {
+        //     // Read and decode the message length
+        //     let mut length_bytes = [0_u8; 2];
+        //     self.read_exact(&mut length_bytes).await?;
+        //     let to_read = u16::from_le_bytes(length_bytes) as usize;
+        //     // Read the message
+        //     let mut buffer = vec![0_u8; to_read];
+        //     self.read_exact(&mut buffer).await?;
+        //     buffer
+        // } else {
+        //     // Read the message
+        //     let mut buffer = vec![0_u8; self.get_mtu() as usize];
+        //     let n = self.read(&mut buffer).await?;
+        //     buffer.truncate(n);
+        //     buffer
+        // };
 
-        let zbuf = ZBuf::from(buffer);
-        let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
-        let mut zbuf_reader = zbuf.reader();
-        while zbuf_reader.can_read() {
-            match zbuf_reader.read_transport_message() {
-                Some(msg) => messages.push(msg),
-                None => {
-                    bail!("Invalid Message: Decoding error on link: {}", self);
-                }
-            }
-        }
+        // let zbuf = ZBuf::from(buffer);
+        // let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
+        // let mut zbuf_reader = zbuf.reader();
+        // while zbuf_reader.can_read() {
+        //     match zbuf_reader.read_transport_message() {
+        //         Some(msg) => messages.push(msg),
+        //         None => {
+        //             bail!("Invalid Message: Decoding error on link: {}", self);
+        //         }
+        //     }
+        // }
 
-        Ok(messages)
+        // Ok(messages)
+        panic!();
     }
 }
 
@@ -282,15 +283,16 @@ pub trait LinkMulticastTrait: Send + Sync {
 
 impl LinkMulticast {
     pub async fn write_transport_message(&self, msg: &mut TransportMessage) -> ZResult<usize> {
-        // Create the buffer for serializing the message
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_transport_message(msg);
-        let contiguous = wbuf.contiguous();
+        // // Create the buffer for serializing the message
+        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        // wbuf.write_transport_message(msg);
+        // let contiguous = wbuf.contiguous();
 
-        // Send the message on the link
-        self.0.write_all(&contiguous).await?;
+        // // Send the message on the link
+        // self.0.write_all(&contiguous).await?;
 
-        Ok(contiguous.len())
+        // Ok(contiguous.len())
+        panic!();
     }
 
     // pub async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {

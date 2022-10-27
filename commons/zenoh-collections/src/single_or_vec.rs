@@ -16,11 +16,13 @@ enum SingleOrVecInner<T> {
     Single(T),
     Vec(Vec<T>),
 }
+
 impl<T> Default for SingleOrVecInner<T> {
     fn default() -> Self {
         SingleOrVecInner::Vec(Vec::new())
     }
 }
+
 impl<T> AsRef<[T]> for SingleOrVecInner<T> {
     fn as_ref(&self) -> &[T] {
         match self {
@@ -29,6 +31,7 @@ impl<T> AsRef<[T]> for SingleOrVecInner<T> {
         }
     }
 }
+
 impl<T> AsMut<[T]> for SingleOrVecInner<T> {
     fn as_mut(&mut self) -> &mut [T] {
         match self {
@@ -37,16 +40,19 @@ impl<T> AsMut<[T]> for SingleOrVecInner<T> {
         }
     }
 }
+
 impl<T: std::fmt::Debug> std::fmt::Debug for SingleOrVecInner<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.as_ref())
     }
 }
+
 impl<T: std::cmp::PartialEq> std::cmp::PartialEq for SingleOrVecInner<T> {
     fn eq(&self, other: &Self) -> bool {
         self.as_ref() == other.as_ref()
     }
 }
+
 impl<T> SingleOrVecInner<T> {
     fn push(&mut self, value: T) {
         match self {
@@ -66,6 +72,7 @@ impl<T> SingleOrVec<T> {
     pub fn push(&mut self, value: T) {
         self.0.push(value)
     }
+
     pub fn truncate(&mut self, len: usize) {
         if let SingleOrVecInner::Vec(v) = &mut self.0 {
             v.truncate(len)
@@ -73,34 +80,44 @@ impl<T> SingleOrVec<T> {
             self.0 = SingleOrVecInner::Vec(Vec::new())
         }
     }
+
+    pub fn clear(&mut self) {
+        self.truncate(0);
+    }
+
     pub fn len(&self) -> usize {
         match &self.0 {
             SingleOrVecInner::Single(_) => 1,
             SingleOrVecInner::Vec(v) => v.len(),
         }
     }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
         matches!(&self.0, SingleOrVecInner::Vec(v) if v.is_empty())
     }
+
     pub fn get(&self, index: usize) -> Option<&T> {
         match &self.0 {
             SingleOrVecInner::Single(v) => (index == 0).then_some(v),
             SingleOrVecInner::Vec(v) => v.get(index),
         }
     }
+
     pub fn get_mut(&mut self, index: usize) -> Option<&mut T> {
         match &mut self.0 {
             SingleOrVecInner::Single(v) => (index == 0).then_some(v),
             SingleOrVecInner::Vec(v) => v.get_mut(index),
         }
     }
+
     pub fn last(&self) -> Option<&T> {
         match &self.0 {
             SingleOrVecInner::Single(v) => Some(v),
             SingleOrVecInner::Vec(v) => v.last(),
         }
     }
+
     pub fn last_mut(&mut self) -> Option<&mut T> {
         match &mut self.0 {
             SingleOrVecInner::Single(v) => Some(v),
@@ -108,6 +125,7 @@ impl<T> SingleOrVec<T> {
         }
     }
 }
+
 impl<T> Default for SingleOrVec<T> {
     fn default() -> Self {
         Self(Default::default())

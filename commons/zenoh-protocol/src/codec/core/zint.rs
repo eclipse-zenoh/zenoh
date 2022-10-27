@@ -14,7 +14,7 @@
 use crate::codec::Zenoh060;
 use crate::codec::{RCodec, WCodec};
 use std::convert::TryInto;
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
@@ -102,23 +102,39 @@ mod test {
     use crate::codec::core::zint::VLE_LEN;
     use crate::codec::*;
     use rand::Rng;
+    use zenoh_buffers::reader::{HasReader, Reader};
+    use zenoh_buffers::writer::HasWriter;
+    use zenoh_buffers::ZBuf;
     use zenoh_protocol_core::ZInt;
 
     #[test]
     fn codec_zint() {
-        let codec = crate::codec::Zenoh060::default();
+        let codec = Zenoh060::default();
         let mut rng = rand::thread_rng();
-        let mut buffer = Vec::with_capacity(VLE_LEN);
-        for _ in 0..TEST_ITER {
-            buffer.clear();
-            let x: ZInt = rng.gen();
-            codec.write(&mut buffer, x).unwrap();
 
-            let mut reader = buffer.as_slice();
-            let y: ZInt = codec.read(&mut reader).unwrap();
-            assert!(reader.is_empty());
+        macro_rules! run {
+            ($buf:expr) => {
+                for _ in 0..TEST_ITER {
+                    $buf.clear();
+                    let mut writer = $buf.writer();
+                    let x: ZInt = rng.gen();
+                    codec.write(&mut writer, x).unwrap();
 
-            assert_eq!(x, y);
+                    let mut reader = $buf.reader();
+                    let y: ZInt = codec.read(&mut reader).unwrap();
+                    assert!(!reader.can_read());
+
+                    assert_eq!(x, y);
+                }
+            };
         }
+
+        println!("ZInt: encoding on Vec<u8>");
+        let mut buffer = Vec::with_capacity(VLE_LEN);
+        run!(buffer);
+
+        println!("ZInt: encoding on ZBuf");
+        let mut buffer = ZBuf::default();
+        run!(buffer);
     }
 }

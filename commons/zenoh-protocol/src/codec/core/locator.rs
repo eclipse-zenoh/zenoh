@@ -13,7 +13,7 @@
 //
 use crate::codec::*;
 use std::convert::TryFrom;
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };

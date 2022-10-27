@@ -11,13 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use crate::SharedMemoryReader;
 use crate::{
     reader::{DidntRead, HasReader, Reader},
-    writer::{BacktrackableWriter, HasWriter, Writer},
-    SharedMemoryReader, SplitBuffer, ZSlice, ZSliceBuffer,
+    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+    SplitBuffer, ZSlice, ZSliceBuffer,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+#[cfg(feature = "shared-memory")]
+use std::sync::RwLock;
 use zenoh_collections::SingleOrVec;
+#[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
 #[derive(Debug, Clone, Default)]
@@ -26,6 +31,10 @@ pub struct ZBuf {
 }
 
 impl ZBuf {
+    pub fn clear(&mut self) {
+        self.slices.clear();
+    }
+
     pub fn zslices(&self) -> impl Iterator<Item = ZSlice> + '_ {
         self.slices.as_ref().iter().map(ZSlice::clone)
     }
@@ -155,15 +164,26 @@ impl<'a> Reader for ZBufReader<'a> {
         let mut read = 0;
         let slices = self.inner.slices.as_ref();
         while let Some(slice) = slices.get(self.cursor.slice) {
+            // Subslice from the current read slice
             let from = &slice.as_ref()[self.cursor.byte..];
+            // Take the minimum length among read and write slices
             let len = from.len().min(into.len());
+            // Copy the slice content
             into[..len].copy_from_slice(&from[..len]);
+            // Advance the write slice
             into = &mut into[len..];
+            // Update the counter
             read += len;
+            // Move the byte cursor
             self.cursor.byte += len;
-            if self.cursor.byte == from.len() {
+            // We consumed all the current read slice, move to the next slice
+            if self.cursor.byte == slice.len() {
                 self.cursor.slice += 1;
                 self.cursor.byte = 0;
+            }
+            // We have read everything we had to read
+            if into.is_empty() {
+                break;
             }
         }
         Ok(read)
@@ -176,6 +196,23 @@ impl<'a> Reader for ZBufReader<'a> {
         } else {
             Err(DidntRead)
         }
+    }
+
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        let slice = self
+            .inner
+            .slices
+            .as_ref()
+            .get(self.cursor.slice)
+            .ok_or(DidntRead)?;
+
+        let byte = slice[self.cursor.byte];
+        self.cursor.byte += 1;
+        if self.cursor.byte == slice.len() {
+            self.cursor.slice += 1;
+            self.cursor.byte = 0;
+        }
+        Ok(byte)
     }
 
     fn remaining(&self) -> usize {
@@ -295,12 +332,12 @@ impl<'a> HasWriter for &'a mut ZBuf {
 }
 
 impl Writer for ZBufWriter<'_> {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, crate::writer::DidntWrite> {
+    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
         self.write_exact(bytes)?;
         Ok(bytes.len())
     }
 
-    fn write_exact(&mut self, bytes: &[u8]) -> Result<(), crate::writer::DidntWrite> {
+    fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
         let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.extend_from_slice(bytes);
@@ -320,14 +357,15 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 
+    fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
+        self.write_exact(std::slice::from_ref(&byte))
+    }
+
     fn remaining(&self) -> usize {
         usize::MAX
     }
 
-    fn write_zslice(
-        &mut self,
-        slice: crate::zslice::ZSlice,
-    ) -> Result<(), crate::writer::DidntWrite> {
+    fn write_zslice(&mut self, slice: ZSlice) -> Result<(), DidntWrite> {
         self.inner.slices.push(slice);
         Ok(())
     }
@@ -336,7 +374,7 @@ impl Writer for ZBufWriter<'_> {
         &mut self,
         mut len: usize,
         f: F,
-    ) -> Result<(), crate::writer::DidntWrite> {
+    ) -> Result<(), DidntWrite> {
         let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.reserve(len);

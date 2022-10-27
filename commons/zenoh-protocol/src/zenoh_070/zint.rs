@@ -15,7 +15,7 @@ use std::convert::TryInto;
 use std::num::NonZeroU8;
 
 use crate::codec::{RCodec, WCodec};
-use zenoh_buffers::traits::{
+use zenoh_buffers::{
     reader::Reader,
     writer::{DidntWrite, Writer},
 };
