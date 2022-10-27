@@ -37,7 +37,7 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
-complete_n = ["zenoh-protocol-core/complete_n", "zenoh-protocol/complete_n"]
+complete_n = ["zenoh-protocol/complete_n", "zenoh-protocol/complete_n"]
 shared-memory = [
     "zenoh-buffers/shared-memory",
     "zenoh-protocol/shared-memory",
@@ -102,7 +102,6 @@ zenoh-link = { version = "0.6.0-beta.1", path = "../io/zenoh-link/" }
 
 zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "0.6.0-beta.1", path = "../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../commons/zenoh-protocol-core/" }
 zenoh-sync = { version = "0.6.0-beta.1", path = "../commons/zenoh-sync/" }
 zenoh-transport = { version = "0.6.0-beta.1", path = "../io/zenoh-transport/" }
 zenoh-util = { version = "0.6.0-beta.1", path = "../commons/zenoh-util" }

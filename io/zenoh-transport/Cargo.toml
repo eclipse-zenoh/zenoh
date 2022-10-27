@@ -68,10 +68,8 @@ zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-coll
 zenoh-config = { version = "0.6.0-beta.1", path = "../../commons/zenoh-config/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
 zenoh-crypto = { version = "0.6.0-beta.1", path = "../../commons/zenoh-crypto/" }
-
 zenoh-link = { version = "0.6.0-beta.1", path = "../zenoh-link/" }
 zenoh-protocol = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol-core/" }
 zenoh-sync = { version = "0.6.0-beta.1", path = "../../commons/zenoh-sync/" }
 
 [dev-dependencies]

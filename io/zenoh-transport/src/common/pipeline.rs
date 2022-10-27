@@ -665,11 +665,11 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use zenoh_buffers::reader::HasReader;
+    use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
     use zenoh_protocol::io::ZBuf;
     use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
     use zenoh_protocol::proto::MessageReader;
     use zenoh_protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
-    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, ZInt};
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);

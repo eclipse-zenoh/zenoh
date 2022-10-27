@@ -18,15 +18,15 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
-use zenoh_protocol_core::key_expr::OwnedKeyExpr;
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_sync::get_mut_unchecked;
 
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::{
+use zenoh_protocol::core::{
     Channel, CongestionControl, Priority, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt,
     ZenohId,
 };
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;

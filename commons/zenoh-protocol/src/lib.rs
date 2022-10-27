@@ -17,8 +17,8 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-pub use zenoh_protocol_core as core;
-pub mod codec;
-pub mod message;
+pub mod common;
+pub mod core;
 pub mod proto;
+pub mod scouting;
+pub mod transport;

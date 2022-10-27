@@ -13,10 +13,10 @@
 //
 use super::defaults::SEQ_NUM_RES;
 use super::msg::*;
+use crate::core::{whatami::WhatAmIMatcher, *};
 use std::convert::TryInto;
 use std::time::Duration;
 use zenoh_buffers::{reader::Reader, ZBufReader};
-use zenoh_protocol_core::{whatami::WhatAmIMatcher, *};
 
 pub trait MessageReader {
     fn read_deco_attachment(&mut self, header: u8) -> Option<Attachment>;

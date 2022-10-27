@@ -22,7 +22,7 @@ use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
-use zenoh_protocol_core::ConsolidationMode;
+use zenoh_protocol::core::ConsolidationMode;
 
 pub trait Primitives: Send + Sync {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr);

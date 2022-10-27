@@ -30,8 +30,8 @@ use zenoh_core::{
     bail, zasynclock, zasyncread, zasyncwrite, zerror, zlock, zparse, Result as ZResult,
 };
 use zenoh_link::*;
+use zenoh_protocol::core::locators::LocatorProtocol;
 use zenoh_protocol::proto::tmsg;
-use zenoh_protocol_core::locators::LocatorProtocol;
 
 /*************************************/
 /*         TRANSPORT CONFIG          */

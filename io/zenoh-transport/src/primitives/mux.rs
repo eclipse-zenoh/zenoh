@@ -1,4 +1,4 @@
-use zenoh_protocol_core::ConsolidationMode;
+use zenoh_protocol::core::ConsolidationMode;
 
 //
 // Copyright (c) 2022 ZettaScale Technology

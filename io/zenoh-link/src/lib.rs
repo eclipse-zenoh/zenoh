@@ -63,7 +63,7 @@ pub use zenoh_link_ws as ws;
 use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
 
 pub use zenoh_link_commons::*;
-pub use zenoh_protocol_core::{EndPoint, Locator};
+pub use zenoh_protocol::core::{EndPoint, Locator};
 
 #[derive(Default, Clone)]
 pub struct LocatorInspector {

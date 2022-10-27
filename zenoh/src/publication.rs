@@ -26,11 +26,11 @@ use zenoh_core::AsyncResolve;
 use zenoh_core::Resolvable;
 use zenoh_core::Resolve;
 use zenoh_core::{zread, SyncResolve};
+use zenoh_protocol::core::Channel;
 use zenoh_protocol::proto::{DataInfo, Options};
-use zenoh_protocol_core::Channel;
 
 /// The kind of congestion control.
-pub use zenoh_protocol_core::CongestionControl;
+pub use zenoh_protocol::core::CongestionControl;
 
 /// A builder for initializing a [`delete`](crate::Session::delete) operation.
 ///

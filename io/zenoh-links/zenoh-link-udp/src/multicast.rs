@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::{borrow::Cow, fmt};
 use zenoh_core::{zerror, Result as ZResult};
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link

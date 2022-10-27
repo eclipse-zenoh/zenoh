@@ -30,10 +30,12 @@ use zenoh_buffers::{
 };
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_cfg_properties::Properties;
+use zenoh_codec::Zenoh060;
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_protocol::codec::Zenoh060;
-use zenoh_protocol::proto::{MessageReader, MessageWriter, TransportMessage};
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::{
+    core::{EndPoint, Locator},
+    proto::{MessageReader, MessageWriter, TransportMessage},
+};
 
 const WBUF_SIZE: usize = 64;
 

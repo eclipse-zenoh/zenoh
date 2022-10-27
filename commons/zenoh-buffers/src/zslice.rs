@@ -519,6 +519,21 @@ impl From<SharedMemoryBuf> for ZSlice {
     }
 }
 
+// Functions mainly used for testing
+impl ZSlice {
+    #[doc(hidden)]
+    pub fn rand(len: usize) -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        (0..len)
+            .into_iter()
+            .map(|_| rng.gen())
+            .collect::<Vec<u8>>()
+            .into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,7 +545,7 @@ mod tests {
         println!("[01] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
-        let buf: Vec<u8> = (0_u8..16).into_iter().collect();
+        let buf = (0..16).into_iter().collect::<Vec<u8>>();
         unsafe {
             let mbuf = zslice.as_mut_slice();
             mbuf[..buf.len()].clone_from_slice(&buf[..]);

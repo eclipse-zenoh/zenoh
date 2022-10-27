@@ -23,13 +23,13 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol_core::SubInfo;
+use zenoh_protocol::core::SubInfo;
 
 /// The subscription mode.
-pub use zenoh_protocol_core::SubMode;
+pub use zenoh_protocol::core::SubMode;
 
 /// The kind of reliability.
-pub use zenoh_protocol_core::Reliability;
+pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,

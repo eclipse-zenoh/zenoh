@@ -19,12 +19,12 @@ use std::time::Duration;
 use uhlc::HLC;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::{
+use zenoh_protocol::core::{
     Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, Reliability,
     SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
+use zenoh_protocol::io::ZBuf;
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_transport::{DummyPrimitives, Primitives};
 
 #[test]

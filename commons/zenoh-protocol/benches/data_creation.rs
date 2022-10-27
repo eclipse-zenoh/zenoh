@@ -17,7 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use zenoh_protocol_core::SampleKind;
+use zenoh_protocol::core::SampleKind;
 
 use zenoh_protocol::core::Encoding;
 use zenoh_protocol::core::{Channel, CongestionControl, WireExpr};

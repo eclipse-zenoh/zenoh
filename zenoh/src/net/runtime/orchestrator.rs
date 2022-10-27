@@ -24,10 +24,10 @@ use zenoh_config::{EndPoint, ModeDependent};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
+use zenoh_protocol::core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
 use zenoh_protocol::proto::{MessageReader, MessageWriter};
-use zenoh_protocol_core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
 use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = 65536;

@@ -55,6 +55,8 @@ use zenoh_collections::Timer;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
+use zenoh_protocol::core::ZenohId;
+use zenoh_protocol::core::EMPTY_EXPR_ID;
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
@@ -63,8 +65,6 @@ use zenoh_protocol::{
     io::ZBuf,
     proto::{DataInfo, RoutingContext},
 };
-use zenoh_protocol_core::ZenohId;
-use zenoh_protocol_core::EMPTY_EXPR_ID;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {

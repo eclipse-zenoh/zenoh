@@ -331,7 +331,8 @@ jobs:
           cd commons/zenoh-collections && cargo publish && cd - && sleep 20
           cd commons/zenoh-crypto && cargo publish && cd - && sleep 20
           cd commons/zenoh-util && cargo publish && cd - && sleep 20
-          cd commons/zenoh-protocol-core && cargo publish && cd - && sleep 20
+          cd commons/zenoh-protocol && cargo publish && cd - && sleep 20
+          cd commons/zenoh-codec && cargo publish && cd - && sleep 20
           cd commons/zenoh-config && cargo publish && cd - && sleep 20
           cd commons/zenoh-buffers && cargo publish && cd - && sleep 20
           cd commons/zenoh-protocol && cargo publish && cd - && sleep 20

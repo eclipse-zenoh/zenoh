@@ -27,13 +27,13 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::key_expr::OwnedKeyExpr;
-use zenoh_protocol_core::ConsolidationMode;
-use zenoh_protocol_core::{
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
+use zenoh_protocol::core::ConsolidationMode;
+use zenoh_protocol::core::{
     Channel, CongestionControl, Encoding, KnownEncoding, QueryTarget, QueryableInfo, SubInfo,
     WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
 };
+use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_transport::{Primitives, TransportUnicast};
 
 pub struct AdminContext {

@@ -39,5 +39,5 @@ serde_yaml = "0.9.13"
 validated_struct = { version = "2.1.0", features = ["json5", "json_get"] }
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../zenoh-cfg-properties" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../zenoh-protocol-core/" }
+zenoh-protocol = { version = "0.6.0-beta.1", path = "../zenoh-protocol/" }
 zenoh-util = { version = "0.6.0-beta.1", path = "../zenoh-util" }

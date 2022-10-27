@@ -39,6 +39,6 @@ flume = "0.10.14"
 
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties/" }
+zenoh-codec = { version = "0.6.0-beta.1", path = "../../commons/zenoh-codec/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
 zenoh-protocol = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol-core/" }

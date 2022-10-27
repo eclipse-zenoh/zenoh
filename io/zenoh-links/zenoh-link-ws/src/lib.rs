@@ -23,7 +23,7 @@ use std::net::SocketAddr;
 use url::Url;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::Locator;
 mod unicast;
 pub use unicast::*;
 

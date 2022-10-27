@@ -28,7 +28,7 @@ pub use multicast::*;
 pub use unicast::*;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::Locator;
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers

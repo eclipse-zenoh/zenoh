@@ -20,8 +20,8 @@ use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{EndPoint, Link};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{WhatAmI, ZenohId};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,

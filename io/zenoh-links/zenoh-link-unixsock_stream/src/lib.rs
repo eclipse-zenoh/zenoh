@@ -24,7 +24,7 @@ use zenoh_core::zconfigurable;
 mod unicast;
 #[cfg(target_family = "unix")]
 pub use unicast::*;
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::Locator;
 // Default MTU (UnixSocketStream PDU) in bytes.
 // NOTE: Since UnixSocketStream is a byte-stream oriented transport, theoretically it has
 //       no limit regarding the MTU. However, given the batching strategy

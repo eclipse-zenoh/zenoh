@@ -32,8 +32,8 @@ use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zerror, zlock};
 use zenoh_link::{LinkMulticast, Locator};
+use zenoh_protocol::core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use zenoh_protocol::proto::{MessageReader, TransportMessage};
-use zenoh_protocol_core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
 use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {

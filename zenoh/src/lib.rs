@@ -124,7 +124,7 @@ pub use zenoh_buffers as buffers;
 pub mod time {
     use std::convert::TryFrom;
 
-    pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
+    pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)

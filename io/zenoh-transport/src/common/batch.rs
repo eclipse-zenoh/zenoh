@@ -394,11 +394,11 @@ mod tests {
     use super::*;
     use std::convert::TryFrom;
     use zenoh_buffers::{SplitBuffer, WBuf, ZBuf};
+    use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
     use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
     use zenoh_protocol::proto::{
         Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
     };
-    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
 
     fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
         for is_streamed in [false, true].iter() {

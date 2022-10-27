@@ -29,7 +29,7 @@ use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::Locator;
 
 mod unicast;
 pub use unicast::*;

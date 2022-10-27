@@ -412,3 +412,13 @@ impl BacktrackableWriter for ZBufWriter<'_> {
         true
     }
 }
+
+// Functions mainly used for testing
+impl ZBuf {
+    #[doc(hidden)]
+    pub fn rand(len: usize) -> Self {
+        let mut zbuf = ZBuf::default();
+        zbuf.push_zslice(ZSlice::rand(len));
+        zbuf
+    }
+}

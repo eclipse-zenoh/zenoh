@@ -14,10 +14,10 @@
 use super::core::Encoding;
 use super::core::*;
 use super::defaults::SEQ_NUM_RES;
+use crate::core::whatami::WhatAmIMatcher;
 use std::fmt;
 use std::time::Duration;
 use zenoh_buffers::{ZBuf, ZSlice};
-use zenoh_protocol_core::whatami::WhatAmIMatcher;
 
 /*************************************/
 /*               IDS                 */

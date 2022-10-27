@@ -37,13 +37,13 @@ use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zparse};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
-use zenoh_protocol_core::{EndPoint, Locator, Priority};
+use zenoh_protocol::core::{EndPoint, Locator, Priority};
 
 /// # Examples
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol_core::{ZenohId, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohId, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_core::Result as ZResult;
 ///
