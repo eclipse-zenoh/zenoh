@@ -326,21 +326,21 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         let mut in_big_wild = false;
         for chunk in value.split('/') {
             if chunk.is_empty() {
-                bail!("Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
+                bail!((-4) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
             }
             if chunk == "$*" {
-                bail!(
+                bail!((-1)
                     "Invalid Key Expr `{}`: lone `$*`s must be replaced by `*` to reach canon-form",
                     value
                 )
             }
             if in_big_wild {
                 match chunk {
-                    "**" => bail!(
+                    "**" => bail!((-3)
                         "Invalid Key Expr `{}`: `**/**` must be replaced by `**` to reach canon-form",
                         value
                     ),
-                    "*" => bail!(
+                    "*" => bail!((-2)
                         "Invalid Key Expr `{}`: `**/*` must be replaced by `*/**` to reach canon-form",
                         value
                     ),
@@ -352,7 +352,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             } else {
                 in_big_wild = false;
                 if chunk.contains("**") {
-                    bail!(
+                    bail!((-5)
                         "Invalid Key Expr `{}`: `**` may only be preceded an followed by `/`",
                         value
                     )
@@ -370,16 +370,16 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             if forbidden == b'$' {
                 if let Some(b'*') = bytes.get(index + 1) {
                     if let Some(b'$') = bytes.get(index + 2) {
-                        bail!(
+                        bail!((-6)
                             "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
                             value
                         )
                     }
                 } else {
-                    bail!("Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
+                    bail!((-8)"Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
                 }
             } else {
-                bail!(
+                bail!((-7)
                     "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
                     value
                 )
