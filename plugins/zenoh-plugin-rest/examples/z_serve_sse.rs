@@ -21,7 +21,7 @@ const HTML: &str = r#"
 <div id="result"></div>
 <script>
 if(typeof(EventSource) !== "undefined") {
-  var source = new EventSource("demo/sse/event");
+  var source = new EventSource("/demo/sse/event");
   source.addEventListener("PUT", function(e) {
     document.getElementById("result").innerHTML += e.data + "<br>";
   }, false);
@@ -60,7 +60,7 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    print!("Declaring Publisher on '{}'...", event_key);
+    println!("Declaring Publisher on '{}'...", event_key);
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
@@ -74,7 +74,7 @@ async fn main() {
     );
 
     println!(
-        "Data updates are accessible through HTML5 SSE at http://<hostname>:8000{}",
+        "Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{}",
         key
     );
     loop {
@@ -125,7 +125,7 @@ fn parse_args() -> Config {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints
