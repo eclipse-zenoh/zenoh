@@ -148,7 +148,7 @@ pub struct ZBufReader<'a> {
     cursor: ZBufPos,
 }
 
-impl<'a> HasReader<'a> for &'a ZBuf {
+impl<'a> HasReader for &'a ZBuf {
     type Reader = ZBufReader<'a>;
 
     fn reader(self) -> Self::Reader {
@@ -159,7 +159,7 @@ impl<'a> HasReader<'a> for &'a ZBuf {
     }
 }
 
-impl<'a, 'b: 'a> Reader<'a> for ZBufReader<'b> {
+impl<'a> Reader for ZBufReader<'a> {
     fn read(&mut self, mut into: &mut [u8]) -> Result<usize, DidntRead> {
         let mut read = 0;
         let slices = self.inner.slices.as_ref();
@@ -222,16 +222,20 @@ impl<'a, 'b: 'a> Reader<'a> for ZBufReader<'b> {
             - self.cursor.byte
     }
 
-    type ZSliceIterator = ZBufSliceIterator<'a, 'b>;
-    fn read_zslices(&'a mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
+    fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
         if self.remaining() < len {
             return Err(DidntRead);
         }
 
-        Ok(ZBufSliceIterator {
+        let iter = ZBufSliceIterator {
             reader: self,
             remaining: len,
-        })
+        };
+        for slice in iter {
+            f(slice);
+        }
+
+        Ok(())
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {

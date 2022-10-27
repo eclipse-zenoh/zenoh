@@ -45,9 +45,9 @@ where
     }
 }
 
-impl<'a, R> RCodec<&mut R, ZInt> for Zenoh060
+impl<R> RCodec<&mut R, ZInt> for Zenoh060
 where
-    R: Reader<'a>,
+    R: Reader,
 {
     type Error = DidntRead;
 
@@ -85,9 +85,9 @@ where
     }
 }
 
-impl<'a, R> RCodec<&mut R, usize> for Zenoh060
+impl<R> RCodec<&mut R, usize> for Zenoh060
 where
-    R: Reader<'a>,
+    R: Reader,
 {
     type Error = DidntRead;
 

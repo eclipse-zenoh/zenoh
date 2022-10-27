@@ -98,14 +98,14 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
 }
 
 // Reader
-impl<'a> HasReader<'a> for &'a [u8] {
+impl<'a> HasReader for &'a [u8] {
     type Reader = Self;
 
     fn reader(self) -> Self::Reader {
         self
     }
 }
-impl<'a, 'b: 'a> Reader<'a> for &'b [u8] {
+impl Reader for &[u8] {
     fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
         let len = self.len().min(into.len());
         into[..len].copy_from_slice(&self[..len]);
@@ -134,10 +134,10 @@ impl<'a, 'b: 'a> Reader<'a> for &'b [u8] {
         }
     }
 
-    type ZSliceIterator = std::option::IntoIter<ZSlice>;
-    fn read_zslices(&'a mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
+    fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
         let zslice = self.read_zslice(len)?;
-        Ok(unsafe { std::mem::transmute(Some(zslice).into_iter()) })
+        f(zslice);
+        Ok(())
     }
 
     #[allow(clippy::uninit_vec)]

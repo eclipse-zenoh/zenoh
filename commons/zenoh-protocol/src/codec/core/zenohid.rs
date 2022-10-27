@@ -31,9 +31,9 @@ where
     }
 }
 
-impl<'a, R> RCodec<&mut R, ZenohId> for Zenoh060
+impl<R> RCodec<&mut R, ZenohId> for Zenoh060
 where
-    R: Reader<'a>,
+    R: Reader,
 {
     type Error = DidntRead;
 

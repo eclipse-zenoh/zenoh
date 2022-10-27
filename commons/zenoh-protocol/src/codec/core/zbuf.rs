@@ -35,16 +35,14 @@ where
 
 impl<R> RCodec<&mut R, ZBuf> for Zenoh060
 where
-    R: for<'a> Reader<'a>,
+    R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
         let len: usize = self.read(&mut *reader)?;
         let mut zbuf = ZBuf::default();
-        for s in reader.read_zslices(len)? {
-            zbuf.push_zslice(s);
-        }
+        reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
         Ok(zbuf)
     }
 }
