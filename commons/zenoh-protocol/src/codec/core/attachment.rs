@@ -15,15 +15,11 @@ use crate::{
     codec::*,
     message::{core::Attachment, imsg},
 };
-use std::convert::TryFrom;
 use zenoh_buffers::{
-    traits::{
-        reader::{DidntRead, Reader},
-        writer::{DidntWrite, Writer},
-    },
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
     ZBuf,
 };
-use zenoh_protocol_core::Locator;
 
 impl<W> WCodec<&mut W, &Attachment> for Zenoh060
 where
@@ -36,9 +32,9 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Attachment> for Zenoh060
+impl<'a, R> RCodec<&mut R, Attachment> for Zenoh060
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = DidntRead;
 
@@ -51,9 +47,9 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Attachment> for Zenoh060RCodec
+impl<'a, R> RCodec<&mut R, Attachment> for Zenoh060RCodec
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = DidntRead;
 
@@ -62,16 +58,16 @@ where
             return Err(DidntRead);
         }
 
-        #[cfg(feature = "shared-memory")]
-        {
-            let buff: ZBuf = self.read(&mut *reader)?;
-            Some(Attachment { buffer })
-        }
+        // #[cfg(feature = "shared-memory")]
+        // {
+        let buffer: ZBuf = self.codec.read(&mut *reader)?;
+        Ok(Attachment { buffer })
+        // }
 
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            let buffer = self.read_zbuf()?;
-            Some(Attachment { buffer })
-        }
+        // #[cfg(not(feature = "shared-memory"))]
+        // {
+        //     let buffer = self.read_zbuf()?;
+        //     Some(Attachment { buffer })
+        // }
     }
 }

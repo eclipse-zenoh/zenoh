@@ -139,9 +139,9 @@ where
         Ok(())
     }
 }
-impl<R> RCodec<&mut R, u64> for &Zenoh070
+impl<'a, R> RCodec<&mut R, u64> for &Zenoh070
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = ();
     fn read(self, reader: &mut R) -> Result<u64, Self::Error> {

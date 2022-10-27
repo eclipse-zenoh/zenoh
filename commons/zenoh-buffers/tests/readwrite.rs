@@ -15,6 +15,8 @@ use zenoh_buffers::reader::*;
 use zenoh_buffers::writer::*;
 use zenoh_buffers::*;
 
+const BYTES: usize = 22;
+
 macro_rules! run {
     ($buffer:expr) => {
         println!(">>> Write");
@@ -47,11 +49,11 @@ macro_rules! run {
             })
             .unwrap();
 
-        let wbs4: [u8; 4] = [18, 19, 20, 21];
+        let wbs5: [u8; 4] = [18, 19, 20, 21];
         writer
             .with_reservation::<typenum::U2, _>(|reservation, writer| {
-                writer.write_exact(&wbs4[2..]).unwrap();
-                let r = reservation.write::<typenum::U2>(&wbs4[..2]);
+                writer.write_exact(&wbs5[2..]).unwrap();
+                let r = reservation.write::<typenum::U2>(&wbs5[..2]);
                 Ok(r)
             })
             .unwrap();
@@ -61,22 +63,32 @@ macro_rules! run {
 
         let b = reader.read_u8().unwrap();
         assert_eq!(0, b);
+        assert_eq!(BYTES - 1, reader.remaining());
         let b = reader.read_u8().unwrap();
         assert_eq!(1, b);
+        assert_eq!(BYTES - 2, reader.remaining());
 
         let mut rbs: [u8; 4] = [0, 0, 0, 0];
         let r = reader.read(&mut rbs).unwrap();
         assert_eq!(4, r);
+        assert_eq!(BYTES - 6, reader.remaining());
         assert_eq!(wbs1, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
+        assert_eq!(BYTES - 10, reader.remaining());
         assert_eq!(wbs2, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
+        assert_eq!(BYTES - 14, reader.remaining());
         assert_eq!(wbs3, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
+        assert_eq!(BYTES - 18, reader.remaining());
         assert_eq!(wbs4, rbs);
+
+        reader.read_exact(&mut rbs).unwrap();
+        assert_eq!(BYTES - 22, reader.remaining());
+        assert_eq!(wbs5, rbs);
 
         match reader.read(&mut rbs) {
             Ok(bs) => assert_eq!(0, bs),
@@ -90,7 +102,7 @@ macro_rules! run {
 #[test]
 fn buffer_slice() {
     println!("Buffer Slice");
-    let mut sbuf = [0u8; 18];
+    let mut sbuf = [0u8; BYTES];
     run!(sbuf.as_mut());
 }
 

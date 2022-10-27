@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// mod attachment;
+mod attachment;
 mod locator;
 mod zbuf;
 mod zenohid;
@@ -35,9 +35,9 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, u8> for Zenoh060
+impl<'a, R> RCodec<&mut R, u8> for Zenoh060
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = DidntRead;
 
@@ -59,9 +59,9 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Vec<u8>> for Zenoh060
+impl<'a, R> RCodec<&mut R, Vec<u8>> for Zenoh060
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = DidntRead;
 
@@ -90,9 +90,9 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, String> for Zenoh060
+impl<'a, R> RCodec<&mut R, String> for Zenoh060
 where
-    R: Reader,
+    R: Reader<'a>,
 {
     type Error = DidntRead;
 

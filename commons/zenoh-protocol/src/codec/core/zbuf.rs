@@ -35,7 +35,7 @@ where
 
 impl<R> RCodec<&mut R, ZBuf> for Zenoh060
 where
-    R: Reader,
+    R: for<'a> Reader<'a>,
 {
     type Error = DidntRead;
 
@@ -46,5 +46,69 @@ where
             zbuf.push_zslice(s);
         }
         Ok(zbuf)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::codec::*;
+    use zenoh_buffers::reader::{HasReader, Reader};
+    use zenoh_buffers::writer::{HasWriter, Writer};
+    use zenoh_buffers::ZBuf;
+
+    #[test]
+    fn codec_zbuf() {
+        let codec = Zenoh060::default();
+        let bytes = (0..=u8::MAX).into_iter().collect::<Vec<u8>>();
+        let mut x = ZBuf::default();
+        let mut writer = x.writer();
+        writer.write_exact(bytes.as_slice()).unwrap();
+
+        // macro_rules! run {
+        //     ($buf:expr) => {
+        //         for _ in 0..TEST_ITER {
+        //             $buf.clear();
+        //             let mut writer = $buf.writer();
+        //             codec.write(&mut writer, &x).unwrap();
+
+        //             println!("{:?}", x);
+        //             println!("{:?}", writer);
+
+        //             let mut reader = $buf.reader();
+        //             let y: ZBuf = codec.read(&mut reader).unwrap();
+        //             println!("{:?}", y);
+        //             println!("{:?}", reader);
+        //             println!("Remaining: {}", reader.remaining());
+        //             assert!(!reader.can_read());
+
+        //             assert_eq!(x, y);
+        //         }
+        //     };
+        // }
+
+        // println!("ZBuf: encoding on Vec<u8>");
+        // let mut buffer = Vec::with_capacity(ZenohId::MAX_SIZE);
+        // run!(buffer);
+
+        println!("ZBuf: encoding on ZBuf");
+        let mut buffer = ZBuf::default();
+        // run!(buffer);
+        for _ in 0..TEST_ITER {
+            buffer.clear();
+            let mut writer = buffer.writer();
+            codec.write(&mut writer, &x).unwrap();
+
+            println!("{:?}", x);
+            println!("{:?}", writer);
+
+            let mut reader = buffer.reader();
+            let y: ZBuf = codec.read(&mut reader).unwrap();
+            println!("{:?}", y);
+            println!("{:?}", reader);
+            println!("Remaining: {}", reader.remaining());
+            assert!(!reader.can_read());
+
+            assert_eq!(x, y);
+        }
     }
 }

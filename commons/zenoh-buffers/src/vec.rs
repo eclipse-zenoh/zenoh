@@ -72,7 +72,7 @@ impl BacktrackableWriter for &mut Vec<u8> {
 }
 
 // Reader
-impl<'a> HasReader for &'a Vec<u8> {
+impl<'a> HasReader<'a> for &'a Vec<u8> {
     type Reader = &'a [u8];
 
     fn reader(self) -> Self::Reader {

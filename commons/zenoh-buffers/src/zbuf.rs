@@ -148,7 +148,7 @@ pub struct ZBufReader<'a> {
     cursor: ZBufPos,
 }
 
-impl<'a> HasReader for &'a ZBuf {
+impl<'a> HasReader<'a> for &'a ZBuf {
     type Reader = ZBufReader<'a>;
 
     fn reader(self) -> Self::Reader {
@@ -159,7 +159,7 @@ impl<'a> HasReader for &'a ZBuf {
     }
 }
 
-impl<'a> Reader for ZBufReader<'a> {
+impl<'a, 'b: 'a> Reader<'a> for ZBufReader<'b> {
     fn read(&mut self, mut into: &mut [u8]) -> Result<usize, DidntRead> {
         let mut read = 0;
         let slices = self.inner.slices.as_ref();
@@ -222,28 +222,15 @@ impl<'a> Reader for ZBufReader<'a> {
             - self.cursor.byte
     }
 
-    type ZSliceIterator = ZBufSliceIterator<'a>;
-    fn read_zslices(&mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
+    type ZSliceIterator = ZBufSliceIterator<'a, 'b>;
+    fn read_zslices(&'a mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead> {
         if self.remaining() < len {
             return Err(DidntRead);
         }
 
-        let Self { inner, cursor } = *self;
-        let mut remaining = (len + cursor.byte) as isize;
-        let mut end = cursor;
-        for slice in &self.inner.slices.as_ref()[cursor.slice..] {
-            remaining -= slice.len() as isize;
-            if remaining <= 0 {
-                end.byte = (slice.len() as isize + remaining) as usize;
-                return Ok(ZBufSliceIterator { inner, cursor, end });
-            } else {
-                end.slice += 1
-            }
-        }
         Ok(ZBufSliceIterator {
-            inner,
-            cursor,
-            end: cursor,
+            reader: self,
+            remaining: len,
         })
     }
 
@@ -278,38 +265,36 @@ impl<'a> Reader for ZBufReader<'a> {
 }
 
 // ZSlice iterator
-pub struct ZBufSliceIterator<'a> {
-    inner: &'a ZBuf,
-    cursor: ZBufPos,
-    end: ZBufPos,
+pub struct ZBufSliceIterator<'a, 'b> {
+    reader: &'a mut ZBufReader<'b>,
+    remaining: usize,
 }
 
-impl Iterator for ZBufSliceIterator<'_> {
+impl Iterator for ZBufSliceIterator<'_, '_> {
     type Item = ZSlice;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.cursor.slice > self.end.slice {
+        if self.remaining == 0 {
             return None;
         }
-        let mut ret = self.inner.slices[self.cursor.slice].clone();
-        if self.cursor.slice == self.end.slice {
-            ret.end = ret.start + self.end.byte
+
+        let slice = &self.reader.inner.slices[self.reader.cursor.slice];
+        let slen = slice.len();
+        if slen <= self.remaining {
+            self.remaining -= slen;
+            self.reader.cursor.slice += 1;
+            self.reader.cursor.byte = 0;
+            Some(slice.clone())
+        } else {
+            self.reader.cursor.byte += self.remaining;
+            let slice = slice.new_sub_slice(0, self.remaining);
+            self.remaining = 0;
+            slice
         }
-        ret.start += self.cursor.byte;
-        self.cursor.slice += 1;
-        self.cursor.byte = 0;
-        Some(ret)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.len();
-        (len, Some(len))
-    }
-}
-
-impl ExactSizeIterator for ZBufSliceIterator<'_> {
-    fn len(&self) -> usize {
-        self.end.slice - self.cursor.slice + 1
+        (1, None)
     }
 }
 

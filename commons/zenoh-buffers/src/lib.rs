@@ -159,15 +159,14 @@ pub mod reader {
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
-
-    pub trait Reader {
+    pub trait Reader<'a> {
         fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
 
-        type ZSliceIterator: Iterator<Item = ZSlice> + ExactSizeIterator;
+        type ZSliceIterator: Iterator<Item = ZSlice> + 'a;
         /// Returns an iterator of ZSlices such that the sum of their length is _exactly_ `len`.
-        fn read_zslices(&mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead>;
+        fn read_zslices(&'a mut self, len: usize) -> Result<Self::ZSliceIterator, DidntRead>;
         /// Reads exactly `len` bytes, returning them as a single ZSlice.
         fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead>;
 
@@ -185,8 +184,8 @@ pub mod reader {
         }
     }
 
-    pub trait HasReader {
-        type Reader: Reader;
+    pub trait HasReader<'a> {
+        type Reader: Reader<'a>;
 
         /// Returns the most appropriate reader for `self`
         fn reader(self) -> Self::Reader;

@@ -40,7 +40,7 @@ use zenoh_buffers::{
 //     }
 // }
 
-// impl<R> RCodec<&mut R, ScoutingMessage> for Zenoh060
+// impl<'a, R> RCodec<&'a mut R, ScoutingMessage> for Zenoh060
 // where
 //     R: Reader,
 // {
