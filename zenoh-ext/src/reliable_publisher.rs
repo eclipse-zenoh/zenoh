@@ -11,18 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::future::Ready;
-use std::sync::atomic::{AtomicU64, Ordering};
-use zenoh::buffers::WBuf;
-use zenoh::prelude::r#async::*;
-use zenoh::publication::{Publication, Publisher};
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
-use zenoh_protocol::io::WBufCodec;
-use zenoh_util::core::ResolveFuture;
+#[zenoh_core::unstable]
+use {
+    std::future::Ready,
+    std::sync::atomic::{AtomicU64, Ordering},
+    zenoh::buffers::WBuf,
+    zenoh::prelude::r#async::*,
+    zenoh::publication::{Publication, Publisher},
+    zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve},
+    zenoh_protocol::io::WBufCodec,
+    zenoh_util::core::ResolveFuture,
+};
 
+#[zenoh_core::unstable]
 use crate::{ReliabilityCache, SessionExt};
 
 /// The builder of ReliablePublisher, allowing to configure it.
+#[zenoh_core::unstable]
 pub struct ReliablePublisherBuilder<'a, 'b> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -31,6 +36,7 @@ pub struct ReliablePublisherBuilder<'a, 'b> {
     resources_limit: Option<usize>,
 }
 
+#[zenoh_core::unstable]
 impl<'a, 'b> ReliablePublisherBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
@@ -64,16 +70,19 @@ impl<'a, 'b> ReliablePublisherBuilder<'a, 'b> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> Resolvable for ReliablePublisherBuilder<'a, '_> {
     type To = ZResult<ReliablePublisher<'a>>;
 }
 
+#[zenoh_core::unstable]
 impl SyncResolve for ReliablePublisherBuilder<'_, '_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         ReliablePublisher::new(self)
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> AsyncResolve for ReliablePublisherBuilder<'a, '_> {
     type Future = Ready<Self::To>;
 
@@ -82,6 +91,7 @@ impl<'a> AsyncResolve for ReliablePublisherBuilder<'a, '_> {
     }
 }
 
+#[zenoh_core::unstable]
 pub struct ReliablePublisher<'a> {
     _id: ZenohId,
     _seqnum: AtomicU64,
@@ -89,6 +99,7 @@ pub struct ReliablePublisher<'a> {
     _cache: Option<ReliabilityCache<'a>>,
 }
 
+#[zenoh_core::unstable]
 impl<'a> ReliablePublisher<'a> {
     fn new(conf: ReliablePublisherBuilder<'a, '_>) -> ZResult<Self> {
         let key_expr = conf.pub_key_expr?;

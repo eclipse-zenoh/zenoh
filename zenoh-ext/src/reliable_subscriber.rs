@@ -11,26 +11,30 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_trait::async_trait;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::future::Ready;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use zenoh::buffers::reader::{HasReader, Reader};
-use zenoh::buffers::ZBuf;
-use zenoh::handlers::{locked, DefaultHandler};
-use zenoh::prelude::r#async::*;
-use zenoh::query::{QueryTarget, Reply, ReplyKeyExpr};
-use zenoh::subscriber::{Reliability, Subscriber};
-use zenoh::Result as ZResult;
-use zenoh_collections::timer::Timer;
-use zenoh_collections::{Timed, TimedEvent};
-use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::io::ZBufCodec;
+#[zenoh_core::unstable]
+use {
+    async_trait::async_trait,
+    std::collections::hash_map::Entry,
+    std::collections::HashMap,
+    std::convert::TryFrom,
+    std::future::Ready,
+    std::sync::{Arc, Mutex},
+    std::time::Duration,
+    zenoh::buffers::reader::{HasReader, Reader},
+    zenoh::buffers::ZBuf,
+    zenoh::handlers::{locked, DefaultHandler},
+    zenoh::prelude::r#async::*,
+    zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
+    zenoh::subscriber::{Reliability, Subscriber},
+    zenoh::Result as ZResult,
+    zenoh_collections::timer::Timer,
+    zenoh_collections::{Timed, TimedEvent},
+    zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve},
+    zenoh_protocol::io::ZBufCodec,
+};
 
 /// The builder of ReliableSubscriber, allowing to configure it.
+#[zenoh_core::unstable]
 pub struct ReliableSubscriberBuilder<'b, Handler> {
     session: Arc<Session>,
     key_expr: ZResult<KeyExpr<'b>>,
@@ -43,6 +47,7 @@ pub struct ReliableSubscriberBuilder<'b, Handler> {
     handler: Handler,
 }
 
+#[zenoh_core::unstable]
 impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
     pub(crate) fn new(
         session: Arc<Session>,
@@ -136,6 +141,8 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
         }
     }
 }
+
+#[zenoh_core::unstable]
 impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
@@ -210,6 +217,7 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a, Handler> Resolvable for ReliableSubscriberBuilder<'a, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample>,
@@ -218,6 +226,7 @@ where
     type To = ZResult<ReliableSubscriber<'a, Handler::Receiver>>;
 }
 
+#[zenoh_core::unstable]
 impl<Handler> SyncResolve for ReliableSubscriberBuilder<'_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -228,6 +237,7 @@ where
     }
 }
 
+#[zenoh_core::unstable]
 impl<Handler> AsyncResolve for ReliableSubscriberBuilder<'_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -239,28 +249,36 @@ where
         std::future::ready(self.res_sync())
     }
 }
+
+#[zenoh_core::unstable]
 struct InnerState {
     last_seq_num: Option<ZInt>,
     pending_queries: u64,
     pending_samples: HashMap<ZInt, Sample>,
 }
 
+#[zenoh_core::unstable]
 pub struct ReliableSubscriber<'a, Receiver> {
     _subscriber: Subscriber<'a, ()>,
     receiver: Receiver,
 }
+
+#[zenoh_core::unstable]
 impl<Receiver> std::ops::Deref for ReliableSubscriber<'_, Receiver> {
     type Target = Receiver;
     fn deref(&self) -> &Self::Target {
         &self.receiver
     }
 }
+
+#[zenoh_core::unstable]
 impl<Receiver> std::ops::DerefMut for ReliableSubscriber<'_, Receiver> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.receiver
     }
 }
 
+#[zenoh_core::unstable]
 fn handle_sample(
     states: &mut HashMap<ZenohId, InnerState>,
     wait: bool,
@@ -300,6 +318,7 @@ fn handle_sample(
     (id, new)
 }
 
+#[zenoh_core::unstable]
 fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
     match (start, end) {
         (Some(start), Some(end)) => format!("_sn={}..{}", start, end),
@@ -309,6 +328,7 @@ fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
     }
 }
 
+#[zenoh_core::unstable]
 #[derive(Clone)]
 struct PeriodicQuery {
     id: ZenohId,
@@ -320,6 +340,7 @@ struct PeriodicQuery {
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
+#[zenoh_core::unstable]
 impl PeriodicQuery {
     fn with_id(mut self, id: ZenohId) -> Self {
         self.id = id;
@@ -327,6 +348,7 @@ impl PeriodicQuery {
     }
 }
 
+#[zenoh_core::unstable]
 #[async_trait]
 impl Timed for PeriodicQuery {
     async fn run(&mut self) {
@@ -362,6 +384,7 @@ impl Timed for PeriodicQuery {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
     fn new<Handler>(conf: ReliableSubscriberBuilder<'a, Handler>) -> ZResult<Self>
     where
@@ -490,6 +513,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
     }
 }
 
+#[zenoh_core::unstable]
 #[derive(Clone)]
 struct InitialRepliesHandler {
     statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
@@ -497,6 +521,7 @@ struct InitialRepliesHandler {
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
+#[zenoh_core::unstable]
 impl Drop for InitialRepliesHandler {
     fn drop(&mut self) {
         let (states, wait) = &mut *zlock!(self.statesref);
@@ -518,6 +543,7 @@ impl Drop for InitialRepliesHandler {
     }
 }
 
+#[zenoh_core::unstable]
 #[derive(Clone)]
 struct RepliesHandler {
     id: ZenohId,
@@ -525,6 +551,7 @@ struct RepliesHandler {
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
 
+#[zenoh_core::unstable]
 impl Drop for RepliesHandler {
     fn drop(&mut self) {
         let (states, wait) = &mut *zlock!(self.statesref);

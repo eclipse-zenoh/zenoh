@@ -11,23 +11,27 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::channel::{bounded, Sender};
-use async_std::task;
-use futures::select;
-use futures::{FutureExt, StreamExt};
-use std::collections::{HashMap, VecDeque};
-use std::convert::TryInto;
-use std::future::Ready;
-use zenoh::buffers::reader::HasReader;
-use zenoh::prelude::r#async::*;
-use zenoh::queryable::{Query, Queryable};
-use zenoh::subscriber::FlumeSubscriber;
-use zenoh::Session;
-use zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
-use zenoh_protocol::io::ZBufCodec;
-use zenoh_util::core::ResolveFuture;
+#[zenoh_core::unstable]
+use {
+    async_std::channel::{bounded, Sender},
+    async_std::task,
+    futures::select,
+    futures::{FutureExt, StreamExt},
+    std::collections::{HashMap, VecDeque},
+    std::convert::TryInto,
+    std::future::Ready,
+    zenoh::buffers::reader::HasReader,
+    zenoh::prelude::r#async::*,
+    zenoh::queryable::{Query, Queryable},
+    zenoh::subscriber::FlumeSubscriber,
+    zenoh::Session,
+    zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve},
+    zenoh_protocol::io::ZBufCodec,
+    zenoh_util::core::ResolveFuture,
+};
 
 /// The builder of ReliabilityCache, allowing to configure it.
+#[zenoh_core::unstable]
 pub struct ReliabilityCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
@@ -38,6 +42,7 @@ pub struct ReliabilityCacheBuilder<'a, 'b, 'c> {
     resources_limit: Option<usize>,
 }
 
+#[zenoh_core::unstable]
 impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
         session: &'a Session,
@@ -93,16 +98,19 @@ impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> Resolvable for ReliabilityCacheBuilder<'a, '_, '_> {
     type To = ZResult<ReliabilityCache<'a>>;
 }
 
+#[zenoh_core::unstable]
 impl SyncResolve for ReliabilityCacheBuilder<'_, '_, '_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         ReliabilityCache::new(self)
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> AsyncResolve for ReliabilityCacheBuilder<'a, '_, '_> {
     type Future = Ready<Self::To>;
 
@@ -111,6 +119,7 @@ impl<'a> AsyncResolve for ReliabilityCacheBuilder<'a, '_, '_> {
     }
 }
 
+#[zenoh_core::unstable]
 fn decode_range(range: &str) -> (Option<ZInt>, Option<ZInt>) {
     let mut split = range.split("..");
     let start = split.next().and_then(|s| s.parse::<u64>().ok());
@@ -118,6 +127,7 @@ fn decode_range(range: &str) -> (Option<ZInt>, Option<ZInt>) {
     (start, end)
 }
 
+#[zenoh_core::unstable]
 fn sample_in_range(sample: &Sample, start: Option<ZInt>, end: Option<ZInt>) -> bool {
     if start.is_none() && end.is_none() {
         true
@@ -134,12 +144,14 @@ fn sample_in_range(sample: &Sample, start: Option<ZInt>, end: Option<ZInt>) -> b
     }
 }
 
+#[zenoh_core::unstable]
 pub struct ReliabilityCache<'a> {
     _sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
 
+#[zenoh_core::unstable]
 impl<'a> ReliabilityCache<'a> {
     fn new(conf: ReliabilityCacheBuilder<'a, '_, '_>) -> ZResult<ReliabilityCache<'a>> {
         let key_expr = conf.pub_key_expr?;
