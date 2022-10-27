@@ -154,16 +154,16 @@ pub use anyhow::anyhow;
 #[macro_export]
 macro_rules! zerror {
     (($errno:expr) $source: expr => $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno)).set_source($source)
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8)).set_source($source)
     };
     (($errno:expr) $t: literal) => {
-        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::new($errno))
+        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
     };
     (($errno:expr) $t: expr) => {
-        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::new($errno))
+        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
     };
     (($errno:expr) $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno))
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
     };
     ($source: expr => $($t: tt)*) => {
         $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::MIN).set_source($source)
