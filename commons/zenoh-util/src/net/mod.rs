@@ -405,8 +405,5 @@ pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
         .map(|x| IpAddr::V6(*x));
 
     // Extend
-    ipv4_iter
-        .chain(nll_addrs)
-        .chain(yll_addrs)
-        .collect()
+    ipv4_iter.chain(nll_addrs).chain(yll_addrs).collect()
 }
