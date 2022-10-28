@@ -13,6 +13,7 @@
 //
 use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
+use async_std::prelude::FutureExt;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -35,6 +36,7 @@ const SEND_BUF_INITIAL_SIZE: usize = 8;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+const CONNECTION_TIMEOUT: Duration = Duration::from_millis(10_000);
 const CONNECTION_RETRY_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const CONNECTION_RETRY_MAX_PERIOD: Duration = Duration::from_millis(4_000);
 const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u32 = 2;
@@ -102,9 +104,15 @@ impl Runtime {
             }
             _ => {
                 for locator in &peers {
-                    match self.manager().open_transport(locator.clone()).await {
-                        Ok(_) => return Ok(()),
-                        Err(err) => log::warn!("Unable to connect to {}! {}", locator, err),
+                    match self
+                        .manager()
+                        .open_transport(locator.clone())
+                        .timeout(CONNECTION_TIMEOUT)
+                        .await
+                    {
+                        Ok(Ok(_)) => return Ok(()),
+                        Ok(Err(e)) => log::warn!("Unable to connect to {}! {}", locator, e),
+                        Err(e) => log::warn!("Unable to connect to {}! {}", locator, e),
                     }
                 }
                 let e = zerror!("Unable to connect to any of {:?}! ", peers);
@@ -481,8 +489,13 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self.manager().open_transport(endpoint).await {
-                Ok(transport) => {
+            match self
+                .manager()
+                .open_transport(endpoint)
+                .timeout(CONNECTION_TIMEOUT)
+                .await
+            {
+                Ok(Ok(transport)) => {
                     log::debug!("Successfully connected to configured peer {}", peer);
                     if let Some(orch_transport) = transport
                         .get_callback()
@@ -494,6 +507,14 @@ impl Runtime {
                         *zwrite!(orch_transport.endpoint) = Some(peer);
                     }
                     break;
+                }
+                Ok(Err(e)) => {
+                    log::debug!(
+                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                        peer,
+                        e,
+                        delay
+                    );
                 }
                 Err(e) => {
                     log::debug!(
@@ -597,8 +618,14 @@ impl Runtime {
     async fn connect(&self, locators: &[Locator]) -> Option<TransportUnicast> {
         for locator in locators {
             let endpoint = locator.clone().into();
-            match self.manager().open_transport(endpoint).await {
-                Ok(transport) => return Some(transport),
+            match self
+                .manager()
+                .open_transport(endpoint)
+                .timeout(CONNECTION_TIMEOUT)
+                .await
+            {
+                Ok(Ok(transport)) => return Some(transport),
+                Ok(Err(e)) => log::trace!("Unable to connect to {}! {}", locator, e),
                 Err(e) => log::trace!("Unable to connect to {}! {}", locator, e),
             }
         }
