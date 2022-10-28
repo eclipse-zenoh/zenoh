@@ -20,6 +20,7 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
@@ -490,32 +491,23 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         for (key, value) in guard.iter() {
             let listener_locator = &value.endpoint.locator;
             let (kip, kpt) = (key.ip(), key.port());
+
             // Either ipv4/0.0.0.0 or ipv6/[::]
             if kip.is_unspecified() {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(mut ipaddrs) => {
-                        let iter = ipaddrs
-                            .drain(..)
-                            .filter(|x| {
-                                ((kip.is_ipv4() && x.is_ipv4()) || kip.is_ipv6())
-                                    && !x.is_loopback()
-                                    && !x.is_multicast()
-                            })
-                            .map(|x| {
-                                let mut l =
-                                    Locator::new(UDP_LOCATOR_PREFIX, &SocketAddr::new(x, kpt));
-                                l.metadata = listener_locator.metadata.clone();
-                                l
-                            });
-                        locators.extend(iter);
-                    }
-                    Err(err) => log::error!("Unable to get local addresses: {}", err),
-                }
+                let mut addrs = match kip {
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                };
+                let iter = addrs.drain(..).map(|x| {
+                    let mut l = Locator::new(UDP_LOCATOR_PREFIX, &SocketAddr::new(x, kpt));
+                    l.metadata = listener_locator.metadata.clone();
+                    l
+                });
+                locators.extend(iter);
             } else {
                 locators.push(listener_locator.clone());
             }
         }
-        std::mem::drop(guard);
 
         locators
     }
