@@ -385,7 +385,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             if forbidden == b'$' {
                 if let Some(b'*') = bytes.get(index + 1) {
                     if let Some(b'$') = bytes.get(index + 2) {
-                        bail!((KeyExprConstructionError:: DollarAfterDollarOrStar)
+                        bail!((KeyExprConstructionError::DollarAfterDollarOrStar)
                             "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
                             value
                         )
