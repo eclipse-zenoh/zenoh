@@ -430,6 +430,32 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
     }
 }
 
+fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<Resource>) {
+    if !tables.full_net(WhatAmI::Peer)
+        && res.context().router_subs.len() == 1
+        && res.context().router_subs.contains(&tables.zid)
+    {
+        for mut face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            if face.whatami == WhatAmI::Peer
+                && face.local_subs.contains(res)
+                && !res.session_ctxs.values().any(|s| {
+                    face.zid != s.face.zid && s.subs.is_some() && s.face.whatami == WhatAmI::Client
+                })
+            {
+                let key_expr = Resource::get_best_key(res, "", face.id);
+                face.primitives.forget_subscriber(&key_expr, None);
+
+                get_mut_unchecked(&mut face).local_subs.remove(res);
+            }
+        }
+    }
+}
+
 fn propagate_forget_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
@@ -485,6 +511,8 @@ fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, 
         }
         propagate_forget_simple_subscription(tables, res);
     }
+
+    propagate_forget_simple_subscription_to_peers(tables, res);
 }
 
 fn undeclare_router_subscription(
@@ -597,6 +625,8 @@ pub(crate) fn undeclare_client_subscription(
         WhatAmI::Router => {
             if client_subs.is_empty() && !peer_subs {
                 undeclare_router_subscription(tables, None, res, &tables.zid.clone());
+            } else {
+                propagate_forget_simple_subscription_to_peers(tables, res);
             }
         }
         WhatAmI::Peer => {
@@ -647,13 +677,25 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     };
     match tables.whatami {
         WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client
-                || (face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
-            {
+            if face.whatami == WhatAmI::Client {
                 for sub in &tables.router_subs {
                     get_mut_unchecked(face).local_subs.insert(sub.clone());
                     let key_expr = Resource::decl_key(sub, face);
                     face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                }
+            } else if face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                for sub in &tables.router_subs {
+                    if sub.context.is_some()
+                        && (sub.context().router_subs.iter().any(|r| *r != tables.zid)
+                            || sub
+                                .session_ctxs
+                                .values()
+                                .any(|s| s.subs.is_some() && s.face.whatami == WhatAmI::Client))
+                    {
+                        get_mut_unchecked(face).local_subs.insert(sub.clone());
+                        let key_expr = Resource::decl_key(sub, face);
+                        face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                    }
                 }
             }
         }
