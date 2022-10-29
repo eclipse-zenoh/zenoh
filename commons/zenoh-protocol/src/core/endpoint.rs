@@ -12,12 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{
-    locators::{ArcProperties, Locator},
+    locator::{ArcProperties, Locator},
     split_once,
 };
 use zenoh_core::bail;
 
-use super::locators::{CONFIG_SEPARATOR, FIELD_SEPARATOR, LIST_SEPARATOR, METADATA_SEPARATOR};
+use super::locator::{CONFIG_SEPARATOR, FIELD_SEPARATOR, LIST_SEPARATOR, METADATA_SEPARATOR};
 
 use std::{
     convert::{TryFrom, TryInto},
@@ -119,5 +119,21 @@ impl FromStr for EndPoint {
             locator: l.parse()?,
             config: r.parse().ok(),
         })
+    }
+}
+
+impl EndPoint {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        // @TODO: equality for ArcProperties needs to be fixed
+        // if rng.gen_bool(0.5) {
+        //     config.push(CONFIG_SEPARATOR);
+        //     config.push_str(ArcProperties::rand().to_string().as_str());
+        // }
+
+        EndPoint {
+            locator: Locator::rand(),
+            config: None,
+        }
     }
 }

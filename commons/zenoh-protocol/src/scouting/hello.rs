@@ -13,7 +13,7 @@
 //
 use crate::core::{Locator, WhatAmI, ZenohId};
 use rand::Rng;
-use std::fmt;
+use std::{fmt, iter::FromIterator};
 
 /// # Hello message
 ///
@@ -92,10 +92,7 @@ impl Hello {
             None
         };
         let locators = if rng.gen_bool(0.5) {
-            Some(vec![
-                "tcp/1.2.3.4:1234".parse().unwrap(),
-                "tcp/5.6.7.8:5678".parse().unwrap(),
-            ])
+            Some(Vec::from_iter((1..5).into_iter().map(|_| Locator::rand())))
         } else {
             None
         };

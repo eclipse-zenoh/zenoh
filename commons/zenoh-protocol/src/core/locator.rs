@@ -12,8 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::split_once;
+use rand::Rng;
 use std::{
-    collections::HashMap, convert::TryFrom, hash::Hash, iter::FromIterator, str::FromStr, sync::Arc,
+    collections::HashMap, convert::TryFrom, fmt, hash::Hash, iter::FromIterator, str::FromStr,
+    sync::Arc,
 };
 use zenoh_core::bail;
 
@@ -24,6 +26,7 @@ pub const CONFIG_SEPARATOR: char = '#';
 pub const LIST_SEPARATOR: char = ';';
 pub const FIELD_SEPARATOR: char = '=';
 
+// Propertis
 #[derive(Debug, Clone, Eq)]
 pub struct ArcProperties(pub Arc<HashMap<String, String>>);
 impl std::ops::Deref for ArcProperties {
@@ -32,31 +35,37 @@ impl std::ops::Deref for ArcProperties {
         &self.0
     }
 }
+
 impl Hash for ArcProperties {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.0).hash(state);
     }
 }
+
 impl std::ops::DerefMut for ArcProperties {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
+
 impl PartialEq for ArcProperties {
     fn eq(&self, other: &Self) -> bool {
         Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
     }
 }
+
 impl From<Arc<HashMap<String, String>>> for ArcProperties {
     fn from(v: Arc<HashMap<String, String>>) -> Self {
         ArcProperties(v)
     }
 }
+
 impl From<HashMap<String, String>> for ArcProperties {
     fn from(v: HashMap<String, String>) -> Self {
         ArcProperties(Arc::new(v))
     }
 }
+
 impl ArcProperties {
     pub fn merge(&mut self, other: &Arc<HashMap<String, String>>) {
         if other.is_empty() {
@@ -69,6 +78,7 @@ impl ArcProperties {
         }
     }
 }
+
 impl FromStr for ArcProperties {
     type Err = ();
 
@@ -83,6 +93,7 @@ impl FromStr for ArcProperties {
         }
     }
 }
+
 impl Extend<(String, String)> for ArcProperties {
     fn extend<T: IntoIterator<Item = (String, String)>>(&mut self, iter: T) {
         let mut iter = iter.into_iter();
@@ -98,6 +109,42 @@ impl Extend<(String, String)> for ArcProperties {
     }
 }
 
+impl fmt::Display for ArcProperties {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut list = false;
+        for (k, v) in self.0.iter() {
+            if list {
+                write!(f, "{}", LIST_SEPARATOR)?;
+            }
+            write!(f, "{}{}{}", k, FIELD_SEPARATOR, v)?;
+            list = true;
+        }
+        Ok(())
+    }
+}
+
+impl ArcProperties {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        let mut rng = rand::thread_rng();
+
+        let iter = (MIN..rng.gen_range(MIN + 1..MAX)).into_iter().map(|_| {
+            let k = (MIN..MAX)
+                .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+                .collect::<String>();
+            let v = (MIN..MAX)
+                .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+                .collect::<String>();
+            (k, v)
+        });
+        Self(Arc::new(HashMap::from_iter(iter)))
+    }
+}
+
+// Locator
 /// A `String` that respects the [`Locator`] canon form: `<proto>/<address>?<metadata>`, such that `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
@@ -118,13 +165,7 @@ impl core::fmt::Display for Locator {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.inner)?;
         if let Some(meta) = &self.metadata {
-            let mut iter = meta.iter();
-            if let Some((k, v)) = iter.next() {
-                write!(f, "{}{}{}{}", METADATA_SEPARATOR, k, FIELD_SEPARATOR, v)?;
-            }
-            for (k, v) in iter {
-                write!(f, "{}{}{}{}", LIST_SEPARATOR, k, FIELD_SEPARATOR, v)?;
-            }
+            write!(f, "{}{}", METADATA_SEPARATOR, meta)?;
         }
         Ok(())
     }
@@ -279,12 +320,50 @@ impl<'a, T: Iterator<Item = (&'a str, V)> + Clone, V> HasCanonForm for T {
     }
 }
 
+pub type LocatorProtocol = str;
+
+impl Locator {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        let mut rng = rand::thread_rng();
+
+        let mut locator = String::new();
+
+        let proto = (MIN..MAX)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect::<String>();
+
+        locator.push_str(proto.as_str());
+        locator.push(PROTO_SEPARATOR);
+
+        let address = (MIN..MAX)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect::<String>();
+
+        locator.push_str(address.as_str());
+
+        // @TODO: equality for ArcProperties needs to be fixed
+        // if rng.gen_bool(0.5) {
+        //     locator.push(METADATA_SEPARATOR);
+        //     locator.push_str(ArcProperties::rand().to_string().as_str());
+        // }
+
+        Locator {
+            inner: locator,
+            metadata: None,
+        }
+    }
+}
+
 #[test]
 fn locators() {
-    Locator::from_str("udp/127.0.0.1").unwrap();
-    let locator = Locator::from_str("udp/127.0.0.1?hello=there;general=kenobi").unwrap();
+    Locator::from_str("udp/127.0.0.1:7447").unwrap();
+    let locator = Locator::from_str("udp/127.0.0.1:7447?hello=there;general=kenobi").unwrap();
     assert_eq!(locator.protocol(), "udp");
-    assert_eq!(locator.address(), "127.0.0.1");
+    assert_eq!(locator.address(), "127.0.0.1:7447");
     assert_eq!(
         ***locator.metadata().unwrap(),
         [("general", "kenobi"), ("hello", "there")]
@@ -293,5 +372,3 @@ fn locators() {
             .collect::<HashMap<String, String>>()
     );
 }
-
-pub type LocatorProtocol = str;

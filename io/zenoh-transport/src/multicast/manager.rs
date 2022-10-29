@@ -21,7 +21,7 @@ use zenoh_config::{Config, ZN_LINK_KEEP_ALIVE_DEFAULT, ZN_LINK_LEASE_DEFAULT};
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zerror, zlock, zparse};
 use zenoh_link::*;
-use zenoh_protocol::core::locators::LocatorProtocol;
+use zenoh_protocol::core::locator::LocatorProtocol;
 use zenoh_protocol::proto::tmsg;
 
 pub struct TransportManagerConfigMulticast {

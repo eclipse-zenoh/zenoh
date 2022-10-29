@@ -40,10 +40,8 @@ use zenoh_buffers::{
     writer::HasWriter,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{
-    common::Attachment,
-    core::{ZInt, ZenohId},
-};
+use zenoh_protocol::core::locator::ArcProperties;
+use zenoh_protocol::{common::*, core::*, scouting::*};
 
 macro_rules! run_single {
     ($type:ty, $rand:expr, $code:expr, $buff:expr) => {
@@ -77,6 +75,7 @@ macro_rules! run {
     };
 }
 
+// Core
 #[test]
 fn codec_zint() {
     run!(ZInt, thread_rng().gen::<ZInt>());
@@ -95,9 +94,26 @@ fn codec_zbuf() {
     );
 }
 
+// #[test]
+// fn codec_endpoint() {
+//     run!(EndPoint, EndPoint::rand());
+// }
+
+#[test]
+fn codec_locator() {
+    run!(Locator, Locator::rand());
+}
+
+// Common
 #[test]
 fn codec_attachment() {
     run!(Attachment, Attachment::rand());
+}
+
+// Scouting
+#[test]
+fn codec_hello() {
+    run!(Hello, Hello::rand());
 }
 
 // macro_rules! gen {

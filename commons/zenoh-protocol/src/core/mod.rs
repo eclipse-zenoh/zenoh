@@ -51,10 +51,10 @@ pub use wire_expr::WireExpr;
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 
-pub mod locators;
-pub use locators::Locator;
-pub mod endpoints;
-pub use endpoints::EndPoint;
+pub mod locator;
+pub use locator::Locator;
+pub mod endpoint;
+pub use endpoint::EndPoint;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
