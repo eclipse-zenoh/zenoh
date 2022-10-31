@@ -11,129 +11,349 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{
-    locator::{ArcProperties, Locator},
-    split_once,
-};
-use zenoh_core::bail;
+use super::locator::*;
+use crate::core::split_once;
+use std::{convert::TryFrom, fmt, str::FromStr};
+use zenoh_core::{zerror, Error as ZError};
 
-use super::locator::{CONFIG_SEPARATOR, FIELD_SEPARATOR, LIST_SEPARATOR, METADATA_SEPARATOR};
+// Parsing chars
+pub const PROTO_SEPARATOR: char = '/';
+pub const METADATA_SEPARATOR: char = '?';
+pub const LIST_SEPARATOR: char = ';';
+pub const FIELD_SEPARATOR: char = '=';
+pub const CONFIG_SEPARATOR: char = '#';
 
-use std::{
-    convert::{TryFrom, TryInto},
-    iter::FromIterator,
-    str::FromStr,
-};
+pub(super) fn protocol(s: &str) -> &str {
+    let pdix = s.find(PROTO_SEPARATOR).unwrap_or(s.len());
+    &s[..pdix]
+}
+
+pub(super) fn address(s: &str) -> &str {
+    let pdix = s.find(PROTO_SEPARATOR).unwrap_or(s.len());
+    let midx = s.find(METADATA_SEPARATOR).unwrap_or(s.len());
+    let cidx = s.find(CONFIG_SEPARATOR).unwrap_or(s.len());
+    &s[pdix + 1..midx.min(cidx)]
+}
+
+pub(super) fn metadata(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    match s.find(METADATA_SEPARATOR) {
+        Some(midx) => {
+            let cidx = s.find(CONFIG_SEPARATOR).unwrap_or(s.len());
+            properties(&s[midx + 1..cidx])
+        }
+        None => properties(&s[s.len()..]),
+    }
+}
+
+pub(super) fn config(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    match s.find(CONFIG_SEPARATOR) {
+        Some(cidx) => properties(&s[cidx + 1..]),
+        None => properties(&s[s.len()..]),
+    }
+}
+
+pub fn properties(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    s.split(LIST_SEPARATOR).filter_map(|prop| {
+        if prop.is_empty() {
+            None
+        } else {
+            Some(split_once(prop, FIELD_SEPARATOR))
+        }
+    })
+}
 
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct EndPoint {
-    pub locator: Locator,
-    pub config: Option<ArcProperties>,
+    inner: String,
 }
-impl core::fmt::Display for EndPoint {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.locator)?;
-        if let Some(meta) = &self.config {
-            let mut iter = meta.iter();
-            if let Some((k, v)) = iter.next() {
-                write!(f, "{}{}{}{}", CONFIG_SEPARATOR, k, FIELD_SEPARATOR, v)?;
-            }
-            for (k, v) in iter {
-                write!(f, "{}{}{}{}", LIST_SEPARATOR, k, FIELD_SEPARATOR, v)?;
-            }
+
+impl EndPoint {
+    pub fn split(
+        &self,
+    ) -> (
+        &str,
+        &str,
+        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator,
+        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator,
+    ) {
+        (
+            self.protocol(),
+            self.address(),
+            self.metadata(),
+            self.config(),
+        )
+    }
+
+    pub fn protocol(&self) -> &str {
+        protocol(self.inner.as_str())
+    }
+
+    pub fn address(&self) -> &str {
+        address(self.inner.as_str())
+    }
+
+    pub fn metadata(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+        metadata(self.inner.as_str())
+    }
+
+    pub fn config(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+        config(self.inner.as_str())
+    }
+}
+
+impl From<EndPoint> for Locator {
+    fn from(mut val: EndPoint) -> Self {
+        if let Some(cidx) = val.inner.find(CONFIG_SEPARATOR) {
+            val.inner.truncate(cidx);
         }
-        Ok(())
+        Locator { inner: val.inner }
+    }
+}
+
+impl From<Locator> for EndPoint {
+    fn from(val: Locator) -> Self {
+        EndPoint { inner: val.inner }
+    }
+}
+
+impl fmt::Display for EndPoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.inner)
     }
 }
 impl From<EndPoint> for String {
     fn from(v: EndPoint) -> String {
-        v.to_string()
-    }
-}
-
-impl EndPoint {
-    #[must_use = "returns true on success"]
-    pub fn set_addr(&mut self, addr: &str) -> bool {
-        unsafe { std::mem::transmute::<_, &mut Locator>(self) }.set_addr(addr)
-    }
-    pub fn extend_configuration(&mut self, extension: impl IntoIterator<Item = (String, String)>) {
-        match self.config.is_some() {
-            true => match &mut self.config {
-                Some(config) => config.extend(extension),
-                None => unsafe { std::hint::unreachable_unchecked() },
-            },
-            false => {
-                self.config =
-                    Some(std::collections::HashMap::from_iter(extension.into_iter()).into())
-            }
-        }
-    }
-}
-impl From<EndPoint> for Locator {
-    fn from(val: EndPoint) -> Self {
-        val.locator
-    }
-}
-impl From<Locator> for EndPoint {
-    fn from(val: Locator) -> Self {
-        EndPoint {
-            locator: val,
-            config: None,
-        }
+        v.inner
     }
 }
 
 impl TryFrom<String> for EndPoint {
-    type Error = zenoh_core::Error;
-    fn try_from(mut value: String) -> Result<Self, Self::Error> {
-        let (l, r) = split_once(&value, CONFIG_SEPARATOR);
-        if r.contains(METADATA_SEPARATOR) {
-            bail!(
-                "{} is a forbidden character in endpoint metadata",
-                METADATA_SEPARATOR
-            );
+    type Error = ZError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        const ERR: &str =
+            "Endpoints must be of the form <protocol>/<address>[?<metadata>][#<config>]";
+
+        fn sort_hashmap(from: &str, into: &mut String) {
+            let mut from = from
+                .split(LIST_SEPARATOR)
+                .map(|p| split_once(p, FIELD_SEPARATOR))
+                .collect::<Vec<(&str, &str)>>();
+            from.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+
+            let mut first = true;
+            for (k, v) in from.iter() {
+                if !first {
+                    into.push(LIST_SEPARATOR);
+                }
+                into.push_str(k);
+                if !v.is_empty() {
+                    into.push(FIELD_SEPARATOR);
+                    into.push_str(v);
+                }
+                first = false;
+            }
         }
-        let config = r.parse().ok();
-        let locator_len = l.len();
-        value.truncate(locator_len);
-        Ok(EndPoint {
-            locator: value.try_into()?,
-            config,
-        })
+
+        let pidx = s
+            .find(PROTO_SEPARATOR)
+            .and_then(|i| (!s[..i].is_empty() && !s[i + 1..].is_empty()).then_some(i))
+            .ok_or_else(|| zerror!("{}", ERR))?;
+
+        match (s.find(METADATA_SEPARATOR), s.find(CONFIG_SEPARATOR)) {
+            // No metadata or config at all
+            (None, None) => Ok(EndPoint { inner: s }),
+            // There is some metadata
+            (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
+                let mut inner = String::with_capacity(s.len());
+                inner.push_str(&s[..midx + 1]); // Includes metadata separator
+                sort_hashmap(&s[midx + 1..], &mut inner);
+                Ok(EndPoint { inner })
+            }
+            // There is some config
+            (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
+                let mut inner = String::with_capacity(s.len());
+                inner.push_str(&s[..cidx + 1]); // Includes config separator
+                sort_hashmap(&s[cidx + 1..], &mut inner);
+                Ok(EndPoint { inner })
+            }
+            // There is some metadata and some config
+            (Some(midx), Some(cidx))
+                if midx > pidx
+                    && cidx > midx
+                    && !s[midx + 1..cidx].is_empty()
+                    && !s[cidx + 1..].is_empty() =>
+            {
+                let mut inner = String::with_capacity(s.len());
+                inner.push_str(&s[..midx + 1]); // Includes metadata separator
+
+                sort_hashmap(&s[midx + 1..cidx], &mut inner);
+
+                inner.push(CONFIG_SEPARATOR);
+                sort_hashmap(&s[cidx + 1..], &mut inner);
+
+                Ok(EndPoint { inner })
+            }
+            _ => Err(zerror!("{}", ERR).into()),
+        }
     }
 }
+
 impl FromStr for EndPoint {
-    type Err = zenoh_core::Error;
+    type Err = ZError;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (l, r) = split_once(s, CONFIG_SEPARATOR);
-        if r.contains(METADATA_SEPARATOR) {
-            bail!(
-                "{} is a forbidden character in endpoint metadata",
-                METADATA_SEPARATOR
-            );
-        }
-        Ok(EndPoint {
-            locator: l.parse()?,
-            config: r.parse().ok(),
-        })
+        Self::try_from(s.to_owned())
     }
 }
 
 impl EndPoint {
     #[doc(hidden)]
     pub fn rand() -> Self {
-        // @TODO: equality for ArcProperties needs to be fixed
-        // if rng.gen_bool(0.5) {
-        //     config.push(CONFIG_SEPARATOR);
-        //     config.push_str(ArcProperties::rand().to_string().as_str());
-        // }
+        use rand::{
+            distributions::{Alphanumeric, DistString},
+            rngs::ThreadRng,
+            Rng,
+        };
 
-        EndPoint {
-            locator: Locator::rand(),
-            config: None,
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        fn gen_hashmap(rng: &mut ThreadRng, endpoint: &mut String) {
+            let num = rng.gen_range(MIN..MAX);
+            for i in 0..num {
+                if i != 0 {
+                    endpoint.push(LIST_SEPARATOR);
+                }
+                let len = rng.gen_range(MIN..MAX);
+                let key = Alphanumeric.sample_string(rng, len);
+                endpoint.push_str(key.as_str());
+
+                endpoint.push(FIELD_SEPARATOR);
+
+                let len = rng.gen_range(MIN..MAX);
+                let value = Alphanumeric.sample_string(rng, len);
+                endpoint.push_str(value.as_str());
+            }
         }
+
+        let mut rng = rand::thread_rng();
+        let mut endpoint = String::new();
+
+        let len = rng.gen_range(MIN..MAX);
+        let proto = Alphanumeric.sample_string(&mut rng, len);
+        endpoint.push_str(proto.as_str());
+
+        endpoint.push(PROTO_SEPARATOR);
+
+        let len = rng.gen_range(MIN..MAX);
+        let address = Alphanumeric.sample_string(&mut rng, len);
+        endpoint.push_str(address.as_str());
+
+        if rng.gen_bool(0.5) {
+            endpoint.push(METADATA_SEPARATOR);
+            gen_hashmap(&mut rng, &mut endpoint);
+        }
+        if rng.gen_bool(0.5) {
+            endpoint.push(CONFIG_SEPARATOR);
+            gen_hashmap(&mut rng, &mut endpoint);
+        }
+
+        endpoint.parse().unwrap()
     }
+}
+
+#[test]
+fn endpoints() {
+    assert!(EndPoint::from_str("/").is_err());
+    assert!(EndPoint::from_str("?").is_err());
+    assert!(EndPoint::from_str("#").is_err());
+
+    assert!(EndPoint::from_str("udp").is_err());
+    assert!(EndPoint::from_str("/udp").is_err());
+    assert!(EndPoint::from_str("udp/").is_err());
+
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?").is_err());
+    assert!(EndPoint::from_str("udp?127.0.0.1:7447").is_err());
+    assert!(EndPoint::from_str("udp?127.0.0.1:7447/meta").is_err());
+
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447#").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?#").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447#?").is_err());
+    assert!(EndPoint::from_str("udp#127.0.0.1:7447/").is_err());
+    assert!(EndPoint::from_str("udp#127.0.0.1:7447/?").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?a=1#").is_err());
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
+    assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447");
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 0);
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?a=1;b=2").unwrap();
+    assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447?a=1;b=2");
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 2);
+    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
+    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
+    assert_eq!(endpoint.config().count(), 0);
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?b=2;a=1").unwrap();
+    assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447?a=1;b=2");
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 2);
+    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
+    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
+    assert_eq!(endpoint.config().count(), 0);
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#A=1;B=2").unwrap();
+    assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447#A=1;B=2");
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 0);
+    assert_eq!(endpoint.config().count(), 2);
+    endpoint.config().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#B=2;A=1").unwrap();
+    assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447#A=1;B=2");
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 0);
+    assert_eq!(endpoint.config().count(), 2);
+    endpoint.config().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?a=1;b=2#A=1;B=2").unwrap();
+    assert_eq!(
+        &format!("{}", endpoint),
+        "udp/127.0.0.1:7447?a=1;b=2#A=1;B=2"
+    );
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 2);
+    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
+    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
+    assert_eq!(endpoint.config().count(), 2);
+    endpoint.config().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+
+    let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?b=2;a=1#B=2;A=1").unwrap();
+    assert_eq!(
+        &format!("{}", endpoint),
+        "udp/127.0.0.1:7447?a=1;b=2#A=1;B=2"
+    );
+    assert_eq!(endpoint.protocol(), "udp");
+    assert_eq!(endpoint.address(), "127.0.0.1:7447");
+    assert_eq!(endpoint.metadata().count(), 2);
+    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
+    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
+    assert_eq!(endpoint.config().count(), 2);
+    endpoint.config().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().find(|x| x == &("B", "2")).unwrap();
 }

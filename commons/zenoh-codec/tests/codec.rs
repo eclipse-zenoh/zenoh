@@ -40,7 +40,6 @@ use zenoh_buffers::{
     writer::HasWriter,
 };
 use zenoh_codec::*;
-use zenoh_protocol::core::locator::ArcProperties;
 use zenoh_protocol::{common::*, core::*, scouting::*};
 
 macro_rules! run_single {
@@ -94,10 +93,10 @@ fn codec_zbuf() {
     );
 }
 
-// #[test]
-// fn codec_endpoint() {
-//     run!(EndPoint, EndPoint::rand());
-// }
+#[test]
+fn codec_endpoint() {
+    run!(EndPoint, EndPoint::rand());
+}
 
 #[test]
 fn codec_locator() {
@@ -114,6 +113,11 @@ fn codec_attachment() {
 #[test]
 fn codec_hello() {
     run!(Hello, Hello::rand());
+}
+
+#[test]
+fn codec_scout() {
+    run!(Scout, Scout::rand());
 }
 
 // macro_rules! gen {

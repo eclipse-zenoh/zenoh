@@ -36,3 +36,21 @@ pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
     pub zid_request: bool,
 }
+
+// Functions mainly used for testing
+impl Scout {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let what = if rng.gen_bool(0.5) {
+            Some(WhatAmIMatcher::rand())
+        } else {
+            None
+        };
+        let zid_request = rng.gen_bool(0.5);
+        Self { what, zid_request }
+    }
+}

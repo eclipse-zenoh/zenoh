@@ -87,7 +87,7 @@ impl Hello {
             None
         };
         let whatami = if rng.gen_bool(0.5) {
-            Some(WhatAmI::Peer)
+            Some(WhatAmI::rand())
         } else {
             None
         };

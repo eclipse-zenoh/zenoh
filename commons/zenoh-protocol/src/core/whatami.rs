@@ -36,6 +36,16 @@ impl std::str::FromStr for WhatAmI {
 }
 
 impl WhatAmI {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::prelude::SliceRandom;
+
+        let mut rng = rand::thread_rng();
+        *[WhatAmI::Router, WhatAmI::Peer, WhatAmI::Client]
+            .choose(&mut rng)
+            .unwrap()
+    }
+
     pub fn to_str(self) -> &'static str {
         match self {
             WhatAmI::Router => "router",
@@ -122,6 +132,14 @@ use std::{num::NonZeroU8, ops::BitOr};
 pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(rng.gen_range(128..136)) })
+    }
+
     pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
         let i = i.try_into().ok()?;
         if 127 < i && i < 136 {
