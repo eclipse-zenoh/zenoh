@@ -30,8 +30,6 @@ use rand::*;
 // use zenoh_protocol::core::{whatami::WhatAmIMatcher, *};
 
 const NUM_ITER: usize = 100;
-const PROPS_LENGTH: usize = 3;
-const PROP_MAX_SIZE: usize = 64;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
 use zenoh_buffers::ZBuf;

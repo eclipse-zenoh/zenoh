@@ -43,27 +43,3 @@ uhlc = "0.5.1"
 uuid = "1.2.1"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
-
-[dev-dependencies]
-criterion = "0.4.0"
-uuid = { version = "1.1.2", features = ["v4"] }
-
-[[bench]]
-name = "codec_bench"
-harness = false
-
-[[bench]]
-name = "rwbuf_bench"
-harness = false
-
-[[bench]]
-name = "data_creation"
-harness = false
-
-[[bench]]
-name = "frame_codec"
-harness = false
-
-[[bench]]
-name = "tables_bench"
-harness = false

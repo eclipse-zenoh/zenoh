@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod attachment;
 mod endpoint;
 mod locator;
 mod zbuf;

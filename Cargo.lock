@@ -3738,7 +3738,9 @@ dependencies = [
 name = "zenoh-codec"
 version = "0.6.0-beta.1"
 dependencies = [
+ "criterion",
  "rand 0.8.5",
+ "uuid",
  "zenoh-buffers",
  "zenoh-core",
  "zenoh-protocol",
@@ -4073,7 +4075,6 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.6.0-beta.1"
 dependencies = [
- "criterion",
  "hex",
  "lazy_static",
  "log",

@@ -33,3 +33,12 @@ rand = "0.8.5"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
 zenoh-protocol = { version = "0.6.0-beta.1", path = "../zenoh-protocol/" }
+
+
+[dev-dependencies]
+criterion = "0.4.0"
+uuid = { version = "1.1.2", features = ["v4"] }
+
+[[bench]]
+name = "codec"
+harness = false
