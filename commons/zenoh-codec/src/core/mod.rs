@@ -16,6 +16,7 @@ mod locator;
 mod zbuf;
 mod zenohid;
 mod zint;
+mod zslice;
 
 use crate::*;
 use zenoh_buffers::{
@@ -65,7 +66,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &[u8]) -> Self::Output {
-        self.write(&mut *writer, x.len())?;
+        zcwrite!(self, writer, x.len())?;
         writer.write_exact(x)
     }
 }
@@ -97,7 +98,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &str) -> Self::Output {
-        self.write(&mut *writer, x.as_bytes())
+        zcwrite!(self, writer, x.as_bytes())
     }
 }
 

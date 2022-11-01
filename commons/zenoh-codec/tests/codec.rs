@@ -13,32 +13,16 @@
 //
 
 use rand::*;
-// use std::convert::{TryFrom, TryInto};
-// use std::time::Duration;
-// use uhlc::Timestamp;
-// use zenoh_buffers::reader::HasReader;
-// use zenoh_buffers::writer::{BacktrackableWriter, HasWriter};
-// use zenoh_protocol::io::{WBuf, ZBuf};
-// use zenoh_protocol::io::{WBufCodec, ZBufCodec};
-// use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
-// use zenoh_protocol::proto::{
-//     Attachment, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-//     ForgetSubscriber, FramePayload, MessageReader, MessageWriter, Publisher, Queryable,
-//     ReplierInfo, ReplyContext, Resource, RoutingContext, Subscriber, TransportMessage,
-//     ZenohMessage,
-// };
-// use zenoh_protocol::core::{whatami::WhatAmIMatcher, *};
-
-const NUM_ITER: usize = 100;
-const MAX_PAYLOAD_SIZE: usize = 256;
-
-use zenoh_buffers::ZBuf;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
+    ZBuf,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{common::*, core::*, scouting::*};
+use zenoh_protocol::{common::*, core::*, scouting::*, transport::*};
+
+const NUM_ITER: usize = 100;
+const MAX_PAYLOAD_SIZE: usize = 256;
 
 macro_rules! run_single {
     ($type:ty, $rand:expr, $code:expr, $buff:expr) => {
@@ -116,6 +100,17 @@ fn codec_hello() {
 #[test]
 fn codec_scout() {
     run!(Scout, Scout::rand());
+}
+
+// Transport
+#[test]
+fn codec_init_syn() {
+    run!(InitSyn, InitSyn::rand());
+}
+
+#[test]
+fn codec_init_ack() {
+    run!(InitAck, InitAck::rand());
 }
 
 // macro_rules! gen {

@@ -49,9 +49,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &[EndPoint]) -> Self::Output {
-        self.write(&mut *writer, x.len())?;
+        zcwrite!(self, writer, x.len())?;
         for l in x {
-            self.write(&mut *writer, l)?;
+            zcwrite!(self, writer, l)?;
         }
         Ok(())
     }

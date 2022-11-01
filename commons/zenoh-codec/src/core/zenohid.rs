@@ -13,7 +13,7 @@ use std::convert::TryFrom;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::*;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -27,7 +27,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
-        self.write(&mut *writer, x.as_slice())
+        zcwrite!(self, writer, x.as_slice())
     }
 }
 

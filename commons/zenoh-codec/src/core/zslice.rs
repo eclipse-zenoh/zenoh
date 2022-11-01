@@ -15,34 +15,31 @@ use crate::*;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    SplitBuffer, ZBuf,
+    ZSlice,
 };
 
-impl<W> WCodec<&mut W, &ZBuf> for Zenoh060
+impl<W> WCodec<&mut W, ZSlice> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
+    fn write(self, writer: &mut W, x: ZSlice) -> Self::Output {
         zcwrite!(self, writer, x.len())?;
-        for s in x.zslices() {
-            writer.write_zslice(s)?;
-        }
+        writer.write_zslice(x)?;
         Ok(())
     }
 }
 
-impl<R> RCodec<&mut R, ZBuf> for Zenoh060
+impl<R> RCodec<&mut R, ZSlice> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<ZSlice, Self::Error> {
         let len: usize = self.read(&mut *reader)?;
-        let mut zbuf = ZBuf::default();
-        reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
-        Ok(zbuf)
+        let zslice = reader.read_zslice(len)?;
+        Ok(zslice)
     }
 }

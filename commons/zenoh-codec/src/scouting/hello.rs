@@ -43,20 +43,20 @@ where
         if x.locators.is_some() {
             header |= tmsg::flag::L;
         }
-        self.write(&mut *writer, header)?;
+        zcwrite!(self, writer, header)?;
 
         // Body
         if let Some(zid) = x.zid.as_ref() {
-            self.write(&mut *writer, zid)?;
+            zcwrite!(self, writer, zid)?;
         }
         if let Some(wai) = x.whatami {
             if wai != WhatAmI::Router {
                 let wai: ZInt = wai.into();
-                self.write(&mut *writer, wai)?;
+                zcwrite!(self, writer, wai)?;
             }
         }
         if let Some(locs) = x.locators.as_ref() {
-            self.write(&mut *writer, locs.as_slice())?;
+            zcwrite!(self, writer, locs.as_slice())?;
         }
         Ok(())
     }
@@ -89,19 +89,19 @@ where
         }
 
         let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
+            let zid: ZenohId = zcread!(self.codec, reader)?;
             Some(zid)
         } else {
             None
         };
         let whatami = if imsg::has_flag(self.header, tmsg::flag::W) {
-            let wai: ZInt = self.codec.read(&mut *reader)?;
+            let wai: ZInt = zcread!(self.codec, reader)?;
             WhatAmI::try_from(wai)
         } else {
             None
         };
         let locators = if imsg::has_flag(self.header, tmsg::flag::L) {
-            let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
+            let locs: Vec<Locator> = zcread!(self.codec, reader)?;
             Some(locs)
         } else {
             None

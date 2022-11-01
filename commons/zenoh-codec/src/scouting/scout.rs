@@ -38,13 +38,13 @@ where
         if x.what.is_some() {
             header |= tmsg::flag::W;
         }
-        self.write(&mut *writer, header)?;
+        zcwrite!(self, writer, header)?;
 
         // Body
         match x.what {
             Some(w) => {
                 let w: ZInt = w.into();
-                self.write(&mut *writer, w)
+                zcwrite!(self, writer, w)
             }
             None => Ok(()),
         }

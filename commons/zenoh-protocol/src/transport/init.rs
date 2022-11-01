@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{WhatAmI, ZInt, ZenohId};
+use crate::{
+    core::{WhatAmI, ZInt, ZenohId},
+    proto::defaults::SEQ_NUM_RES,
+};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
@@ -59,6 +62,34 @@ pub struct InitSyn {
     pub is_qos: bool,
 }
 
+// Functions mainly used for testing
+impl InitSyn {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let version: u8 = rng.gen();
+        let whatami = WhatAmI::rand();
+        let zid = ZenohId::default();
+        let sn_resolution = if rng.gen_bool(0.5) {
+            rng.gen()
+        } else {
+            SEQ_NUM_RES
+        };
+        let is_qos = rng.gen_bool(0.5);
+
+        Self {
+            version,
+            whatami,
+            zid,
+            sn_resolution,
+            is_qos,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitAck {
     pub whatami: WhatAmI,
@@ -66,4 +97,35 @@ pub struct InitAck {
     pub sn_resolution: Option<ZInt>,
     pub is_qos: bool,
     pub cookie: ZSlice,
+}
+
+// Functions mainly used for testing
+impl InitAck {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        const MIN: usize = 32;
+        const MAX: usize = 1_024;
+
+        let mut rng = rand::thread_rng();
+
+        let whatami = WhatAmI::rand();
+        let zid = ZenohId::default();
+        let sn_resolution = if rng.gen_bool(0.5) {
+            Some(rng.gen())
+        } else {
+            None
+        };
+        let is_qos = rng.gen_bool(0.5);
+        let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
+
+        Self {
+            whatami,
+            zid,
+            sn_resolution,
+            is_qos,
+            cookie,
+        }
+    }
 }
