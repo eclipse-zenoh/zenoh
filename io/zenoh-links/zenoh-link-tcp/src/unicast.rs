@@ -77,9 +77,9 @@ impl LinkUnicastTcp {
         LinkUnicastTcp {
             socket,
             src_addr,
-            src_locator: Locator::new(TCP_LOCATOR_PREFIX, &src_addr),
+            src_locator: Locator::new(TCP_LOCATOR_PREFIX, &src_addr, "").unwrap(),
             dst_addr,
-            dst_locator: Locator::new(TCP_LOCATOR_PREFIX, &dst_addr),
+            dst_locator: Locator::new(TCP_LOCATOR_PREFIX, &dst_addr, "").unwrap(),
         }
     }
 }

@@ -12,8 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod init;
+mod open;
 
 pub use init::*;
+pub use open::*;
+
+use crate::common::Attachment;
 
 pub mod tmsg {
     use crate::common::imsg;
@@ -109,4 +113,29 @@ pub mod tmsg {
         pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
         pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
     }
+}
+
+// Zenoh messages at zenoh-transport level
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransportBody {
+    InitSyn(InitSyn),
+    InitAck(InitAck),
+    OpenSyn(OpenSyn),
+    OpenAck(OpenAck),
+    // Join(Join),
+    // Close(Close),
+    // Sync(Sync),
+    // AckNack(AckNack),
+    // KeepAlive(KeepAlive),
+    // Ping(Ping),
+    // Pong(Pong),
+    // Frame(Frame),
+}
+
+#[derive(Debug, Clone)]
+pub struct TransportMessage {
+    pub body: TransportBody,
+    pub attachment: Option<Attachment>,
+    #[cfg(feature = "stats")]
+    pub size: Option<std::num::NonZeroUsize>,
 }

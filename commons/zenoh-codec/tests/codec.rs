@@ -113,6 +113,16 @@ fn codec_init_ack() {
     run!(InitAck, InitAck::rand());
 }
 
+#[test]
+fn codec_open_syn() {
+    run!(OpenSyn, OpenSyn::rand());
+}
+
+#[test]
+fn codec_open_ack() {
+    run!(OpenAck, OpenAck::rand());
+}
+
 // macro_rules! gen {
 //     ($name:ty) => {
 //         thread_rng().gen::<$name>()

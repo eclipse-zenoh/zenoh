@@ -13,7 +13,7 @@
 //
 use super::endpoint::*;
 use std::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
-use zenoh_core::Error as ZError;
+use zenoh_core::{Error as ZError, Result as ZResult};
 
 // Locator
 /// A `String` that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`,
@@ -26,6 +26,16 @@ pub struct Locator {
 }
 
 impl Locator {
+    pub fn new<A, B, C>(protocol: A, address: B, metadata: C) -> ZResult<Self>
+    where
+        A: AsRef<str>,
+        B: AsRef<str>,
+        C: AsRef<str>,
+    {
+        let ep = EndPoint::new(protocol, address, metadata, "")?;
+        Ok(ep.into())
+    }
+
     pub fn split(
         &self,
     ) -> (

@@ -453,7 +453,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                                 let mut l = Locator::new(
                                     QUIC_LOCATOR_PREFIX,
                                     &SocketAddr::new(ipaddr, key.port()),
-                                );
+                                    "",
+                                )
+                                .unwrap();
                                 l.metadata = value.endpoint.locator.metadata.clone();
                                 locators.push(l);
                             }

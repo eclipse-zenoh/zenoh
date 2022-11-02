@@ -12,31 +12,71 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod init;
-use zenoh_protocol::common::Attachment;
+mod open;
 
-// Zenoh messages at zenoh-transport level
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TransportBody {
-    // Scout(Scout),
-    // Hello(Hello),
-    // InitSyn(InitSyn),
-    // InitAck(InitAck),
-    // OpenSyn(OpenSyn),
-    // OpenAck(OpenAck),
-    // Join(Join),
-    // Close(Close),
-    // Sync(Sync),
-    // AckNack(AckNack),
-    // KeepAlive(KeepAlive),
-    // Ping(Ping),
-    // Pong(Pong),
-    // Frame(Frame),
+use crate::*;
+use zenoh_buffers::{
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
+};
+use zenoh_protocol::{
+    common::{imsg, Attachment},
+    transport::*,
+};
+
+// TransportMessage
+impl<W> WCodec<&mut W, &TransportMessage> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
+        if let Some(a) = x.attachment.as_ref() {
+            zcwrite!(self, writer, a)?;
+        }
+        match &x.body {
+            TransportBody::InitSyn(b) => zcwrite!(self, writer, b),
+            TransportBody::InitAck(b) => zcwrite!(self, writer, b),
+            TransportBody::OpenSyn(b) => zcwrite!(self, writer, b),
+            TransportBody::OpenAck(b) => zcwrite!(self, writer, b),
+        }
+    }
 }
 
-#[derive(Debug, Clone)]
-pub struct TransportMessage {
-    pub body: TransportBody,
-    pub attachment: Option<Attachment>,
-    #[cfg(feature = "stats")]
-    pub size: Option<std::num::NonZeroUsize>,
+impl<R> RCodec<&mut R, TransportMessage> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<TransportMessage, Self::Error> {
+        let mut codec = Zenoh060RCodec {
+            header: zcread!(self, reader)?,
+            ..Default::default()
+        };
+        let mut attachment: Option<Attachment> = None;
+        if imsg::mid(codec.header) == tmsg::id::ATTACHMENT {
+            let a: Attachment = zcread!(codec, reader)?;
+            attachment = Some(a);
+            codec.header = zcread!(self, reader)?;
+        }
+        let body = match imsg::mid(codec.header) {
+            tmsg::id::INIT if !imsg::has_flag(codec.header, tmsg::flag::A) => {
+                TransportBody::InitSyn(zcread!(codec, reader)?)
+            }
+            tmsg::id::INIT if imsg::has_flag(codec.header, tmsg::flag::A) => {
+                TransportBody::InitAck(zcread!(codec, reader)?)
+            }
+            tmsg::id::OPEN if !imsg::has_flag(codec.header, tmsg::flag::A) => {
+                TransportBody::OpenSyn(zcread!(codec, reader)?)
+            }
+            tmsg::id::OPEN if imsg::has_flag(codec.header, tmsg::flag::A) => {
+                TransportBody::OpenAck(zcread!(codec, reader)?)
+            }
+            _ => return Err(DidntRead),
+        };
+
+        Ok(TransportMessage { body, attachment })
+    }
 }

@@ -14,7 +14,7 @@
 use super::locator::*;
 use crate::core::split_once;
 use std::{convert::TryFrom, fmt, str::FromStr};
-use zenoh_core::{zerror, Error as ZError};
+use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
@@ -71,6 +71,31 @@ pub struct EndPoint {
 }
 
 impl EndPoint {
+    pub fn new<A, B, C, D>(protocol: A, address: B, metadata: C, config: D) -> ZResult<Self>
+    where
+        A: AsRef<str>,
+        B: AsRef<str>,
+        C: AsRef<str>,
+        D: AsRef<str>,
+    {
+        let p: &str = protocol.as_ref();
+        let a: &str = address.as_ref();
+        let m: &str = metadata.as_ref();
+        let c: &str = config.as_ref();
+
+        let s = match (m.is_empty(), c.is_empty()) {
+            (true, true) => format!("{}{}{}", p, PROTO_SEPARATOR, a),
+            (false, true) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m),
+            (true, false) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, CONFIG_SEPARATOR, c),
+            (false, false) => format!(
+                "{}{}{}{}{}{}{}",
+                p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m, CONFIG_SEPARATOR, c
+            ),
+        };
+
+        s.parse()
+    }
+
     pub fn split(
         &self,
     ) -> (
