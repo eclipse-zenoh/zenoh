@@ -14,11 +14,13 @@
 mod close;
 mod init;
 mod join;
+mod keepalive;
 mod open;
 
 pub use close::*;
 pub use init::*;
 pub use join::*;
+pub use keepalive::*;
 pub use open::*;
 
 use crate::common::Attachment;
@@ -128,7 +130,7 @@ pub enum TransportBody {
     OpenAck(OpenAck),
     Join(Join),
     Close(Close),
-    // KeepAlive(KeepAlive),
+    KeepAlive(KeepAlive),
     // Frame(Frame),
 }
 
@@ -154,13 +156,14 @@ impl TransportMessage {
             None
         };
 
-        let body = match rng.gen_range(0..6) {
+        let body = match rng.gen_range(0..7) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
             3 => TransportBody::OpenAck(OpenAck::rand()),
             4 => TransportBody::Join(Join::rand()),
             5 => TransportBody::Close(Close::rand()),
+            6 => TransportBody::KeepAlive(KeepAlive::rand()),
             _ => unreachable!(),
         };
 
