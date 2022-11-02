@@ -25,7 +25,7 @@ use zenoh_collections::SingleOrVec;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq)]
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
 }

@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod close;
 mod init;
 mod join;
 mod open;
 
+pub use close::*;
 pub use init::*;
 pub use join::*;
 pub use open::*;
@@ -125,15 +127,43 @@ pub enum TransportBody {
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
     Join(Join),
-    // Close(Close),
+    Close(Close),
     // KeepAlive(KeepAlive),
     // Frame(Frame),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
+}
+
+// Functions mainly used for testing
+impl TransportMessage {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let attachment = if rng.gen_bool(0.5) {
+            Some(Attachment::rand())
+        } else {
+            None
+        };
+
+        let body = match rng.gen_range(0..6) {
+            0 => TransportBody::InitSyn(InitSyn::rand()),
+            1 => TransportBody::InitAck(InitAck::rand()),
+            2 => TransportBody::OpenSyn(OpenSyn::rand()),
+            3 => TransportBody::OpenAck(OpenAck::rand()),
+            4 => TransportBody::Join(Join::rand()),
+            5 => TransportBody::Close(Close::rand()),
+            _ => unreachable!(),
+        };
+
+        Self { body, attachment }
+    }
 }

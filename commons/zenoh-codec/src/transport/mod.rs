@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod close;
 mod init;
 mod join;
 mod open;
@@ -42,6 +43,7 @@ where
             TransportBody::OpenSyn(b) => zcwrite!(self, writer, b),
             TransportBody::OpenAck(b) => zcwrite!(self, writer, b),
             TransportBody::Join(b) => zcwrite!(self, writer, b),
+            TransportBody::Close(b) => zcwrite!(self, writer, b),
         }
     }
 }
@@ -78,7 +80,8 @@ where
                     TransportBody::OpenAck(zcread!(codec, reader)?)
                 }
             }
-            tmsg::id::JOIN => TransportBody::OpenAck(zcread!(codec, reader)?),
+            tmsg::id::JOIN => TransportBody::Join(zcread!(codec, reader)?),
+            tmsg::id::CLOSE => TransportBody::Close(zcread!(codec, reader)?),
             _ => return Err(DidntRead),
         };
 

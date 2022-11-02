@@ -35,7 +35,7 @@ use zenoh_buffers::ZBuf;
 /// ~   Attachment  ~
 /// +---------------+
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attachment {
     pub buffer: ZBuf,
 }

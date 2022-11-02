@@ -128,6 +128,16 @@ fn codec_join() {
     run!(Join, Join::rand());
 }
 
+#[test]
+fn codec_close() {
+    run!(Close, Close::rand());
+}
+
+#[test]
+fn codec_transport() {
+    run!(TransportMessage, TransportMessage::rand());
+}
+
 // macro_rules! gen {
 //     ($name:ty) => {
 //         thread_rng().gen::<$name>()
