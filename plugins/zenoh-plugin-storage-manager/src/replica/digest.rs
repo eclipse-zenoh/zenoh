@@ -20,8 +20,8 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use std::string::ParseError;
 use std::time::Duration;
-use zenoh::time::Timestamp;
 use zenoh::key_expr::OwnedKeyExpr;
+use zenoh::time::Timestamp;
 
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct DigestConfig {
@@ -59,8 +59,8 @@ pub struct SubInterval {
 
 #[derive(new, Eq, PartialEq, Clone, Debug, Deserialize, Serialize, Hash)]
 pub struct LogEntry {
-    pub timestamp:Timestamp,
-    pub key:OwnedKeyExpr,
+    pub timestamp: Timestamp,
+    pub key: OwnedKeyExpr,
 }
 
 impl Ord for LogEntry {
@@ -295,7 +295,10 @@ impl Digest {
                 &subintervals
                     .get(&sub)
                     .unwrap()
-                    .content.clone().into_iter().collect::<Vec<LogEntry>>()
+                    .content
+                    .clone()
+                    .into_iter()
+                    .collect::<Vec<LogEntry>>(),
             );
 
             subintervals.get_mut(&sub).unwrap().checksum = checksum;
@@ -307,7 +310,8 @@ impl Digest {
                 &intervals
                     .get(&int)
                     .unwrap()
-                    .content.clone()
+                    .content
+                    .clone()
                     .into_iter()
                     .collect::<Vec<u64>>(),
                 &subintervals,
@@ -399,8 +403,11 @@ impl Digest {
         let mut subintervals_to_update = HashSet::new();
 
         for ts in content {
-            let subinterval =
-                Digest::get_subinterval(current.config.delta, ts.timestamp, current.config.sub_intervals);
+            let subinterval = Digest::get_subinterval(
+                current.config.delta,
+                ts.timestamp,
+                current.config.sub_intervals,
+            );
             subintervals_to_update.insert(subinterval);
             let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
             intervals_to_update.insert(interval);
@@ -458,8 +465,11 @@ impl Digest {
         let mut subintervals_to_update = HashSet::new();
 
         for entry in deleted_content {
-            let subinterval =
-                Digest::get_subinterval(current.config.delta, entry.timestamp, current.config.sub_intervals);
+            let subinterval = Digest::get_subinterval(
+                current.config.delta,
+                entry.timestamp,
+                current.config.sub_intervals,
+            );
             subintervals_to_update.insert(subinterval);
             let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
             intervals_to_update.insert(interval);
@@ -472,7 +482,11 @@ impl Digest {
                     .get_mut(&subinterval)
                     .unwrap()
                     .content
-                    .retain(|x| x.timestamp.get_time() != entry.timestamp.get_time() && x.timestamp.get_id() != entry.timestamp.get_id() && x.key != entry.key);
+                    .retain(|x| {
+                        x.timestamp.get_time() != entry.timestamp.get_time()
+                            && x.timestamp.get_id() != entry.timestamp.get_id()
+                            && x.key != entry.key
+                    });
                 subintervals_to_update.insert(subinterval);
             }
             if current.intervals.contains_key(&interval) {
@@ -732,11 +746,7 @@ impl Digest {
     }
 
     //return missing content in a subinterval
-    pub fn get_content_diff(
-        &self,
-        subinterval: u64,
-        content: Vec<LogEntry>,
-    ) -> Vec<LogEntry> {
+    pub fn get_content_diff(&self, subinterval: u64, content: Vec<LogEntry>) -> Vec<LogEntry> {
         if !self.subintervals.contains_key(&subinterval) {
             return content;
         }

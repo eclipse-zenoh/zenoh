@@ -199,8 +199,9 @@ impl Snapshotter {
         let latest_snapshot_time = replica_data.last_snapshot_time.read().await;
         let mut log = Vec::new();
         for (key, timestamp) in &*log_locked {
-            log.push(LogEntry{
-                timestamp: *timestamp, key: key.clone()
+            log.push(LogEntry {
+                timestamp: *timestamp,
+                key: key.clone(),
             });
         }
         let digest = Digest::create_digest(
@@ -243,13 +244,13 @@ impl Snapshotter {
             let mut log = replica_data.stable_log.write().await;
             let deleted = (*log).insert(key.clone(), ts);
             if deleted.is_some() {
-                deleted_content.insert(LogEntry{
-                    timestamp:deleted.unwrap(), key:key.clone()});
+                deleted_content.insert(LogEntry {
+                    timestamp: deleted.unwrap(),
+                    key: key.clone(),
+                });
             }
             drop(log);
-            new_stable_content.insert(LogEntry{
-                timestamp:ts, key
-            });
+            new_stable_content.insert(LogEntry { timestamp: ts, key });
         }
         let mut digest = replica_data.digest.write().await;
         let updated_digest = Digest::update_digest(
@@ -279,11 +280,15 @@ impl Snapshotter {
             } else {
                 let deleted = stable.insert(k.clone(), ts);
                 if deleted.is_some() {
-                    deleted_stable.insert(LogEntry{
-                        timestamp: deleted.unwrap(), key: k.clone()});
+                    deleted_stable.insert(LogEntry {
+                        timestamp: deleted.unwrap(),
+                        key: k.clone(),
+                    });
                 }
-                new_stable.insert(LogEntry{
-                    timestamp:ts, key:k});
+                new_stable.insert(LogEntry {
+                    timestamp: ts,
+                    key: k,
+                });
             }
         }
         drop(stable);

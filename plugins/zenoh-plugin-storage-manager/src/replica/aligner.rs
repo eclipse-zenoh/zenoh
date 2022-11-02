@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{Snapshotter, LogEntry};
+use super::{LogEntry, Snapshotter};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use flume::{Receiver, Sender};

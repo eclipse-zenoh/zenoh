@@ -260,10 +260,7 @@ impl AlignQueryable {
         digest.get_interval_content(intervals)
     }
 
-    async fn get_content(
-        &self,
-        subinterval: u64,
-    ) -> HashMap<u64, BTreeSet<LogEntry>> {
+    async fn get_content(&self, subinterval: u64) -> HashMap<u64, BTreeSet<LogEntry>> {
         let digest = self.snapshotter.get_digest().await;
         let mut subintervals = HashSet::new();
         subintervals.insert(subinterval);
