@@ -39,7 +39,7 @@ pub mod storage;
 
 pub use align_queryable::AlignQueryable;
 pub use aligner::Aligner;
-pub use digest::{Digest, DigestConfig, EraType};
+pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::{ReplicationInfo, Snapshotter};
 pub use storage::{ReplicationService, StorageService};
 

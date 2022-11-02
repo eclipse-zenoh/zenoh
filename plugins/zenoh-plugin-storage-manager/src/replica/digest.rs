@@ -21,6 +21,7 @@ use std::str::FromStr;
 use std::string::ParseError;
 use std::time::Duration;
 use zenoh::time::Timestamp;
+use zenoh::key_expr::OwnedKeyExpr;
 
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct DigestConfig {
@@ -32,7 +33,7 @@ pub struct DigestConfig {
 
 #[derive(Eq, PartialEq, Clone, Debug, Deserialize, Serialize)]
 pub struct Digest {
-    pub timestamp: zenoh::time::Timestamp,
+    pub timestamp: Timestamp,
     pub config: DigestConfig,
     pub checksum: u64,
     pub eras: HashMap<EraType, Interval>,
@@ -53,7 +54,25 @@ pub struct SubInterval {
     #[new(default)]
     pub checksum: u64,
     #[new(default)]
-    pub content: BTreeSet<zenoh::time::Timestamp>,
+    pub content: BTreeSet<LogEntry>,
+}
+
+#[derive(new, Eq, PartialEq, Clone, Debug, Deserialize, Serialize, Hash)]
+pub struct LogEntry {
+    pub timestamp:Timestamp,
+    pub key:OwnedKeyExpr,
+}
+
+impl Ord for LogEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.timestamp.cmp(&other.timestamp)
+    }
+}
+
+impl PartialOrd for LogEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(PartialEq, Eq, Hash, Ord, PartialOrd, Debug, Clone, Deserialize, Serialize)]
@@ -81,9 +100,9 @@ trait Checksum {
     fn format_content(&self) -> String;
 }
 
-impl Checksum for Timestamp {
+impl Checksum for LogEntry {
     fn format_content(&self) -> String {
-        format!("{}", self)
+        format!("{}-{}", self.timestamp, self.key)
     }
 }
 
@@ -112,9 +131,9 @@ impl Checksum for u64 {
 impl Digest {
     // Creates a digest from scratch when initializing the replica
     pub fn create_digest(
-        timestamp: zenoh::time::Timestamp,
+        timestamp: Timestamp,
         config: DigestConfig,
-        mut raw_log: Vec<Timestamp>,
+        mut raw_log: Vec<LogEntry>,
         latest_interval: u64,
     ) -> Digest {
         // sort log
@@ -135,7 +154,7 @@ impl Digest {
             HashMap::new(),
         );
         for entry in raw_log {
-            let sub = Digest::get_subinterval(config.delta, entry, config.sub_intervals);
+            let sub = Digest::get_subinterval(config.delta, entry.timestamp, config.sub_intervals);
             let interval = Digest::get_interval(sub, config.sub_intervals);
             let era = Digest::get_era(&config, latest_interval, interval);
 
@@ -145,7 +164,7 @@ impl Digest {
                 if !sub_content.is_empty() {
                     // compute checksum, store it for interval
                     let checksum = Digest::get_content_hash(
-                        &sub_content.iter().copied().collect::<Vec<Timestamp>>(),
+                        &sub_content.clone().into_iter().collect::<Vec<LogEntry>>(),
                     );
                     let s = SubInterval {
                         checksum,
@@ -192,7 +211,7 @@ impl Digest {
         }
         // close subinterval
         let checksum =
-            Digest::get_content_hash(&sub_content.iter().copied().collect::<Vec<Timestamp>>());
+            Digest::get_content_hash(&sub_content.clone().into_iter().collect::<Vec<LogEntry>>());
         let s = SubInterval {
             checksum,
             content: sub_content,
@@ -245,8 +264,8 @@ impl Digest {
         mut current: Digest,
         latest_interval: u64,
         last_snapshot_time: Timestamp,
-        new_content: HashSet<Timestamp>,
-        deleted_content: HashSet<Timestamp>,
+        new_content: HashSet<LogEntry>,
+        deleted_content: HashSet<LogEntry>,
     ) -> Digest {
         // push content in correct places
         let (mut current, mut subintervals_to_update, mut intervals_to_update, mut eras_to_update) =
@@ -276,10 +295,7 @@ impl Digest {
                 &subintervals
                     .get(&sub)
                     .unwrap()
-                    .content
-                    .iter()
-                    .copied()
-                    .collect::<Vec<Timestamp>>(),
+                    .content.clone().into_iter().collect::<Vec<LogEntry>>()
             );
 
             subintervals.get_mut(&sub).unwrap().checksum = checksum;
@@ -291,9 +307,8 @@ impl Digest {
                 &intervals
                     .get(&int)
                     .unwrap()
-                    .content
-                    .iter()
-                    .copied()
+                    .content.clone()
+                    .into_iter()
                     .collect::<Vec<u64>>(),
                 &subintervals,
             );
@@ -340,7 +355,7 @@ impl Digest {
     }
 
     // compute the checksum of a subinterval
-    fn get_subinterval_checksum(content: &[Timestamp]) -> u64 {
+    fn get_subinterval_checksum(content: &[LogEntry]) -> u64 {
         Digest::get_content_hash(content)
     }
 
@@ -376,7 +391,7 @@ impl Digest {
     // update the digest with new content
     fn update_new_content(
         current: &mut Digest,
-        content: HashSet<Timestamp>,
+        content: HashSet<LogEntry>,
         latest_interval: u64,
     ) -> (Digest, HashSet<u64>, HashSet<u64>, HashSet<EraType>) {
         let mut eras_to_update = HashSet::new();
@@ -385,7 +400,7 @@ impl Digest {
 
         for ts in content {
             let subinterval =
-                Digest::get_subinterval(current.config.delta, ts, current.config.sub_intervals);
+                Digest::get_subinterval(current.config.delta, ts.timestamp, current.config.sub_intervals);
             subintervals_to_update.insert(subinterval);
             let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
             intervals_to_update.insert(interval);
@@ -396,7 +411,7 @@ impl Digest {
                 .subintervals
                 .entry(subinterval)
                 .and_modify(|e| {
-                    e.content.insert(ts);
+                    e.content.insert(ts.clone());
                 })
                 .or_insert(SubInterval {
                     checksum: 0,
@@ -435,7 +450,7 @@ impl Digest {
     // remove deleted content from the digest
     fn remove_deleted_content(
         current: &mut Digest,
-        deleted_content: HashSet<Timestamp>,
+        deleted_content: HashSet<LogEntry>,
         latest_interval: u64,
     ) -> (Digest, HashSet<u64>, HashSet<u64>, HashSet<EraType>) {
         let mut eras_to_update = HashSet::new();
@@ -444,7 +459,7 @@ impl Digest {
 
         for entry in deleted_content {
             let subinterval =
-                Digest::get_subinterval(current.config.delta, entry, current.config.sub_intervals);
+                Digest::get_subinterval(current.config.delta, entry.timestamp, current.config.sub_intervals);
             subintervals_to_update.insert(subinterval);
             let interval = Digest::get_interval(subinterval, current.config.sub_intervals);
             intervals_to_update.insert(interval);
@@ -457,7 +472,7 @@ impl Digest {
                     .get_mut(&subinterval)
                     .unwrap()
                     .content
-                    .retain(|&x| x.get_time() != entry.get_time() && x.get_id() != entry.get_id());
+                    .retain(|x| x.timestamp.get_time() != entry.timestamp.get_time() && x.timestamp.get_id() != entry.timestamp.get_id() && x.key != entry.key);
                 subintervals_to_update.insert(subinterval);
             }
             if current.intervals.contains_key(&interval) {
@@ -643,7 +658,7 @@ impl Digest {
     pub fn get_subinterval_content(
         &self,
         subintervals: HashSet<u64>,
-    ) -> HashMap<u64, BTreeSet<zenoh::time::Timestamp>> {
+    ) -> HashMap<u64, BTreeSet<LogEntry>> {
         let mut result = HashMap::new();
         for each in subintervals {
             result.insert(each, self.subintervals.get(&each).unwrap().content.clone());
@@ -706,8 +721,8 @@ impl Digest {
     // get missing content from a given list of subintervals
     pub fn get_full_content_diff(
         &self,
-        other_subintervals: HashMap<u64, Vec<zenoh::time::Timestamp>>,
-    ) -> Vec<zenoh::time::Timestamp> {
+        other_subintervals: HashMap<u64, Vec<LogEntry>>,
+    ) -> Vec<LogEntry> {
         let mut result = Vec::new();
         for (sub, content) in other_subintervals {
             let mut other = self.get_content_diff(sub, content.clone());
@@ -720,8 +735,8 @@ impl Digest {
     pub fn get_content_diff(
         &self,
         subinterval: u64,
-        content: Vec<zenoh::time::Timestamp>,
-    ) -> Vec<zenoh::time::Timestamp> {
+        content: Vec<LogEntry>,
+    ) -> Vec<LogEntry> {
         if !self.subintervals.contains_key(&subinterval) {
             return content;
         }

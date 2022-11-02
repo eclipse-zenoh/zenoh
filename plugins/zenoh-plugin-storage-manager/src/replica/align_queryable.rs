@@ -34,13 +34,13 @@ enum AlignComponent {
     Era(EraType),
     Intervals(Vec<u64>),
     Subintervals(Vec<u64>),
-    Contents(Vec<Timestamp>),
+    Contents(Vec<LogEntry>),
 }
 #[derive(Debug)]
 enum AlignData {
     Interval(u64, u64),
     Subinterval(u64, u64),
-    Content(u64, BTreeSet<Timestamp>),
+    Content(u64, BTreeSet<LogEntry>),
     Data(OwnedKeyExpr, (Value, Timestamp)),
 }
 
@@ -160,12 +160,12 @@ impl AlignQueryable {
             AlignComponent::Contents(contents) => {
                 let mut result = Vec::new();
                 for each in contents {
-                    let entry = self.get_entry_with_ts(each).await;
+                    let entry = self.get_entry(each.clone()).await;
                     if entry.is_some() {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
                             OwnedKeyExpr::from(entry.key_expr),
-                            (entry.value, each),
+                            (entry.value, each.timestamp),
                         ));
                     }
                 }
@@ -212,46 +212,36 @@ impl AlignQueryable {
 
 // replying queries
 impl AlignQueryable {
-    async fn get_entry_with_ts(&self, timestamp: Timestamp) -> Option<Sample> {
+    async fn get_entry(&self, logentry: LogEntry) -> Option<Sample> {
         // get corresponding key from log
-        let mut key = None;
-        let log = self.snapshotter.get_stable_log().await;
-        for (k, ts) in log {
-            if ts == timestamp {
-                key = Some(k.to_string());
-            }
-        }
-
-        if key.is_some() {
-            let replies = self.session.get(&key.unwrap()).res().await.unwrap();
-            if let Ok(reply) = replies.recv_async().await {
-                match reply.sample {
-                    Ok(sample) => {
-                        trace!(
-                            "[ALIGN QUERYABLE] Received ('{}': '{}')",
-                            sample.key_expr.as_str(),
-                            sample.value
-                        );
-                        if sample.timestamp.is_some() {
-                            match sample.timestamp.unwrap().cmp(&timestamp) {
-                                Ordering::Greater => return None,
-                                Ordering::Less => {
-                                    error!(
-                                        "[ALIGN QUERYABLE] Data in the storage is older than requested."
-                                    );
-                                    return None;
-                                }
-                                Ordering::Equal => return Some(sample),
+        let replies = self.session.get(&logentry.key).res().await.unwrap();
+        if let Ok(reply) = replies.recv_async().await {
+            match reply.sample {
+                Ok(sample) => {
+                    trace!(
+                        "[ALIGN QUERYABLE] Received ('{}': '{}')",
+                        sample.key_expr.as_str(),
+                        sample.value
+                    );
+                    if sample.timestamp.is_some() {
+                        match sample.timestamp.unwrap().cmp(&logentry.timestamp) {
+                            Ordering::Greater => return None,
+                            Ordering::Less => {
+                                error!(
+                                    "[ALIGN QUERYABLE] Data in the storage is older than requested."
+                                );
+                                return None;
                             }
+                            Ordering::Equal => return Some(sample),
                         }
                     }
-                    Err(err) => {
-                        error!(
-                            "[ALIGN QUERYABLE] Error when requesting storage: {:?}.",
-                            err
-                        );
-                        return None;
-                    }
+                }
+                Err(err) => {
+                    error!(
+                        "[ALIGN QUERYABLE] Error when requesting storage: {:?}.",
+                        err
+                    );
+                    return None;
                 }
             }
         }
@@ -273,7 +263,7 @@ impl AlignQueryable {
     async fn get_content(
         &self,
         subinterval: u64,
-    ) -> HashMap<u64, BTreeSet<zenoh::time::Timestamp>> {
+    ) -> HashMap<u64, BTreeSet<LogEntry>> {
         let digest = self.snapshotter.get_digest().await;
         let mut subintervals = HashSet::new();
         subintervals.insert(subinterval);
