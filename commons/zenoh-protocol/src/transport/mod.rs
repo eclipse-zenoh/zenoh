@@ -12,9 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod init;
+mod join;
 mod open;
 
 pub use init::*;
+pub use join::*;
 pub use open::*;
 
 use crate::common::Attachment;
@@ -122,13 +124,9 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
-    // Join(Join),
+    Join(Join),
     // Close(Close),
-    // Sync(Sync),
-    // AckNack(AckNack),
     // KeepAlive(KeepAlive),
-    // Ping(Ping),
-    // Pong(Pong),
     // Frame(Frame),
 }
 

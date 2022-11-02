@@ -123,6 +123,11 @@ fn codec_open_ack() {
     run!(OpenAck, OpenAck::rand());
 }
 
+#[test]
+fn codec_join() {
+    run!(Join, Join::rand());
+}
+
 // macro_rules! gen {
 //     ($name:ty) => {
 //         thread_rng().gen::<$name>()

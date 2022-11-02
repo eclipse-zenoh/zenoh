@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod init;
+mod join;
 mod open;
 
 use crate::*;
@@ -40,6 +41,7 @@ where
             TransportBody::InitAck(b) => zcwrite!(self, writer, b),
             TransportBody::OpenSyn(b) => zcwrite!(self, writer, b),
             TransportBody::OpenAck(b) => zcwrite!(self, writer, b),
+            TransportBody::Join(b) => zcwrite!(self, writer, b),
         }
     }
 }
@@ -62,18 +64,21 @@ where
             codec.header = zcread!(self, reader)?;
         }
         let body = match imsg::mid(codec.header) {
-            tmsg::id::INIT if !imsg::has_flag(codec.header, tmsg::flag::A) => {
-                TransportBody::InitSyn(zcread!(codec, reader)?)
+            tmsg::id::INIT => {
+                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+                    TransportBody::InitSyn(zcread!(codec, reader)?)
+                } else {
+                    TransportBody::InitAck(zcread!(codec, reader)?)
+                }
             }
-            tmsg::id::INIT if imsg::has_flag(codec.header, tmsg::flag::A) => {
-                TransportBody::InitAck(zcread!(codec, reader)?)
+            tmsg::id::OPEN => {
+                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+                    TransportBody::OpenSyn(zcread!(codec, reader)?)
+                } else {
+                    TransportBody::OpenAck(zcread!(codec, reader)?)
+                }
             }
-            tmsg::id::OPEN if !imsg::has_flag(codec.header, tmsg::flag::A) => {
-                TransportBody::OpenSyn(zcread!(codec, reader)?)
-            }
-            tmsg::id::OPEN if imsg::has_flag(codec.header, tmsg::flag::A) => {
-                TransportBody::OpenAck(zcread!(codec, reader)?)
-            }
+            tmsg::id::JOIN => TransportBody::OpenAck(zcread!(codec, reader)?),
             _ => return Err(DidntRead),
         };
 
