@@ -12,3 +12,4 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod attachment;
+mod priority;

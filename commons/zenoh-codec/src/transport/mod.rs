@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod close;
+mod frame;
 mod init;
 mod join;
 mod keepalive;
@@ -46,6 +47,7 @@ where
             TransportBody::Join(b) => zcwrite!(self, writer, b),
             TransportBody::Close(b) => zcwrite!(self, writer, b),
             TransportBody::KeepAlive(b) => zcwrite!(self, writer, b),
+            TransportBody::Frame(b) => zcwrite!(self, writer, b),
         }
     }
 }
@@ -85,6 +87,7 @@ where
             tmsg::id::JOIN => TransportBody::Join(zcread!(codec, reader)?),
             tmsg::id::CLOSE => TransportBody::Close(zcread!(codec, reader)?),
             tmsg::id::KEEP_ALIVE => TransportBody::KeepAlive(zcread!(codec, reader)?),
+            tmsg::id::PRIORITY | tmsg::id::FRAME => TransportBody::Frame(zcread!(codec, reader)?),
             _ => return Err(DidntRead),
         };
 

@@ -91,7 +91,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::INIT || imsg::has_flag(self.header, tmsg::flag::A) {
+        if imsg::mid(self.header) != tmsg::id::INIT || imsg::has_flag(self.header, tmsg::flag::A) {
             return Err(DidntRead);
         }
 

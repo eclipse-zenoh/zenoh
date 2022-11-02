@@ -139,6 +139,11 @@ fn codec_keep_alive() {
 }
 
 #[test]
+fn codec_frame() {
+    run!(Frame, Frame::rand());
+}
+
+#[test]
 fn codec_transport() {
     run!(TransportMessage, TransportMessage::rand());
 }

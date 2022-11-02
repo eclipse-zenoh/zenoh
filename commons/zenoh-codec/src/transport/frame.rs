@@ -1,0 +1,137 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+use crate::*;
+use zenoh_buffers::{
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
+};
+use zenoh_protocol::{
+    common::imsg,
+    core::{Channel, Priority, Reliability, ZInt},
+    transport::{tmsg, Frame, FramePayload},
+};
+
+impl<W> WCodec<&mut W, &Frame> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
+        // Decorator
+        if x.channel.priority != Priority::default() {
+            zcwrite!(self, writer, &x.channel.priority)?;
+        }
+
+        // Header
+        let mut header = tmsg::id::FRAME;
+        if let Reliability::Reliable = x.channel.reliability {
+            header |= tmsg::flag::R;
+        }
+        if let FramePayload::Fragment { is_final, .. } = x.payload {
+            header |= tmsg::flag::F;
+            if is_final {
+                header |= tmsg::flag::E;
+            }
+        }
+        zcwrite!(self, writer, header)?;
+
+        // Body
+        zcwrite!(self, writer, x.sn)?;
+        match &x.payload {
+            FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer.clone())?,
+            FramePayload::Messages {
+                // messages 
+                ..
+            } => {
+                // for m in messages.iter_mut() {
+                //     zcheck!(self.write_zenoh_message(m));
+                // }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<R> RCodec<&mut R, Frame> for Zenoh060
+where
+    R: Reader + std::fmt::Debug,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
+        let codec = Zenoh060RCodec {
+            header: zcread!(self, reader)?,
+            ..Default::default()
+        };
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<&mut R, Frame> for Zenoh060RCodec
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(mut self, reader: &mut R) -> Result<Frame, Self::Error> {
+        let mut priority = Priority::default();
+        if imsg::mid(self.header) == tmsg::id::PRIORITY {
+            // Decode priority
+            priority = zcread!(self, reader)?;
+            // Read next header
+            self.header = zcread!(self.codec, reader)?;
+        }
+
+        if imsg::mid(self.header) != tmsg::id::FRAME {
+            return Err(DidntRead);
+        }
+
+        let reliability = match imsg::has_flag(self.header, tmsg::flag::R) {
+            true => Reliability::Reliable,
+            false => Reliability::BestEffort,
+        };
+        let channel = Channel {
+            priority,
+            reliability,
+        };
+        let sn: ZInt = zcread!(self.codec, reader)?;
+
+        let payload = if imsg::has_flag(self.header, tmsg::flag::F) {
+            // A fragmented frame is not supposed to be followed by
+            // any other frame in the same batch. Read all the bytes.
+            let buffer = reader.read_zslice(reader.remaining())?;
+            let is_final = imsg::has_flag(self.header, tmsg::flag::E);
+            FramePayload::Fragment { buffer, is_final }
+        } else {
+            // let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
+            // while self.can_read() {
+            //     let pos = self.get_pos();
+            //     if let Some(msg) = self.read_zenoh_message(reliability) {
+            //         messages.push(msg);
+            //     } else {
+            //         self.set_pos(pos);
+            //         break;
+            //     }
+            // }
+            FramePayload::Messages { messages: vec![] }
+        };
+
+        Ok(Frame {
+            channel,
+            sn,
+            payload,
+        })
+    }
+}

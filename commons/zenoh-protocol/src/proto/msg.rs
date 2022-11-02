@@ -611,7 +611,7 @@ impl PartialOrd for DataInfo {
 /// +---------------+
 ///
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Data {
     pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,
@@ -1051,7 +1051,7 @@ impl Header for LinkStateList {
 
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZenohBody {
     Data(Data),
     Declare(Declare),
@@ -1061,7 +1061,7 @@ pub enum ZenohBody {
     LinkStateList(LinkStateList),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ZenohMessage {
     pub body: ZenohBody,
     pub channel: Channel,

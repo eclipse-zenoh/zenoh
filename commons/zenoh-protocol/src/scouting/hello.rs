@@ -50,27 +50,16 @@ use std::{fmt, iter::FromIterator};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hello {
     pub zid: Option<ZenohId>,
-    pub whatami: Option<WhatAmI>,
-    pub locators: Option<Vec<Locator>>,
+    pub whatami: WhatAmI,
+    pub locators: Vec<Locator>,
 }
 
 impl fmt::Display for Hello {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let what = match self.whatami {
-            Some(what) => what.to_str(),
-            None => WhatAmI::Router.to_str(),
-        };
-        let locators = match &self.locators {
-            Some(locators) => locators
-                .iter()
-                .map(|locator| locator.to_string())
-                .collect::<Vec<String>>(),
-            None => vec![],
-        };
         f.debug_struct("Hello")
             .field("zid", &self.zid)
-            .field("whatami", &what)
-            .field("locators", &locators)
+            .field("whatami", &self.whatami)
+            .field("locators", &self.locators)
             .finish()
     }
 }
@@ -86,15 +75,11 @@ impl Hello {
         } else {
             None
         };
-        let whatami = if rng.gen_bool(0.5) {
-            Some(WhatAmI::rand())
-        } else {
-            None
-        };
+        let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
-            Some(Vec::from_iter((1..5).into_iter().map(|_| Locator::rand())))
+            Vec::from_iter((1..5).into_iter().map(|_| Locator::rand()))
         } else {
-            None
+            vec![]
         };
         Self {
             zid,

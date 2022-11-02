@@ -108,7 +108,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Join, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::JOIN {
+        if imsg::mid(self.header) != tmsg::id::JOIN {
             return Err(DidntRead);
         }
 

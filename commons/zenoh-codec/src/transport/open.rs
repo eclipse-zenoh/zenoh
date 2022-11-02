@@ -143,7 +143,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::OPEN || !imsg::has_flag(self.header, tmsg::flag::A) {
+        if imsg::mid(self.header) != tmsg::id::OPEN || !imsg::has_flag(self.header, tmsg::flag::A) {
             return Err(DidntRead);
         }
 

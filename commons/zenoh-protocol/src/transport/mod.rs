@@ -12,12 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod close;
+mod frame;
 mod init;
 mod join;
 mod keepalive;
 mod open;
 
 pub use close::*;
+pub use frame::*;
 pub use init::*;
 pub use join::*;
 pub use keepalive::*;
@@ -131,7 +133,7 @@ pub enum TransportBody {
     Join(Join),
     Close(Close),
     KeepAlive(KeepAlive),
-    // Frame(Frame),
+    Frame(Frame),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,7 +158,7 @@ impl TransportMessage {
             None
         };
 
-        let body = match rng.gen_range(0..7) {
+        let body = match rng.gen_range(0..8) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
@@ -164,6 +166,7 @@ impl TransportMessage {
             4 => TransportBody::Join(Join::rand()),
             5 => TransportBody::Close(Close::rand()),
             6 => TransportBody::KeepAlive(KeepAlive::rand()),
+            7 => TransportBody::Frame(Frame::rand()),
             _ => unreachable!(),
         };
 

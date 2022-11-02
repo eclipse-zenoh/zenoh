@@ -66,7 +66,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::KEEP_ALIVE {
+        if imsg::mid(self.header) != tmsg::id::KEEP_ALIVE {
             return Err(DidntRead);
         }
 
