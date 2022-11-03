@@ -77,9 +77,9 @@ impl LinkUnicastTcp {
         LinkUnicastTcp {
             socket,
             src_addr,
-            src_locator: Locator::new(TCP_LOCATOR_PREFIX, &src_addr, "").unwrap(),
+            src_locator: Locator::new(TCP_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
-            dst_locator: Locator::new(TCP_LOCATOR_PREFIX, &dst_addr, "").unwrap(),
+            dst_locator: Locator::new(TCP_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
         }
     }
 }
@@ -220,7 +220,7 @@ impl LinkManagerUnicastTcp {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addr = get_tcp_addr(&endpoint.locator).await?;
+        let dst_addr = get_tcp_addr(endpoint.address()).await?;
 
         let stream = TcpStream::connect(dst_addr)
             .await
@@ -240,7 +240,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_tcp_addr(&endpoint.locator).await?;
+        let addr = get_tcp_addr(endpoint.address()).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr)
@@ -252,7 +252,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             .map_err(|e| zerror!("Can not create a new TCP listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
-        assert!(endpoint.set_addr(&format!("{}", local_addr)));
+        endpoint = EndPoint::new(
+            endpoint.protocol(),
+            &format!("{}", local_addr),
+            endpoint.metadata(),
+            endpoint.config(),
+        )?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -270,7 +275,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -279,7 +284,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_tcp_addr(&endpoint.locator).await?;
+        let addr = get_tcp_addr(endpoint.address()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -311,17 +316,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
+            let listener_locator = &value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     TCP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }
@@ -333,11 +339,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     TCP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }

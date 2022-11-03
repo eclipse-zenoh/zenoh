@@ -153,8 +153,7 @@ pub struct LinkManagerMulticastUdp;
 #[async_trait]
 impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
     async fn new_link(&self, ep: &EndPoint) -> ZResult<LinkMulticast> {
-        let locator = &ep.locator;
-        let mcast_addr = get_udp_addr(locator).await?;
+        let mcast_addr = get_udp_addr(ep.address()).await?;
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
@@ -176,11 +175,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;
-        if let Some(iface) = if let Some(config) = &ep.config {
-            config.get(UDP_MULTICAST_SRC_IFACE)
-        } else {
-            None
-        } {
+        if let Some(iface) = ep.config().get(UDP_MULTICAST_SRC_IFACE) {
             iface_addr = match iface.parse() {
                 Ok(addr) => Some(addr),
                 Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?

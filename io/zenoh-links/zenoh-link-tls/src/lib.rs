@@ -29,7 +29,7 @@ use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 
 mod unicast;
 pub use unicast::*;
@@ -137,20 +137,20 @@ pub mod config {
     pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
 }
 
-pub async fn get_tls_addr(address: &Locator) -> ZResult<SocketAddr> {
-    let addr = address.address();
-    match addr.to_socket_addrs().await?.next() {
+pub async fn get_tls_addr(address: Address<'_>) -> ZResult<SocketAddr> {
+    match address.as_str().to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
-        None => bail!("Couldn't resolve TLS locator address: {}", addr),
+        None => bail!("Couldn't resolve TLS locator address: {}", address),
     }
 }
 
-pub fn get_tls_host(address: &Locator) -> ZResult<&str> {
-    Ok(address.address().split(':').next().unwrap())
+pub fn get_tls_host(address: Address<'_>) -> ZResult<String> {
+    Ok(address.as_str().split(':').next().unwrap().to_owned())
 }
 
-pub async fn get_tls_dns(address: &Locator) -> ZResult<DNSName> {
-    match DNSNameRef::try_from_ascii_str(get_tls_host(address)?) {
+pub async fn get_tls_dns(address: Address<'_>) -> ZResult<DNSName> {
+    let host = get_tls_host(address)?;
+    match DNSNameRef::try_from_ascii_str(host.as_str()) {
         Ok(v) => Ok(v.to_owned()),
         Err(e) => bail!(e),
     }

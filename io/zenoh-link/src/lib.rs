@@ -85,7 +85,7 @@ impl LocatorInspector {
         #[allow(unused_imports)]
         use zenoh_link_commons::LocatorInspector;
         let protocol = locator.protocol();
-        match protocol {
+        match protocol.as_str() {
             #[cfg(feature = "transport_tcp")]
             TCP_LOCATOR_PREFIX => self.tcp_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_udp")]

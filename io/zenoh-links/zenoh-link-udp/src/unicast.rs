@@ -283,7 +283,7 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastUdp {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addr = get_udp_addr(&endpoint.locator).await?;
+        let dst_addr = get_udp_addr(endpoint.address()).await?;
 
         // Establish a UDP socket
         let socket = if dst_addr.is_ipv4() {
@@ -332,7 +332,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_udp_addr(&endpoint.locator).await?;
+        let addr = get_udp_addr(endpoint.address()).await?;
 
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
@@ -348,7 +348,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         })?;
 
         // Update the endpoint locator address
-        assert!(endpoint.set_addr(&format!("{}", local_addr)));
+        endpoint = EndPoint::new(
+            endpoint.protocol(),
+            local_addr.to_string(),
+            endpoint.metadata(),
+            endpoint.config(),
+        )?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -366,7 +371,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnicastUdp::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -375,7 +380,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_udp_addr(&endpoint.locator).await?;
+        let addr = get_udp_addr(endpoint.address()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -407,17 +412,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
+            let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     crate::UDP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }
@@ -429,11 +435,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     crate::UDP_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }

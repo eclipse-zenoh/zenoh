@@ -23,36 +23,36 @@ pub const LIST_SEPARATOR: char = ';';
 pub const FIELD_SEPARATOR: char = '=';
 pub const CONFIG_SEPARATOR: char = '#';
 
-pub(super) fn protocol(s: &str) -> &str {
+pub(super) fn protocol(s: &str) -> Protocol {
     let pdix = s.find(PROTO_SEPARATOR).unwrap_or(s.len());
-    &s[..pdix]
+    Protocol(&s[..pdix])
 }
 
-pub(super) fn address(s: &str) -> &str {
+pub(super) fn address(s: &str) -> Address {
     let pdix = s.find(PROTO_SEPARATOR).unwrap_or(s.len());
     let midx = s.find(METADATA_SEPARATOR).unwrap_or(s.len());
     let cidx = s.find(CONFIG_SEPARATOR).unwrap_or(s.len());
-    &s[pdix + 1..midx.min(cidx)]
+    Address(&s[pdix + 1..midx.min(cidx)])
 }
 
-pub(super) fn metadata(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+pub(super) fn metadata(s: &str) -> Metadata {
     match s.find(METADATA_SEPARATOR) {
         Some(midx) => {
             let cidx = s.find(CONFIG_SEPARATOR).unwrap_or(s.len());
-            properties(&s[midx + 1..cidx])
+            Metadata(&s[midx + 1..cidx])
         }
-        None => properties(&s[s.len()..]),
+        None => Metadata(""),
     }
 }
 
-pub(super) fn config(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+pub(super) fn config(s: &str) -> Config {
     match s.find(CONFIG_SEPARATOR) {
-        Some(cidx) => properties(&s[cidx + 1..]),
-        None => properties(&s[s.len()..]),
+        Some(cidx) => Config(&s[cidx + 1..]),
+        None => Config(""),
     }
 }
 
-pub fn properties(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+pub(super) fn properties(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
     s.split(LIST_SEPARATOR).filter_map(|prop| {
         if prop.is_empty() {
             None
@@ -60,6 +60,109 @@ pub fn properties(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIt
             Some(split_once(prop, FIELD_SEPARATOR))
         }
     })
+}
+
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Protocol<'a>(&'a str);
+
+impl Protocol<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+impl AsRef<str> for Protocol<'_> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for Protocol<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Address<'a>(&'a str);
+
+impl Address<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+impl AsRef<str> for Address<'_> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for Address<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Metadata<'a>(&'a str);
+
+impl Metadata<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+        properties(self.0)
+    }
+
+    pub fn get(&self, k: &str) -> Option<&str> {
+        self.iter().find(|x| x.0 == k).map(|x| x.1)
+    }
+}
+
+impl AsRef<str> for Metadata<'_> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for Metadata<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Config<'a>(&'a str);
+
+impl Config<'_> {
+    pub fn as_str(&self) -> &str {
+        self.0
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+        properties(self.0)
+    }
+
+    pub fn get(&self, k: &str) -> Option<&str> {
+        self.iter().find(|x| x.0 == k).map(|x| x.1)
+    }
+}
+
+impl AsRef<str> for Config<'_> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for Config<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
@@ -96,14 +199,7 @@ impl EndPoint {
         s.parse()
     }
 
-    pub fn split(
-        &self,
-    ) -> (
-        &str,
-        &str,
-        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator,
-        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator,
-    ) {
+    pub fn split(&self) -> (Protocol, Address, Metadata, Config) {
         (
             self.protocol(),
             self.address(),
@@ -112,20 +208,24 @@ impl EndPoint {
         )
     }
 
-    pub fn protocol(&self) -> &str {
+    pub fn protocol(&self) -> Protocol {
         protocol(self.inner.as_str())
     }
 
-    pub fn address(&self) -> &str {
+    pub fn address(&self) -> Address {
         address(self.inner.as_str())
     }
 
-    pub fn metadata(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn metadata(&self) -> Metadata {
         metadata(self.inner.as_str())
     }
 
-    pub fn config(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn config(&self) -> Config {
         config(self.inner.as_str())
+    }
+
+    pub fn to_locator(&self) -> Locator {
+        self.clone().into()
     }
 }
 
@@ -149,6 +249,7 @@ impl fmt::Display for EndPoint {
         f.write_str(&self.inner)
     }
 }
+
 impl From<EndPoint> for String {
     fn from(v: EndPoint) -> String {
         v.inner
@@ -314,71 +415,116 @@ fn endpoints() {
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447");
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 0);
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 0);
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?a=1;b=2").unwrap();
     assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447?a=1;b=2");
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 2);
-    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
-    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
-    assert_eq!(endpoint.config().count(), 0);
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(!endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 2);
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("a", "1"))
+        .unwrap();
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("b", "2"))
+        .unwrap();
+    assert!(endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 0);
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?b=2;a=1").unwrap();
     assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447?a=1;b=2");
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 2);
-    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
-    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
-    assert_eq!(endpoint.config().count(), 0);
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(!endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 2);
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("a", "1"))
+        .unwrap();
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("b", "2"))
+        .unwrap();
+    assert!(endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 0);
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#A=1;B=2").unwrap();
     assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447#A=1;B=2");
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 0);
-    assert_eq!(endpoint.config().count(), 2);
-    endpoint.config().find(|x| x == &("A", "1")).unwrap();
-    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 0);
+    assert!(!endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 2);
+    endpoint.config().iter().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().iter().find(|x| x == &("B", "2")).unwrap();
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447#B=2;A=1").unwrap();
     assert_eq!(&format!("{}", endpoint), "udp/127.0.0.1:7447#A=1;B=2");
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 0);
-    assert_eq!(endpoint.config().count(), 2);
-    endpoint.config().find(|x| x == &("A", "1")).unwrap();
-    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 0);
+    assert!(!endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 2);
+    endpoint.config().iter().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().iter().find(|x| x == &("B", "2")).unwrap();
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?a=1;b=2#A=1;B=2").unwrap();
     assert_eq!(
         &format!("{}", endpoint),
         "udp/127.0.0.1:7447?a=1;b=2#A=1;B=2"
     );
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 2);
-    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
-    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
-    assert_eq!(endpoint.config().count(), 2);
-    endpoint.config().find(|x| x == &("A", "1")).unwrap();
-    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(!endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 2);
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("a", "1"))
+        .unwrap();
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("b", "2"))
+        .unwrap();
+    assert!(!endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 2);
+    endpoint.config().iter().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().iter().find(|x| x == &("B", "2")).unwrap();
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447?b=2;a=1#B=2;A=1").unwrap();
     assert_eq!(
         &format!("{}", endpoint),
         "udp/127.0.0.1:7447?a=1;b=2#A=1;B=2"
     );
-    assert_eq!(endpoint.protocol(), "udp");
-    assert_eq!(endpoint.address(), "127.0.0.1:7447");
-    assert_eq!(endpoint.metadata().count(), 2);
-    endpoint.metadata().find(|x| x == &("a", "1")).unwrap();
-    endpoint.metadata().find(|x| x == &("b", "2")).unwrap();
-    assert_eq!(endpoint.config().count(), 2);
-    endpoint.config().find(|x| x == &("A", "1")).unwrap();
-    endpoint.config().find(|x| x == &("B", "2")).unwrap();
+    assert_eq!(endpoint.protocol().as_str(), "udp");
+    assert_eq!(endpoint.address().as_str(), "127.0.0.1:7447");
+    assert!(!endpoint.metadata().as_str().is_empty());
+    assert_eq!(endpoint.metadata().iter().count(), 2);
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("a", "1"))
+        .unwrap();
+    endpoint
+        .metadata()
+        .iter()
+        .find(|x| x == &("b", "2"))
+        .unwrap();
+    assert!(!endpoint.config().as_str().is_empty());
+    assert_eq!(endpoint.config().iter().count(), 2);
+    endpoint.config().iter().find(|x| x == &("A", "1")).unwrap();
+    endpoint.config().iter().find(|x| x == &("B", "2")).unwrap();
 }

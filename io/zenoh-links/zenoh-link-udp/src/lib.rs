@@ -28,7 +28,7 @@ pub use multicast::*;
 pub use unicast::*;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers
@@ -76,7 +76,7 @@ impl LocatorInspector for UdpLocatorInspector {
         UDP_LOCATOR_PREFIX
     }
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
-        Ok(get_udp_addr(locator).await?.ip().is_multicast())
+        Ok(get_udp_addr(locator.address()).await?.ip().is_multicast())
     }
 }
 
@@ -84,13 +84,12 @@ pub mod config {
     pub const UDP_MULTICAST_SRC_IFACE: &str = "src_iface";
 }
 
-pub(crate) async fn get_udp_addr(locator: &Locator) -> ZResult<SocketAddr> {
-    let addr = locator.address();
-    let mut addrs = addr.to_socket_addrs().await?;
+pub(crate) async fn get_udp_addr(address: Address<'_>) -> ZResult<SocketAddr> {
+    let mut addrs = address.as_str().to_socket_addrs().await?;
     if let Some(addr) = addrs.next() {
         Ok(addr)
     } else {
-        bail!("Couldn't resolve UDP locator address: {}", addr);
+        bail!("Couldn't resolve UDP locator address: {}", address);
     }
 }
 

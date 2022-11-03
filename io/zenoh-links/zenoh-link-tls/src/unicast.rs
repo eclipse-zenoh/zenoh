@@ -107,9 +107,9 @@ impl LinkUnicastTls {
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
             src_addr,
-            src_locator: Locator::new(TLS_LOCATOR_PREFIX, &src_addr),
+            src_locator: Locator::new(TLS_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
-            dst_locator: Locator::new(TLS_LOCATOR_PREFIX, &dst_addr),
+            dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
         }
@@ -265,9 +265,8 @@ impl LinkManagerUnicastTls {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let locator = &endpoint.locator;
-        let domain = get_tls_dns(locator).await?;
-        let addr = get_tls_addr(locator).await?;
+        let domain = get_tls_dns(endpoint.address()).await?;
+        let addr = get_tls_addr(endpoint.address()).await?;
         let host: &str = domain.as_ref().into();
 
         // Initialize the TcpStream
@@ -284,16 +283,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
 
         // Initialize the TLS stream
-        let mut bytes = Vec::new();
-        if let Some(config) = endpoint.config {
-            if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-                bytes = value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                bytes = fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
-            }
-        }
+        let config = endpoint.config();
+        let bytes = if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+            value.as_bytes().to_vec()
+        } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+            fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
+        } else {
+            vec![]
+        };
 
         let config = if bytes.is_empty() {
             Arc::new(ClientConfig::new())
@@ -319,33 +318,30 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let locator = &endpoint.locator;
-        let addr = get_tls_addr(locator).await?;
-        let host = get_tls_host(locator)?;
+        let addr = get_tls_addr(endpoint.address()).await?;
+        let host = get_tls_host(endpoint.address())?;
 
         let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
-        let mut tls_server_private_key = Vec::new();
-        let mut tls_server_certificate = Vec::new();
+        let mut tls_server_private_key = vec![];
+        let mut tls_server_certificate = vec![];
 
-        if let Some(config) = &endpoint.config {
-            let config = &***config;
-            if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
-                tls_server_private_key = value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-                tls_server_private_key = fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
-            }
-            if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
-                tls_server_certificate = value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
-                tls_server_certificate = fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
-            }
-            if let Some(value) = config.get(TLS_CLIENT_AUTH) {
-                client_auth = value.parse()?
-            }
+        let config = endpoint.config();
+        if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+            tls_server_private_key = value.as_bytes().to_vec()
+        } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+            tls_server_private_key = fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
+        }
+        if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+            tls_server_certificate = value.as_bytes().to_vec()
+        } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+            tls_server_certificate = fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
+        }
+        if let Some(value) = config.get(TLS_CLIENT_AUTH) {
+            client_auth = value.parse()?
         }
 
         // Configure the server private key
@@ -408,8 +404,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         });
 
         // Update the endpoint locator address
-        let mut locator: Locator = locator.to_owned();
-        assert!(locator.set_addr(&format!("{}:{}", host, local_port)));
+        let locator = Locator::new(
+            endpoint.protocol(),
+            format!("{}:{}", host, local_port),
+            endpoint.metadata(),
+        )?;
 
         let listener = ListenerUnicastTls::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
@@ -419,7 +418,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_tls_addr(&endpoint.locator).await?;
+        let addr = get_tls_addr(endpoint.address()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -451,17 +450,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
+            let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     TLS_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }
@@ -473,11 +473,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     TLS_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }

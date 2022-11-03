@@ -36,25 +36,19 @@ impl Locator {
         Ok(ep.into())
     }
 
-    pub fn split(
-        &self,
-    ) -> (
-        &str,
-        &str,
-        impl Iterator<Item = (&str, &str)> + DoubleEndedIterator,
-    ) {
+    pub fn split(&self) -> (Protocol, Address, Metadata) {
         (self.protocol(), self.address(), self.metadata())
     }
 
-    pub fn protocol(&self) -> &str {
+    pub fn protocol(&self) -> Protocol {
         protocol(self.inner.as_str())
     }
 
-    pub fn address(&self) -> &str {
+    pub fn address(&self) -> Address {
         address(self.inner.as_str())
     }
 
-    pub fn metadata(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn metadata(&self) -> Metadata {
         metadata(self.inner.as_str())
     }
 }

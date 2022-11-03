@@ -20,10 +20,9 @@
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::net::SocketAddr;
-use zenoh_link_commons::LocatorInspector;
-
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
-use zenoh_protocol::core::Locator;
+use zenoh_link_commons::LocatorInspector;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 
 mod unicast;
 pub use unicast::*;
@@ -63,8 +62,8 @@ zconfigurable! {
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-pub async fn get_tcp_addr(address: &Locator) -> ZResult<SocketAddr> {
-    let mut addrs = address.address().to_socket_addrs().await?;
+pub async fn get_tcp_addr(address: Address<'_>) -> ZResult<SocketAddr> {
+    let mut addrs = address.as_str().to_socket_addrs().await?;
     match addrs.next() {
         Some(address) => Ok(address),
         None => bail!("Couldn't resolve TCP locator address: {}", address),
