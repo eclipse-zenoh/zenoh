@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use rand::*;
+use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
     ZBuf,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{common::*, core::*, scouting::*, transport::*};
+use zenoh_protocol::{common::*, core::*, scouting::*, transport::*, zenoh::*};
 
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
@@ -83,6 +83,15 @@ fn codec_endpoint() {
 #[test]
 fn codec_locator() {
     run!(Locator, Locator::rand());
+}
+
+#[test]
+fn codec_timestamp() {
+    run!(Timestamp, {
+        let time = uhlc::NTP64(thread_rng().gen());
+        let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+        Timestamp::new(time, id)
+    });
 }
 
 // Common
@@ -151,6 +160,12 @@ fn codec_frame() {
 #[test]
 fn codec_transport() {
     run!(TransportMessage, TransportMessage::rand());
+}
+
+// Zenoh
+#[test]
+fn codec_datainfo() {
+    run!(DataInfo, DataInfo::rand());
 }
 
 // macro_rules! gen {

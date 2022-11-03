@@ -15,29 +15,16 @@ mod common;
 mod core;
 mod scouting;
 mod transport;
+mod zenoh;
 
 pub trait WCodec<Buffer, Message> {
     type Output;
     fn write(self, buffer: Buffer, message: Message) -> Self::Output;
 }
 
-#[macro_export]
-macro_rules! zcwrite {
-    ($codec:expr, $writer:expr, $value:expr) => {
-        $codec.write(&mut *$writer, $value)
-    };
-}
-
 pub trait RCodec<Buffer, Message> {
     type Error;
     fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
-}
-
-#[macro_export]
-macro_rules! zcread {
-    ($codec:expr, $reader:expr) => {
-        $codec.read(&mut *$reader)
-    };
 }
 
 #[derive(Clone, Copy, Default)]

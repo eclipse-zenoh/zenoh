@@ -13,6 +13,7 @@
 //
 mod endpoint;
 mod locator;
+mod timestamp;
 mod zbuf;
 mod zenohid;
 mod zint;
@@ -66,7 +67,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &[u8]) -> Self::Output {
-        zcwrite!(self, writer, x.len())?;
+        self.write(&mut *writer, x.len())?;
         writer.write_exact(x)
     }
 }
@@ -98,7 +99,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &str) -> Self::Output {
-        zcwrite!(self, writer, x.as_bytes())
+        self.write(&mut *writer, x.as_bytes())
     }
 }
 

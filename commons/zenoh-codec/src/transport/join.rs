@@ -51,33 +51,33 @@ where
         if opts != 0 {
             header |= tmsg::flag::O;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
         if opts != 0 {
-            zcwrite!(self, writer, options(x))?;
+            self.write(&mut *writer, options(x))?;
         }
 
         // Body
-        zcwrite!(self, writer, x.version)?;
+        self.write(&mut *writer, x.version)?;
         let wai: ZInt = x.whatami.into();
-        zcwrite!(self, writer, wai)?;
-        zcwrite!(self, writer, &x.zid)?;
+        self.write(&mut *writer, wai)?;
+        self.write(&mut *writer, &x.zid)?;
         if imsg::has_flag(header, tmsg::flag::T1) {
-            zcwrite!(self, writer, x.lease.as_secs() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
         } else {
-            zcwrite!(self, writer, x.lease.as_millis() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
         }
         if imsg::has_flag(header, tmsg::flag::S) {
-            zcwrite!(self, writer, x.sn_resolution)?;
+            self.write(&mut *writer, x.sn_resolution)?;
         }
         match &x.next_sns {
             ConduitSnList::Plain(sn) => {
-                zcwrite!(self, writer, sn.reliable)?;
-                zcwrite!(self, writer, sn.best_effort)?;
+                self.write(&mut *writer, sn.reliable)?;
+                self.write(&mut *writer, sn.best_effort)?;
             }
             ConduitSnList::QoS(sns) => {
                 for sn in sns.iter() {
-                    zcwrite!(self, writer, sn.reliable)?;
-                    zcwrite!(self, writer, sn.best_effort)?;
+                    self.write(&mut *writer, sn.reliable)?;
+                    self.write(&mut *writer, sn.best_effort)?;
                 }
             }
         }
@@ -94,7 +94,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<Join, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -113,22 +113,22 @@ where
         }
 
         let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
-            zcread!(self.codec, reader)?
+            self.codec.read(&mut *reader)?
         } else {
             0
         };
-        let version: u8 = zcread!(self.codec, reader)?;
-        let wai: ZInt = zcread!(self.codec, reader)?;
+        let version: u8 = self.codec.read(&mut *reader)?;
+        let wai: ZInt = self.codec.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
-        let zid: ZenohId = zcread!(self.codec, reader)?;
-        let lease: ZInt = zcread!(self.codec, reader)?;
+        let zid: ZenohId = self.codec.read(&mut *reader)?;
+        let lease: ZInt = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, tmsg::flag::T1) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
         let sn_resolution: ZInt = if imsg::has_flag(self.header, tmsg::flag::S) {
-            zcread!(self.codec, reader)?
+            self.codec.read(&mut *reader)?
         } else {
             SEQ_NUM_RES
         };
@@ -136,14 +136,14 @@ where
         let next_sns = if is_qos {
             let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {
-                sns[i].reliable = zcread!(self.codec, reader)?;
-                sns[i].best_effort = zcread!(self.codec, reader)?;
+                sns[i].reliable = self.codec.read(&mut *reader)?;
+                sns[i].best_effort = self.codec.read(&mut *reader)?;
             }
             ConduitSnList::QoS(sns)
         } else {
             ConduitSnList::Plain(ConduitSn {
-                reliable: zcread!(self.codec, reader)?,
-                best_effort: zcread!(self.codec, reader)?,
+                reliable: self.codec.read(&mut *reader)?,
+                best_effort: self.codec.read(&mut *reader)?,
             })
         };
 

@@ -31,7 +31,7 @@ where
     fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
         // Decorator
         if x.channel.priority != Priority::default() {
-            zcwrite!(self, writer, &x.channel.priority)?;
+            self.write(&mut *writer, &x.channel.priority)?;
         }
 
         // Header
@@ -45,10 +45,10 @@ where
                 header |= tmsg::flag::E;
             }
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
-        zcwrite!(self, writer, x.sn)?;
+        self.write(&mut *writer, x.sn)?;
         match &x.payload {
             FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer.clone())?,
             FramePayload::Messages {
@@ -72,7 +72,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -89,9 +89,9 @@ where
         let mut priority = Priority::default();
         if imsg::mid(self.header) == tmsg::id::PRIORITY {
             // Decode priority
-            priority = zcread!(self, reader)?;
+            priority = self.read(&mut *reader)?;
             // Read next header
-            self.header = zcread!(self.codec, reader)?;
+            self.header = self.codec.read(&mut *reader)?;
         }
 
         if imsg::mid(self.header) != tmsg::id::FRAME {
@@ -106,7 +106,7 @@ where
             priority,
             reliability,
         };
-        let sn: ZInt = zcread!(self.codec, reader)?;
+        let sn: ZInt = self.codec.read(&mut *reader)?;
 
         let payload = if imsg::has_flag(self.header, tmsg::flag::F) {
             // A fragmented frame is not supposed to be followed by

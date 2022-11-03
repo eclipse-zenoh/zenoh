@@ -11,15 +11,4 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-//! ⚠️ WARNING ⚠️
-//!
-//! This crate is intended for Zenoh's internal use.
-//!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
-pub mod common;
-pub mod core;
-pub mod proto;
-pub mod scouting;
-pub mod transport;
-pub mod zenoh;
+mod data;

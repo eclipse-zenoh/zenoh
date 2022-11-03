@@ -28,7 +28,7 @@ where
     fn write(self, writer: &mut W, x: &Priority) -> Self::Output {
         // Header
         let header = tmsg::id::PRIORITY | ((*x as u8) << imsg::HEADER_BITS);
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
         Ok(())
     }
 }

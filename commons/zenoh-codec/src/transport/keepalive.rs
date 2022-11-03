@@ -34,11 +34,11 @@ where
         if x.zid.is_some() {
             header |= tmsg::flag::I;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
         if let Some(p) = x.zid.as_ref() {
-            zcwrite!(self, writer, p)?;
+            self.write(&mut *writer, p)?;
         }
         Ok(())
     }
@@ -52,7 +52,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -71,7 +71,7 @@ where
         }
 
         let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = zcread!(self.codec, reader)?;
+            let zid: ZenohId = self.codec.read(&mut *reader)?;
             Some(zid)
         } else {
             None

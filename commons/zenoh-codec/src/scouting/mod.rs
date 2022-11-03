@@ -32,12 +32,12 @@ where
 
     fn write(self, writer: &mut W, x: &ScoutingMessage) -> Self::Output {
         if let Some(a) = x.attachment.as_ref() {
-            zcwrite!(self, writer, a)?;
+            self.write(&mut *writer, a)?;
         }
 
         match &x.body {
-            ScoutingBody::Scout(s) => zcwrite!(self, writer, s),
-            ScoutingBody::Hello(h) => zcwrite!(self, writer, h),
+            ScoutingBody::Scout(s) => self.write(&mut *writer, s),
+            ScoutingBody::Hello(h) => self.write(&mut *writer, h),
         }
     }
 }

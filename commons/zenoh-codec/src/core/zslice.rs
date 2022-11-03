@@ -25,7 +25,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: ZSlice) -> Self::Output {
-        zcwrite!(self, writer, x.len())?;
+        self.write(&mut *writer, x.len())?;
         writer.write_zslice(x)?;
         Ok(())
     }

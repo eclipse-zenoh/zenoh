@@ -52,18 +52,18 @@ where
         if has_options(x) {
             header |= tmsg::flag::O;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
         if has_options(x) {
-            zcwrite!(self, writer, options(x))?;
+            self.write(&mut *writer, options(x))?;
         }
-        zcwrite!(self, writer, x.version)?;
+        self.write(&mut *writer, x.version)?;
         let wai: ZInt = x.whatami.into();
-        zcwrite!(self, writer, wai)?;
-        zcwrite!(self, writer, &x.zid)?;
+        self.write(&mut *writer, wai)?;
+        self.write(&mut *writer, &x.zid)?;
         if imsg::has_flag(header, tmsg::flag::S) {
-            zcwrite!(self, writer, x.sn_resolution)?;
+            self.write(&mut *writer, x.sn_resolution)?;
         }
         Ok(())
     }
@@ -77,7 +77,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -96,16 +96,16 @@ where
         }
 
         let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
-            zcread!(self.codec, reader)?
+            self.codec.read(&mut *reader)?
         } else {
             0
         };
-        let version: u8 = zcread!(self.codec, reader)?;
-        let wai: ZInt = zcread!(self.codec, reader)?;
+        let version: u8 = self.codec.read(&mut *reader)?;
+        let wai: ZInt = self.codec.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
-        let zid: ZenohId = zcread!(self.codec, reader)?;
+        let zid: ZenohId = self.codec.read(&mut *reader)?;
         let sn_resolution: ZInt = if imsg::has_flag(self.header, tmsg::flag::S) {
-            zcread!(self.codec, reader)?
+            self.codec.read(&mut *reader)?
         } else {
             SEQ_NUM_RES
         };
@@ -150,19 +150,19 @@ where
         if has_options(x) {
             header |= tmsg::flag::O;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
         if has_options(x) {
-            zcwrite!(self, writer, options(x))?;
+            self.write(&mut *writer, options(x))?;
         }
         let wai: ZInt = x.whatami.into();
-        zcwrite!(self, writer, wai)?;
-        zcwrite!(self, writer, &x.zid)?;
+        self.write(&mut *writer, wai)?;
+        self.write(&mut *writer, &x.zid)?;
         if let Some(snr) = x.sn_resolution {
-            zcwrite!(self, writer, snr)?;
+            self.write(&mut *writer, snr)?;
         }
-        zcwrite!(self, writer, x.cookie.clone())?;
+        self.write(&mut *writer, x.cookie.clone())?;
         Ok(())
     }
 }
@@ -175,7 +175,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -194,21 +194,21 @@ where
         }
 
         let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
-            zcread!(self.codec, reader)?
+            self.codec.read(&mut *reader)?
         } else {
             0
         };
-        let wai: ZInt = zcread!(self.codec, reader)?;
+        let wai: ZInt = self.codec.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
-        let zid: ZenohId = zcread!(self.codec, reader)?;
+        let zid: ZenohId = self.codec.read(&mut *reader)?;
         let sn_resolution = if imsg::has_flag(self.header, tmsg::flag::S) {
-            let snr: ZInt = zcread!(self.codec, reader)?;
+            let snr: ZInt = self.codec.read(&mut *reader)?;
             Some(snr)
         } else {
             None
         };
         let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
-        let cookie: ZSlice = zcread!(self.codec, reader)?;
+        let cookie: ZSlice = self.codec.read(&mut *reader)?;
 
         Ok(InitAck {
             whatami,

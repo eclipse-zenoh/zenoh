@@ -30,6 +30,7 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 rand = "0.8.5"
+uhlc = "0.5.1"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
 zenoh-protocol = { version = "0.6.0-beta.1", path = "../zenoh-protocol/" }

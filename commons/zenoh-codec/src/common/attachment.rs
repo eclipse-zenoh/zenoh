@@ -35,7 +35,7 @@ where
         // if self.buffer.has_shminfo() {
         //     header |= tmsg::flag::Z;
         // }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // #[cfg(feature = "shared-memory")]
         // {
@@ -49,7 +49,7 @@ where
         // }
 
         // Body
-        zcwrite!(self, writer, &x.buffer)
+        self.write(&mut *writer, &x.buffer)
     }
 }
 
@@ -91,7 +91,7 @@ where
         //     Some(Attachment { buffer })
         // }
 
-        let buffer: ZBuf = zcread!(self.codec, reader)?;
+        let buffer: ZBuf = self.codec.read(&mut *reader)?;
         Ok(Attachment { buffer })
     }
 }

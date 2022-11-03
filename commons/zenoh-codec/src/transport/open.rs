@@ -37,16 +37,16 @@ where
         if x.lease.as_millis() % 1_000 == 0 {
             header |= tmsg::flag::T2;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
         if imsg::has_flag(header, tmsg::flag::T2) {
-            zcwrite!(self, writer, x.lease.as_secs() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
         } else {
-            zcwrite!(self, writer, x.lease.as_millis() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
         }
-        zcwrite!(self, writer, x.initial_sn)?;
-        zcwrite!(self, writer, x.cookie.clone())?;
+        self.write(&mut *writer, x.initial_sn)?;
+        self.write(&mut *writer, x.cookie.clone())?;
         Ok(())
     }
 }
@@ -59,7 +59,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -77,15 +77,15 @@ where
             return Err(DidntRead);
         }
 
-        let lease: ZInt = zcread!(self.codec, reader)?;
+        let lease: ZInt = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: ZInt = zcread!(self.codec, reader)?;
+        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
 
-        let cookie: ZSlice = zcread!(self.codec, reader)?;
+        let cookie: ZSlice = self.codec.read(&mut *reader)?;
         Ok(OpenSyn {
             lease,
             initial_sn,
@@ -108,15 +108,15 @@ where
         if x.lease.as_millis() % 1_000 == 0 {
             header |= tmsg::flag::T2;
         }
-        zcwrite!(self, writer, header)?;
+        self.write(&mut *writer, header)?;
 
         // Body
         if imsg::has_flag(header, tmsg::flag::T2) {
-            zcwrite!(self, writer, x.lease.as_secs() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
         } else {
-            zcwrite!(self, writer, x.lease.as_millis() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
         }
-        zcwrite!(self, writer, x.initial_sn)?;
+        self.write(&mut *writer, x.initial_sn)?;
         Ok(())
     }
 }
@@ -129,7 +129,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
         let codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         codec.read(reader)
@@ -147,13 +147,13 @@ where
             return Err(DidntRead);
         }
 
-        let lease: ZInt = zcread!(self.codec, reader)?;
+        let lease: ZInt = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: ZInt = zcread!(self.codec, reader)?;
+        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
 
         Ok(OpenAck { lease, initial_sn })
     }

@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,37 +12,43 @@ use std::convert::TryFrom;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
+use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::ZenohId;
+use zenoh_protocol::core::{Timestamp, ZenohId};
 
-impl<W> WCodec<&mut W, &ZenohId> for Zenoh060
+impl<W> WCodec<&mut W, &Timestamp> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
-        self.write(&mut *writer, x.as_slice())
+    fn write(self, writer: &mut W, x: &Timestamp) -> Self::Output {
+        self.write(&mut *writer, x.get_time().as_u64())?;
+        self.write(&mut *writer, x.get_id().as_slice())?;
+        Ok(())
     }
 }
 
-impl<R> RCodec<&mut R, ZenohId> for Zenoh060
+impl<R> RCodec<&mut R, Timestamp> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZenohId, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<Timestamp, Self::Error> {
+        let time: u64 = self.read(&mut *reader)?;
         let size: usize = self.read(&mut *reader)?;
-        if size > ZenohId::MAX_SIZE {
+        if size > (uhlc::ID::MAX_SIZE) {
             return Err(DidntRead);
         }
-
-        let mut id = [0; ZenohId::MAX_SIZE];
+        let mut id = [0_u8; ZenohId::MAX_SIZE];
         reader.read_exact(&mut id[..size])?;
-        ZenohId::try_from(&id[..size]).map_err(|_| DidntRead)
+
+        let time = uhlc::NTP64(time);
+        let id = uhlc::ID::try_from(&id[..size]).map_err(|_| DidntRead)?;
+        Ok(Timestamp::new(time, id))
     }
 }

@@ -37,17 +37,17 @@ where
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
         if let Some(a) = x.attachment.as_ref() {
-            zcwrite!(self, writer, a)?;
+            self.write(&mut *writer, a)?;
         }
         match &x.body {
-            TransportBody::InitSyn(b) => zcwrite!(self, writer, b),
-            TransportBody::InitAck(b) => zcwrite!(self, writer, b),
-            TransportBody::OpenSyn(b) => zcwrite!(self, writer, b),
-            TransportBody::OpenAck(b) => zcwrite!(self, writer, b),
-            TransportBody::Join(b) => zcwrite!(self, writer, b),
-            TransportBody::Close(b) => zcwrite!(self, writer, b),
-            TransportBody::KeepAlive(b) => zcwrite!(self, writer, b),
-            TransportBody::Frame(b) => zcwrite!(self, writer, b),
+            TransportBody::InitSyn(b) => self.write(&mut *writer, b),
+            TransportBody::InitAck(b) => self.write(&mut *writer, b),
+            TransportBody::OpenSyn(b) => self.write(&mut *writer, b),
+            TransportBody::OpenAck(b) => self.write(&mut *writer, b),
+            TransportBody::Join(b) => self.write(&mut *writer, b),
+            TransportBody::Close(b) => self.write(&mut *writer, b),
+            TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
+            TransportBody::Frame(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -60,34 +60,34 @@ where
 
     fn read(self, reader: &mut R) -> Result<TransportMessage, Self::Error> {
         let mut codec = Zenoh060RCodec {
-            header: zcread!(self, reader)?,
+            header: self.read(&mut *reader)?,
             ..Default::default()
         };
         let mut attachment: Option<Attachment> = None;
         if imsg::mid(codec.header) == tmsg::id::ATTACHMENT {
-            let a: Attachment = zcread!(codec, reader)?;
+            let a: Attachment = codec.read(&mut *reader)?;
             attachment = Some(a);
-            codec.header = zcread!(self, reader)?;
+            codec.header = self.read(&mut *reader)?;
         }
         let body = match imsg::mid(codec.header) {
             tmsg::id::INIT => {
                 if !imsg::has_flag(codec.header, tmsg::flag::A) {
-                    TransportBody::InitSyn(zcread!(codec, reader)?)
+                    TransportBody::InitSyn(codec.read(&mut *reader)?)
                 } else {
-                    TransportBody::InitAck(zcread!(codec, reader)?)
+                    TransportBody::InitAck(codec.read(&mut *reader)?)
                 }
             }
             tmsg::id::OPEN => {
                 if !imsg::has_flag(codec.header, tmsg::flag::A) {
-                    TransportBody::OpenSyn(zcread!(codec, reader)?)
+                    TransportBody::OpenSyn(codec.read(&mut *reader)?)
                 } else {
-                    TransportBody::OpenAck(zcread!(codec, reader)?)
+                    TransportBody::OpenAck(codec.read(&mut *reader)?)
                 }
             }
-            tmsg::id::JOIN => TransportBody::Join(zcread!(codec, reader)?),
-            tmsg::id::CLOSE => TransportBody::Close(zcread!(codec, reader)?),
-            tmsg::id::KEEP_ALIVE => TransportBody::KeepAlive(zcread!(codec, reader)?),
-            tmsg::id::PRIORITY | tmsg::id::FRAME => TransportBody::Frame(zcread!(codec, reader)?),
+            tmsg::id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
+            tmsg::id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
+            tmsg::id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
+            tmsg::id::PRIORITY | tmsg::id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
