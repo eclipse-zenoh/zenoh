@@ -46,11 +46,11 @@ macro_rules! run {
     ($type:ty, $rand:expr) => {
         let codec = Zenoh060::default();
 
-        println!("{}: codec on Vec<u8>", std::any::type_name::<$type>());
+        println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
         let mut buffer = vec![];
         run_single!($type, $rand, codec, buffer);
 
-        println!("{}: codec on ZBuf", std::any::type_name::<$type>());
+        println!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
         run_single!($type, $rand, codec, buffer);
     };
@@ -100,6 +100,11 @@ fn codec_hello() {
 #[test]
 fn codec_scout() {
     run!(Scout, Scout::rand());
+}
+
+#[test]
+fn codec_scouting() {
+    run!(ScoutingMessage, ScoutingMessage::rand());
 }
 
 // Transport

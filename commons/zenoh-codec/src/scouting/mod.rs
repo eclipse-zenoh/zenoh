@@ -55,15 +55,15 @@ where
         };
 
         let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
-            let a: Attachment = self.read(&mut *reader)?;
+            let a: Attachment = codec.read(&mut *reader)?;
             codec.header = self.read(&mut *reader)?;
             Some(a)
         } else {
             None
         };
         let body = match imsg::mid(codec.header) {
-            imsg::id::SCOUT => ScoutingBody::Scout(self.read(&mut *reader)?),
-            imsg::id::HELLO => ScoutingBody::Hello(self.read(&mut *reader)?),
+            imsg::id::SCOUT => ScoutingBody::Scout(codec.read(&mut *reader)?),
+            imsg::id::HELLO => ScoutingBody::Hello(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
         Ok(ScoutingMessage { body, attachment })

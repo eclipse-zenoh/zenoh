@@ -25,10 +25,34 @@ pub enum ScoutingBody {
     Hello(Hello),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScoutingMessage {
     pub body: ScoutingBody,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<std::num::NonZeroUsize>,
+}
+
+// Functions mainly used for testing
+impl ScoutingMessage {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let attachment = if rng.gen_bool(0.5) {
+            Some(Attachment::rand())
+        } else {
+            None
+        };
+
+        let body = match rng.gen_range(0..2) {
+            0 => ScoutingBody::Hello(Hello::rand()),
+            1 => ScoutingBody::Scout(Scout::rand()),
+            _ => unreachable!(),
+        };
+
+        Self { body, attachment }
+    }
 }
