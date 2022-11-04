@@ -241,16 +241,15 @@ impl Network {
                 None
             },
             whatami: self.graph[idx].whatami,
-            locators: details
-                .locators
-                .then(|| {
-                    if idx == self.idx {
-                        Some(self.runtime.get_locators())
-                    } else {
-                        self.graph[idx].locators.clone()
-                    }
-                })
-                .flatten(),
+            locators: if details.locators {
+                if idx == self.idx {
+                    Some(self.runtime.get_locators())
+                } else {
+                    self.graph[idx].locators.clone()
+                }
+            } else {
+                None
+            },
             links,
         }
     }
