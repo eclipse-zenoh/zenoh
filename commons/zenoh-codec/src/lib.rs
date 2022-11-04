@@ -33,15 +33,31 @@ pub struct Zenoh060;
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
-pub struct Zenoh060RCodec {
+pub struct Zenoh060Header {
     pub header: u8,
     pub codec: Zenoh060,
 }
 
-impl Zenoh060RCodec {
+impl Zenoh060Header {
     pub fn new(header: u8) -> Self {
         Self {
             header,
+            codec: Zenoh060::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+#[non_exhaustive]
+pub struct Zenoh060Condition {
+    pub condition: bool,
+    pub codec: Zenoh060,
+}
+
+impl Zenoh060Condition {
+    pub fn new(condition: bool) -> Self {
+        Self {
+            condition,
             codec: Zenoh060::default(),
         }
     }

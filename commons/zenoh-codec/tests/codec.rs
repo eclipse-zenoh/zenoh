@@ -164,8 +164,18 @@ fn codec_transport() {
 
 // Zenoh
 #[test]
-fn codec_datainfo() {
+fn codec_reply_context() {
+    run!(ReplyContext, ReplyContext::rand());
+}
+
+#[test]
+fn codec_data_info() {
     run!(DataInfo, DataInfo::rand());
+}
+
+#[test]
+fn codec_data() {
+    run!(Data, Data::rand());
 }
 
 // macro_rules! gen {

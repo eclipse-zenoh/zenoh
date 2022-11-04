@@ -49,7 +49,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ScoutingMessage, Self::Error> {
-        let mut codec = Zenoh060RCodec {
+        let mut codec = Zenoh060Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };

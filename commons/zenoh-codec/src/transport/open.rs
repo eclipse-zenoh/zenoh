@@ -58,7 +58,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
-        let codec = Zenoh060RCodec {
+        let codec = Zenoh060Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -66,7 +66,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, OpenSyn> for Zenoh060RCodec
+impl<R> RCodec<&mut R, OpenSyn> for Zenoh060Header
 where
     R: Reader,
 {
@@ -128,7 +128,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        let codec = Zenoh060RCodec {
+        let codec = Zenoh060Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -136,7 +136,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, OpenAck> for Zenoh060RCodec
+impl<R> RCodec<&mut R, OpenAck> for Zenoh060Header
 where
     R: Reader,
 {

@@ -45,6 +45,33 @@ pub struct ReplyContext {
     pub replier: Option<ReplierInfo>,
 }
 
+impl ReplyContext {
+    pub fn is_final(&self) -> bool {
+        self.replier.is_none()
+    }
+}
+
+// Functions mainly used for testing
+impl ReplyContext {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        let qid: ZInt = rng.gen();
+        let replier = if rng.gen_bool(0.5) {
+            Some(ReplierInfo {
+                id: ZenohId::default(),
+            })
+        } else {
+            None
+        };
+
+        Self { qid, replier }
+    }
+}
+
 /// # DataInfo
 ///
 /// DataInfo data structure is optionally included in Data messages
@@ -165,4 +192,59 @@ pub struct Data {
     pub payload: ZBuf,
     pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,
+}
+
+// Functions mainly used for testing
+impl Data {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::{
+            distributions::{Alphanumeric, DistString},
+            Rng,
+        };
+
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        let mut rng = rand::thread_rng();
+
+        let scope: ZInt = rng.gen_range(0..20);
+        let suffix: String = if rng.gen_bool(0.5) {
+            let len = rng.gen_range(MIN..MAX);
+            Alphanumeric.sample_string(&mut rng, len)
+        } else {
+            String::new()
+        };
+        let key = WireExpr {
+            scope,
+            suffix: suffix.into(),
+        };
+
+        let data_info = if rng.gen_bool(0.5) {
+            Some(DataInfo::rand())
+        } else {
+            None
+        };
+
+        let payload = ZBuf::rand(rng.gen_range(MIN..MAX));
+
+        let congestion_control = if rng.gen_bool(0.5) {
+            CongestionControl::Block
+        } else {
+            CongestionControl::Drop
+        };
+        let reply_context = if rng.gen_bool(0.5) {
+            Some(ReplyContext::rand())
+        } else {
+            None
+        };
+
+        Self {
+            key,
+            data_info,
+            payload,
+            congestion_control,
+            reply_context,
+        }
+    }
 }

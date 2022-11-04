@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod endpoint;
+mod keyexpr;
 mod locator;
 mod timestamp;
 mod zbuf;

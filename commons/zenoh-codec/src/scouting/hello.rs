@@ -65,7 +65,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
-        let codec = Zenoh060RCodec {
+        let codec = Zenoh060Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Hello> for Zenoh060RCodec
+impl<R> RCodec<&mut R, Hello> for Zenoh060Header
 where
     R: Reader,
 {
