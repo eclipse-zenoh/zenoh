@@ -220,29 +220,29 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Data, Self::Error> {
-        let codec = Zenoh060Header {
+        let mut codec = Zenoh060HeaderReplyContext {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
+        if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
+            let hodec = Zenoh060Header {
+                header: codec.header,
+                ..Default::default()
+            };
+            codec.reply_context = Some(hodec.read(&mut *reader)?);
+            codec.header = self.read(&mut *reader)?;
+        }
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<&mut R, Data> for Zenoh060Header
+impl<R> RCodec<&mut R, Data> for Zenoh060HeaderReplyContext
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(mut self, reader: &mut R) -> Result<Data, Self::Error> {
-        let mut reply_context: Option<ReplyContext> = None;
-        if imsg::mid(self.header) == zmsg::id::REPLY_CONTEXT {
-            // Decode priority
-            reply_context = Some(self.read(&mut *reader)?);
-            // Read next header
-            self.header = self.codec.read(&mut *reader)?;
-        }
-
+    fn read(self, reader: &mut R) -> Result<Data, Self::Error> {
         if imsg::mid(self.header) != zmsg::id::DATA {
             return Err(DidntRead);
         }
@@ -284,7 +284,7 @@ where
             data_info,
             payload,
             congestion_control,
-            reply_context,
+            reply_context: self.reply_context,
         })
     }
 }

@@ -192,6 +192,11 @@ fn codec_data() {
 }
 
 #[test]
+fn codec_unit() {
+    run!(Unit, Unit::rand());
+}
+
+#[test]
 fn codec_zenoh() {
     run!(
         ZenohMessage,

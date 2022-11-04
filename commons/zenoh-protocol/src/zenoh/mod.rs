@@ -12,13 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod data;
-
 pub mod routing;
-pub use routing::*;
+mod unit;
 
 use crate::{common::Attachment, core::Channel};
 pub use data::*;
+pub use routing::*;
 use std::fmt;
+pub use unit::*;
 
 pub mod zmsg {
     use crate::{
@@ -184,7 +185,7 @@ pub enum ZenohBody {
     // Declare(Declare),
     // Query(Query),
     // Pull(Pull),
-    // Unit(Unit),
+    Unit(Unit),
     // LinkStateList(LinkStateList),
 }
 
@@ -252,8 +253,9 @@ impl ZenohMessage {
             priority,
             reliability,
         };
-        let body = match rng.gen_range(0..1) {
+        let body = match rng.gen_range(0..2) {
             0 => ZenohBody::Data(Data::rand()),
+            1 => ZenohBody::Unit(Unit::rand()),
             _ => unreachable!(),
         };
 

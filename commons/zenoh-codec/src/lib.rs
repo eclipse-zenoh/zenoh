@@ -1,5 +1,3 @@
-use zenoh_protocol::core::Reliability;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -18,6 +16,8 @@ mod core;
 mod scouting;
 mod transport;
 mod zenoh;
+
+use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};
 
 pub trait WCodec<Buffer, Message> {
     type Output;
@@ -61,4 +61,12 @@ impl Zenoh060Reliability {
             codec: Zenoh060::default(),
         }
     }
+}
+
+#[derive(Clone, Default)]
+#[non_exhaustive]
+pub struct Zenoh060HeaderReplyContext {
+    pub header: u8,
+    pub reply_context: Option<ReplyContext>,
+    pub codec: Zenoh060,
 }

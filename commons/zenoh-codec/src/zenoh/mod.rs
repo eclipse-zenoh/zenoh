@@ -13,6 +13,7 @@
 //
 mod data;
 mod routing;
+mod unit;
 
 use crate::*;
 use zenoh_buffers::{
@@ -44,6 +45,7 @@ where
 
         match &x.body {
             ZenohBody::Data(d) => self.write(&mut *writer, d),
+            ZenohBody::Unit(u) => self.write(&mut *writer, u),
         }
     }
 }
@@ -98,7 +100,33 @@ where
         };
 
         let body = match imsg::mid(codec.header) {
-            zmsg::id::REPLY_CONTEXT | zmsg::id::DATA => ZenohBody::Data(codec.read(&mut *reader)?),
+            zmsg::id::REPLY_CONTEXT => {
+                let rc: ReplyContext = codec.read(&mut *reader)?;
+                let rodec = Zenoh060HeaderReplyContext {
+                    header: self.codec.read(&mut *reader)?,
+                    reply_context: Some(rc),
+                    ..Default::default()
+                };
+                match imsg::mid(rodec.header) {
+                    zmsg::id::DATA => ZenohBody::Data(rodec.read(&mut *reader)?),
+                    zmsg::id::UNIT => ZenohBody::Unit(rodec.read(&mut *reader)?),
+                    _ => return Err(DidntRead),
+                }
+            }
+            zmsg::id::DATA => {
+                let rodec = Zenoh060HeaderReplyContext {
+                    header: codec.header,
+                    ..Default::default()
+                };
+                ZenohBody::Data(rodec.read(&mut *reader)?)
+            }
+            zmsg::id::UNIT => {
+                let rodec = Zenoh060HeaderReplyContext {
+                    header: codec.header,
+                    ..Default::default()
+                };
+                ZenohBody::Unit(rodec.read(&mut *reader)?)
+            }
             _ => return Err(DidntRead),
         };
         Ok(ZenohMessage {
