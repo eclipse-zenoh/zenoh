@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod data;
+mod pull;
 mod routing;
 mod unit;
 
@@ -46,6 +47,7 @@ where
         match &x.body {
             ZenohBody::Data(d) => self.write(&mut *writer, d),
             ZenohBody::Unit(u) => self.write(&mut *writer, u),
+            ZenohBody::Pull(p) => self.write(&mut *writer, p),
         }
     }
 }
@@ -127,6 +129,7 @@ where
                 };
                 ZenohBody::Unit(rodec.read(&mut *reader)?)
             }
+            zmsg::id::PULL => ZenohBody::Pull(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
         Ok(ZenohMessage {
