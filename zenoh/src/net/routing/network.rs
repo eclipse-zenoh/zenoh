@@ -29,16 +29,6 @@ struct Details {
     links: bool,
 }
 
-macro_rules! d {
-    (zid: $zid:expr, locs: $locs:expr, links: $links:expr) => {
-        Details {
-            zid: $zid,
-            locators: $locs,
-            links: $links,
-        }
-    };
-}
-
 #[derive(Clone)]
 pub(crate) struct Node {
     pub(crate) zid: ZenohId,
@@ -448,7 +438,14 @@ impl Network {
                 if self.gossip {
                     if let Some(idx) = idx {
                         self.send_on_links(
-                            vec![(idx, d! {zid: true, locs: self.gossip, links: false})],
+                            vec![(
+                                idx,
+                                Details {
+                                    zid: true,
+                                    locators: self.gossip,
+                                    links: false,
+                                },
+                            )],
                             |link| link.zid != zid,
                         );
 
@@ -604,7 +601,16 @@ impl Network {
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             let new_idxs = new_idxs
                 .into_iter()
-                .map(|(_, idx1, _new_node)| (idx1, d! {zid: true, locs: self.gossip, links: true}))
+                .map(|(_, idx1, _new_node)| {
+                    (
+                        idx1,
+                        Details {
+                            zid: true,
+                            locators: self.gossip,
+                            links: true,
+                        },
+                    )
+                })
                 .collect::<Vec<(NodeIndex, Details)>>();
             for link in self.links.values() {
                 if link.zid != src {
@@ -613,7 +619,14 @@ impl Network {
                         .into_iter()
                         .filter_map(|(_, idx1, _)| {
                             if link.zid != self.graph[idx1].zid {
-                                Some((idx1, d! {zid: false, locs: self.gossip, links: true}))
+                                Some((
+                                    idx1,
+                                    Details {
+                                        zid: false,
+                                        locators: self.gossip,
+                                        links: true,
+                                    },
+                                ))
                             } else {
                                 None
                             }
@@ -685,11 +698,32 @@ impl Network {
                     self.send_on_link(
                         if new {
                             vec![
-                                (idx, d! {zid: true, locs: false, links: false}),
-                                (self.idx, d! {zid: false, locs: self.gossip, links: true}),
+                                (
+                                    idx,
+                                    Details {
+                                        zid: true,
+                                        locators: false,
+                                        links: false,
+                                    },
+                                ),
+                                (
+                                    self.idx,
+                                    Details {
+                                        zid: false,
+                                        locators: self.gossip,
+                                        links: true,
+                                    },
+                                ),
                             ]
                         } else {
-                            vec![(self.idx, d! {zid: false, locs: self.gossip, links: true})]
+                            vec![(
+                                self.idx,
+                                Details {
+                                    zid: false,
+                                    locators: self.gossip,
+                                    links: true,
+                                },
+                            )]
                         },
                         &link.transport,
                     )
@@ -698,12 +732,19 @@ impl Network {
         let idxs = self
             .graph
             .node_indices()
-            .map(|idx| (idx, d! {
-                zid: true,
-                locs: self.gossip,
-                links: self.full_linkstate ||
-                    (self.router_peers_failover_brokering && idx == self.idx && whatami == WhatAmI::Router)
-            }))
+            .map(|idx| {
+                (
+                    idx,
+                    Details {
+                        zid: true,
+                        locators: self.gossip,
+                        links: self.full_linkstate
+                            || (self.router_peers_failover_brokering
+                                && idx == self.idx
+                                && whatami == WhatAmI::Router),
+                    },
+                )
+            })
             .collect();
         self.send_on_link(idxs, &transport);
         free_index
@@ -726,7 +767,14 @@ impl Network {
             self.graph[self.idx].sn += 1;
 
             self.send_on_links(
-                vec![(self.idx, d! {zid: false, locs: self.gossip, links: true})],
+                vec![(
+                    self.idx,
+                    Details {
+                        zid: false,
+                        locators: self.gossip,
+                        links: true,
+                    },
+                )],
                 |_| true,
             );
 
@@ -736,7 +784,14 @@ impl Network {
                 self.graph.remove_node(idx);
             }
             self.send_on_links(
-                vec![(self.idx, d! {zid: false, locs: self.gossip, links: true})],
+                vec![(
+                    self.idx,
+                    Details {
+                        zid: false,
+                        locators: self.gossip,
+                        links: true,
+                    },
+                )],
                 |link| link.zid != *zid,
             );
             vec![]
