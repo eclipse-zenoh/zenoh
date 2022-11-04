@@ -13,7 +13,12 @@
 //
 mod data;
 
+pub mod routing;
+pub use routing::*;
+
+use crate::{common::Attachment, core::Channel};
 pub use data::*;
+use std::fmt;
 
 pub mod zmsg {
     use crate::{
@@ -168,5 +173,46 @@ pub mod zmsg {
         pub const REPLY: CongestionControl = CongestionControl::Block;
         pub const UNIT: CongestionControl = CongestionControl::Block;
         pub const LINK_STATE_LIST: CongestionControl = CongestionControl::Block;
+    }
+}
+
+// Zenoh messages at zenoh level
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ZenohBody {
+    Data(Data),
+    // Declare(Declare),
+    // Query(Query),
+    // Pull(Pull),
+    // Unit(Unit),
+    // LinkStateList(LinkStateList),
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct ZenohMessage {
+    pub body: ZenohBody,
+    pub channel: Channel,
+    pub routing_context: Option<RoutingContext>,
+    pub attachment: Option<Attachment>,
+    #[cfg(feature = "stats")]
+    pub size: Option<std::num::NonZeroUsize>,
+}
+
+impl fmt::Debug for ZenohMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:?} {:?} {:?} {:?}",
+            self.body, self.channel, self.routing_context, self.attachment
+        )?;
+        #[cfg(feature = "stats")]
+        write!(f, " {:?}", self.size)?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for ZenohMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
     }
 }

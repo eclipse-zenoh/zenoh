@@ -164,6 +164,11 @@ fn codec_transport() {
 
 // Zenoh
 #[test]
+fn codec_routing_context() {
+    run!(RoutingContext, RoutingContext::rand());
+}
+
+#[test]
 fn codec_reply_context() {
     run!(ReplyContext, ReplyContext::rand());
 }
