@@ -275,7 +275,7 @@ impl Resource {
     }
 
     pub fn make_resource(
-        tables: &mut Tables,
+        _tables: &mut Tables,
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
@@ -289,13 +289,13 @@ impl Resource {
             };
 
             match get_mut_unchecked(from).childs.get_mut(chunk) {
-                Some(res) => Resource::make_resource(tables, res, rest),
+                Some(res) => Resource::make_resource(_tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
                     if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                         log::debug!("Register resource {}", new.expr());
                     }
-                    let res = Resource::make_resource(tables, &mut new, rest);
+                    let res = Resource::make_resource(_tables, &mut new, rest);
                     get_mut_unchecked(from)
                         .childs
                         .insert(String::from(chunk), new);
@@ -305,7 +305,7 @@ impl Resource {
         } else {
             match from.parent.clone() {
                 Some(mut parent) => {
-                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
+                    Resource::make_resource(_tables, &mut parent, &[&from.suffix, suffix].concat())
                 }
                 None => {
                     let (chunk, rest) = match suffix[1..].find('/') {
@@ -314,13 +314,13 @@ impl Resource {
                     };
 
                     match get_mut_unchecked(from).childs.get_mut(chunk) {
-                        Some(res) => Resource::make_resource(tables, res, rest),
+                        Some(res) => Resource::make_resource(_tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
                             if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                                 log::debug!("Register resource {}", new.expr());
                             }
-                            let res = Resource::make_resource(tables, &mut new, rest);
+                            let res = Resource::make_resource(_tables, &mut new, rest);
                             get_mut_unchecked(from)
                                 .childs
                                 .insert(String::from(chunk), new);
@@ -611,7 +611,7 @@ pub fn register_expr(
                     })
                     .clone();
 
-                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id == None {
+                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id.is_none() {
                     let local_expr_id = get_mut_unchecked(face).get_next_local_id();
                     get_mut_unchecked(&mut ctx).local_expr_id = Some(local_expr_id);
 
