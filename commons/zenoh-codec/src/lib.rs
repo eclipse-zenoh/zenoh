@@ -1,3 +1,5 @@
+use zenoh_protocol::core::Reliability;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -38,15 +40,6 @@ pub struct Zenoh060Header {
     pub codec: Zenoh060,
 }
 
-impl Zenoh060Header {
-    pub fn new(header: u8) -> Self {
-        Self {
-            header,
-            codec: Zenoh060::default(),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
 pub struct Zenoh060Condition {
@@ -54,10 +47,17 @@ pub struct Zenoh060Condition {
     pub codec: Zenoh060,
 }
 
-impl Zenoh060Condition {
-    pub fn new(condition: bool) -> Self {
+#[derive(Clone, Copy, Default)]
+#[non_exhaustive]
+pub struct Zenoh060Reliability {
+    pub reliability: Reliability,
+    pub codec: Zenoh060,
+}
+
+impl Zenoh060Reliability {
+    pub fn new(reliability: Reliability) -> Self {
         Self {
-            condition,
+            reliability,
             codec: Zenoh060::default(),
         }
     }

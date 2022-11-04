@@ -216,3 +216,52 @@ impl fmt::Display for ZenohMessage {
         fmt::Debug::fmt(self, f)
     }
 }
+
+// Functions mainly used for testing
+impl ZenohMessage {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use crate::core::{Priority, Reliability};
+        use rand::Rng;
+        use std::convert::TryInto;
+
+        let mut rng = rand::thread_rng();
+
+        let attachment = if rng.gen_bool(0.5) {
+            Some(Attachment::rand())
+        } else {
+            None
+        };
+
+        let routing_context = if rng.gen_bool(0.5) {
+            Some(RoutingContext::rand())
+        } else {
+            None
+        };
+
+        let priority: Priority = rng
+            .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
+            .try_into()
+            .unwrap();
+        let reliability = if rng.gen_bool(0.5) {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        };
+        let channel = Channel {
+            priority,
+            reliability,
+        };
+        let body = match rng.gen_range(0..1) {
+            0 => ZenohBody::Data(Data::rand()),
+            _ => unreachable!(),
+        };
+
+        Self {
+            body,
+            channel,
+            routing_context,
+            attachment,
+        }
+    }
+}

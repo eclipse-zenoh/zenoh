@@ -25,16 +25,16 @@ const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
 
 macro_rules! run_single {
-    ($type:ty, $rand:expr, $code:expr, $buff:expr) => {
+    ($type:ty, $rand:expr, $wcode:expr, $rcode:expr, $buff:expr) => {
         for _ in 0..NUM_ITER {
             let x: $type = $rand;
 
             $buff.clear();
             let mut writer = $buff.writer();
-            $code.write(&mut writer, &x).unwrap();
+            $wcode.write(&mut writer, &x).unwrap();
 
             let mut reader = $buff.reader();
-            let y: $type = $code.read(&mut reader).unwrap();
+            let y: $type = $rcode.read(&mut reader).unwrap();
             assert!(!reader.can_read());
 
             assert_eq!(x, y);
@@ -42,17 +42,25 @@ macro_rules! run_single {
     };
 }
 
-macro_rules! run {
-    ($type:ty, $rand:expr) => {
-        let codec = Zenoh060::default();
-
+macro_rules! run_buffers {
+    ($type:ty, $rand:expr, $wcode:expr, $rcode:expr) => {
         println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
         let mut buffer = vec![];
-        run_single!($type, $rand, codec, buffer);
+        run_single!($type, $rand, $wcode, $rcode, buffer);
 
         println!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
-        run_single!($type, $rand, codec, buffer);
+        run_single!($type, $rand, $wcode, $rcode, buffer);
+    };
+}
+
+macro_rules! run {
+    ($type:ty, $rand:expr) => {
+        let codec = Zenoh060::default();
+        run_buffers!($type, $rand, codec, codec);
+    };
+    ($type:ty, $rand:expr, $wcode:block, $rcode:block) => {
+        run_buffers!($type, $rand, $wcode, $rcode);
     };
 }
 
@@ -181,6 +189,30 @@ fn codec_data_info() {
 #[test]
 fn codec_data() {
     run!(Data, Data::rand());
+}
+
+#[test]
+fn codec_zenoh() {
+    run!(
+        ZenohMessage,
+        {
+            let mut x = ZenohMessage::rand();
+            x.channel.reliability = Reliability::Reliable;
+            x
+        },
+        { Zenoh060::default() },
+        { Zenoh060Reliability::new(Reliability::Reliable) }
+    );
+    run!(
+        ZenohMessage,
+        {
+            let mut x = ZenohMessage::rand();
+            x.channel.reliability = Reliability::BestEffort;
+            x
+        },
+        { Zenoh060::default() },
+        { Zenoh060Reliability::new(Reliability::BestEffort) }
+    );
 }
 
 // macro_rules! gen {

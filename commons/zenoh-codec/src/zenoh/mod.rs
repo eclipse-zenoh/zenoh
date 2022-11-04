@@ -21,7 +21,8 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, Attachment},
-    zenoh::{ZenohBody, ZenohMessage},
+    core::{Channel, Priority},
+    zenoh::{zmsg, RoutingContext, ZenohBody, ZenohMessage},
 };
 
 impl<W> WCodec<&mut W, &ZenohMessage> for Zenoh060
@@ -34,9 +35,11 @@ where
         if let Some(a) = x.attachment.as_ref() {
             self.write(&mut *writer, a)?;
         }
-
         if let Some(r) = x.routing_context.as_ref() {
             self.write(&mut *writer, r)?;
+        }
+        if x.channel.priority != Priority::default() {
+            self.write(&mut *writer, &x.channel.priority)?;
         }
 
         match &x.body {
@@ -45,31 +48,67 @@ where
     }
 }
 
-impl<'a, R> RCodec<&'a mut R, ZenohMessage> for Zenoh060
+impl<R> RCodec<&mut R, ZenohMessage> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        // let mut codec = Zenoh060Header {
-        //     header: self.read(&mut *reader)?,
-        //     ..Default::default()
-        // };
+        let codec = Zenoh060Reliability {
+            reliability: Reliability::default(),
+            ..Default::default()
+        };
+        codec.read(reader)
+    }
+}
 
-        // let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
-        //     let a: Attachment = codec.read(&mut *reader)?;
-        //     codec.header = self.read(&mut *reader)?;
-        //     Some(a)
-        // } else {
-        //     None
-        // };
-        // let body = match imsg::mid(codec.header) {
-        //     imsg::id::SCOUT => ScoutingBody::Scout(codec.read(&mut *reader)?),
-        //     imsg::id::HELLO => ScoutingBody::Hello(codec.read(&mut *reader)?),
-        //     _ => return Err(DidntRead),
-        // };
-        // Ok(ZenohMessage { body, attachment })
-        Err(DidntRead)
+impl<'a, R> RCodec<&'a mut R, ZenohMessage> for Zenoh060Reliability
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
+        let mut codec = Zenoh060Header {
+            header: self.codec.read(&mut *reader)?,
+            ..Default::default()
+        };
+
+        let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
+            let a: Attachment = codec.read(&mut *reader)?;
+            codec.header = self.codec.read(&mut *reader)?;
+            Some(a)
+        } else {
+            None
+        };
+        let routing_context = if imsg::mid(codec.header) == zmsg::id::ROUTING_CONTEXT {
+            let r: RoutingContext = codec.read(&mut *reader)?;
+            codec.header = self.codec.read(&mut *reader)?;
+            Some(r)
+        } else {
+            None
+        };
+        let priority = if imsg::mid(codec.header) == zmsg::id::PRIORITY {
+            let p: Priority = codec.read(&mut *reader)?;
+            codec.header = self.codec.read(&mut *reader)?;
+            p
+        } else {
+            Priority::default()
+        };
+
+        let body = match imsg::mid(codec.header) {
+            zmsg::id::REPLY_CONTEXT | zmsg::id::DATA => ZenohBody::Data(codec.read(&mut *reader)?),
+            _ => return Err(DidntRead),
+        };
+        Ok(ZenohMessage {
+            body,
+            attachment,
+            channel: Channel {
+                priority,
+                reliability: self.reliability,
+            },
+            routing_context,
+        })
     }
 }
