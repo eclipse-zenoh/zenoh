@@ -56,17 +56,7 @@ impl Query {
 
         let mut rng = rand::thread_rng();
 
-        let scope: ZInt = rng.gen_range(0..20);
-        let suffix: String = if rng.gen_bool(0.5) {
-            let len = rng.gen_range(MIN..MAX);
-            Alphanumeric.sample_string(&mut rng, len)
-        } else {
-            String::new()
-        };
-        let key = WireExpr {
-            scope,
-            suffix: suffix.into(),
-        };
+        let key = WireExpr::rand();
 
         let parameters = if rng.gen_bool(0.5) {
             let len = rng.gen_range(MIN..MAX);

@@ -207,6 +207,56 @@ fn codec_query() {
 }
 
 #[test]
+fn codec_declaration_resource() {
+    run!(Resource, Resource::rand());
+}
+
+#[test]
+fn codec_declaration_forget_resource() {
+    run!(ForgetResource, ForgetResource::rand());
+}
+
+#[test]
+fn codec_declaration_publisher() {
+    run!(Publisher, Publisher::rand());
+}
+
+#[test]
+fn codec_declaration_forget_publisher() {
+    run!(ForgetPublisher, ForgetPublisher::rand());
+}
+
+#[test]
+fn codec_declaration_subscriber() {
+    run!(Subscriber, Subscriber::rand());
+}
+
+#[test]
+fn codec_declaration_forget_subscriber() {
+    run!(ForgetSubscriber, ForgetSubscriber::rand());
+}
+
+#[test]
+fn codec_declaration_queryable() {
+    run!(Queryable, Queryable::rand());
+}
+
+#[test]
+fn codec_declaration_forget_queryable() {
+    run!(ForgetQueryable, ForgetQueryable::rand());
+}
+
+#[test]
+fn codec_declaration() {
+    run!(Declaration, Declaration::rand());
+}
+
+#[test]
+fn codec_declare() {
+    run!(Declare, Declare::rand());
+}
+
+#[test]
 fn codec_zenoh() {
     run!(
         ZenohMessage,

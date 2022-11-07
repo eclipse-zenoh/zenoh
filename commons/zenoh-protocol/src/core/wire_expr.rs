@@ -198,3 +198,32 @@ impl<'a> From<&'a String> for WireExpr<'a> {
         }
     }
 }
+
+// Functions mainly used for testing
+impl WireExpr<'_> {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::{
+            distributions::{Alphanumeric, DistString},
+            Rng,
+        };
+
+        const MIN: usize = 2;
+        const MAX: usize = 64;
+
+        let mut rng = rand::thread_rng();
+
+        let scope: ExprId = rng.gen_range(0..20);
+        let suffix: String = if rng.gen_bool(0.5) {
+            let len = rng.gen_range(MIN..MAX);
+            Alphanumeric.sample_string(&mut rng, len)
+        } else {
+            String::new()
+        };
+
+        WireExpr {
+            scope,
+            suffix: suffix.into(),
+        }
+    }
+}

@@ -39,28 +39,11 @@ pub struct Pull {
 impl Pull {
     #[doc(hidden)]
     pub fn rand() -> Self {
-        use rand::{
-            distributions::{Alphanumeric, DistString},
-            Rng,
-        };
-
-        const MIN: usize = 2;
-        const MAX: usize = 16;
+        use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        let scope: ZInt = rng.gen_range(0..20);
-        let suffix: String = if rng.gen_bool(0.5) {
-            let len = rng.gen_range(MIN..MAX);
-            Alphanumeric.sample_string(&mut rng, len)
-        } else {
-            String::new()
-        };
-        let key = WireExpr {
-            scope,
-            suffix: suffix.into(),
-        };
-
+        let key = WireExpr::rand();
         let pull_id: ZInt = rng.gen();
         let max_samples = if rng.gen_bool(0.5) {
             Some(rng.gen())

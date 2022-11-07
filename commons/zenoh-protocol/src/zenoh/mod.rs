@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod data;
+mod declare;
 mod pull;
 mod query;
 mod routing;
@@ -19,6 +20,7 @@ mod unit;
 
 use crate::{common::Attachment, core::Channel};
 pub use data::*;
+pub use declare::*;
 pub use pull::*;
 pub use query::*;
 pub use routing::*;
@@ -189,7 +191,7 @@ pub enum ZenohBody {
     Unit(Unit),
     Pull(Pull),
     Query(Query),
-    // Declare(Declare),
+    Declare(Declare),
     // LinkStateList(LinkStateList),
 }
 
@@ -257,11 +259,12 @@ impl ZenohMessage {
             priority,
             reliability,
         };
-        let body = match rng.gen_range(0..4) {
+        let body = match rng.gen_range(0..5) {
             0 => ZenohBody::Data(Data::rand()),
             1 => ZenohBody::Unit(Unit::rand()),
             2 => ZenohBody::Pull(Pull::rand()),
             3 => ZenohBody::Query(Query::rand()),
+            4 => ZenohBody::Declare(Declare::rand()),
             _ => unreachable!(),
         };
 
