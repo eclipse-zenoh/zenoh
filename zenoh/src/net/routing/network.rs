@@ -685,6 +685,7 @@ impl Network {
             self.graph[self.idx].links.push(zid);
             self.graph[self.idx].sn += 1;
 
+            // Send updated self linkstate on all existing links except new one
             self.links
                 .values()
                 .filter(|link| {
@@ -728,6 +729,8 @@ impl Network {
                     )
                 });
         }
+
+        // Send all nodes linkstate on new link
         let idxs = self
             .graph
             .node_indices()
