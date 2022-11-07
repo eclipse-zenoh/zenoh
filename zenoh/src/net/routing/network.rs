@@ -101,6 +101,7 @@ pub(crate) struct Network {
     pub(crate) full_linkstate: bool,
     pub(crate) router_peers_failover_brokering: bool,
     pub(crate) gossip: bool,
+    pub(crate) gossip_multihop: bool,
     pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
@@ -111,6 +112,7 @@ pub(crate) struct Network {
 }
 
 impl Network {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         name: String,
         zid: ZenohId,
@@ -118,6 +120,7 @@ impl Network {
         full_linkstate: bool,
         router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -134,6 +137,7 @@ impl Network {
             full_linkstate,
             router_peers_failover_brokering,
             gossip,
+            gossip_multihop,
             autoconnect,
             idx,
             links: VecMap::new(),
@@ -436,17 +440,19 @@ impl Network {
 
                 if self.gossip {
                     if let Some(idx) = idx {
-                        self.send_on_links(
-                            vec![(
-                                idx,
-                                Details {
-                                    zid: true,
-                                    locators: self.gossip,
-                                    links: false,
-                                },
-                            )],
-                            |link| link.zid != zid,
-                        );
+                        if self.gossip_multihop || self.links.values().any(|link| link.zid == zid) {
+                            self.send_on_links(
+                                vec![(
+                                    idx,
+                                    Details {
+                                        zid: true,
+                                        locators: self.gossip,
+                                        links: false,
+                                    },
+                                )],
+                                |link| link.zid != zid,
+                            );
+                        }
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers

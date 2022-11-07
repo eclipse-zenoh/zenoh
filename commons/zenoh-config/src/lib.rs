@@ -147,6 +147,9 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
+                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+                /// When flase, gossip scouting informations are only propagated to the next hop.
+                multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,

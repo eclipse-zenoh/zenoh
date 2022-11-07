@@ -297,6 +297,7 @@ impl Router {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(
         &mut self,
         runtime: Runtime,
@@ -304,6 +305,7 @@ impl Router {
         peer_full_linkstate: bool,
         router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
         let mut tables = zwrite!(self.tables);
@@ -315,6 +317,7 @@ impl Router {
                 router_full_linkstate,
                 router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }
@@ -326,6 +329,7 @@ impl Router {
                 peer_full_linkstate,
                 router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }
