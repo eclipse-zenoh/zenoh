@@ -15,7 +15,9 @@
 //! Sample primitives
 use std::convert::TryInto;
 
+use zenoh_config::ZenohId;
 use zenoh_protocol::proto::DataInfo;
+use zenoh_protocol_core::ZInt;
 
 use crate::buffers::ZBuf;
 use crate::prelude::{KeyExpr, SampleKind, Value};
@@ -42,6 +44,48 @@ impl Default for Locality {
     }
 }
 
+/// Informations on the source of a zenoh [`Sample`].
+#[zenoh_core::unstable]
+#[derive(Debug, Clone)]
+pub struct SourceInfo {
+    /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
+    pub source_id: Option<ZenohId>,
+    /// The sequence number of the [`Sample`] from the source.
+    pub source_sn: Option<ZInt>,
+}
+
+#[test]
+fn source_info_stack_size() {
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
+}
+
+impl SourceInfo {
+    pub(crate) fn empty() -> Self {
+        SourceInfo {
+            source_id: None,
+            source_sn: None,
+        }
+    }
+}
+
+impl From<DataInfo> for SourceInfo {
+    fn from(data_info: DataInfo) -> Self {
+        SourceInfo {
+            source_id: data_info.source_id,
+            source_sn: data_info.source_sn,
+        }
+    }
+}
+
+impl From<Option<DataInfo>> for SourceInfo {
+    fn from(data_info: Option<DataInfo>) -> Self {
+        match data_info {
+            Some(data_info) => data_info.into(),
+            None => SourceInfo::empty(),
+        }
+    }
+}
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -54,6 +98,16 @@ pub struct Sample {
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
+
+    #[cfg(feature = "unstable")]
+    /// <div class="stab unstable">
+    ///   <span class="emoji">🔬</span>
+    ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+    ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
+    /// </div>
+    ///
+    /// Infos on the source of this Sample.
+    pub source_info: SourceInfo,
 }
 
 impl Sample {
@@ -69,6 +123,8 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         }
     }
     /// Creates a new Sample.
@@ -87,6 +143,8 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            #[cfg(feature = "unstable")]
+            source_info: SourceInfo::empty(),
         })
     }
 
@@ -107,6 +165,8 @@ impl Sample {
                 value,
                 kind: data_info.kind,
                 timestamp: data_info.timestamp,
+                #[cfg(feature = "unstable")]
+                source_info: data_info.into(),
             }
         } else {
             Sample {
@@ -114,6 +174,8 @@ impl Sample {
                 value,
                 kind: SampleKind::default(),
                 timestamp: None,
+                #[cfg(feature = "unstable")]
+                source_info: SourceInfo::empty(),
             }
         }
     }
@@ -126,6 +188,10 @@ impl Sample {
             timestamp: self.timestamp,
             #[cfg(feature = "shared-memory")]
             sliced: false,
+            #[cfg(feature = "unstable")]
+            source_id: self.source_info.source_id,
+            #[cfg(feature = "unstable")]
+            source_sn: self.source_info.source_sn,
         };
         (self.key_expr, self.value.payload, info)
     }
@@ -140,6 +206,14 @@ impl Sample {
     #[inline]
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
+        self
+    }
+
+    /// Sets the source info of this Sample.
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = source_info;
         self
     }
 

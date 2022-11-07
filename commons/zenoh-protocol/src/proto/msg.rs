@@ -528,10 +528,6 @@ impl Header for Priority {
 /// +---------------+
 /// ~   source_sn   ~ if options & (1 << 8)
 /// +---------------+
-/// ~first_router_id~ if options & (1 << 9)
-/// +---------------+
-/// ~first_router_sn~ if options & (1 << 10)
-/// +---------------+
 ///
 /// - if options & (1 << 5) then the payload is sliced
 ///
@@ -543,6 +539,8 @@ pub struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
+    pub source_id: Option<ZenohId>,
+    pub source_sn: Option<ZInt>,
 }
 
 impl DataInfo {
@@ -567,6 +565,12 @@ impl Options for DataInfo {
         if self.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
         }
+        if self.source_id.is_some() {
+            options |= zmsg::data::info::SRCID;
+        }
+        if self.source_sn.is_some() {
+            options |= zmsg::data::info::SRCSN;
+        }
         options
     }
 
@@ -588,6 +592,8 @@ impl Options for DataInfo {
             || self.kind != SampleKind::Put
             || self.encoding.is_some()
             || self.timestamp.is_some()
+            || self.source_id.is_some()
+            || self.source_sn.is_some()
     }
 }
 

@@ -206,6 +206,8 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
+        source_id: option_gen!(gen_zid()),
+        source_sn: option_gen!(gen!(ZInt)),
     }
 }
 
