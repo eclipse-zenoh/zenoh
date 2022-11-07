@@ -13,7 +13,7 @@
 //
 use crate::{
     core::{Channel, Priority, Reliability, ZInt},
-    proto::ZenohMessage,
+    zenoh::ZenohMessage,
 };
 use zenoh_buffers::ZSlice;
 
@@ -56,39 +56,6 @@ pub struct Frame {
     pub sn: ZInt,
     pub payload: FramePayload,
 }
-
-// impl Header for Frame {
-//     #[inline(always)]
-//     fn header(&self) -> u8 {
-//         let mut header = tmsg::id::FRAME;
-//         if let Reliability::Reliable = self.channel.reliability {
-//             header |= tmsg::flag::R;
-//         }
-//         if let FramePayload::Fragment { is_final, .. } = self.payload {
-//             header |= tmsg::flag::F;
-//             if is_final {
-//                 header |= tmsg::flag::E;
-//             }
-//         }
-//         header
-//     }
-// }
-
-// impl Frame {
-//     pub fn make_header(reliability: Reliability, is_fragment: Option<bool>) -> u8 {
-//         let mut header = tmsg::id::FRAME;
-//         if let Reliability::Reliable = reliability {
-//             header |= tmsg::flag::R;
-//         }
-//         if let Some(is_final) = is_fragment {
-//             header |= tmsg::flag::F;
-//             if is_final {
-//                 header |= tmsg::flag::E;
-//             }
-//         }
-//         header
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FramePayload {
@@ -150,8 +117,15 @@ impl Frame {
                 is_final: rng.gen_bool(0.5),
             }
         } else {
-            // @TODO: update once ZenohMessage is implemented
-            FramePayload::Messages { messages: vec![] }
+            let n = rng.gen_range(1..16);
+            let messages = (0..n)
+                .map(|_| {
+                    let mut m = ZenohMessage::rand();
+                    m.channel = channel;
+                    m
+                })
+                .collect::<Vec<ZenohMessage>>();
+            FramePayload::Messages { messages }
         };
 
         Frame {

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    reader::{DidntRead, HasReader, Reader},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
@@ -105,6 +105,7 @@ impl<'a> HasReader for &'a [u8] {
         self
     }
 }
+
 impl Reader for &[u8] {
     fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
         let len = self.len().min(into.len());
@@ -161,5 +162,18 @@ impl Reader for &[u8] {
 
     fn can_read(&self) -> bool {
         !self.is_empty()
+    }
+}
+
+impl<'a> BacktrackableReader for &'a [u8] {
+    type Mark = &'a [u8];
+
+    fn mark(&mut self) -> Self::Mark {
+        self
+    }
+
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        *self = mark;
+        true
     }
 }

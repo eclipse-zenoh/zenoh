@@ -20,7 +20,7 @@ mod open;
 
 use crate::*;
 use zenoh_buffers::{
-    reader::{DidntRead, Reader},
+    reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
@@ -54,7 +54,7 @@ where
 
 impl<R> RCodec<&mut R, TransportMessage> for Zenoh060
 where
-    R: Reader,
+    R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 

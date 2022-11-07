@@ -187,6 +187,13 @@ pub mod reader {
         }
     }
 
+    pub trait BacktrackableReader: Reader {
+        type Mark;
+
+        fn mark(&mut self) -> Self::Mark;
+        fn rewind(&mut self, mark: Self::Mark) -> bool;
+    }
+
     pub trait HasReader {
         type Reader: Reader;
 

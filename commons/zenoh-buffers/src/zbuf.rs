@@ -14,7 +14,7 @@
 #[cfg(feature = "shared-memory")]
 use crate::SharedMemoryReader;
 use crate::{
-    reader::{DidntRead, HasReader, Reader},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     SplitBuffer, ZSlice, ZSliceBuffer,
 };
@@ -265,6 +265,19 @@ impl<'a> Reader for ZBufReader<'a> {
                 Ok(buffer.into())
             }
         }
+    }
+}
+
+impl<'a> BacktrackableReader for ZBufReader<'a> {
+    type Mark = ZBufPos;
+
+    fn mark(&mut self) -> Self::Mark {
+        self.cursor
+    }
+
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        self.cursor = mark;
+        true
     }
 }
 

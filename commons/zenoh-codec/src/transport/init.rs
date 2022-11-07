@@ -20,7 +20,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::imsg,
     core::{WhatAmI, ZInt, ZenohId},
-    proto::defaults::SEQ_NUM_RES,
+    defaults::SEQ_NUM_RES,
     transport::{tmsg, InitAck, InitSyn},
 };
 

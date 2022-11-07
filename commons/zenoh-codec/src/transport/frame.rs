@@ -13,13 +13,14 @@
 //
 use crate::*;
 use zenoh_buffers::{
-    reader::{DidntRead, Reader},
+    reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
     core::{Channel, Priority, Reliability, ZInt},
     transport::{tmsg, Frame, FramePayload},
+    zenoh::ZenohMessage,
 };
 
 impl<W> WCodec<&mut W, &Frame> for Zenoh060
@@ -51,13 +52,10 @@ where
         self.write(&mut *writer, x.sn)?;
         match &x.payload {
             FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer.clone())?,
-            FramePayload::Messages {
-                // messages 
-                ..
-            } => {
-                // for m in messages.iter_mut() {
-                //     zcheck!(self.write_zenoh_message(m));
-                // }
+            FramePayload::Messages { messages } => {
+                for m in messages.iter() {
+                    self.write(&mut *writer, m)?;
+                }
             }
         }
         Ok(())
@@ -66,7 +64,7 @@ where
 
 impl<R> RCodec<&mut R, Frame> for Zenoh060
 where
-    R: Reader + std::fmt::Debug,
+    R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
@@ -81,7 +79,7 @@ where
 
 impl<R> RCodec<&mut R, Frame> for Zenoh060Header
 where
-    R: Reader,
+    R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
@@ -115,17 +113,24 @@ where
             let is_final = imsg::has_flag(self.header, tmsg::flag::E);
             FramePayload::Fragment { buffer, is_final }
         } else {
-            // let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
-            // while self.can_read() {
-            //     let pos = self.get_pos();
-            //     if let Some(msg) = self.read_zenoh_message(reliability) {
-            //         messages.push(msg);
-            //     } else {
-            //         self.set_pos(pos);
-            //         break;
-            //     }
-            // }
-            FramePayload::Messages { messages: vec![] }
+            let rcode = Zenoh060Reliability {
+                reliability,
+                ..Default::default()
+            };
+
+            let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
+            while reader.can_read() {
+                let mark = reader.mark();
+                let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
+                match res {
+                    Ok(m) => messages.push(m),
+                    Err(_) => {
+                        reader.rewind(mark);
+                        break;
+                    }
+                }
+            }
+            FramePayload::Messages { messages }
         };
 
         Ok(Frame {

@@ -21,7 +21,7 @@ use zenoh_codec::*;
 // use zenoh_buffers::reader::HasReader;
 // use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr};
 // use zenoh_protocol::io::{WBuf, ZBuf};
-use zenoh_protocol::{core::ZInt, proto::defaults::BATCH_SIZE};
+use zenoh_protocol::{core::ZInt, defaults::BATCH_SIZE};
 // use zenoh_protocol::proto::ZenohMessage;
 // use zenoh_protocol::proto::{MessageReader, MessageWriter};
 

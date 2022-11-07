@@ -13,7 +13,7 @@
 //
 use crate::{
     core::{WhatAmI, ZInt, ZenohId},
-    proto::defaults::SEQ_NUM_RES,
+    defaults::SEQ_NUM_RES,
 };
 use zenoh_buffers::ZSlice;
 

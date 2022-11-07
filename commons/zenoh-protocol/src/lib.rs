@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub mod common;
 pub mod core;
-pub mod proto;
+pub mod defaults;
 pub mod scouting;
 pub mod transport;
 pub mod zenoh;
