@@ -20,13 +20,12 @@ use {
     std::collections::{HashMap, VecDeque},
     std::convert::TryInto,
     std::future::Ready,
-    zenoh::buffers::reader::HasReader,
     zenoh::prelude::r#async::*,
     zenoh::queryable::{Query, Queryable},
+    zenoh::sample::SourceInfo,
     zenoh::subscriber::FlumeSubscriber,
     zenoh::Session,
     zenoh_core::{bail, AsyncResolve, Resolvable, Result as ZResult, SyncResolve},
-    zenoh_protocol::io::ZBufCodec,
     zenoh_util::core::ResolveFuture,
 };
 
@@ -131,16 +130,15 @@ fn decode_range(range: &str) -> (Option<ZInt>, Option<ZInt>) {
 fn sample_in_range(sample: &Sample, start: Option<ZInt>, end: Option<ZInt>) -> bool {
     if start.is_none() && end.is_none() {
         true
-    } else {
-        let mut buf = sample.value.payload.reader();
-        let _id = buf.read_zid().unwrap(); //TODO
-        let seq_num = buf.read_zint().unwrap(); //TODO
+    } else if let Some(source_sn) = sample.source_info.source_sn {
         match (start, end) {
-            (Some(start), Some(end)) => seq_num >= start && seq_num <= end,
-            (Some(start), None) => seq_num >= start,
-            (None, Some(end)) => seq_num <= end,
+            (Some(start), Some(end)) => source_sn >= start && source_sn <= end,
+            (Some(start), None) => source_sn >= start,
+            (None, Some(end)) => source_sn <= end,
             (None, None) => true,
         }
+    } else {
+        false
     }
 }
 
@@ -204,24 +202,26 @@ impl<'a> ReliabilityCache<'a> {
                     // on publication received by the local subscriber, store it
                     sample = sub_recv.recv_async() => {
                         if let Ok(sample) = sample {
-                            let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
-                                prefix.join(&sample.key_expr).unwrap().into()
-                            } else {
-                                sample.key_expr.clone()
-                            };
+                            if let SourceInfo { source_id: Some(_), source_sn: Some(_)} = sample.source_info {
+                                let queryable_key_expr: KeyExpr<'_> = if let Some(prefix) = &queryable_prefix {
+                                    prefix.join(&sample.key_expr).unwrap().into()
+                                } else {
+                                    sample.key_expr.clone()
+                                };
 
-                            if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
-                                if queue.len() >= history {
-                                    queue.pop_front();
+                                if let Some(queue) = cache.get_mut(queryable_key_expr.as_keyexpr()) {
+                                    if queue.len() >= history {
+                                        queue.pop_front();
+                                    }
+                                    queue.push_back(sample);
+                                } else if cache.len() >= limit {
+                                    log::error!("ReliabilityCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    pub_key_expr);
+                                } else {
+                                    let mut queue: VecDeque<Sample> = VecDeque::new();
+                                    queue.push_back(sample);
+                                    cache.insert(queryable_key_expr.into(), queue);
                                 }
-                                queue.push_back(sample);
-                            } else if cache.len() >= limit {
-                                log::error!("ReliabilityCache on {}: resource_limit exceeded - can't cache publication for a new resource",
-                                pub_key_expr);
-                            } else {
-                                let mut queue: VecDeque<Sample> = VecDeque::new();
-                                queue.push_back(sample);
-                                cache.insert(queryable_key_expr.into(), queue);
                             }
                         }
                     },

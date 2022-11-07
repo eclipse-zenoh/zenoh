@@ -15,13 +15,14 @@
 use {
     std::future::Ready,
     std::sync::atomic::{AtomicU64, Ordering},
-    zenoh::buffers::WBuf,
     zenoh::prelude::r#async::*,
     zenoh::publication::{Publication, Publisher},
     zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve},
-    zenoh_protocol::io::WBufCodec,
     zenoh_util::core::ResolveFuture,
 };
+
+#[zenoh_core::unstable]
+use zenoh::sample::SourceInfo;
 
 #[zenoh_core::unstable]
 use crate::{ReliabilityCache, SessionExt};
@@ -168,13 +169,12 @@ impl<'a> ReliablePublisher<'a> {
     where
         IntoValue: Into<Value>,
     {
-        let v: Value = value.into();
-        let mut buf = WBuf::new(128, false);
-        buf.write_zid(&self._id);
-        buf.write_zint(self._seqnum.fetch_add(1, Ordering::Relaxed));
-        buf.write_zbuf_slices(&v.payload);
         self._publisher
-            .write(kind, Value::new(buf.into()).encoding(v.encoding))
+            .write(kind, value)
+            .with_source_info(SourceInfo {
+                source_id: Some(self._id),
+                source_sn: Some(self._seqnum.fetch_add(1, Ordering::Relaxed)),
+            })
     }
 
     /// Put data.

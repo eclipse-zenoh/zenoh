@@ -1,3 +1,5 @@
+use zenoh::sample::SourceInfo;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -20,8 +22,6 @@ use {
     std::future::Ready,
     std::sync::{Arc, Mutex},
     std::time::Duration,
-    zenoh::buffers::reader::{HasReader, Reader},
-    zenoh::buffers::ZBuf,
     zenoh::handlers::{locked, DefaultHandler},
     zenoh::prelude::r#async::*,
     zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
@@ -30,7 +30,6 @@ use {
     zenoh_collections::timer::Timer,
     zenoh_collections::{Timed, TimedEvent},
     zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve},
-    zenoh_protocol::io::ZBufCodec,
 };
 
 /// The builder of ReliableSubscriber, allowing to configure it.
@@ -284,38 +283,40 @@ fn handle_sample(
     wait: bool,
     sample: Sample,
     callback: &Arc<dyn Fn(Sample) + Send + Sync>,
-) -> (ZenohId, bool) {
-    let mut buf = sample.value.payload.reader();
-    let id = buf.read_zid().unwrap(); //TODO
-    let seq_num = buf.read_zint().unwrap(); //TODO
-    let mut payload = ZBuf::default();
-    buf.read_into_zbuf(&mut payload, buf.remaining());
-    let value = Value::new(payload).encoding(sample.encoding.clone());
-    let s = Sample::new(sample.key_expr, value);
-    let entry = states.entry(id);
-    let new = matches!(&entry, Entry::Occupied(_));
-    let state = entry.or_insert(InnerState {
-        last_seq_num: None,
-        pending_queries: 0,
-        pending_samples: HashMap::new(),
-    });
-    if wait {
-        state.pending_samples.insert(seq_num, s);
-    } else if state.last_seq_num.is_some() && seq_num != state.last_seq_num.unwrap() + 1 {
-        if seq_num > state.last_seq_num.unwrap() {
-            state.pending_samples.insert(seq_num, s);
-        }
-    } else {
-        callback(s);
-        let mut last_seq_num = seq_num;
-        state.last_seq_num = Some(last_seq_num);
-        while let Some(s) = state.pending_samples.remove(&(last_seq_num + 1)) {
-            callback(s);
-            last_seq_num += 1;
+) -> bool {
+    if let SourceInfo {
+        source_id: Some(source_id),
+        source_sn: Some(source_sn),
+    } = sample.source_info
+    {
+        let entry = states.entry(source_id);
+        let new = matches!(&entry, Entry::Occupied(_));
+        let state = entry.or_insert(InnerState {
+            last_seq_num: None,
+            pending_queries: 0,
+            pending_samples: HashMap::new(),
+        });
+        if wait {
+            state.pending_samples.insert(source_sn, sample);
+        } else if state.last_seq_num.is_some() && source_sn != state.last_seq_num.unwrap() + 1 {
+            if source_sn > state.last_seq_num.unwrap() {
+                state.pending_samples.insert(source_sn, sample);
+            }
+        } else {
+            callback(sample);
+            let mut last_seq_num = source_sn;
             state.last_seq_num = Some(last_seq_num);
+            while let Some(s) = state.pending_samples.remove(&(last_seq_num + 1)) {
+                callback(s);
+                last_seq_num += 1;
+                state.last_seq_num = Some(last_seq_num);
+            }
         }
+        new
+    } else {
+        callback(sample);
+        true
     }
-    (id, new)
 }
 
 #[zenoh_core::unstable]
@@ -331,7 +332,7 @@ fn seq_num_range(start: Option<ZInt>, end: Option<ZInt>) -> String {
 #[zenoh_core::unstable]
 #[derive(Clone)]
 struct PeriodicQuery {
-    id: ZenohId,
+    source_id: ZenohId,
     statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
     key_expr: KeyExpr<'static>,
     session: Arc<Session>,
@@ -342,8 +343,8 @@ struct PeriodicQuery {
 
 #[zenoh_core::unstable]
 impl PeriodicQuery {
-    fn with_id(mut self, id: ZenohId) -> Self {
-        self.id = id;
+    fn with_source_id(mut self, source_id: ZenohId) -> Self {
+        self.source_id = source_id;
         self
     }
 }
@@ -354,13 +355,13 @@ impl Timed for PeriodicQuery {
     async fn run(&mut self) {
         let mut lock = zlock!(self.statesref);
         let (states, _wait) = &mut *lock;
-        if let Some(state) = states.get_mut(&self.id) {
+        if let Some(state) = states.get_mut(&self.source_id) {
             state.pending_queries += 1;
-            let key_expr = (&self.id.into_keyexpr()) / &self.key_expr;
+            let key_expr = (&self.source_id.into_keyexpr()) / &self.key_expr;
             let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
             drop(lock);
             let handler = RepliesHandler {
-                id: self.id,
+                source_id: self.source_id,
                 statesref: self.statesref.clone(),
                 callback: self.callback.clone(),
             };
@@ -401,7 +402,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                 Arc::new(Timer::new(false)),
                 period,
                 PeriodicQuery {
-                    id: ZenohId::try_from([1]).unwrap(),
+                    source_id: ZenohId::try_from([1]).unwrap(),
                     statesref: statesref.clone(),
                     key_expr: key_expr.clone().into_owned(),
                     session,
@@ -422,42 +423,48 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
             move |s: Sample| {
                 let mut lock = zlock!(statesref);
                 let (states, wait) = &mut *lock;
-                let (id, new) = handle_sample(states, *wait, s, &callback);
+                let source_id = s.source_info.source_id;
+                let new = handle_sample(states, *wait, s, &callback);
 
-                if new {
-                    if let Some((timer, period, query)) = periodic_query.as_ref() {
-                        timer.add(TimedEvent::periodic(*period, query.clone().with_id(id)))
+                if let Some(source_id) = source_id {
+                    if new {
+                        if let Some((timer, period, query)) = periodic_query.as_ref() {
+                            timer.add(TimedEvent::periodic(
+                                *period,
+                                query.clone().with_source_id(source_id),
+                            ))
+                        }
                     }
-                }
 
-                if let Some(state) = states.get_mut(&id) {
-                    if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-                        state.pending_queries += 1;
-                        let key_expr = (&id.into_keyexpr()) / &key_expr;
-                        let seq_num_range =
-                            seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
-                        drop(lock);
-                        let handler = RepliesHandler {
-                            id,
-                            statesref: statesref.clone(),
-                            callback: callback.clone(),
-                        };
-                        let _ = session
-                            .get(Selector::from(key_expr).with_parameters(&seq_num_range))
-                            .callback({
-                                move |r: Reply| {
-                                    if let Ok(s) = r.sample {
-                                        let (ref mut states, wait) =
-                                            &mut *zlock!(handler.statesref);
-                                        handle_sample(states, *wait, s, &handler.callback);
+                    if let Some(state) = states.get_mut(&source_id) {
+                        if state.pending_queries == 0 && !state.pending_samples.is_empty() {
+                            state.pending_queries += 1;
+                            let key_expr = (&source_id.into_keyexpr()) / &key_expr;
+                            let seq_num_range =
+                                seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
+                            drop(lock);
+                            let handler = RepliesHandler {
+                                source_id,
+                                statesref: statesref.clone(),
+                                callback: callback.clone(),
+                            };
+                            let _ = session
+                                .get(Selector::from(key_expr).with_parameters(&seq_num_range))
+                                .callback({
+                                    move |r: Reply| {
+                                        if let Ok(s) = r.sample {
+                                            let (ref mut states, wait) =
+                                                &mut *zlock!(handler.statesref);
+                                            handle_sample(states, *wait, s, &handler.callback);
+                                        }
                                     }
-                                }
-                            })
-                            .consolidation(ConsolidationMode::None)
-                            .accept_replies(ReplyKeyExpr::Any)
-                            .target(query_target)
-                            .timeout(query_timeout)
-                            .res_sync();
+                                })
+                                .consolidation(ConsolidationMode::None)
+                                .accept_replies(ReplyKeyExpr::Any)
+                                .target(query_target)
+                                .timeout(query_timeout)
+                                .res_sync();
+                        }
                     }
                 }
             }
@@ -525,7 +532,7 @@ struct InitialRepliesHandler {
 impl Drop for InitialRepliesHandler {
     fn drop(&mut self) {
         let (states, wait) = &mut *zlock!(self.statesref);
-        for (id, state) in states.iter_mut() {
+        for (source_id, state) in states.iter_mut() {
             let mut pending_samples = state
                 .pending_samples
                 .drain()
@@ -536,7 +543,10 @@ impl Drop for InitialRepliesHandler {
                 (self.callback)(sample);
             }
             if let Some((timer, period, query)) = self.periodic_query.as_ref() {
-                timer.add(TimedEvent::periodic(*period, query.clone().with_id(*id)))
+                timer.add(TimedEvent::periodic(
+                    *period,
+                    query.clone().with_source_id(*source_id),
+                ))
             }
         }
         *wait = false;
@@ -546,7 +556,7 @@ impl Drop for InitialRepliesHandler {
 #[zenoh_core::unstable]
 #[derive(Clone)]
 struct RepliesHandler {
-    id: ZenohId,
+    source_id: ZenohId,
     statesref: Arc<Mutex<(HashMap<ZenohId, InnerState>, bool)>>,
     callback: Arc<dyn Fn(Sample) + Send + Sync>,
 }
@@ -555,7 +565,7 @@ struct RepliesHandler {
 impl Drop for RepliesHandler {
     fn drop(&mut self) {
         let (states, wait) = &mut *zlock!(self.statesref);
-        if let Some(state) = states.get_mut(&self.id) {
+        if let Some(state) = states.get_mut(&self.source_id) {
             state.pending_queries -= 1;
             if !state.pending_samples.is_empty() && !*wait {
                 log::error!("Sample missed: unable to retrieve some missing samples.");
