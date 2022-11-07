@@ -34,6 +34,7 @@ fn base_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -124,6 +125,7 @@ fn match_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -161,6 +163,7 @@ fn clean_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
@@ -493,6 +496,7 @@ fn client_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     ));
 

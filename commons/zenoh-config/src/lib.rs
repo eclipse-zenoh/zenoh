@@ -170,6 +170,15 @@ validated_struct::validator! {
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
         RoutingConf {
+            /// The routing strategy to use in routers and it's configuration.
+            pub router: #[derive(Default)]
+            RouterRoutingConf {
+                /// When set to true a router will forward data between two peers
+                /// directly connected to it if it detects that those peers are not
+                /// connected to each other.
+                /// The failover brokering only works if gossip discovery is enabled.
+                peers_failover_brokering: Option<bool>,
+            },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
