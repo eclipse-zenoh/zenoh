@@ -160,7 +160,7 @@ impl AlignQueryable {
             AlignComponent::Contents(contents) => {
                 let mut result = Vec::new();
                 for each in contents {
-                    let entry = self.get_entry(each.clone()).await;
+                    let entry = self.get_entry(&each).await;
                     if entry.is_some() {
                         let entry = entry.unwrap();
                         result.push(AlignData::Data(
@@ -212,7 +212,7 @@ impl AlignQueryable {
 
 // replying queries
 impl AlignQueryable {
-    async fn get_entry(&self, logentry: LogEntry) -> Option<Sample> {
+    async fn get_entry(&self, logentry: &LogEntry) -> Option<Sample> {
         // get corresponding key from log
         let replies = self.session.get(&logentry.key).res().await.unwrap();
         if let Ok(reply) = replies.recv_async().await {
@@ -223,8 +223,8 @@ impl AlignQueryable {
                         sample.key_expr.as_str(),
                         sample.value
                     );
-                    if sample.timestamp.is_some() {
-                        match sample.timestamp.unwrap().cmp(&logentry.timestamp) {
+                    if let Some(timestamp) = sample.timestamp {
+                        match timestamp.cmp(&logentry.timestamp) {
                             Ordering::Greater => return None,
                             Ordering::Less => {
                                 error!(

@@ -243,9 +243,9 @@ impl Snapshotter {
         } else {
             let mut log = replica_data.stable_log.write().await;
             let deleted = (*log).insert(key.clone(), ts);
-            if deleted.is_some() {
+            if let Some(deleted) = deleted {
                 deleted_content.insert(LogEntry {
-                    timestamp: deleted.unwrap(),
+                    timestamp: deleted,
                     key: key.clone(),
                 });
             }
@@ -279,9 +279,9 @@ impl Snapshotter {
                 remains_volatile.insert(k, ts);
             } else {
                 let deleted = stable.insert(k.clone(), ts);
-                if deleted.is_some() {
+                if let Some(deleted) = deleted {
                     deleted_stable.insert(LogEntry {
-                        timestamp: deleted.unwrap(),
+                        timestamp: deleted,
                         key: k.clone(),
                     });
                 }
