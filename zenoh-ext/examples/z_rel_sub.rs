@@ -76,7 +76,7 @@ fn parse_args() -> (Config, String, bool, Option<Duration>) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
-                .default_value("demo/reliable/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-h, --history   'Query for historical samples at startup.'",

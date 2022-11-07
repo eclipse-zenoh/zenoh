@@ -65,7 +65,7 @@ fn parse_args() -> (Config, String, usize, String) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
-                .default_value("demo/reliable/example/**"),
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
