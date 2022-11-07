@@ -417,6 +417,12 @@ impl MessageWriter for WBuf {
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
         }
+        if let Some(zid) = info.source_id.as_ref() {
+            zcheck!(self.write_zid(zid));
+        }
+        if let Some(sn) = info.source_sn {
+            zcheck!(self.write_zint(sn));
+        }
         true
     }
 
