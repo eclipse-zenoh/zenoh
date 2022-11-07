@@ -202,6 +202,11 @@ fn codec_pull() {
 }
 
 #[test]
+fn codec_query() {
+    run!(Query, Query::rand());
+}
+
+#[test]
 fn codec_zenoh() {
     run!(
         ZenohMessage,

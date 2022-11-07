@@ -13,12 +13,14 @@
 //
 mod data;
 mod pull;
+mod query;
 mod routing;
 mod unit;
 
 use crate::{common::Attachment, core::Channel};
 pub use data::*;
 pub use pull::*;
+pub use query::*;
 pub use routing::*;
 use std::fmt;
 pub use unit::*;
@@ -186,8 +188,8 @@ pub enum ZenohBody {
     Data(Data),
     Unit(Unit),
     Pull(Pull),
+    Query(Query),
     // Declare(Declare),
-    // Query(Query),
     // LinkStateList(LinkStateList),
 }
 
@@ -255,10 +257,11 @@ impl ZenohMessage {
             priority,
             reliability,
         };
-        let body = match rng.gen_range(0..3) {
+        let body = match rng.gen_range(0..4) {
             0 => ZenohBody::Data(Data::rand()),
             1 => ZenohBody::Unit(Unit::rand()),
             2 => ZenohBody::Pull(Pull::rand()),
+            3 => ZenohBody::Query(Query::rand()),
             _ => unreachable!(),
         };
 

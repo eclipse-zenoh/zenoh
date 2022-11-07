@@ -13,6 +13,7 @@
 //
 mod data;
 mod pull;
+mod query;
 mod routing;
 mod unit;
 
@@ -48,6 +49,7 @@ where
             ZenohBody::Data(d) => self.write(&mut *writer, d),
             ZenohBody::Unit(u) => self.write(&mut *writer, u),
             ZenohBody::Pull(p) => self.write(&mut *writer, p),
+            ZenohBody::Query(q) => self.write(&mut *writer, q),
         }
     }
 }
@@ -130,8 +132,10 @@ where
                 ZenohBody::Unit(rodec.read(&mut *reader)?)
             }
             zmsg::id::PULL => ZenohBody::Pull(codec.read(&mut *reader)?),
+            zmsg::id::QUERY => ZenohBody::Query(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
+
         Ok(ZenohMessage {
             body,
             attachment,
