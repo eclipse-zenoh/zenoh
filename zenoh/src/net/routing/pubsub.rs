@@ -872,32 +872,25 @@ pub(crate) fn pubsub_tree_change(
 }
 
 pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
-    if let Some(src_face) = tables.get_face(zid) {
+    if let Some(src_face) = tables.get_face(zid).cloned() {
         if tables.router_peers_failover_brokering
             && tables.whatami == WhatAmI::Router
             && src_face.whatami == WhatAmI::Peer
         {
             for res in &src_face.remote_subs {
                 if !remote_router_subs(tables, res) {
-                    for mut dst_face in tables
-                        .faces
-                        .values()
-                        .cloned()
-                        .collect::<Vec<Arc<FaceState>>>()
-                    {
+                    for dst_face in tables.faces.values_mut() {
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
                             if links.contains(&dst_face.zid) {
                                 if dst_face.local_subs.contains(res) {
                                     let key_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.forget_subscriber(&key_expr, None);
 
-                                    get_mut_unchecked(&mut dst_face).local_subs.remove(res);
+                                    get_mut_unchecked(dst_face).local_subs.remove(res);
                                 }
                             } else {
-                                get_mut_unchecked(&mut dst_face)
-                                    .local_subs
-                                    .insert(res.clone());
-                                let key_expr = Resource::decl_key(res, &mut dst_face);
+                                get_mut_unchecked(dst_face).local_subs.insert(res.clone());
+                                let key_expr = Resource::decl_key(res, dst_face);
                                 let sub_info = SubInfo {
                                     reliability: Reliability::Reliable, // TODO
                                     mode: SubMode::Push,
