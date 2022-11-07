@@ -13,6 +13,7 @@
 //
 mod data;
 mod declare;
+mod linkstate;
 mod pull;
 mod query;
 mod routing;
@@ -21,6 +22,7 @@ mod unit;
 use crate::{common::Attachment, core::Channel};
 pub use data::*;
 pub use declare::*;
+pub use linkstate::*;
 pub use pull::*;
 pub use query::*;
 pub use routing::*;
@@ -192,7 +194,7 @@ pub enum ZenohBody {
     Pull(Pull),
     Query(Query),
     Declare(Declare),
-    // LinkStateList(LinkStateList),
+    LinkStateList(LinkStateList),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -259,12 +261,13 @@ impl ZenohMessage {
             priority,
             reliability,
         };
-        let body = match rng.gen_range(0..5) {
+        let body = match rng.gen_range(0..6) {
             0 => ZenohBody::Data(Data::rand()),
             1 => ZenohBody::Unit(Unit::rand()),
             2 => ZenohBody::Pull(Pull::rand()),
             3 => ZenohBody::Query(Query::rand()),
             4 => ZenohBody::Declare(Declare::rand()),
+            5 => ZenohBody::LinkStateList(LinkStateList::rand()),
             _ => unreachable!(),
         };
 

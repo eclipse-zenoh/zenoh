@@ -13,6 +13,7 @@
 //
 mod data;
 mod declare;
+mod linkstate;
 mod pull;
 mod query;
 mod routing;
@@ -52,6 +53,7 @@ where
             ZenohBody::Pull(p) => self.write(&mut *writer, p),
             ZenohBody::Query(q) => self.write(&mut *writer, q),
             ZenohBody::Declare(d) => self.write(&mut *writer, d),
+            ZenohBody::LinkStateList(l) => self.write(&mut *writer, l),
         }
     }
 }
@@ -136,6 +138,7 @@ where
             zmsg::id::PULL => ZenohBody::Pull(codec.read(&mut *reader)?),
             zmsg::id::QUERY => ZenohBody::Query(codec.read(&mut *reader)?),
             zmsg::id::DECLARE => ZenohBody::Declare(codec.read(&mut *reader)?),
+            zmsg::id::LINK_STATE_LIST => ZenohBody::LinkStateList(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

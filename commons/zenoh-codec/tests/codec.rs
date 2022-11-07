@@ -257,6 +257,16 @@ fn codec_declare() {
 }
 
 #[test]
+fn codec_link_state() {
+    run!(LinkState, LinkState::rand());
+}
+
+#[test]
+fn codec_link_state_list() {
+    run!(LinkStateList, LinkStateList::rand());
+}
+
+#[test]
 fn codec_zenoh() {
     run!(
         ZenohMessage,
