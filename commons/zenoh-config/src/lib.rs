@@ -294,7 +294,11 @@ validated_struct::validator! {
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
-        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        /// <div class="stab unstable">
+        ///   <span class="emoji">🔬</span>
+        ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
+        /// </div>
         AdminSpaceConf {
             /// Permissions on the admin space
             pub permissions:

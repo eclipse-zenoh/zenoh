@@ -56,8 +56,11 @@ pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let item = proc_macro2::TokenStream::from(item);
     TokenStream::from(quote! {
         #[cfg(feature = "unstable")]
-        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
-        /// To use it, you must enable zenoh's `unstable` feature flag.
+        /// <div class="stab unstable">
+        ///   <span class="emoji">🔬</span>
+        ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
+        /// </div>
         ///
         #item
     })

@@ -54,11 +54,7 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 #[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = if this.complete != 0 || info.complete != 0 {
-        1
-    } else {
-        0
-    };
+    this.complete = u64::from(this.complete != 0 || info.complete != 0);
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
@@ -538,7 +534,13 @@ fn remote_peer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
 fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
-        .map(|ctx| ctx.face.clone())
+        .filter_map(|ctx| {
+            if ctx.qabl.is_some() {
+                Some(ctx.face.clone())
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
@@ -578,6 +580,32 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             face.primitives.forget_queryable(&key_expr, None);
 
             get_mut_unchecked(face).local_qabls.remove(res);
+        }
+    }
+}
+
+fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc<Resource>) {
+    if !tables.full_net(WhatAmI::Peer)
+        && res.context().router_qabls.len() == 1
+        && res.context().router_qabls.contains_key(&tables.zid)
+    {
+        for mut face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            if face.whatami == WhatAmI::Peer
+                && face.local_qabls.contains_key(res)
+                && !res.session_ctxs.values().any(|s| {
+                    face.zid != s.face.zid && s.qabl.is_some() && s.face.whatami == WhatAmI::Client
+                })
+            {
+                let key_expr = Resource::get_best_key(res, "", face.id);
+                face.primitives.forget_queryable(&key_expr, None);
+
+                get_mut_unchecked(&mut face).local_qabls.remove(res);
+            }
         }
     }
 }
@@ -637,6 +665,8 @@ fn unregister_router_queryable(tables: &mut Tables, res: &mut Arc<Resource>, rou
         }
         propagate_forget_simple_queryable(tables, res);
     }
+
+    propagate_forget_simple_queryable_to_peers(tables, res);
 }
 
 fn undeclare_router_queryable(
@@ -751,6 +781,7 @@ pub(crate) fn undeclare_client_queryable(
             } else {
                 let local_info = local_router_qabl_info(tables, res);
                 register_router_queryable(tables, None, res, &local_info, tables.zid);
+                propagate_forget_simple_queryable_to_peers(tables, res);
             }
         }
         WhatAmI::Peer => {
@@ -805,11 +836,32 @@ pub fn forget_client_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, e
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     match tables.whatami {
         WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client
-                || (face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
-            {
+            if face.whatami == WhatAmI::Client {
                 for qabl in tables.router_qabls.iter() {
                     if qabl.context.is_some() {
+                        let info = local_qabl_info(
+                            tables.whatami,
+                            tables.full_net(WhatAmI::Peer),
+                            &tables.zid,
+                            qabl,
+                            face,
+                        );
+                        get_mut_unchecked(face)
+                            .local_qabls
+                            .insert(qabl.clone(), info.clone());
+                        let key_expr = Resource::decl_key(qabl, face);
+                        face.primitives.decl_queryable(&key_expr, &info, None);
+                    }
+                }
+            } else if face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                for qabl in tables.router_qabls.iter() {
+                    if qabl.context.is_some()
+                        && (qabl.context().router_qabls.keys().any(|r| *r != tables.zid)
+                            || qabl
+                                .session_ctxs
+                                .values()
+                                .any(|s| s.qabl.is_some() && s.face.whatami == WhatAmI::Client))
+                    {
                         let info = local_qabl_info(
                             tables.whatami,
                             tables.full_net(WhatAmI::Peer),

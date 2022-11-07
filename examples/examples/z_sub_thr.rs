@@ -101,7 +101,7 @@ fn parse_args() -> (Config, usize, usize) {
     let args = App::new("zenoh throughput sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
-                .possible_values(&["peer", "client"]),
+                .possible_values(["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",

@@ -37,7 +37,7 @@ pub struct LibLoader {
 impl LibLoader {
     /// Returns the list of search paths used by `LibLoader::default()`
     pub fn default_search_paths() -> &'static str {
-        &(*LIB_DEFAULT_SEARCH_PATHS)
+        &LIB_DEFAULT_SEARCH_PATHS
     }
 
     /// Creates a new [LibLoader] with a set of paths where the libraries will be searched for.
