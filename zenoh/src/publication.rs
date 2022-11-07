@@ -16,6 +16,7 @@
 
 use crate::net::transport::Primitives;
 use crate::prelude::*;
+use crate::sample::SourceInfo;
 use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
@@ -232,6 +233,7 @@ impl<'a> Publisher<'a> {
             publisher: self,
             value,
             kind,
+            source_info: SourceInfo::empty(),
         }
     }
 
@@ -371,6 +373,17 @@ pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,
     kind: SampleKind,
+    source_info: SourceInfo,
+}
+
+impl Publication<'_> {
+    /// Attach the given [`SourceInfo`] to the published data.
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = source_info;
+        self
+    }
 }
 
 impl Resolvable for Publication<'_> {
@@ -383,6 +396,7 @@ impl SyncResolve for Publication<'_> {
             publisher,
             value,
             kind,
+            source_info,
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
         let primitives = zread!(publisher.session.state)
@@ -399,6 +413,8 @@ impl SyncResolve for Publication<'_> {
             None
         };
         info.timestamp = publisher.session.runtime.new_timestamp();
+        info.source_id = source_info.source_id;
+        info.source_sn = source_info.source_sn;
         let data_info = if info.has_options() { Some(info) } else { None };
 
         primitives.send_data(
