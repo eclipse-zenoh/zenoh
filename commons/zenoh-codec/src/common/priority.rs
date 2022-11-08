@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{common::imsg, core::Priority, transport::tmsg};
 
-impl<W> WCodec<&mut W, &Priority> for Zenoh060
+impl<W> WCodec<&Priority, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -33,7 +33,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Priority> for Zenoh060
+impl<R> RCodec<Priority, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Priority> for Zenoh060Header
+impl<R> RCodec<Priority, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

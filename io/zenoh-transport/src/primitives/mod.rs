@@ -14,15 +14,16 @@
 mod demux;
 mod mux;
 
-use super::protocol;
-use super::protocol::core::{
-    Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
-};
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
-use zenoh_protocol::core::ConsolidationMode;
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::{
+    core::{
+        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
+        WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, RoutingContext},
+};
 
 pub trait Primitives: Send + Sync {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr);

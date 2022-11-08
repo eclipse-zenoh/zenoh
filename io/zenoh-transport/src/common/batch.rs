@@ -1,8 +1,3 @@
-use zenoh_buffers::buffer::CopyBuffer;
-use zenoh_buffers::writer::BacktrackableWriter;
-use zenoh_buffers::{WBufReader, WBufWriter};
-use zenoh_protocol::proto::MessageWriter;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -16,12 +11,20 @@ use zenoh_protocol::proto::MessageWriter;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::protocol::core::{Priority, Reliability, ZInt};
-use super::protocol::io::WBuf;
-use super::protocol::proto::{TransportMessage, ZenohMessage};
 use super::seq_num::SeqNumGenerator;
+use zenoh_buffers::{
+    reader::{Reader, SiphonableReader},
+    writer::{BacktrackableWriter, HasWriter, Writer},
+    BBuf,
+};
+use zenoh_codec::{WCodec, Zenoh060};
+use zenoh_protocol::{
+    core::{Priority, Reliability, ZInt},
+    transport::TransportMessage,
+    zenoh::ZenohMessage,
+};
 
-const LENGTH_BYTES: [u8; 2] = [0_u8, 0_u8];
+const LENGTH_BYTES: [u8; 2] = u16::MIN.to_be_bytes();
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -84,7 +87,7 @@ impl SerializationBatchStats {
 #[derive(Clone, Debug)]
 pub(crate) struct SerializationBatch {
     // The buffer to perform the batching on
-    buffer: WBufWriter,
+    buffer: BBuf,
     // It is a streamed batch
     is_streamed: bool,
     // The current frame being serialized: BestEffort/Reliable
@@ -116,7 +119,7 @@ impl SerializationBatch {
     pub(crate) fn new(size: u16, is_streamed: bool) -> SerializationBatch {
         let size: usize = size as usize;
         let mut batch = SerializationBatch {
-            buffer: WBuf::new(size, true).into(),
+            buffer: BBuf::with_capacity(size),
             is_streamed,
             current_frame: CurrentFrame::None,
             sn: SerializationBatchSeqNum {
@@ -142,7 +145,7 @@ impl SerializationBatch {
     /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
     #[inline(always)]
     pub(crate) fn len(&self) -> u16 {
-        let len = self.buffer.as_ref().len() as u16;
+        let len = self.buffer.len() as u16;
         if self.is_streamed() {
             len - (LENGTH_BYTES.len() as u16)
         } else {
@@ -163,7 +166,8 @@ impl SerializationBatch {
         self.current_frame = CurrentFrame::None;
         self.buffer.clear();
         if self.is_streamed() {
-            self.buffer.write(&LENGTH_BYTES);
+            let mut writer = self.buffer.writer();
+            writer.write_exact(&LENGTH_BYTES[..]);
         }
         self.sn.clear();
         #[cfg(feature = "stats")]
@@ -176,18 +180,14 @@ impl SerializationBatch {
     pub(crate) fn write_len(&mut self) {
         if self.is_streamed() {
             let length = self.len();
-            let bits = self
-                .buffer
-                .as_mut()
-                .get_first_slice_mut(..LENGTH_BYTES.len());
-            bits.copy_from_slice(&length.to_le_bytes());
+            self.buffer.as_mut_slice()[..LENGTH_BYTES.len()].copy_from_slice(&length.to_le_bytes());
         }
     }
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
     pub(crate) fn as_bytes(&self) -> &[u8] {
-        self.buffer.as_ref().get_first_slice(..)
+        self.buffer.as_slice()
     }
 
     /// Try to serialize a [`TransportMessage`][TransportMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -197,22 +197,26 @@ impl SerializationBatch {
     ///
     pub(crate) fn serialize_transport_message(&mut self, message: &mut TransportMessage) -> bool {
         // Mark the write operation
-        self.buffer.mark();
-        let res = self.buffer.as_mut().write_transport_message(message);
-        if res {
-            // Reset the current frame value
-            self.current_frame = CurrentFrame::None;
-        } else {
-            // Revert the write operation
-            self.buffer.rewind();
-        }
+        let mut writer = self.buffer.writer();
+        let mark = writer.mark();
 
-        #[cfg(feature = "stats")]
-        if res {
-            self.stats.t_msgs += 1;
+        let codec = Zenoh060::default();
+        match codec.write(&mut writer, &*message) {
+            Ok(_) => {
+                // Reset the current frame value
+                self.current_frame = CurrentFrame::None;
+                #[cfg(feature = "stats")]
+                {
+                    self.stats.t_msgs += 1;
+                }
+                true
+            }
+            Err(_) => {
+                // Revert the write operation
+                writer.rewind(mark);
+                false
+            }
         }
-
-        res
     }
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -255,7 +259,8 @@ impl SerializationBatch {
         }
 
         // Mark the write operation
-        self.buffer.mark();
+        let mut writer = self.buffer.writer();
+        let mark = writer.mark();
 
         // If a new sequence number has been provided, it means we are in the case we need
         // to start a new frame. Write a new frame header.
@@ -296,7 +301,7 @@ impl SerializationBatch {
 
         if !res {
             // Revert the write operation
-            self.buffer.rewind();
+            writer.rewind(mark);
         }
 
         res
@@ -313,20 +318,24 @@ impl SerializationBatch {
     ///
     /// * `to_write` - The amount of bytes that still need to be fragmented.
     ///
-    pub(crate) fn serialize_zenoh_fragment(
+    pub(crate) fn serialize_zenoh_fragment<R>(
         &mut self,
         reliability: Reliability,
         priority: Priority,
         sn_gen: &mut SeqNumGenerator,
-        to_fragment: &mut WBufReader,
+        to_fragment: &mut R,
         to_write: usize,
-    ) -> usize {
+    ) -> usize
+    where
+        R: SiphonableReader,
+    {
         // Assume first that this is not the final fragment
         let sn = sn_gen.get();
         let mut is_final = false;
+        let mut writer = self.buffer.writer();
         loop {
             // Mark the buffer for the writing operation
-            self.buffer.mark();
+            let mark = writer.mark();
             // Write the frame header
             let fragment = Some(is_final);
             let attachment = None;
@@ -340,18 +349,17 @@ impl SerializationBatch {
 
             if res {
                 // Compute the amount left
-                let space_left = self.buffer.as_ref().capacity() - self.buffer.as_ref().len();
+                let space_left = writer.remaining();
                 // Check if it is really the final fragment
                 if !is_final && (to_write <= space_left) {
                     // Revert the buffer
-                    self.buffer.rewind();
+                    writer.rewind(mark);
                     // It is really the finally fragment, reserialize the header
                     is_final = true;
                     continue;
                 }
                 // Write the fragment
-                let written = to_write.min(space_left);
-                to_fragment.copy_into_wbuf(self.buffer.as_mut(), written);
+                let written = to_fragment.siphon(writer).unwrap();
 
                 // Keep track of the latest serialized SN
                 let sn_state = SerializationBatchSeqNumState { next: sn_gen.now() };
@@ -369,7 +377,7 @@ impl SerializationBatch {
             } else {
                 // Revert the buffer and the SN
                 sn_gen.set(sn).unwrap();
-                self.buffer.rewind();
+                writer.rewind(mark);
                 return 0;
             }
         }
@@ -378,26 +386,27 @@ impl SerializationBatch {
     #[cfg(test)]
     pub(crate) fn get_serialized_messages(&self) -> &[u8] {
         if self.is_streamed() {
-            self.buffer.as_ref().get_first_slice(LENGTH_BYTES.len()..)
+            &self.buffer.as_slice()[LENGTH_BYTES.len()..]
         } else {
-            self.buffer.as_ref().get_first_slice(..)
+            self.buffer.as_slice()
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use zenoh_buffers::buffer::InsertBuffer;
-    use zenoh_buffers::reader::HasReader;
-    use zenoh_protocol::proto::MessageReader;
-
     use super::*;
     use std::convert::TryFrom;
-    use zenoh_buffers::{SplitBuffer, WBuf, ZBuf};
-    use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt};
-    use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
-    use zenoh_protocol::proto::{
-        Frame, FramePayload, TransportBody, TransportMessage, ZenohMessage,
+    use zenoh_buffers::{
+        reader::{DidntRead, HasReader},
+        SplitBuffer, ZBuf,
+    };
+    use zenoh_codec::{RCodec, Zenoh060Reliability};
+    use zenoh_protocol::{
+        core::{Channel, CongestionControl, Priority, Reliability, WireExpr, ZInt},
+        defaults::SEQ_NUM_RES,
+        transport::{Frame, FramePayload, TransportBody, TransportMessage},
+        zenoh::ZenohMessage,
     };
 
     fn serialize_no_fragmentation(batch_size: u16, payload_size: usize) {
@@ -482,11 +491,15 @@ mod tests {
             // Verify that we deserialize the same messages we have serialized
             let mut deserialized: Vec<TransportMessage> = vec![];
             // Convert the buffer into an ZBuf
-            let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
-            let mut zbuf = zbuf.reader();
+            let mut reader = batch.get_serialized_messages().reader();
+            let codec = Zenoh060::default();
             // Deserialize the messages
-            while let Some(msg) = zbuf.read_transport_message() {
-                deserialized.push(msg);
+            loop {
+                let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
+                match res {
+                    Ok(msg) => deserialized.push(msg),
+                    Err(_) => break,
+                }
             }
             assert!(!deserialized.is_empty());
 
@@ -538,9 +551,12 @@ mod tests {
                     attachment,
                 );
 
+                let codec = Zenoh060::default();
+
                 // Serialize the message
-                let mut wbuf = WBuf::new(batch_size as usize, false);
-                wbuf.write_zenoh_message(&mut msg_in);
+                let mut wbuf = vec![];
+                let mut writer = wbuf.writer();
+                codec.write(&mut writer, &msg_in).unwrap();
 
                 print!(
                     "Streamed: {}\t\tBatch: {}\t\tPload: {}",
@@ -570,12 +586,12 @@ mod tests {
 
                 assert!(!batches.is_empty());
 
-                let mut fragments = WBuf::new(0, false);
+                let mut fragments = ZBuf::default();
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+                    let reader = batch.get_serialized_messages().reader();
                     // Deserialize the messages
-                    let msg = zbuf.reader().read_transport_message().unwrap();
+                    let msg: TransportMessage = codec.read(&mut reader).unwrap();
 
                     match msg.body {
                         TransportBody::Frame(Frame {
@@ -583,7 +599,7 @@ mod tests {
                             ..
                         }) => {
                             assert!(!buffer.is_empty());
-                            fragments.append(buffer);
+                            fragments.push_zslice(buffer);
                             if is_final {
                                 break;
                             }
@@ -591,14 +607,14 @@ mod tests {
                         _ => panic!(),
                     }
                 }
-                let fragments: ZBuf = fragments.into();
 
                 assert!(!fragments.is_empty());
 
                 // Deserialize the message
-                let msg_out = fragments.reader().read_zenoh_message(*reliability);
-                assert!(msg_out.is_some());
-                assert_eq!(msg_in, msg_out.unwrap());
+                let codec = Zenoh060Reliability::new(*reliability);
+                let mut reader = fragments.reader();
+                let msg_out: ZenohMessage = codec.read(&mut reader).unwrap();
+                assert_eq!(msg_in, msg_out);
 
                 println!("\t\tFragments: {}", batches.len());
             }

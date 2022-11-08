@@ -19,12 +19,12 @@ mod zenoh;
 
 use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};
 
-pub trait WCodec<Buffer, Message> {
+pub trait WCodec<Message, Buffer> {
     type Output;
     fn write(self, buffer: Buffer, message: Message) -> Self::Output;
 }
 
-pub trait RCodec<Buffer, Message> {
+pub trait RCodec<Message, Buffer> {
     type Error;
     fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
 }

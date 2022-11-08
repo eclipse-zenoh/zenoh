@@ -14,7 +14,10 @@
 mod hello;
 mod scout;
 
-use crate::common::Attachment;
+use crate::{
+    common::Attachment,
+    core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
+};
 pub use hello::*;
 pub use scout::*;
 
@@ -35,6 +38,40 @@ pub struct ScoutingMessage {
 
 // Functions mainly used for testing
 impl ScoutingMessage {
+    pub fn make_scout(
+        what: Option<WhatAmIMatcher>,
+        zid_request: bool,
+        attachment: Option<Attachment>,
+    ) -> ScoutingMessage {
+        ScoutingMessage {
+            body: ScoutingBody::Scout(Scout { what, zid_request }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_hello(
+        zid: Option<ZenohId>,
+        whatami: Option<WhatAmI>,
+        locators: Option<Vec<Locator>>,
+        attachment: Option<Attachment>,
+    ) -> ScoutingMessage {
+        let whatami = whatami.unwrap_or(WhatAmI::Router);
+        let locators = locators.unwrap_or_default();
+
+        ScoutingMessage {
+            body: ScoutingBody::Hello(Hello {
+                zid,
+                whatami,
+                locators,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;

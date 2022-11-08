@@ -22,7 +22,7 @@ use zenoh_protocol::{
     zenoh::{zmsg, Unit},
 };
 
-impl<W> WCodec<&mut W, &Unit> for Zenoh060
+impl<W> WCodec<&Unit, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Unit> for Zenoh060
+impl<R> RCodec<Unit, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -68,7 +68,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Unit> for Zenoh060HeaderReplyContext
+impl<R> RCodec<Unit, &mut R> for Zenoh060HeaderReplyContext
 where
     R: Reader,
 {

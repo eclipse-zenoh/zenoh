@@ -18,14 +18,20 @@ mod join;
 mod keepalive;
 mod open;
 
+use std::time::Duration;
+
 pub use close::*;
 pub use frame::*;
 pub use init::*;
 pub use join::*;
 pub use keepalive::*;
 pub use open::*;
+use zenoh_buffers::ZSlice;
 
-use crate::common::Attachment;
+use crate::{
+    common::Attachment,
+    core::{Channel, ConduitSnList, WhatAmI, ZInt, ZenohId},
+};
 
 pub mod tmsg {
     use crate::common::imsg;
@@ -144,8 +150,155 @@ pub struct TransportMessage {
     pub size: Option<std::num::NonZeroUsize>,
 }
 
-// Functions mainly used for testing
 impl TransportMessage {
+    pub fn make_init_syn(
+        version: u8,
+        whatami: WhatAmI,
+        zid: ZenohId,
+        sn_resolution: ZInt,
+        is_qos: bool,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitSyn(InitSyn {
+                version,
+                whatami,
+                zid,
+                sn_resolution,
+                is_qos,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_init_ack(
+        whatami: WhatAmI,
+        zid: ZenohId,
+        sn_resolution: Option<ZInt>,
+        is_qos: bool,
+        cookie: ZSlice,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::InitAck(InitAck {
+                whatami,
+                zid,
+                sn_resolution,
+                is_qos,
+                cookie,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_open_syn(
+        lease: Duration,
+        initial_sn: ZInt,
+        cookie: ZSlice,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenSyn(OpenSyn {
+                lease,
+                initial_sn,
+                cookie,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_open_ack(
+        lease: Duration,
+        initial_sn: ZInt,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_join(
+        version: u8,
+        whatami: WhatAmI,
+        zid: ZenohId,
+        lease: Duration,
+        sn_resolution: ZInt,
+        next_sns: ConduitSnList,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Join(Join {
+                version,
+                whatami,
+                zid,
+                lease,
+                sn_resolution,
+                next_sns,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_close(
+        zid: Option<ZenohId>,
+        reason: u8,
+        link_only: bool,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Close(Close {
+                zid,
+                reason,
+                link_only,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_keep_alive(
+        zid: Option<ZenohId>,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::KeepAlive(KeepAlive { zid }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_frame(
+        channel: Channel,
+        sn: ZInt,
+        payload: FramePayload,
+        attachment: Option<Attachment>,
+    ) -> TransportMessage {
+        TransportMessage {
+            body: TransportBody::Frame(Frame {
+                channel,
+                sn,
+                payload,
+            }),
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    // Functions mainly used for testing
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;

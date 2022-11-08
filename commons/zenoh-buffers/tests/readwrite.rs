@@ -114,6 +114,21 @@ fn buffer_vec() {
 }
 
 #[test]
+fn buffer_bbuf() {
+    println!("Buffer BBuf");
+    let mut bbuf = BBuf::with_capacity(u8::MAX as usize);
+    run!(bbuf);
+
+    bbuf.clear();
+    let mut writer = bbuf.writer();
+
+    writer.write_exact(&vec![0u8; u8::MAX as usize]).unwrap();
+    assert!(writer
+        .write_exact(&vec![0u8; 1 + u8::MAX as usize])
+        .is_err());
+}
+
+#[test]
 fn buffer_zbuf() {
     println!("Buffer ZBuf");
     let mut zbuf = ZBuf::default();

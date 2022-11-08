@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::EndPoint;
 
-impl<W> WCodec<&mut W, &EndPoint> for Zenoh060
+impl<W> WCodec<&EndPoint, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -30,7 +30,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, EndPoint> for Zenoh060
+impl<R> RCodec<EndPoint, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<W> WCodec<&mut W, &[EndPoint]> for Zenoh060
+impl<W> WCodec<&[EndPoint], &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -57,7 +57,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Vec<EndPoint>> for Zenoh060
+impl<R> RCodec<Vec<EndPoint>, &mut R> for Zenoh060
 where
     R: Reader,
 {

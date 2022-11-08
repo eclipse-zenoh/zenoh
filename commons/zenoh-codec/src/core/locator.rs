@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::Locator;
 
-impl<W> WCodec<&mut W, &Locator> for Zenoh060
+impl<W> WCodec<&Locator, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -30,7 +30,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Locator> for Zenoh060
+impl<R> RCodec<Locator, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<W> WCodec<&mut W, &[Locator]> for Zenoh060
+impl<W> WCodec<&[Locator], &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -57,7 +57,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Vec<Locator>> for Zenoh060
+impl<R> RCodec<Vec<Locator>, &mut R> for Zenoh060
 where
     R: Reader,
 {

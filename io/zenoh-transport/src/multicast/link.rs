@@ -25,15 +25,16 @@ use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh_buffers::buffer::InsertBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::{ZBuf, ZSlice};
 use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zerror, zlock};
 use zenoh_link::{LinkMulticast, Locator};
-use zenoh_protocol::core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
-use zenoh_protocol::proto::{MessageReader, TransportMessage};
+use zenoh_protocol::{
+    core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
+    transport::TransportMessage,
+};
 use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {
@@ -370,7 +371,7 @@ async fn rx_task(
                 // Add the received bytes to the ZBuf for deserialization
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.append(zs);
+                zbuf.push_zslice(zs);
 
                 // Deserialize all the messages from the current ZBuf
                 let mut reader = zbuf.reader();

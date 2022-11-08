@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::protocol::proto::{
-    Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
-};
 use super::Primitives;
 use crate::TransportPeerEventHandler;
 use std::any::Any;
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_link::Link;
+use zenoh_protocol::zenoh::{
+    Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
+};
 
 pub struct DeMux<P: Primitives> {
     primitives: P,

@@ -23,7 +23,7 @@ use crate::unicast::establishment::{
 use crate::TransportManager;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::proto::tmsg;
+use zenoh_protocol::transport::tmsg;
 
 pub(super) type AError = (zenoh_core::Error, Option<u8>);
 pub(super) type AResult<T> = Result<T, AError>;

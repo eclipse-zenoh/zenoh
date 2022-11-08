@@ -29,7 +29,7 @@ use zenoh_protocol::{
 };
 
 // TransportMessage
-impl<W> WCodec<&mut W, &TransportMessage> for Zenoh060
+impl<W> WCodec<&TransportMessage, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, TransportMessage> for Zenoh060
+impl<R> RCodec<TransportMessage, &mut R> for Zenoh060
 where
     R: Reader + BacktrackableReader,
 {

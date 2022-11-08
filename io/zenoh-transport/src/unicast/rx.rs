@@ -64,8 +64,8 @@ impl TransportUnicastInner {
 
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
-            #[cfg(feature = "shared-memory")]
-            let _ = msg.map_to_shmbuf(self.config.manager.shmr.clone())?;
+            // #[cfg(feature = "shared-memory")]
+            // let _ = msg.map_to_shmbuf(self.config.manager.shmr.clone())?;
             callback.handle_message(msg)
         } else {
             log::debug!(

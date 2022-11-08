@@ -18,7 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::{WireExpr, ZInt};
 
-impl<W> WCodec<&mut W, &WireExpr<'_>> for Zenoh060
+impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -33,7 +33,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, WireExpr<'static>> for Zenoh060Condition
+impl<R> RCodec<WireExpr<'static>, &mut R> for Zenoh060Condition
 where
     R: Reader,
 {

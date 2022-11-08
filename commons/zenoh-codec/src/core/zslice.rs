@@ -18,7 +18,7 @@ use zenoh_buffers::{
     ZSlice,
 };
 
-impl<W> WCodec<&mut W, ZSlice> for Zenoh060
+impl<W> WCodec<ZSlice, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -31,7 +31,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ZSlice> for Zenoh060
+impl<R> RCodec<ZSlice, &mut R> for Zenoh060
 where
     R: Reader,
 {

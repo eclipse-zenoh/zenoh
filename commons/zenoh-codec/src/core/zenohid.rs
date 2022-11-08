@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,13 +12,14 @@ use std::convert::TryFrom;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
+use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::core::ZenohId;
 
-impl<W> WCodec<&mut W, &ZenohId> for Zenoh060
+impl<W> WCodec<&ZenohId, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -31,7 +30,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ZenohId> for Zenoh060
+impl<R> RCodec<ZenohId, &mut R> for Zenoh060
 where
     R: Reader,
 {

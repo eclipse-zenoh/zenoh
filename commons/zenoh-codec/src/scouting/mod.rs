@@ -24,7 +24,7 @@ use zenoh_protocol::{
     scouting::{ScoutingBody, ScoutingMessage},
 };
 
-impl<W> WCodec<&mut W, &ScoutingMessage> for Zenoh060
+impl<W> WCodec<&ScoutingMessage, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<'a, R> RCodec<&'a mut R, ScoutingMessage> for Zenoh060
+impl<R> RCodec<ScoutingMessage, &mut R> for Zenoh060
 where
     R: Reader,
 {

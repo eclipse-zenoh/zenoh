@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+    reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
@@ -41,26 +41,25 @@ impl Writer for &mut [u8] {
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
         let len = bytes.len();
         if self.len() < len {
-            Err(DidntWrite)
-        } else {
-            self[..len].copy_from_slice(&bytes[..len]);
-            // Safety: this doesn't compile with simple assignment because the compiler
-            // doesn't believe that the subslice has the same lifetime as the original slice,
-            // so we transmute to assure it that it does.
-            *self = unsafe { std::mem::transmute(&mut self[len..]) };
-            Ok(())
+            return Err(DidntWrite);
         }
+
+        self[..len].copy_from_slice(&bytes[..len]);
+        // Safety: this doesn't compile with simple assignment because the compiler
+        // doesn't believe that the subslice has the same lifetime as the original slice,
+        // so we transmute to assure it that it does.
+        *self = unsafe { std::mem::transmute(&mut self[len..]) };
+        Ok(())
     }
 
     fn remaining(&self) -> usize {
         self.len()
     }
 
-    fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
-        &mut self,
-        mut len: usize,
-        f: F,
-    ) -> Result<(), DidntWrite> {
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
         if len > self.len() {
             return Err(DidntWrite);
         }
@@ -117,22 +116,21 @@ impl Reader for &[u8] {
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
         let len = into.len();
         if self.len() < len {
-            Err(DidntRead)
-        } else {
-            into.copy_from_slice(&self[..len]);
-            *self = &self[len..];
-            Ok(())
+            return Err(DidntRead);
         }
+
+        into.copy_from_slice(&self[..len]);
+        *self = &self[len..];
+        Ok(())
     }
 
     fn read_u8(&mut self) -> Result<u8, DidntRead> {
-        if self.can_read() {
-            let ret = self[0];
-            *self = &self[1..];
-            Ok(ret)
-        } else {
-            Err(DidntRead)
+        if !self.can_read() {
+            return Err(DidntRead);
         }
+        let ret = self[0];
+        *self = &self[1..];
+        Ok(ret)
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -175,5 +173,14 @@ impl<'a> BacktrackableReader for &'a [u8] {
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         *self = mark;
         true
+    }
+}
+
+impl<'a> SiphonableReader for &'a [u8] {
+    fn siphon<W>(&mut self, mut writer: W) -> Result<usize, DidntSiphon>
+    where
+        W: Writer,
+    {
+        writer.write(self).map_err(|_| DidntSiphon)
     }
 }

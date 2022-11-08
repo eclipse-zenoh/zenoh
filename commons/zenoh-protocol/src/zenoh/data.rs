@@ -46,6 +46,11 @@ pub struct ReplyContext {
 }
 
 impl ReplyContext {
+    // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
+    pub fn new(qid: ZInt, replier: Option<ReplierInfo>) -> Self {
+        Self { qid, replier }
+    }
+
     pub fn is_final(&self) -> bool {
         self.replier.is_none()
     }

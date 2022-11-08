@@ -40,8 +40,12 @@ pub struct Attachment {
     pub buffer: ZBuf,
 }
 
-// Functions mainly used for testing
 impl Attachment {
+    pub fn new(buffer: ZBuf) -> Self {
+        Self { buffer }
+    }
+
+    // Functions mainly used for testing
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;

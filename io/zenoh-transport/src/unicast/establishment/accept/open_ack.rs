@@ -15,8 +15,11 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
+use zenoh_protocol::{
+    common::Attachment,
+    core::ZInt,
+    transport::{tmsg, TransportMessage},
+};
 
 /*************************************/
 /*             ACCEPT                */

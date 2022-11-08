@@ -13,11 +13,13 @@
 //
 
 //! Provide [ZBuf] as convenient buffers used for serialization and deserialization.
+mod bbuf;
 mod slice;
 mod vec;
 mod zbuf;
 mod zslice;
 
+pub use bbuf::*;
 pub use slice::*;
 pub use vec::*;
 pub use zbuf::*;
@@ -146,6 +148,7 @@ pub mod reader {
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
+
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
@@ -157,6 +160,7 @@ pub mod reader {
             len: usize,
             for_each_slice: F,
         ) -> Result<(), DidntRead>;
+
         /// Reads exactly `len` bytes, returning them as a single ZSlice.
         fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead>;
 
@@ -169,6 +173,7 @@ pub mod reader {
                 Err(DidntRead)
             }
         }
+
         fn can_read(&self) -> bool {
             self.remaining() != 0
         }
@@ -181,18 +186,21 @@ pub mod reader {
         fn rewind(&mut self, mark: Self::Mark) -> bool;
     }
 
+    #[derive(Debug, Clone, Copy)]
+    pub struct DidntSiphon;
+
+    pub trait SiphonableReader: Reader {
+        fn siphon<W>(&mut self, writer: W) -> Result<usize, DidntSiphon>
+        where
+            W: crate::writer::Writer;
+    }
+
     pub trait HasReader {
         type Reader: Reader;
 
         /// Returns the most appropriate reader for `self`
         fn reader(self) -> Self::Reader;
     }
-}
-
-pub trait ConstructibleBuffer {
-    /// Constructs a split buffer that may accept `slice_capacity` segments without allocating.
-    /// It may also accept receiving cached writes for `cache_capacity` bytes before needing to reallocate its cache.
-    fn with_capacities(slice_capacity: usize, cache_capacity: usize) -> Self;
 }
 
 /// A trait for buffers that can be composed of multiple non contiguous slices.

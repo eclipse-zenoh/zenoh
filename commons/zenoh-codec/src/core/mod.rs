@@ -14,6 +14,7 @@
 mod endpoint;
 mod keyexpr;
 mod locator;
+mod property;
 mod timestamp;
 mod zbuf;
 mod zenohid;
@@ -27,7 +28,7 @@ use zenoh_buffers::{
 };
 
 // u8
-impl<W> WCodec<&mut W, u8> for Zenoh060
+impl<W> WCodec<u8, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -38,7 +39,7 @@ where
     }
 }
 
-impl<W> WCodec<&mut W, &u8> for Zenoh060
+impl<W> WCodec<&u8, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -49,7 +50,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, u8> for Zenoh060
+impl<R> RCodec<u8, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -61,7 +62,7 @@ where
 }
 
 // &[u8] / Vec<u8>
-impl<W> WCodec<&mut W, &[u8]> for Zenoh060
+impl<W> WCodec<&[u8], &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -73,7 +74,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Vec<u8>> for Zenoh060
+impl<R> RCodec<Vec<u8>, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -93,7 +94,7 @@ where
 }
 
 // &str / String
-impl<W> WCodec<&mut W, &str> for Zenoh060
+impl<W> WCodec<&str, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -104,7 +105,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, String> for Zenoh060
+impl<R> RCodec<String, &mut R> for Zenoh060
 where
     R: Reader,
 {

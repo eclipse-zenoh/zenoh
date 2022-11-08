@@ -23,7 +23,7 @@ use zenoh_protocol::{
 };
 
 // QueryTarget
-impl<W> WCodec<&mut W, &QueryTarget> for Zenoh060
+impl<W> WCodec<&QueryTarget, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, QueryTarget> for Zenoh060
+impl<R> RCodec<QueryTarget, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -69,7 +69,7 @@ where
 }
 
 // ConsolidationMode
-impl<W> WCodec<&mut W, &ConsolidationMode> for Zenoh060
+impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -86,7 +86,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ConsolidationMode> for Zenoh060
+impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -105,7 +105,7 @@ where
 }
 
 // Query
-impl<W> WCodec<&mut W, &Query> for Zenoh060
+impl<W> WCodec<&Query, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -135,7 +135,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Query> for Zenoh060
+impl<R> RCodec<Query, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -150,7 +150,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Query> for Zenoh060Header
+impl<R> RCodec<Query, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

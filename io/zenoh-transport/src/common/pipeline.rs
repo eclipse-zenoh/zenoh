@@ -13,7 +13,6 @@
 //
 use super::batch::SerializationBatch;
 use super::conduit::{TransportChannelTx, TransportConduitTx};
-use super::protocol::io::WBuf;
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -21,6 +20,10 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::writer::HasWriter;
+use zenoh_buffers::{SplitBuffer, ZBuf};
+use zenoh_codec::{WCodec, Zenoh060};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::{core::Priority, transport::TransportMessage, zenoh::ZenohMessage};
@@ -100,7 +103,7 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    fragbuf: WBuf,
+    fragbuf: ZBuf,
 }
 
 impl StageIn {
@@ -176,11 +179,14 @@ impl StageIn {
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
-        self.fragbuf.write_zenoh_message(msg);
+
+        let mut writer = self.fragbuf.writer();
+        let codec = Zenoh060::default();
+        codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
         let mut to_write = self.fragbuf.len();
-        let mut fragbuf_reader = self.fragbuf.reader();
+        let mut reader = self.fragbuf.reader();
         while to_write > 0 {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
@@ -191,7 +197,7 @@ impl StageIn {
                 msg.channel.reliability,
                 priority,
                 &mut channel.sn,
-                &mut fragbuf_reader,
+                &mut reader,
                 to_write,
             );
 
@@ -211,6 +217,9 @@ impl StageIn {
                 break;
             }
         }
+
+        // Clean the fragbuf
+        self.fragbuf.clear();
 
         true
     }
@@ -511,7 +520,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                fragbuf: WBuf::new(config.batch_size as usize, false),
+                fragbuf: ZBuf::default(),
             }));
 
             // The stage out for this priority
@@ -665,7 +674,11 @@ mod tests {
         },
         time::{Duration, Instant},
     };
-    use zenoh_buffers::{reader::HasReader, ZBuf};
+    use zenoh_buffers::{
+        reader::{DidntRead, HasReader},
+        ZBuf,
+    };
+    use zenoh_codec::{RCodec, Zenoh060};
     use zenoh_protocol::{
         core::{Channel, CongestionControl, Priority, Reliability, ZInt},
         defaults::{BATCH_SIZE, SEQ_NUM_RES},
@@ -734,24 +747,32 @@ mod tests {
                 let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
                 // Deserialize the messages
                 let mut reader = zbuf.reader();
-                while let Some(msg) = reader.read_transport_message() {
-                    match msg.body {
-                        TransportBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Messages { messages } => {
-                                msgs += messages.len();
-                            }
-                            FramePayload::Fragment { is_final, .. } => {
-                                fragments += 1;
-                                if is_final {
+                let codec = Zenoh060::default();
+
+                loop {
+                    let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
+                    match res {
+                        Ok(msg) => {
+                            match msg.body {
+                                TransportBody::Frame(Frame { payload, .. }) => match payload {
+                                    FramePayload::Messages { messages } => {
+                                        msgs += messages.len();
+                                    }
+                                    FramePayload::Fragment { is_final, .. } => {
+                                        fragments += 1;
+                                        if is_final {
+                                            msgs += 1;
+                                        }
+                                    }
+                                },
+                                _ => {
                                     msgs += 1;
                                 }
                             }
-                        },
-                        _ => {
-                            msgs += 1;
+                            println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                         }
+                        Err(_) => break,
                     }
-                    println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                 }
                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
                 // Reinsert the batch

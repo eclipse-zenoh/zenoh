@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 
 // InitSyn
-impl<W> WCodec<&mut W, &InitSyn> for Zenoh060
+impl<W> WCodec<&InitSyn, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -69,7 +69,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, InitSyn> for Zenoh060
+impl<R> RCodec<InitSyn, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -84,7 +84,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, InitSyn> for Zenoh060Header
+impl<R> RCodec<InitSyn, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -122,7 +122,7 @@ where
 }
 
 // InitAck
-impl<W> WCodec<&mut W, &InitAck> for Zenoh060
+impl<W> WCodec<&InitAck, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -167,7 +167,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, InitAck> for Zenoh060
+impl<R> RCodec<InitAck, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -182,7 +182,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, InitAck> for Zenoh060Header
+impl<R> RCodec<InitAck, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

@@ -22,7 +22,7 @@ use zenoh_protocol::{
     zenoh::{zmsg, RoutingContext},
 };
 
-impl<W> WCodec<&mut W, &RoutingContext> for Zenoh060
+impl<W> WCodec<&RoutingContext, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, RoutingContext> for Zenoh060
+impl<R> RCodec<RoutingContext, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -54,7 +54,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, RoutingContext> for Zenoh060Header
+impl<R> RCodec<RoutingContext, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

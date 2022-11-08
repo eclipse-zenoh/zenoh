@@ -18,7 +18,7 @@ use zenoh_buffers::{
     SplitBuffer, ZBuf,
 };
 
-impl<W> WCodec<&mut W, &ZBuf> for Zenoh060
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -33,7 +33,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ZBuf> for Zenoh060
+impl<R> RCodec<ZBuf, &mut R> for Zenoh060
 where
     R: Reader,
 {

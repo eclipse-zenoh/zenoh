@@ -21,7 +21,9 @@ mod unit;
 
 use crate::{
     common::Attachment,
-    core::{Channel, CongestionControl, Reliability},
+    core::{
+        Channel, CongestionControl, ConsolidationMode, QueryTarget, Reliability, WireExpr, ZInt,
+    },
 };
 pub use data::*;
 pub use declare::*;
@@ -31,6 +33,7 @@ pub use query::*;
 pub use routing::*;
 use std::fmt;
 pub use unit::*;
+use zenoh_buffers::ZBuf;
 
 pub mod zmsg {
     use crate::{
@@ -211,6 +214,130 @@ pub struct ZenohMessage {
 }
 
 impl ZenohMessage {
+    pub fn make_declare(
+        declarations: Vec<Declaration>,
+        routing_context: Option<RoutingContext>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::Declare(Declare { declarations }),
+            channel: zmsg::default_channel::DECLARE,
+            routing_context,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[inline(always)]
+    pub fn make_data(
+        key: WireExpr<'static>,
+        payload: ZBuf,
+        channel: Channel,
+        congestion_control: CongestionControl,
+        data_info: Option<DataInfo>,
+        routing_context: Option<RoutingContext>,
+        reply_context: Option<ReplyContext>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::Data(Data {
+                key,
+                data_info,
+                payload,
+                congestion_control,
+                reply_context,
+            }),
+            channel,
+            routing_context,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_unit(
+        channel: Channel,
+        congestion_control: CongestionControl,
+        reply_context: Option<ReplyContext>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::Unit(Unit {
+                congestion_control,
+                reply_context,
+            }),
+            channel,
+            routing_context: None,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_pull(
+        is_final: bool,
+        key: WireExpr<'static>,
+        pull_id: ZInt,
+        max_samples: Option<ZInt>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::Pull(Pull {
+                key,
+                pull_id,
+                max_samples,
+                is_final,
+            }),
+            channel: zmsg::default_channel::PULL,
+            routing_context: None,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn make_query(
+        key: WireExpr<'static>,
+        parameters: String,
+        qid: ZInt,
+        target: Option<QueryTarget>,
+        consolidation: ConsolidationMode,
+        routing_context: Option<RoutingContext>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::Query(Query {
+                key,
+                parameters,
+                qid,
+                target,
+                consolidation,
+            }),
+            channel: zmsg::default_channel::QUERY,
+            routing_context,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
+    pub fn make_link_state_list(
+        link_states: Vec<LinkState>,
+        attachment: Option<Attachment>,
+    ) -> ZenohMessage {
+        ZenohMessage {
+            body: ZenohBody::LinkStateList(LinkStateList { link_states }),
+            channel: zmsg::default_channel::LINK_STATE_LIST,
+            routing_context: None,
+            attachment,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
     // -- Message Predicates
     #[inline]
     pub fn is_reliable(&self) -> bool {

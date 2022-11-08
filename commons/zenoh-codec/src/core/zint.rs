@@ -22,7 +22,7 @@ use zenoh_protocol::core::ZInt;
 const VLE_LEN: usize = 10;
 
 // ZInt
-impl<W> WCodec<&mut W, ZInt> for Zenoh060
+impl<W> WCodec<ZInt, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -44,7 +44,7 @@ where
     }
 }
 
-impl<W> WCodec<&mut W, &ZInt> for Zenoh060
+impl<W> WCodec<&ZInt, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -55,7 +55,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ZInt> for Zenoh060
+impl<R> RCodec<ZInt, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -83,7 +83,7 @@ where
 }
 
 // usize
-impl<W> WCodec<&mut W, usize> for Zenoh060
+impl<W> WCodec<usize, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -95,14 +95,14 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, usize> for Zenoh060
+impl<R> RCodec<usize, &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
-        let x: ZInt = <Self as RCodec<&mut R, ZInt>>::read(self, reader)?;
+        let x: ZInt = <Self as RCodec<ZInt, &mut R>>::read(self, reader)?;
         x.try_into().map_err(|_| DidntRead)
     }
 }

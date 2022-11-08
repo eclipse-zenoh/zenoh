@@ -26,7 +26,7 @@ use zenoh_protocol::{
 };
 
 // Declaration
-impl<W> WCodec<&mut W, &Declaration> for Zenoh060
+impl<W> WCodec<&Declaration, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -48,7 +48,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Declaration> for Zenoh060
+impl<R> RCodec<Declaration, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -79,7 +79,7 @@ where
 }
 
 // Declare
-impl<W> WCodec<&mut W, &Declare> for Zenoh060
+impl<W> WCodec<&Declare, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Declare> for Zenoh060
+impl<R> RCodec<Declare, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -115,7 +115,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Declare> for Zenoh060Header
+impl<R> RCodec<Declare, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -138,7 +138,7 @@ where
 }
 
 // Resource
-impl<W> WCodec<&mut W, &Resource> for Zenoh060
+impl<W> WCodec<&Resource, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -160,7 +160,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Resource> for Zenoh060
+impl<R> RCodec<Resource, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -175,7 +175,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Resource> for Zenoh060Header
+impl<R> RCodec<Resource, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -198,7 +198,7 @@ where
 }
 
 // ForgetResource
-impl<W> WCodec<&mut W, &ForgetResource> for Zenoh060
+impl<W> WCodec<&ForgetResource, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -216,7 +216,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetResource> for Zenoh060
+impl<R> RCodec<ForgetResource, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -231,7 +231,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetResource> for Zenoh060Header
+impl<R> RCodec<ForgetResource, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -249,7 +249,7 @@ where
 }
 
 // Publisher
-impl<W> WCodec<&mut W, &Publisher> for Zenoh060
+impl<W> WCodec<&Publisher, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -270,7 +270,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Publisher> for Zenoh060
+impl<R> RCodec<Publisher, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -285,7 +285,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Publisher> for Zenoh060Header
+impl<R> RCodec<Publisher, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -307,7 +307,7 @@ where
 }
 
 // ForgetPublisher
-impl<W> WCodec<&mut W, &ForgetPublisher> for Zenoh060
+impl<W> WCodec<&ForgetPublisher, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -328,7 +328,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetPublisher> for Zenoh060
+impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -343,7 +343,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetPublisher> for Zenoh060Header
+impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -365,7 +365,7 @@ where
 }
 
 // SubMode
-impl<W> WCodec<&mut W, &SubMode> for Zenoh060
+impl<W> WCodec<&SubMode, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -385,7 +385,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, SubMode> for Zenoh060
+impl<R> RCodec<SubMode, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -405,7 +405,7 @@ where
 }
 
 // Subscriber
-impl<W> WCodec<&mut W, &Subscriber> for Zenoh060
+impl<W> WCodec<&Subscriber, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -435,7 +435,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Subscriber> for Zenoh060
+impl<R> RCodec<Subscriber, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -450,7 +450,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Subscriber> for Zenoh060Header
+impl<R> RCodec<Subscriber, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -487,7 +487,7 @@ where
 }
 
 // ForgetSubscriber
-impl<W> WCodec<&mut W, &ForgetSubscriber> for Zenoh060
+impl<W> WCodec<&ForgetSubscriber, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -508,7 +508,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetSubscriber> for Zenoh060
+impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -523,7 +523,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetSubscriber> for Zenoh060Header
+impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -545,7 +545,7 @@ where
 }
 
 // QueryableInfo
-impl<W> WCodec<&mut W, &QueryableInfo> for Zenoh060
+impl<W> WCodec<&QueryableInfo, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -559,7 +559,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, QueryableInfo> for Zenoh060
+impl<R> RCodec<QueryableInfo, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -574,7 +574,7 @@ where
 }
 
 // Queryable
-impl<W> WCodec<&mut W, &Queryable> for Zenoh060
+impl<W> WCodec<&Queryable, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -601,7 +601,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Queryable> for Zenoh060
+impl<R> RCodec<Queryable, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -616,7 +616,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Queryable> for Zenoh060Header
+impl<R> RCodec<Queryable, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -644,7 +644,7 @@ where
 }
 
 // ForgetQueryable
-impl<W> WCodec<&mut W, &ForgetQueryable> for Zenoh060
+impl<W> WCodec<&ForgetQueryable, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -665,7 +665,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetQueryable> for Zenoh060
+impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -680,7 +680,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ForgetQueryable> for Zenoh060Header
+impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

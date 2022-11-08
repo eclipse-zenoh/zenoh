@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::{Timestamp, ZenohId};
 
-impl<W> WCodec<&mut W, &Timestamp> for Zenoh060
+impl<W> WCodec<&Timestamp, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -32,7 +32,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Timestamp> for Zenoh060
+impl<R> RCodec<Timestamp, &mut R> for Zenoh060
 where
     R: Reader,
 {

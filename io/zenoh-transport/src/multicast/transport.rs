@@ -19,15 +19,22 @@ use crate::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
+    time::Duration,
+};
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::{bail, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkMulticast, Locator};
-use zenoh_protocol::core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
-use zenoh_protocol::proto::{tmsg, Join, TransportMessage, ZenohMessage};
+use zenoh_protocol::{
+    core::{ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
+    transport::{tmsg, Join, TransportMessage},
+    zenoh::ZenohMessage,
+};
 
 /*************************************/
 /*             TRANSPORT             */
@@ -234,12 +241,12 @@ impl TransportMulticastInner {
     /// Schedule a Zenoh message on the transmission queue    
     #[cfg(feature = "shared-memory")]
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
-        // Multicast transports do not support SHM for the time being
-        let res = message.map_to_shmbuf(self.manager.shmr.clone());
-        if let Err(e) = res {
-            log::trace!("Failed SHM conversion: {}", e);
-            return;
-        }
+        // // Multicast transports do not support SHM for the time being
+        // let res = message.map_to_shmbuf(self.manager.shmr.clone());
+        // if let Err(e) = res {
+        //     log::trace!("Failed SHM conversion: {}", e);
+        //     return;
+        // }
         self.schedule_first_fit(message);
     }
 

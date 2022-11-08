@@ -440,14 +440,17 @@ impl TransportUnicastInner {
     pub(crate) fn schedule(&self, #[allow(unused_mut)] mut message: ZenohMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self.config.is_shm {
-                message.map_to_shminfo()
-            } else {
-                message.map_to_shmbuf(self.config.manager.shmr.clone())
-            };
-            if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
-                return false;
+            // let res = if self.config.is_shm {
+            //     message.map_to_shminfo()
+            // } else {
+            //     message.map_to_shmbuf(self.config.manager.shmr.clone())
+            // };
+            // if let Err(e) = res {
+            //     log::trace!("Failed SHM conversion: {}", e);
+            //     return false;
+            // }
+            if self.config.is_shm {
+                unimplemented!()
             }
         }
 

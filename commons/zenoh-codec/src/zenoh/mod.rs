@@ -30,7 +30,7 @@ use zenoh_protocol::{
     zenoh::{zmsg, RoutingContext, ZenohBody, ZenohMessage},
 };
 
-impl<W> WCodec<&mut W, &ZenohMessage> for Zenoh060
+impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ZenohMessage> for Zenoh060
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<'a, R> RCodec<&'a mut R, ZenohMessage> for Zenoh060Reliability
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060Reliability
 where
     R: Reader,
 {

@@ -14,7 +14,6 @@
 use super::{
     AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
 };
-use super::{WBuf, ZBuf, ZInt, ZenohId};
 use crate::unicast::establishment::Cookie;
 use async_std::sync::Mutex;
 use async_trait::async_trait;
@@ -31,7 +30,7 @@ use zenoh_config::Config;
 use zenoh_core::{bail, zparse, Result as ZResult};
 use zenoh_core::{zasynclock, zerror};
 use zenoh_crypto::PseudoRng;
-use zenoh_protocol::io::{WBufCodec, ZBufCodec};
+use zenoh_protocol::core::{ZInt, ZenohId};
 
 const WBUF_SIZE: usize = 64;
 const MULTILINK_VERSION: ZInt = 1;
@@ -106,27 +105,27 @@ trait WPubKey {
     fn write_open_syn_property_multilink(&mut self, open_syn_property: &OpenSynProperty) -> bool;
     fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool;
 }
-impl WPubKey for WBuf {
-    fn write_init_syn_property_multilink(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        self.write_zint(init_syn_property.version)
-            && self.write_rsa_pub_key(&init_syn_property.alice_pubkey)
-    }
-    fn write_init_ack_property_multilink(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        self.write_rsa_pub_key(&init_ack_property.bob_pubkey)
-            && self.write_bytes_array(
-                init_ack_property
-                    .nonce_encrypted_with_alice_pubkey
-                    .as_slice(),
-            )
-    }
-    fn write_open_syn_property_multilink(&mut self, open_syn_property: &OpenSynProperty) -> bool {
-        self.write_bytes_array(open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice())
-    }
-    fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool {
-        self.write_bytes_array(pub_key.n().to_bytes_le().as_slice())
-            && self.write_bytes_array(pub_key.e().to_bytes_le().as_slice())
-    }
-}
+// impl WPubKey for WBuf {
+//     fn write_init_syn_property_multilink(&mut self, init_syn_property: &InitSynProperty) -> bool {
+//         self.write_zint(init_syn_property.version)
+//             && self.write_rsa_pub_key(&init_syn_property.alice_pubkey)
+//     }
+//     fn write_init_ack_property_multilink(&mut self, init_ack_property: &InitAckProperty) -> bool {
+//         self.write_rsa_pub_key(&init_ack_property.bob_pubkey)
+//             && self.write_bytes_array(
+//                 init_ack_property
+//                     .nonce_encrypted_with_alice_pubkey
+//                     .as_slice(),
+//             )
+//     }
+//     fn write_open_syn_property_multilink(&mut self, open_syn_property: &OpenSynProperty) -> bool {
+//         self.write_bytes_array(open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice())
+//     }
+//     fn write_rsa_pub_key(&mut self, pub_key: &RsaPublicKey) -> bool {
+//         self.write_bytes_array(pub_key.n().to_bytes_le().as_slice())
+//             && self.write_bytes_array(pub_key.e().to_bytes_le().as_slice())
+//     }
+// }
 
 trait ZPubKey {
     fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty>;
@@ -136,33 +135,37 @@ trait ZPubKey {
 }
 impl ZPubKey for ZBufReader<'_> {
     fn read_init_syn_property_multilink(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        let alice_pubkey = self.read_rsa_pub_key()?;
+        // let version = self.read_zint()?;
+        // let alice_pubkey = self.read_rsa_pub_key()?;
 
-        Some(InitSynProperty {
-            version,
-            alice_pubkey,
-        })
+        // Some(InitSynProperty {
+        //     version,
+        //     alice_pubkey,
+        // })
+        unimplemented!()
     }
     fn read_init_ack_property_multilink(&mut self) -> Option<InitAckProperty> {
-        let bob_pubkey = self.read_rsa_pub_key()?;
-        let nonce_encrypted_with_alice_pubkey = self.read_bytes_array()?;
-        Some(InitAckProperty {
-            bob_pubkey,
-            nonce_encrypted_with_alice_pubkey,
-        })
+        // let bob_pubkey = self.read_rsa_pub_key()?;
+        // let nonce_encrypted_with_alice_pubkey = self.read_bytes_array()?;
+        // Some(InitAckProperty {
+        //     bob_pubkey,
+        //     nonce_encrypted_with_alice_pubkey,
+        // })
+        unimplemented!()
     }
     fn read_open_syn_property_multilink(&mut self) -> Option<OpenSynProperty> {
-        let nonce_encrypted_with_bob_pubkey = self.read_bytes_array()?;
-        Some(OpenSynProperty {
-            nonce_encrypted_with_bob_pubkey,
-        })
+        // let nonce_encrypted_with_bob_pubkey = self.read_bytes_array()?;
+        // Some(OpenSynProperty {
+        //     nonce_encrypted_with_bob_pubkey,
+        // })
+        unimplemented!()
     }
     fn read_rsa_pub_key(&mut self) -> Option<RsaPublicKey> {
-        let n = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
-        let e = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
+        // let n = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
+        // let e = BigUint::from_bytes_le(self.read_bytes_array()?.as_slice());
 
-        RsaPublicKey::new(n, e).ok()
+        // RsaPublicKey::new(n, e).ok()
+        unimplemented!()
     }
 }
 
@@ -300,18 +303,19 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         link: &AuthenticatedPeerLink,
         _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
-        let init_syn_property = InitSynProperty {
-            version: MULTILINK_VERSION,
-            alice_pubkey: self.pub_key.clone(),
-        };
+        // let init_syn_property = InitSynProperty {
+        //     version: MULTILINK_VERSION,
+        //     alice_pubkey: self.pub_key.clone(),
+        // };
 
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        let res = wbuf.write_init_syn_property_multilink(&init_syn_property);
-        if !res {
-            bail!("Failed to serialize InitSyn on link: {}", link);
-        }
+        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        // let res = wbuf.write_init_syn_property_multilink(&init_syn_property);
+        // if !res {
+        //     bail!("Failed to serialize InitSyn on link: {}", link);
+        // }
 
-        Ok(Some(wbuf.contiguous().into_owned()))
+        // Ok(Some(wbuf.contiguous().into_owned()))
+        unimplemented!()
     }
 
     async fn handle_init_syn(
@@ -320,110 +324,111 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        match property {
-            // The connecting zenoh peer wants to do multilink
-            Some(pk) => {
-                // Decode the multilink attachment
-                let zbuf: ZBuf = pk.into();
+        // match property {
+        //     // The connecting zenoh peer wants to do multilink
+        //     Some(pk) => {
+        //         // Decode the multilink attachment
+        //         let zbuf: ZBuf = pk.into();
 
-                let init_syn_property = zbuf
-                    .reader()
-                    .read_init_syn_property_multilink()
-                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
+        //         let init_syn_property = zbuf
+        //             .reader()
+        //             .read_init_syn_property_multilink()
+        //             .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-                // Check if we are compatible
-                if init_syn_property.version != MULTILINK_VERSION {
-                    bail!("PubKey version not supported on link: {}", link);
-                }
+        //         // Check if we are compatible
+        //         if init_syn_property.version != MULTILINK_VERSION {
+        //             bail!("PubKey version not supported on link: {}", link);
+        //         }
 
-                // Check if the peer is already present
-                let mut guard = zasynclock!(self.state);
-                match guard.authenticated.get(&cookie.zid) {
-                    Some(alice_pubkey) => {
-                        // Check if the public key is the same
-                        match alice_pubkey.as_ref() {
-                            Some(apk) => {
-                                // Check if pub key is used consistently
-                                if apk != &init_syn_property.alice_pubkey {
-                                    bail!("Invalid multilink pub key on link: {}", link);
-                                }
-                            }
-                            None => {
-                                // The peer is already present but no previous multilink intereset
-                                // was declared. Rejecting for inconsistent declaration.
-                                bail!("Unexpected multilink pub key on link: {}", link);
-                            }
-                        }
-                    }
-                    None => {
-                        // It's the first time we see this peer, check if it is authorized it
-                        if let Some(kk) = guard.known_keys.as_ref() {
-                            if !kk.iter().any(|x| x == &init_syn_property.alice_pubkey) {
-                                // The peer is already present but no previous multilink intereset
-                                // was declared. Rejecting for inconsistent declaration.
-                                bail!("Unauthorized multilink pub key on link: {}", link);
-                            }
-                        }
+        //         // Check if the peer is already present
+        //         let mut guard = zasynclock!(self.state);
+        //         match guard.authenticated.get(&cookie.zid) {
+        //             Some(alice_pubkey) => {
+        //                 // Check if the public key is the same
+        //                 match alice_pubkey.as_ref() {
+        //                     Some(apk) => {
+        //                         // Check if pub key is used consistently
+        //                         if apk != &init_syn_property.alice_pubkey {
+        //                             bail!("Invalid multilink pub key on link: {}", link);
+        //                         }
+        //                     }
+        //                     None => {
+        //                         // The peer is already present but no previous multilink intereset
+        //                         // was declared. Rejecting for inconsistent declaration.
+        //                         bail!("Unexpected multilink pub key on link: {}", link);
+        //                     }
+        //                 }
+        //             }
+        //             None => {
+        //                 // It's the first time we see this peer, check if it is authorized it
+        //                 if let Some(kk) = guard.known_keys.as_ref() {
+        //                     if !kk.iter().any(|x| x == &init_syn_property.alice_pubkey) {
+        //                         // The peer is already present but no previous multilink intereset
+        //                         // was declared. Rejecting for inconsistent declaration.
+        //                         bail!("Unauthorized multilink pub key on link: {}", link);
+        //                     }
+        //                 }
 
-                        guard
-                            .authenticated
-                            .insert(cookie.zid, Some(init_syn_property.alice_pubkey.clone()));
-                    }
-                }
+        //                 guard
+        //                     .authenticated
+        //                     .insert(cookie.zid, Some(init_syn_property.alice_pubkey.clone()));
+        //             }
+        //         }
 
-                // Create the InitAck attachment
-                let mut wbuf = WBuf::new(WBUF_SIZE, false);
-                let res = wbuf.write_zint(cookie.nonce);
-                if !res {
-                    bail!("Failed to serialize InitAck on link: {}", link);
-                }
+        //         // Create the InitAck attachment
+        //         let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        //         let res = wbuf.write_zint(cookie.nonce);
+        //         if !res {
+        //             bail!("Failed to serialize InitAck on link: {}", link);
+        //         }
 
-                let nonce_bytes = wbuf;
-                let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
-                    &mut guard.prng,
-                    PaddingScheme::PKCS1v15Encrypt,
-                    &nonce_bytes.contiguous(),
-                )?;
+        //         let nonce_bytes = wbuf;
+        //         let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
+        //             &mut guard.prng,
+        //             PaddingScheme::PKCS1v15Encrypt,
+        //             &nonce_bytes.contiguous(),
+        //         )?;
 
-                let init_ack_property = InitAckProperty {
-                    bob_pubkey: self.pub_key.clone(),
-                    nonce_encrypted_with_alice_pubkey,
-                };
+        //         let init_ack_property = InitAckProperty {
+        //             bob_pubkey: self.pub_key.clone(),
+        //             nonce_encrypted_with_alice_pubkey,
+        //         };
 
-                // Store the public key in the cookie
-                let mut wbuf = WBuf::new(WBUF_SIZE, false);
-                let res = wbuf.write_rsa_pub_key(&init_syn_property.alice_pubkey);
-                if !res {
-                    bail!("Failed to serialize InitAck on link: {}", link);
-                }
-                let cookie = wbuf;
+        //         // Store the public key in the cookie
+        //         let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        //         let res = wbuf.write_rsa_pub_key(&init_syn_property.alice_pubkey);
+        //         if !res {
+        //             bail!("Failed to serialize InitAck on link: {}", link);
+        //         }
+        //         let cookie = wbuf;
 
-                // Encode the InitAck property
-                let mut wbuf = WBuf::new(WBUF_SIZE, false);
-                let res = wbuf.write_init_ack_property_multilink(&init_ack_property);
-                if !res {
-                    bail!("Failed to serialize InitAck on link: {}", link);
-                }
-                let attachment = wbuf;
+        //         // Encode the InitAck property
+        //         let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        //         let res = wbuf.write_init_ack_property_multilink(&init_ack_property);
+        //         if !res {
+        //             bail!("Failed to serialize InitAck on link: {}", link);
+        //         }
+        //         let attachment = wbuf;
 
-                Ok((
-                    Some(attachment.contiguous().into_owned()),
-                    Some(cookie.contiguous().into_owned()),
-                ))
-            }
-            // The connecting zenoh peer does not want to do multilink
-            None => {
-                let guard = zasynclock!(self.state);
-                if guard.authenticated.get(&cookie.zid).is_some() {
-                    // The peer is already present but no multilink intereset is declared.
-                    // Rejecting for inconsistent declaration.
-                    bail!("No multilink supported on link: {}", link);
-                }
+        //         Ok((
+        //             Some(attachment.contiguous().into_owned()),
+        //             Some(cookie.contiguous().into_owned()),
+        //         ))
+        //     }
+        //     // The connecting zenoh peer does not want to do multilink
+        //     None => {
+        //         let guard = zasynclock!(self.state);
+        //         if guard.authenticated.get(&cookie.zid).is_some() {
+        //             // The peer is already present but no multilink intereset is declared.
+        //             // Rejecting for inconsistent declaration.
+        //             bail!("No multilink supported on link: {}", link);
+        //         }
 
-                // No properties need to be included in the InitAck attachment
-                Ok((None, None))
-            }
-        }
+        //         // No properties need to be included in the InitAck attachment
+        //         Ok((None, None))
+        //     }
+        // }
+        unimplemented!()
     }
 
     async fn handle_init_ack(
@@ -433,47 +438,48 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
-        let pk = match property {
-            Some(pk) => pk,
-            None => return Ok(None),
-        };
+        // let pk = match property {
+        //     Some(pk) => pk,
+        //     None => return Ok(None),
+        // };
 
-        let zbuf: ZBuf = pk.into();
-        let init_ack_property = zbuf
-            .reader()
-            .read_init_ack_property_multilink()
-            .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
+        // let zbuf: ZBuf = pk.into();
+        // let init_ack_property = zbuf
+        //     .reader()
+        //     .read_init_ack_property_multilink()
+        //     .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-        let nonce = self.pri_key.decrypt(
-            PaddingScheme::PKCS1v15Encrypt,
-            init_ack_property
-                .nonce_encrypted_with_alice_pubkey
-                .as_slice(),
-        )?;
+        // let nonce = self.pri_key.decrypt(
+        //     PaddingScheme::PKCS1v15Encrypt,
+        //     init_ack_property
+        //         .nonce_encrypted_with_alice_pubkey
+        //         .as_slice(),
+        // )?;
 
-        // Create the OpenSyn attachment
-        let mut guard = zasynclock!(self.state);
-        let nonce_encrypted_with_bob_pubkey = init_ack_property.bob_pubkey.encrypt(
-            &mut guard.prng,
-            PaddingScheme::PKCS1v15Encrypt,
-            &nonce[..],
-        )?;
-        drop(guard);
+        // // Create the OpenSyn attachment
+        // let mut guard = zasynclock!(self.state);
+        // let nonce_encrypted_with_bob_pubkey = init_ack_property.bob_pubkey.encrypt(
+        //     &mut guard.prng,
+        //     PaddingScheme::PKCS1v15Encrypt,
+        //     &nonce[..],
+        // )?;
+        // drop(guard);
 
-        let open_syn_property = OpenSynProperty {
-            nonce_encrypted_with_bob_pubkey,
-        };
+        // let open_syn_property = OpenSynProperty {
+        //     nonce_encrypted_with_bob_pubkey,
+        // };
 
-        // Encode the OpenSyn property
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        let res = wbuf.write_open_syn_property_multilink(&open_syn_property);
-        if !res {
-            bail!("Failed to serialize OpenSyn on link: {}", link);
-        }
+        // // Encode the OpenSyn property
+        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        // let res = wbuf.write_open_syn_property_multilink(&open_syn_property);
+        // if !res {
+        //     bail!("Failed to serialize OpenSyn on link: {}", link);
+        // }
 
-        let attachment = wbuf;
+        // let attachment = wbuf;
 
-        Ok(Some(attachment.contiguous().into_owned()))
+        // Ok(Some(attachment.contiguous().into_owned()))
+        unimplemented!()
     }
 
     async fn handle_open_syn(
@@ -482,72 +488,73 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
-        match property {
-            (Some(att), Some(cke)) => {
-                let zbuf: ZBuf = att.into();
-                let open_syn_property = zbuf
-                    .reader()
-                    .read_open_syn_property_multilink()
-                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
+        // match property {
+        //     (Some(att), Some(cke)) => {
+        //         let zbuf: ZBuf = att.into();
+        //         let open_syn_property = zbuf
+        //             .reader()
+        //             .read_open_syn_property_multilink()
+        //             .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-                let nonce_bytes: ZBuf = self
-                    .pri_key
-                    .decrypt(
-                        PaddingScheme::PKCS1v15Encrypt,
-                        open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),
-                    )?
-                    .into();
-                let nonce = nonce_bytes
-                    .reader()
-                    .read_zint()
-                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
+        //         let nonce_bytes: ZBuf = self
+        //             .pri_key
+        //             .decrypt(
+        //                 PaddingScheme::PKCS1v15Encrypt,
+        //                 open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),
+        //             )?
+        //             .into();
+        //         let nonce = nonce_bytes
+        //             .reader()
+        //             .read_zint()
+        //             .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-                if nonce != cookie.nonce {
-                    bail!("Received invalid nonce on link: {}", link);
-                }
+        //         if nonce != cookie.nonce {
+        //             bail!("Received invalid nonce on link: {}", link);
+        //         }
 
-                let zbuf: ZBuf = cke.into();
-                let alice_pubkey = zbuf
-                    .reader()
-                    .read_rsa_pub_key()
-                    .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
+        //         let zbuf: ZBuf = cke.into();
+        //         let alice_pubkey = zbuf
+        //             .reader()
+        //             .read_rsa_pub_key()
+        //             .ok_or_else(|| zerror!("Received invalid InitSyn on link: {}", link))?;
 
-                let mut guard = zasynclock!(self.state);
-                match guard.authenticated.get(&cookie.zid) {
-                    Some(apk) => match apk {
-                        Some(apk) => {
-                            // Check if the public key is still correct
-                            if apk != &alice_pubkey {
-                                bail!("Invalid multilink pub key on link: {}", link);
-                            }
-                        }
-                        None => {
-                            // The peer did not previously express interest in multilink
-                            bail!("Invalid multilink pub key on link: {}", link);
-                        }
-                    },
-                    None => {
-                        // Finally store the public key
-                        guard.authenticated.insert(cookie.zid, Some(alice_pubkey));
-                    }
-                }
-            }
-            (None, None) => {
-                // No multilink
-                let mut guard = zasynclock!(self.state);
-                if guard.authenticated.get(&cookie.zid).is_some() {
-                    // The peer did not previously express interest in multilink
-                    bail!("Invalid multilink pub key on link: {}", link);
-                }
-                // Finally store the public key
-                guard.authenticated.insert(cookie.zid, None);
-            }
-            _ => {
-                bail!("Received invalid nonce on link: {}", link);
-            }
-        }
+        //         let mut guard = zasynclock!(self.state);
+        //         match guard.authenticated.get(&cookie.zid) {
+        //             Some(apk) => match apk {
+        //                 Some(apk) => {
+        //                     // Check if the public key is still correct
+        //                     if apk != &alice_pubkey {
+        //                         bail!("Invalid multilink pub key on link: {}", link);
+        //                     }
+        //                 }
+        //                 None => {
+        //                     // The peer did not previously express interest in multilink
+        //                     bail!("Invalid multilink pub key on link: {}", link);
+        //                 }
+        //             },
+        //             None => {
+        //                 // Finally store the public key
+        //                 guard.authenticated.insert(cookie.zid, Some(alice_pubkey));
+        //             }
+        //         }
+        //     }
+        //     (None, None) => {
+        //         // No multilink
+        //         let mut guard = zasynclock!(self.state);
+        //         if guard.authenticated.get(&cookie.zid).is_some() {
+        //             // The peer did not previously express interest in multilink
+        //             bail!("Invalid multilink pub key on link: {}", link);
+        //         }
+        //         // Finally store the public key
+        //         guard.authenticated.insert(cookie.zid, None);
+        //     }
+        //     _ => {
+        //         bail!("Received invalid nonce on link: {}", link);
+        //     }
+        // }
 
-        Ok(None)
+        // Ok(None)
+        unimplemented!()
     }
 
     async fn handle_open_ack(

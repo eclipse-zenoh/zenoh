@@ -23,7 +23,7 @@ use zenoh_protocol::{
     zenoh::ZenohMessage,
 };
 
-impl<W> WCodec<&mut W, &Frame> for Zenoh060
+impl<W> WCodec<&Frame, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Frame> for Zenoh060
+impl<R> RCodec<Frame, &mut R> for Zenoh060
 where
     R: Reader + BacktrackableReader,
 {
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Frame> for Zenoh060Header
+impl<R> RCodec<Frame, &mut R> for Zenoh060Header
 where
     R: Reader + BacktrackableReader,
 {

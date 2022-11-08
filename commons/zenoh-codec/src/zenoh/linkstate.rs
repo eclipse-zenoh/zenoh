@@ -23,7 +23,7 @@ use zenoh_protocol::{
 };
 
 // LinkState
-impl<W> WCodec<&mut W, &LinkState> for Zenoh060
+impl<W> WCodec<&LinkState, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -65,7 +65,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, LinkState> for Zenoh060
+impl<R> RCodec<LinkState, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -112,7 +112,7 @@ where
 }
 
 // LinkStateList
-impl<W> WCodec<&mut W, &LinkStateList> for Zenoh060
+impl<W> WCodec<&LinkStateList, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -133,7 +133,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, LinkStateList> for Zenoh060
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -148,7 +148,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, LinkStateList> for Zenoh060Header
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

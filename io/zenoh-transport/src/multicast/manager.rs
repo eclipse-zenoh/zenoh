@@ -184,7 +184,7 @@ impl TransportManager {
     ) -> ZResult<TransportMulticast> {
         if !self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             bail!(
@@ -194,9 +194,9 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_multicast(endpoint.locator.protocol())?;
+        let manager = self.new_link_manager_multicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.locator.protocol()) {
+        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
             if endpoint.config.is_some() {
                 endpoint
                     .config
@@ -204,7 +204,12 @@ impl TransportManager {
                     .unwrap()
                     .extend(config.iter().map(|(k, v)| (k.clone(), v.clone())))
             } else {
-                endpoint.config = Some(config.0.clone().into())
+                endpoint = EndPoint::new(
+                    endpoint.protocol(),
+                    endpoint.address(),
+                    endpoint.metadata(),
+                    config.to_string(),
+                )?;
             }
         }
 
@@ -232,7 +237,7 @@ impl TransportManager {
 
         let proto = locator.protocol();
         if !guard.iter().any(|(l, _)| l.protocol() == proto) {
-            let _ = self.del_link_manager_multicast(proto);
+            let _ = self.del_link_manager_multicast(proto.as_str());
         }
 
         res.map(|_| ()).ok_or_else(|| {

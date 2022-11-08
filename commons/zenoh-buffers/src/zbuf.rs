@@ -14,7 +14,7 @@
 #[cfg(feature = "shared-memory")]
 use crate::SharedMemoryReader;
 use crate::{
-    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+    reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     SplitBuffer, ZSlice, ZSliceBuffer,
 };
@@ -290,6 +290,42 @@ impl<'a> BacktrackableReader for ZBufReader<'a> {
     }
 }
 
+impl<'a> SiphonableReader for ZBufReader<'a> {
+    fn siphon<W>(&mut self, mut writer: W) -> Result<usize, DidntSiphon>
+    where
+        W: Writer,
+    {
+        let mut read = 0;
+        let slices = self.inner.slices.as_ref();
+        while let Some(slice) = slices.get(self.cursor.slice) {
+            // Subslice from the current read slice
+            let from = &slice.as_ref()[self.cursor.byte..];
+            // Copy the slice content
+            match writer.write(from) {
+                Ok(len) => {
+                    // Update the counter
+                    read += len;
+                    // Move the byte cursor
+                    self.cursor.byte += len;
+                    // We consumed all the current read slice, move to the next slice
+                    if self.cursor.byte == slice.len() {
+                        self.cursor.slice += 1;
+                        self.cursor.byte = 0;
+                    }
+                }
+                Err(_) => {
+                    if read == 0 {
+                        return Err(DidntSiphon);
+                    } else {
+                        return Ok(read);
+                    }
+                }
+            }
+        }
+        Ok(read)
+    }
+}
+
 // ZSlice iterator
 pub struct ZBufSliceIterator<'a, 'b> {
     reader: &'a mut ZBufReader<'b>,
@@ -381,11 +417,10 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 
-    fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
-        &mut self,
-        mut len: usize,
-        f: F,
-    ) -> Result<(), DidntWrite> {
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
         let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.reserve(len);

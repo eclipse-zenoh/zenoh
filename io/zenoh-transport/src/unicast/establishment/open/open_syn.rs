@@ -14,10 +14,13 @@
 use super::super::authenticator::AuthenticatedPeerLink;
 use super::OResult;
 use crate::TransportManager;
+use zenoh_buffers::ZSlice;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::io::ZSlice;
-use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
+use zenoh_protocol::{
+    common::Attachment,
+    core::ZInt,
+    transport::{tmsg, TransportMessage},
+};
 
 pub(super) struct Input {
     pub(super) cookie: ZSlice,

@@ -26,7 +26,7 @@ use zenoh_protocol::{
 };
 
 // ReplyContext
-impl<W> WCodec<&mut W, &ReplyContext> for Zenoh060
+impl<W> WCodec<&ReplyContext, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -49,7 +49,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ReplyContext> for Zenoh060
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, ReplyContext> for Zenoh060Header
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh060Header
 where
     R: Reader,
 {
@@ -87,7 +87,7 @@ where
 }
 
 // DataInfo
-impl<W> WCodec<&mut W, &DataInfo> for Zenoh060
+impl<W> WCodec<&DataInfo, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -126,7 +126,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, DataInfo> for Zenoh060
+impl<R> RCodec<DataInfo, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -158,7 +158,7 @@ where
 }
 
 // Data
-impl<W> WCodec<&mut W, &Data> for Zenoh060
+impl<W> WCodec<&Data, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -213,7 +213,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Data> for Zenoh060
+impl<R> RCodec<Data, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -236,7 +236,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Data> for Zenoh060HeaderReplyContext
+impl<R> RCodec<Data, &mut R> for Zenoh060HeaderReplyContext
 where
     R: Reader,
 {

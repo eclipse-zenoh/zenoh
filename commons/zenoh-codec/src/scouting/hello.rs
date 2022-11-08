@@ -23,7 +23,7 @@ use zenoh_protocol::{
     transport::tmsg,
 };
 
-impl<W> WCodec<&mut W, &Hello> for Zenoh060
+impl<W> WCodec<&Hello, &mut W> for Zenoh060
 where
     W: Writer,
 {
@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Hello> for Zenoh060
+impl<R> RCodec<Hello, &mut R> for Zenoh060
 where
     R: Reader,
 {
@@ -73,7 +73,7 @@ where
     }
 }
 
-impl<R> RCodec<&mut R, Hello> for Zenoh060Header
+impl<R> RCodec<Hello, &mut R> for Zenoh060Header
 where
     R: Reader,
 {

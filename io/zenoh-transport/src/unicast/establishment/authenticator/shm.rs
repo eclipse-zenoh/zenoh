@@ -20,6 +20,7 @@ use rand::{Rng, SeedableRng};
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 use zenoh_buffers::reader::HasReader;
+use zenoh_buffers::{SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, ZBuf, ZSlice};
 use zenoh_buffers::{SplitBuffer, ZBufReader};
 use zenoh_config::Config;
 use zenoh_core::zresult::ShmError;
@@ -27,10 +28,6 @@ use zenoh_core::{bail, zcheck};
 use zenoh_core::{zerror, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::core::{ZInt, ZenohId};
-use zenoh_protocol::io::{
-    SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, WBufCodec, ZBuf, ZBufCodec,
-    ZSlice,
-};
 
 const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;
@@ -88,41 +85,42 @@ trait WShm {
     fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool;
     fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool;
 }
-impl WShm for WBuf {
-    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        zcheck!(self.write_zint(init_syn_property.version));
-        self.write_zslice_array(init_syn_property.shm.clone())
-    }
-    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        zcheck!(self.write_zint(init_ack_property.challenge));
-        self.write_zslice_array(init_ack_property.shm.clone())
-    }
-    fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool {
-        self.write_zint(open_syn_property.challenge)
-    }
-}
+// impl WShm for WBuf {
+//     fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
+//         zcheck!(self.write_zint(init_syn_property.version));
+//         self.write_zslice_array(init_syn_property.shm.clone())
+//     }
+//     fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
+//         zcheck!(self.write_zint(init_ack_property.challenge));
+//         self.write_zslice_array(init_ack_property.shm.clone())
+//     }
+//     fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool {
+//         self.write_zint(open_syn_property.challenge)
+//     }
+// }
 
 trait ZShm {
     fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty>;
     fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty>;
     fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty>;
 }
-impl ZShm for ZBufReader<'_> {
-    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitSynProperty { version, shm })
-    }
-    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
-        let challenge = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitAckProperty { challenge, shm })
-    }
-    fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty> {
-        let challenge = self.read_zint()?;
-        Some(OpenSynProperty { challenge })
-    }
-}
+
+// impl ZShm for ZBufReader<'_> {
+//     fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
+//         let version = self.read_zint()?;
+//         let shm = self.read_shminfo()?;
+//         Some(InitSynProperty { version, shm })
+//     }
+//     fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
+//         let challenge = self.read_zint()?;
+//         let shm = self.read_shminfo()?;
+//         Some(InitAckProperty { challenge, shm })
+//     }
+//     fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty> {
+//         let challenge = self.read_zint()?;
+//         Some(OpenSynProperty { challenge })
+//     }
+// }
 
 /*************************************/
 /*          Authenticator            */
@@ -200,14 +198,15 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _link: &AuthenticatedPeerLink,
         _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
-        let init_syn_property = InitSynProperty {
-            version: SHM_VERSION,
-            shm: self.buffer.info.serialize().unwrap().into(),
-        };
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_syn_property_shm(&init_syn_property);
+        // let init_syn_property = InitSynProperty {
+        //     version: SHM_VERSION,
+        //     shm: self.buffer.info.serialize().unwrap().into(),
+        // };
+        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        // wbuf.write_init_syn_property_shm(&init_syn_property);
 
-        Ok(Some(wbuf.contiguous().into_owned()))
+        // Ok(Some(wbuf.contiguous().into_owned()))
+        unimplemented!()
     }
 
     async fn handle_init_syn(
@@ -216,58 +215,59 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        let zbuf: ZBuf = match property {
-            Some(p) => p.into(),
-            None => {
-                log::debug!("Peer {} did not express interest in SHM", cookie.zid);
-                return Ok((None, None));
-            }
-        };
-        let mut init_syn_property = match zbuf.reader().read_init_syn_property_shm() {
-            Some(isa) => isa,
-            None => bail!("Received InitSyn with invalid attachment on link: {}", link),
-        };
+        // let zbuf: ZBuf = match property {
+        //     Some(p) => p.into(),
+        //     None => {
+        //         log::debug!("Peer {} did not express interest in SHM", cookie.zid);
+        //         return Ok((None, None));
+        //     }
+        // };
+        // let mut init_syn_property = match zbuf.reader().read_init_syn_property_shm() {
+        //     Some(isa) => isa,
+        //     None => bail!("Received InitSyn with invalid attachment on link: {}", link),
+        // };
 
-        if init_syn_property.version > SHM_VERSION {
-            bail!("Rejected InitSyn with invalid attachment on link: {}", link)
-        }
+        // if init_syn_property.version > SHM_VERSION {
+        //     bail!("Rejected InitSyn with invalid attachment on link: {}", link)
+        // }
 
-        // Try to read from the shared memory
-        match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
-            Ok(res) => {
-                if !res {
-                    log::debug!("Peer {} can not operate over SHM: error", cookie.zid);
-                    return Ok((None, None));
-                }
-            }
-            Err(e) => {
-                log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
-                return Ok((None, None));
-            }
-        }
+        // // Try to read from the shared memory
+        // match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
+        //     Ok(res) => {
+        //         if !res {
+        //             log::debug!("Peer {} can not operate over SHM: error", cookie.zid);
+        //             return Ok((None, None));
+        //         }
+        //     }
+        //     Err(e) => {
+        //         log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
+        //         return Ok((None, None));
+        //     }
+        // }
 
-        log::debug!("Authenticating Shared Memory Access...");
+        // log::debug!("Authenticating Shared Memory Access...");
 
-        let xs = init_syn_property.shm;
-        let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
-                return Ok((None, None));
-            }
-        };
-        let challenge = ZInt::from_le_bytes(bytes);
+        // let xs = init_syn_property.shm;
+        // let bytes: [u8; SHM_SIZE] = match xs.as_slice().try_into() {
+        //     Ok(bytes) => bytes,
+        //     Err(e) => {
+        //         log::debug!("Peer {} can not operate over SHM: {}", cookie.zid, e);
+        //         return Ok((None, None));
+        //     }
+        // };
+        // let challenge = ZInt::from_le_bytes(bytes);
 
-        // Create the InitAck attachment
-        let init_ack_property = InitAckProperty {
-            challenge,
-            shm: self.buffer.info.serialize().unwrap().into(),
-        };
-        // Encode the InitAck property
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_ack_property_shm(&init_ack_property);
+        // // Create the InitAck attachment
+        // let init_ack_property = InitAckProperty {
+        //     challenge,
+        //     shm: self.buffer.info.serialize().unwrap().into(),
+        // };
+        // // Encode the InitAck property
+        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        // wbuf.write_init_ack_property_shm(&init_ack_property);
 
-        Ok((Some(wbuf.contiguous().into_owned()), None))
+        // Ok((Some(wbuf.contiguous().into_owned()), None))
+        unimplemented!()
     }
 
     async fn handle_init_ack(
@@ -277,53 +277,54 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
-        let zbuf: ZBuf = match property {
-            Some(p) => p.into(),
-            None => {
-                log::debug!("Peer {} did not express interest in shared memory", peer_id);
-                return Ok(None);
-            }
-        };
+        // let zbuf: ZBuf = match property {
+        //     Some(p) => p.into(),
+        //     None => {
+        //         log::debug!("Peer {} did not express interest in shared memory", peer_id);
+        //         return Ok(None);
+        //     }
+        // };
 
-        let mut init_ack_property = zbuf
-            .reader()
-            .read_init_ack_property_shm()
-            .ok_or_else(|| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
+        // let mut init_ack_property = zbuf
+        //     .reader()
+        //     .read_init_ack_property_shm()
+        //     .ok_or_else(|| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
 
-        // Try to read from the shared memory
-        match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
-            Ok(res) => {
-                if !res {
-                    return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
-                }
-            }
-            Err(e) => return Err(ShmError(zerror!("No SHM on link {}: {}", link, e)).into()),
-        }
+        // // Try to read from the shared memory
+        // match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
+        //     Ok(res) => {
+        //         if !res {
+        //             return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
+        //         }
+        //     }
+        //     Err(e) => return Err(ShmError(zerror!("No SHM on link {}: {}", link, e)).into()),
+        // }
 
-        let bytes: [u8; SHM_SIZE] = init_ack_property.shm.as_slice().try_into().map_err(|e| {
-            zerror!(
-                "Received InitAck with invalid attachment on link {}: {}",
-                link,
-                e
-            )
-        })?;
-        let challenge = ZInt::from_le_bytes(bytes);
+        // let bytes: [u8; SHM_SIZE] = init_ack_property.shm.as_slice().try_into().map_err(|e| {
+        //     zerror!(
+        //         "Received InitAck with invalid attachment on link {}: {}",
+        //         link,
+        //         e
+        //     )
+        // })?;
+        // let challenge = ZInt::from_le_bytes(bytes);
 
-        if init_ack_property.challenge == self.challenge {
-            // Create the OpenSyn attachment
-            let open_syn_property = OpenSynProperty { challenge };
-            // Encode the OpenSyn property
-            let mut wbuf = WBuf::new(WBUF_SIZE, false);
-            wbuf.write_open_syn_property_shm(&open_syn_property);
+        // if init_ack_property.challenge == self.challenge {
+        //     // Create the OpenSyn attachment
+        //     let open_syn_property = OpenSynProperty { challenge };
+        //     // Encode the OpenSyn property
+        //     let mut wbuf = WBuf::new(WBUF_SIZE, false);
+        //     wbuf.write_open_syn_property_shm(&open_syn_property);
 
-            Ok(Some(wbuf.contiguous().into_owned()))
-        } else {
-            Err(ShmError(zerror!(
-                "Received OpenSyn with invalid attachment on link: {}",
-                link
-            ))
-            .into())
-        }
+        //     Ok(Some(wbuf.contiguous().into_owned()))
+        // } else {
+        //     Err(ShmError(zerror!(
+        //         "Received OpenSyn with invalid attachment on link: {}",
+        //         link
+        //     ))
+        //     .into())
+        // }
+        unimplemented!()
     }
 
     async fn handle_open_syn(
@@ -332,28 +333,29 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
-        let (attachment, _cookie) = property;
-        let zbuf: ZBuf = match attachment {
-            Some(p) => p.into(),
-            None => {
-                log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
-                return Ok(None);
-            }
-        };
-        let open_syn_property = zbuf
-            .reader()
-            .read_open_syn_property_shm()
-            .ok_or_else(|| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
+        // let (attachment, _cookie) = property;
+        // let zbuf: ZBuf = match attachment {
+        //     Some(p) => p.into(),
+        //     None => {
+        //         log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
+        //         return Ok(None);
+        //     }
+        // };
+        // let open_syn_property = zbuf
+        //     .reader()
+        //     .read_open_syn_property_shm()
+        //     .ok_or_else(|| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
 
-        if open_syn_property.challenge == self.challenge {
-            Ok(None)
-        } else {
-            Err(ShmError(zerror!(
-                "Received OpenSyn with invalid attachment on link: {}",
-                link
-            ))
-            .into())
-        }
+        // if open_syn_property.challenge == self.challenge {
+        //     Ok(None)
+        // } else {
+        //     Err(ShmError(zerror!(
+        //         "Received OpenSyn with invalid attachment on link: {}",
+        //         link
+        //     ))
+        //     .into())
+        // }
+        unimplemented!()
     }
 
     async fn handle_open_ack(

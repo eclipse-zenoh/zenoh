@@ -44,11 +44,10 @@ impl Writer for &mut Vec<u8> {
         usize::MAX
     }
 
-    fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
-        &mut self,
-        mut len: usize,
-        f: F,
-    ) -> Result<(), DidntWrite> {
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    where
+        F: FnOnce(&mut [u8]) -> usize,
+    {
         self.reserve(len);
         unsafe {
             len = f(std::mem::transmute(&mut self.spare_capacity_mut()[..len]));
