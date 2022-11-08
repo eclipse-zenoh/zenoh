@@ -331,10 +331,6 @@ impl TransportUnicastInner {
                     let stl = links.remove(index);
                     *guard = links.into_boxed_slice();
                     drop(guard);
-                    // Notify the callback
-                    if let Some(callback) = zread!(self.callback).as_ref() {
-                        callback.del_link(Link::from(link));
-                    }
                     Target::Link(stl.into())
                 }
             } else {
@@ -345,6 +341,11 @@ impl TransportUnicastInner {
                 )
             }
         };
+
+        // Notify the callback
+        if let Some(callback) = zread!(self.callback).as_ref() {
+            callback.del_link(Link::from(link));
+        }
 
         match target {
             Target::Transport => self.delete().await,
