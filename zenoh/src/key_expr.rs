@@ -56,7 +56,7 @@ impl std::ops::Deref for KeyExpr<'_> {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
         match &self.0 {
-            KeyExprInner::Borrowed(s) => *s,
+            KeyExprInner::Borrowed(s) => s,
             KeyExprInner::Owned(s) => s,
             KeyExprInner::Wire { key_expr, .. } => key_expr,
             KeyExprInner::BorrowedWire { key_expr, .. } => key_expr,

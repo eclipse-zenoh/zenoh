@@ -53,7 +53,7 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
     let args = App::new("zenoh query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
-                .possible_values(&["peer", "client"]),
+                .possible_values(["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
@@ -67,7 +67,7 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
         )
         .arg(
             Arg::from_usage("-t, --target=[TARGET] 'The target queryables of the query'")
-                .possible_values(&["BEST_MATCHING", "ALL", "ALL_COMPLETE"])
+                .possible_values(["BEST_MATCHING", "ALL", "ALL_COMPLETE"])
                 .default_value("ALL"),
         )
         .arg(

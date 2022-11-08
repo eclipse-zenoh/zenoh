@@ -128,7 +128,7 @@ impl Cookie {
         zwrite!(wbuf.write_zint(self.whatami.into()));
         zwrite!(wbuf.write_zid(&self.zid));
         zwrite!(wbuf.write_zint(self.sn_resolution));
-        zwrite!(wbuf.write_byte(if self.is_qos { 1 } else { 0 }).is_some());
+        zwrite!(wbuf.write_byte(u8::from(self.is_qos)).is_some());
         zwrite!(wbuf.write_zint(self.nonce));
         zwrite!(wbuf.write_properties(properties.as_slice()));
 
