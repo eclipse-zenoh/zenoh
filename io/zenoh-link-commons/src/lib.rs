@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
+use serde::Serialize;
 use std::borrow::Cow;
 use std::cmp::PartialEq;
 use std::fmt;
@@ -37,7 +38,7 @@ const WBUF_SIZE: usize = 64;
 /*************************************/
 /*            GENERAL                */
 /*************************************/
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,
     pub dst: Locator,

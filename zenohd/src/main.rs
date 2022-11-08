@@ -96,7 +96,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
             }
         }
 
-        let runtime = match Runtime::new(config).await {
+        let runtime = match Runtime::new(config, true).await {
             Ok(runtime) => runtime,
             Err(e) => {
                 println!("{}. Exiting...", e);
