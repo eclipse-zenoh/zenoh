@@ -52,8 +52,8 @@ impl Snapshotter {
     // Initialize the snapshot parameters, logs and digest
     pub async fn new(
         rx_sample: Receiver<(OwnedKeyExpr, Timestamp)>,
-        initial_entries: Vec<(OwnedKeyExpr, Timestamp)>,
-        replica_config: ReplicaConfig,
+        initial_entries: &Vec<(OwnedKeyExpr, Timestamp)>,
+        replica_config: &ReplicaConfig,
     ) -> Self {
         // compute snapshot time and snapshot interval to start with
         // from initial entries, populate the log - stable and volatile
@@ -157,7 +157,7 @@ impl Snapshotter {
     }
 
     // initialize the log from the storage entries at startup
-    async fn initialize_log(&self, log: Vec<(OwnedKeyExpr, Timestamp)>) {
+    async fn initialize_log(&self, log: &Vec<(OwnedKeyExpr, Timestamp)>) {
         let replica_data = &self.content;
         let last_snapshot_time = replica_data.last_snapshot_time.read().await;
 
@@ -166,20 +166,20 @@ impl Snapshotter {
         for (key, timestamp) in log {
             // depending on the associated timestamp, either to stable_log or volatile log
             // entries until last_snapshot_time goes to stable
-            if timestamp > *last_snapshot_time {
-                if volatile_log.contains_key(&key) {
-                    if *volatile_log.get(&key).unwrap() < timestamp {
-                        (*volatile_log).insert(key, timestamp);
+            if *timestamp > *last_snapshot_time {
+                if volatile_log.contains_key(key) {
+                    if *volatile_log.get(key).unwrap() < *timestamp {
+                        (*volatile_log).insert(key.clone(), *timestamp);
                     }
                 } else {
-                    (*volatile_log).insert(key, timestamp);
+                    (*volatile_log).insert(key.clone(), *timestamp);
                 }
-            } else if stable_log.contains_key(&key) {
-                if *stable_log.get(&key).unwrap() < timestamp {
-                    (*stable_log).insert(key, timestamp);
+            } else if stable_log.contains_key(key) {
+                if *stable_log.get(key).unwrap() < *timestamp {
+                    (*stable_log).insert(key.clone(), *timestamp);
                 }
             } else {
-                (*stable_log).insert(key, timestamp);
+                (*stable_log).insert(key.clone(), *timestamp);
             }
         }
         drop(volatile_log);
