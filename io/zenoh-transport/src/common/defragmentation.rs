@@ -11,16 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::protocol::core::{Reliability, ZInt};
-use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
-
-use zenoh_buffers::buffer::InsertBuffer;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
+use zenoh_codec::{RCodec, Zenoh060Reliability};
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_protocol::proto::MessageReader;
+use zenoh_protocol::{
+    core::{Reliability, ZInt},
+    zenoh::ZenohMessage,
+};
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {
@@ -76,7 +74,7 @@ impl DefragBuffer {
             )
         }
 
-        self.buffer.append(zslice);
+        self.buffer.push_zslice(zslice);
         self.sn.increment();
 
         Ok(())
@@ -84,7 +82,9 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
-        let res = self.buffer.reader().read_zenoh_message(self.reliability);
+        let mut reader = self.buffer.reader();
+        let rcodec = Zenoh060Reliability::new(self.reliability);
+        let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
         self.buffer.clear();
         res
     }

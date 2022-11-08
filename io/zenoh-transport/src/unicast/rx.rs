@@ -12,12 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
 #[cfg(feature = "stats")]
 use super::protocol::proto::ZenohBody;
-use super::protocol::proto::{
-    tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
-};
 use super::transport::TransportUnicastInner;
 use async_std::task;
 use std::sync::MutexGuard;
@@ -25,6 +21,11 @@ use std::sync::MutexGuard;
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
 use zenoh_link::LinkUnicast;
+use zenoh_protocol::{
+    core::{Priority, Reliability, ZInt, ZenohId},
+    transport::{tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage},
+    zenoh::ZenohMessage,
+};
 
 /*************************************/
 /*            TRANSPORT RX           */

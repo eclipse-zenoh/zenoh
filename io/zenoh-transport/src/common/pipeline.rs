@@ -13,9 +13,7 @@
 //
 use super::batch::SerializationBatch;
 use super::conduit::{TransportChannelTx, TransportConduitTx};
-use super::protocol::core::Priority;
 use super::protocol::io::WBuf;
-use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -25,7 +23,7 @@ use std::thread;
 use std::time::Duration;
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
-use zenoh_protocol::proto::MessageWriter;
+use zenoh_protocol::{core::Priority, transport::TransportMessage, zenoh::ZenohMessage};
 
 // It's faster to work directly with nanoseconds.
 // Backoff will never last more the u32::MAX nanoseconds.
@@ -658,18 +656,22 @@ impl TransmissionPipelineConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::prelude::FutureExt;
-    use async_std::task;
-    use std::convert::TryFrom;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
-    use zenoh_buffers::reader::HasReader;
-    use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, ZInt};
-    use zenoh_protocol::io::ZBuf;
-    use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
-    use zenoh_protocol::proto::MessageReader;
-    use zenoh_protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
+    use async_std::{prelude::FutureExt, task};
+    use std::{
+        convert::TryFrom,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+    use zenoh_buffers::{reader::HasReader, ZBuf};
+    use zenoh_protocol::{
+        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+        defaults::{BATCH_SIZE, SEQ_NUM_RES},
+        transport::{Frame, FramePayload, TransportBody},
+        zenoh::ZenohMessage,
+    };
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);

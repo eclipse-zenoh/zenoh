@@ -31,9 +31,8 @@ use std::sync::Arc;
 pub use unicast::*;
 use zenoh_core::Result as ZResult;
 use zenoh_link::Link;
-use zenoh_protocol as protocol;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::proto::ZenohMessage;
+use zenoh_protocol::zenoh::ZenohMessage;
 
 /*************************************/
 /*            TRANSPORT              */

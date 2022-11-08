@@ -15,10 +15,6 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{WhatAmI, ZInt, ZenohId};
-#[cfg(feature = "shared-memory")]
-use super::protocol::io::SharedMemoryReader;
-use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
@@ -31,13 +27,17 @@ use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use std::time::Duration;
+#[cfg(feature = "shared-memory")]
+use zenoh_buffers::SharedMemoryReader;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zparse};
+use zenoh_core::{bail, zparse, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
-use zenoh_protocol::core::{EndPoint, Locator, Priority};
+use zenoh_protocol::{
+    core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
+    defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
+};
 
 /// # Examples
 /// ```
@@ -405,7 +405,7 @@ impl TransportManager {
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast
@@ -418,7 +418,7 @@ impl TransportManager {
     pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast
@@ -454,7 +454,7 @@ impl TransportManager {
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast

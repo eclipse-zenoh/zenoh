@@ -19,7 +19,10 @@ mod query;
 mod routing;
 mod unit;
 
-use crate::{common::Attachment, core::Channel};
+use crate::{
+    common::Attachment,
+    core::{Channel, CongestionControl, Reliability},
+};
 pub use data::*;
 pub use declare::*;
 pub use linkstate::*;
@@ -207,6 +210,32 @@ pub struct ZenohMessage {
     pub size: Option<std::num::NonZeroUsize>,
 }
 
+impl ZenohMessage {
+    // -- Message Predicates
+    #[inline]
+    pub fn is_reliable(&self) -> bool {
+        self.channel.reliability == Reliability::Reliable
+    }
+
+    #[inline]
+    pub fn is_droppable(&self) -> bool {
+        if !self.is_reliable() {
+            return true;
+        }
+
+        let cc = match &self.body {
+            ZenohBody::Data(data) => data.congestion_control,
+            ZenohBody::Unit(unit) => unit.congestion_control,
+            ZenohBody::Declare(_) => zmsg::default_congestion_control::DECLARE,
+            ZenohBody::Pull(_) => zmsg::default_congestion_control::PULL,
+            ZenohBody::Query(_) => zmsg::default_congestion_control::QUERY,
+            ZenohBody::LinkStateList(_) => zmsg::default_congestion_control::LINK_STATE_LIST,
+        };
+
+        cc == CongestionControl::Drop
+    }
+}
+
 impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -230,7 +259,7 @@ impl fmt::Display for ZenohMessage {
 impl ZenohMessage {
     #[doc(hidden)]
     pub fn rand() -> Self {
-        use crate::core::{Priority, Reliability};
+        use crate::core::Priority;
         use rand::Rng;
         use std::convert::TryInto;
 

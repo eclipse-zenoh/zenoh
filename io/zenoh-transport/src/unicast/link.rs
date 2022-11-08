@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::conduit::TransportConduitTx;
-use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::TransportMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -27,13 +25,14 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_buffers::buffer::InsertBuffer;
-use zenoh_buffers::reader::{HasReader, Reader};
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    ZBuf, ZSlice,
+};
 use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zerror};
+use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::proto::MessageReader;
+use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
 
 #[derive(Clone)]
@@ -286,7 +285,7 @@ async fn rx_task_stream(
             Action::Read(n) => {
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.append(zs);
+                zbuf.push_zslice(zs);
 
                 let mut zbuf = zbuf.reader();
                 #[cfg(feature = "stats")]
@@ -368,7 +367,7 @@ async fn rx_task_dgram(
                 // Add the received bytes to the ZBuf for deserialization
                 let zs = ZSlice::make(buffer.into(), 0, n)
                     .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.append(zs);
+                zbuf.push_zslice(zs);
                 let mut zbuf = zbuf.reader();
                 // Deserialize all the messages from the current ZBuf
                 while zbuf.can_read() {

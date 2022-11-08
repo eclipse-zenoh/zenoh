@@ -64,6 +64,7 @@ rsa = { version = "0.6.1", optional = true }
 serde = "1.0.145"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties/" }
+zenoh-codec = { version = "0.6.0-beta.1", path = "../../commons/zenoh-codec/" }
 zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-collections/" }
 zenoh-config = { version = "0.6.0-beta.1", path = "../../commons/zenoh-config/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }

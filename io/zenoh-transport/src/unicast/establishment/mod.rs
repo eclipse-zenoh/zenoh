@@ -16,22 +16,22 @@ pub mod authenticator;
 pub(crate) mod open;
 
 use super::super::TransportManager;
-use super::protocol::core::{Property, WhatAmI, ZInt, ZenohId};
-use super::protocol::io::{WBuf, ZBuf};
-use super::protocol::proto::{Attachment, TransportMessage};
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use authenticator::AuthenticatedPeerLink;
 use rand::Rng;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
-use zenoh_buffers::buffer::CopyBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{bail, zerror};
-use zenoh_core::{zasynclock, zasyncread, Result as ZResult};
+use zenoh_codec::{RCodec, WCodec};
+use zenoh_core::{bail, zasynclock, zasyncread, zerror, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{Link, LinkUnicast};
-use zenoh_protocol::io::{WBufCodec, ZBufCodec};
+use zenoh_protocol::{
+    common::Attachment,
+    core::{Property, WhatAmI, ZInt, ZenohId},
+    transport::TransportMessage,
+};
 
 const WBUF_SIZE: usize = 64;
 

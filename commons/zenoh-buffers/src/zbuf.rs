@@ -135,6 +135,15 @@ impl PartialEq for ZBuf {
     }
 }
 
+impl From<Vec<u8>> for ZBuf {
+    fn from(v: Vec<u8>) -> ZBuf {
+        let zs: ZSlice = v.into();
+        let mut zbuf = ZBuf::default();
+        zbuf.push_zslice(zs);
+        zbuf
+    }
+}
+
 // Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {

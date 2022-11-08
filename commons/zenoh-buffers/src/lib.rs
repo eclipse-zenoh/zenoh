@@ -13,20 +13,15 @@
 //
 
 //! Provide [ZBuf] as convenient buffers used for serialization and deserialization.
-pub mod vec;
-pub use vec::*;
-
-pub mod slice;
-pub use slice::*;
-
-mod zslice;
-pub use zslice::*;
-
+mod slice;
+mod vec;
 mod zbuf;
-pub use zbuf::*;
+mod zslice;
 
-mod wbuf;
-pub use wbuf::*;
+pub use slice::*;
+pub use vec::*;
+pub use zbuf::*;
+pub use zslice::*;
 
 #[cfg(feature = "shared-memory")]
 mod shm;
@@ -34,14 +29,6 @@ mod shm;
 pub use shm::*;
 
 use std::borrow::Cow;
-
-pub mod buffer {
-    pub trait ConstructibleBuffer {
-        /// Constructs a split buffer that may accept `slice_capacity` segments without allocating.
-        /// It may also accept receiving cached writes for `cache_capacity` bytes before needing to reallocate its cache.
-        fn with_capacities(slice_capacity: usize, cache_capacity: usize) -> Self;
-    }
-}
 
 pub mod writer {
     #[derive(Debug, Clone, Copy)]
@@ -200,6 +187,12 @@ pub mod reader {
         /// Returns the most appropriate reader for `self`
         fn reader(self) -> Self::Reader;
     }
+}
+
+pub trait ConstructibleBuffer {
+    /// Constructs a split buffer that may accept `slice_capacity` segments without allocating.
+    /// It may also accept receiving cached writes for `cache_capacity` bytes before needing to reallocate its cache.
+    fn with_capacities(slice_capacity: usize, cache_capacity: usize) -> Self;
 }
 
 /// A trait for buffers that can be composed of multiple non contiguous slices.
