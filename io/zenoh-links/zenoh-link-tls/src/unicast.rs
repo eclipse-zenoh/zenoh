@@ -13,10 +13,10 @@ use crate::TLS_LOCATOR_PREFIX;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    config::*, get_tls_addr, get_tls_dns, get_tls_host, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
-    TLS_LINGER_TIMEOUT,
+    config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
+    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT,
 };
-use async_rustls::rustls::internal::pemfile;
+use async_rustls::rustls::version::TLS13;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
 use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
@@ -33,7 +33,8 @@ use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
-use std::io::Cursor;
+use std::fs::File;
+use std::io::{BufReader, Cursor};
 use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -266,51 +267,81 @@ impl LinkManagerUnicastTls {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let locator = &endpoint.locator;
-        let domain = get_tls_dns(locator).await?;
+        let server_name = get_tls_server_name(locator)?;
         let addr = get_tls_addr(locator).await?;
-        let host: &str = domain.as_ref().into();
 
         // Initialize the TcpStream
-        let tcp_stream = TcpStream::connect(addr)
-            .await
-            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
+        let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
+            zerror!(
+                "Can not create a new TLS link bound to {:?}: {}",
+                server_name,
+                e
+            )
+        })?;
 
-        let src_addr = tcp_stream
-            .local_addr()
-            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
+        let src_addr = tcp_stream.local_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new TLS link bound to {:?}: {}",
+                server_name,
+                e
+            )
+        })?;
 
-        let dst_addr = tcp_stream
-            .peer_addr()
-            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
+        let dst_addr = tcp_stream.peer_addr().map_err(|e| {
+            zerror!(
+                "Can not create a new TLS link bound to {:?}: {}",
+                server_name,
+                e
+            )
+        })?;
 
         // Initialize the TLS stream
-        let mut bytes = Vec::new();
+        let mut root_cert_store = RootCertStore::empty();
         if let Some(config) = endpoint.config {
             if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-                bytes = value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                bytes = fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid TLS CA certificate file: {}", e))?
+                let bytes = value.as_bytes().to_vec();
+                let certs = vec![bytes];
+                let trust_anchors = certs.iter().map(|cert| {
+                    let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                });
+                root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+            } else if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                let mut pem = BufReader::new(File::open(filename)?);
+                let certs = rustls_pemfile::certs(&mut pem)?;
+                let trust_anchors = certs.iter().map(|cert| {
+                    let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        ta.subject,
+                        ta.spki,
+                        ta.name_constraints,
+                    )
+                });
+                root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
             }
         }
 
-        let config = if bytes.is_empty() {
-            Arc::new(ClientConfig::new())
-        } else {
-            let mut cc = ClientConfig::new();
-            let _ = cc
-                .root_store
-                .add_pem_file(&mut Cursor::new(&bytes))
-                .map_err(|_| zerror!("Invalid TLS CA certificate file"))?;
-            Arc::new(cc)
-        };
+        let cc = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        let config = Arc::new(cc);
 
         let connector = TlsConnector::from(config);
         let tls_stream = connector
-            .connect(domain.as_ref(), tcp_stream)
+            .connect(server_name.to_owned(), tcp_stream)
             .await
-            .map_err(|e| zerror!("Can not create a new TLS link bound to {}: {}", host, e))?;
+            .map_err(|e| {
+                zerror!(
+                    "Can not create a new TLS link bound to {:?}: {}",
+                    server_name,
+                    e
+                )
+            })?;
         let tls_stream = TlsStream::Client(tls_stream);
 
         let link = Arc::new(LinkUnicastTls::new(tls_stream, src_addr, dst_addr));
@@ -355,8 +386,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 addr,
             );
         }
-        let mut keys =
-            pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key)).unwrap();
+        let mut keys: Vec<PrivateKey> =
+            rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
+                .map_err(|e| zerror!(e))
+                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
 
         // Configure the server certificate
         if tls_server_certificate.is_empty() {
@@ -365,19 +398,27 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 addr,
             );
         }
-        let certs = pemfile::certs(&mut Cursor::new(&tls_server_certificate)).unwrap();
+        let certs: Vec<Certificate> =
+            rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
+                .map_err(|e| zerror!(e))
+                .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
 
-        let mut sc = if client_auth {
-            // @TODO: implement Client authentication
-            bail!(
-                "Can not create a new TLS listener on {}. ClientAuth not supported.",
-                addr
-            );
+        let sc = if client_auth {
+            ServerConfig::builder()
+                .with_safe_default_cipher_suites()
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&[&TLS13]) // Force TLS 1.3
+                .map_err(|e| zerror!(e))?
+                .with_no_client_auth()
+                .with_single_cert(certs, keys.remove(0))
+                .map_err(|e| zerror!(e))?
         } else {
-            ServerConfig::new(NoClientAuth::new())
+            ServerConfig::builder()
+                .with_safe_defaults()
+                .with_no_client_auth()
+                .with_single_cert(certs, keys.remove(0))
+                .map_err(|e| zerror!(e))?
         };
-
-        sc.set_single_cert(certs, keys.remove(0)).unwrap();
 
         // Initialize the TcpListener
         let socket = TcpListener::bind(addr)
