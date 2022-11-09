@@ -200,10 +200,10 @@ async fn tx_task(
             Err(_) => {
                 let zid = None;
                 let attachment = None;
-                let mut message = TransportMessage::make_keep_alive(zid, attachment);
+                let message = TransportMessage::make_keep_alive(zid, attachment);
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.write_transport_message(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);

@@ -120,6 +120,6 @@ impl<'a> HasReader for &'a BBuf {
     type Reader = &'a [u8];
 
     fn reader(self) -> Self::Reader {
-        &self.buffer[..self.len]
+        self.as_slice()
     }
 }

@@ -15,33 +15,39 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use zenoh_buffers::ZBuf;
-use zenoh_buffers::{reader::HasReader, writer::HasWriter};
+use zenoh_buffers::{reader::HasReader, writer::HasWriter, BBuf, ZBuf};
 use zenoh_codec::*;
-// use zenoh_buffers::reader::HasReader;
-// use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WireExpr};
-// use zenoh_protocol::io::{WBuf, ZBuf};
 use zenoh_protocol::{core::ZInt, defaults::BATCH_SIZE};
-// use zenoh_protocol::proto::ZenohMessage;
-// use zenoh_protocol::proto::{MessageReader, MessageWriter};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("ZInt Vec<u8>", |b| {
-        let mut buff = vec![0u8; BATCH_SIZE as usize];
+        let mut buff = Vec::with_capacity(BATCH_SIZE as usize);
         let codec = Zenoh060::default();
 
         b.iter(|| {
             buff.clear();
-            let mut writer = (&mut buff).writer();
+            let mut writer = buff.writer();
             codec.write(&mut writer, ZInt::MAX).unwrap();
-            let mut reader = (&buff).reader();
+            let mut reader = buff.reader();
+            let _: ZInt = codec.read(&mut reader).unwrap();
+        })
+    });
+
+    c.bench_function("ZInt BBuf", |b| {
+        let mut buff = BBuf::with_capacity(BATCH_SIZE as usize);
+        let codec = Zenoh060::default();
+
+        b.iter(|| {
+            buff.clear();
+            let mut writer = buff.writer();
+            codec.write(&mut writer, ZInt::MAX).unwrap();
+            let mut reader = buff.reader();
             let _: ZInt = codec.read(&mut reader).unwrap();
         })
     });
 
     c.bench_function("ZInt ZBuf", |b| {
         let mut buff = ZBuf::default();
-        buff.push_zslice(vec![0u8; BATCH_SIZE as usize].into());
         let codec = Zenoh060::default();
 
         b.iter(|| {
