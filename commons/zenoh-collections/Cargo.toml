@@ -32,6 +32,9 @@ description = "Internal crate for zenoh."
 async-std = { version = "=1.12.0", features = ["unstable"] }
 async-trait = "0.1.57"
 flume = "0.10.14"
+keyed-set = "0.2.0"
 log = "0.4.17"
+token-cell = "1.3"
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
+zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../zenoh-protocol-core/" }
 zenoh-sync = { version = "0.6.0-beta.1", path = "../zenoh-sync/" }
