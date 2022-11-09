@@ -29,24 +29,6 @@ pub struct Cookie {
     pub nonce: ZInt,
     pub properties: EstablishmentProperties,
 }
-pub type CookieHash = Vec<u8>;
-
-impl Cookie {
-    fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-
-        Self {
-            whatami: WhatAmI::rand(),
-            zid: ZenohId::default(),
-            sn_resolution: rng.gen(),
-            is_qos: rng.gen_bool(0.5),
-            nonce: rng.gen(),
-            properties: EstablishmentProperties::rand(),
-        }
-    }
-}
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh060
 where
@@ -107,14 +89,14 @@ pub(super) struct Zenoh060Cookie<'a> {
     pub(super) codec: Zenoh060,
 }
 
-impl<W> WCodec<&Cookie, &mut W> for Zenoh060Cookie<'_>
+impl<W> WCodec<&Cookie, &mut W> for &mut Zenoh060Cookie<'_>
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Cookie) -> Self::Output {
-        let mut buff = vec![0u8; BlockCipher::BLOCK_SIZE];
+        let mut buff = vec![];
         let mut support = buff.writer();
 
         self.codec.write(&mut support, x)?;
@@ -126,7 +108,7 @@ where
     }
 }
 
-impl<R> RCodec<Cookie, &mut R> for Zenoh060Cookie<'_>
+impl<R> RCodec<Cookie, &mut R> for &mut Zenoh060Cookie<'_>
 where
     R: Reader,
 {
@@ -143,58 +125,78 @@ where
     }
 }
 
+impl Cookie {
+    // Functions mainly used for testing
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        Self {
+            whatami: WhatAmI::rand(),
+            zid: ZenohId::default(),
+            sn_resolution: rng.gen(),
+            is_qos: rng.gen_bool(0.5),
+            nonce: rng.gen(),
+            properties: EstablishmentProperties::rand(),
+        }
+    }
+}
+
 mod tests {
-    use super::*;
-    use rand::SeedableRng;
-    use zenoh_buffers::ZBuf;
-
-    const NUM_ITER: usize = 1_000;
-
-    macro_rules! run_single {
-        ($type:ty, $rand:expr, $wcode:expr, $rcode:expr, $buff:expr) => {
-            for _ in 0..NUM_ITER {
-                let x: $type = $rand;
-
-                $buff.clear();
-                let mut writer = $buff.writer();
-                $wcode.write(&mut writer, &x).unwrap();
-
-                let mut reader = $buff.reader();
-                let y: $type = $rcode.read(&mut reader).unwrap();
-                assert!(!reader.can_read());
-
-                assert_eq!(x, y);
-            }
-        };
-    }
-
-    macro_rules! run {
-        ($type:ty, $rand:expr, $codec:expr) => {
-            println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
-            let mut buffer = vec![];
-            run_single!($type, $rand, $codec, $codec, buffer);
-
-            println!("ZBuf: codec {}", std::any::type_name::<$type>());
-            let mut buffer = ZBuf::default();
-            run_single!($type, $rand, $codec, $codec, buffer);
-        };
-    }
-
     #[test]
     fn codec_cookie() {
-        use rand::Rng;
+        use super::*;
+        use rand::{Rng, SeedableRng};
+        use zenoh_buffers::ZBuf;
+
+        const NUM_ITER: usize = 1_000;
+
+        macro_rules! run_single {
+            ($type:ty, $rand:expr, $wcode:expr, $rcode:expr, $buff:expr) => {
+                for _ in 0..NUM_ITER {
+                    let x: $type = $rand;
+
+                    $buff.clear();
+                    let mut writer = $buff.writer();
+                    $wcode.write(&mut writer, &x).unwrap();
+
+                    let mut reader = $buff.reader();
+                    let y: $type = $rcode.read(&mut reader).unwrap();
+                    assert!(!reader.can_read());
+
+                    assert_eq!(x, y);
+                }
+            };
+        }
+
+        macro_rules! run {
+            ($type:ty, $rand:expr, $codec:expr) => {
+                println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+                let mut buffer = vec![];
+                run_single!($type, $rand, $codec, $codec, buffer);
+
+                println!("ZBuf: codec {}", std::any::type_name::<$type>());
+                let mut buffer = ZBuf::default();
+                run_single!($type, $rand, $codec, $codec, buffer);
+            };
+        }
+
+        let codec = Zenoh060::default();
+        run!(Cookie, Cookie::rand(), codec);
 
         let mut prng = PseudoRng::from_entropy();
         let mut key = [0u8; BlockCipher::BLOCK_SIZE];
         prng.fill(&mut key[..]);
 
         let cipher = BlockCipher::new(key);
-        let codec = Zenoh060Cookie {
+        let mut codec = Zenoh060Cookie {
             prng: &mut prng,
             cipher: &cipher,
             codec: Zenoh060::default(),
         };
 
-        // run!(Cookie, Cookie::rand(), codec);
+        run!(Cookie, Cookie::rand(), codec);
     }
 }

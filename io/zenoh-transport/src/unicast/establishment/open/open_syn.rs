@@ -38,10 +38,10 @@ pub(super) async fn send(
 ) -> OResult<Output> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let mut message =
+    let message =
         TransportMessage::make_open_syn(lease, input.initial_sn, input.cookie, input.attachment);
     let _ = link
-        .write_transport_message(&mut message)
+        .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 

@@ -92,7 +92,7 @@ pub(super) async fn recv(
 
     // Decrypt the cookie with the cyper
     let mut reader = encrypted.reader();
-    let codec = Zenoh060Cookie {
+    let mut codec = Zenoh060Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
         codec: Zenoh060::default(),

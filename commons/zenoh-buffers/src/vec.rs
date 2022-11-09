@@ -33,7 +33,7 @@ impl Writer for &mut Vec<u8> {
             return Err(DidntWrite);
         }
         self.extend_from_slice(bytes);
-        // Safety: this operation is safe since we check if bytes is empty
+        // Safety: this operation is safe since we early return if bytes is empty
         Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 

@@ -60,7 +60,7 @@ pub(super) async fn send(
         Some(att)
     };
 
-    let mut message = TransportMessage::make_init_syn(
+    let message = TransportMessage::make_init_syn(
         manager.config.version,
         manager.config.whatami,
         manager.config.zid,
@@ -69,7 +69,7 @@ pub(super) async fn send(
         init_syn_attachment,
     );
     let _ = link
-        .write_transport_message(&mut message)
+        .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 

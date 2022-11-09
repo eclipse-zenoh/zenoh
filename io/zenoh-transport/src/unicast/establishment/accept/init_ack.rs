@@ -110,7 +110,7 @@ pub(super) async fn send(
 
     let mut encrypted = vec![];
     let mut writer = encrypted.writer();
-    let codec = Zenoh060Cookie {
+    let mut codec = Zenoh060Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
         codec: Zenoh060::default(),
@@ -127,7 +127,7 @@ pub(super) async fn send(
 
     // Send the cookie
     let cookie: ZSlice = encrypted.into();
-    let mut message = TransportMessage::make_init_ack(
+    let message = TransportMessage::make_init_ack(
         whatami,
         azid,
         sn_resolution,
@@ -138,7 +138,7 @@ pub(super) async fn send(
 
     // Send the message on the link
     let _ = link
-        .write_transport_message(&mut message)
+        .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 

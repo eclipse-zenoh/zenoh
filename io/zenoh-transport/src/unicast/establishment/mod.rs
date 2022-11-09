@@ -42,9 +42,9 @@ pub(super) async fn close_link(
         let peer_id = Some(manager.config.zid);
         let link_only = true;
         let attachment = None;
-        let mut message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
+        let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
         // Send the close message on the link
-        let _ = link.write_transport_message(&mut message).await;
+        let _ = link.write_transport_message(&message).await;
     }
 
     // Close the link

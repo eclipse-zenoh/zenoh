@@ -247,6 +247,7 @@ impl TransportMulticastInner {
         //     log::trace!("Failed SHM conversion: {}", e);
         //     return;
         // }
+        unimplemented!();
         self.schedule_first_fit(message);
     }
 

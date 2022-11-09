@@ -96,6 +96,7 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
     }
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
+        // Safety: SliceMark's lifetime is bound to the slice's lifetime
         *self = unsafe { std::slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
         true
     }
@@ -145,13 +146,13 @@ impl Reader for &[u8] {
     }
 
     #[allow(clippy::uninit_vec)]
-    // SAFETY: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
-    // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
-    // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
-    // Therefore, it is safe to suppress the `clippy::uninit_vec` lint.
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         // We'll be truncating the vector immediately, and u8 is Copy and therefore doesn't have `Drop`
         let mut buffer: Vec<u8> = Vec::with_capacity(len);
+        // Safety: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
+        // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
+        // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
+        // Therefore, it is safe to suppress the `clippy::uninit_vec` lint.
         unsafe {
             buffer.set_len(len);
         }

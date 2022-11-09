@@ -257,7 +257,7 @@ async fn tx_task(
                     assert_eq!(next_sns.len(), 1);
                     ConduitSnList::Plain(next_sns[0])
                 };
-                let mut message = TransportMessage::make_join(
+                let message = TransportMessage::make_join(
                     config.version,
                     config.whatami,
                     config.zid,
@@ -268,7 +268,7 @@ async fn tx_task(
                 );
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.write_transport_message(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -280,10 +280,10 @@ async fn tx_task(
             Action::KeepAlive => {
                 let zid = Some(config.zid);
                 let attachment = None;
-                let mut message = TransportMessage::make_keep_alive(zid, attachment);
+                let message = TransportMessage::make_keep_alive(zid, attachment);
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.write_transport_message(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
