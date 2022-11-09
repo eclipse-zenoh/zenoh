@@ -26,10 +26,9 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_codec::{RCodec, Zenoh060};
 use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock};
+use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
@@ -341,8 +340,9 @@ async fn rx_task(
         Ok(Action::Stop)
     }
 
-    // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::default();
+    // The codec
+    let codec = Zenoh060::default();
+
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let mut n = rx_buffer_size / mtu;
@@ -351,8 +351,6 @@ async fn rx_task(
     }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
-        // Clear the zbuf
-        zbuf.clear();
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
@@ -368,25 +366,17 @@ async fn rx_task(
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(n);
 
-                // Add the received bytes to the ZBuf for deserialization
-                let zs = ZSlice::make(buffer.into(), 0, n)
-                    .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.push_zslice(zs);
-
                 // Deserialize all the messages from the current ZBuf
-                let mut reader = zbuf.reader();
+                let mut reader = buffer[0..n].reader();
                 while reader.can_read() {
-                    match reader.read_transport_message() {
-                        Some(msg) => {
-                            #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_t_msgs(1);
+                    let msg: TransportMessage = codec
+                        .read(&mut reader)
+                        .map_err(|_| zerror!("{}: decoding error", link))?;
 
-                            transport.receive_message(msg, &loc)?
-                        }
-                        None => {
-                            bail!("{}: decoding error", link);
-                        }
-                    }
+                    #[cfg(feature = "stats")]
+                    transport.stats.inc_rx_t_msgs(1);
+
+                    transport.receive_message(msg, &loc)?
                 }
             }
             Action::Stop => break,

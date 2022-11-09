@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -26,9 +28,13 @@ impl<'a> HasWriter for &'a mut Vec<u8> {
 }
 
 impl Writer for &mut Vec<u8> {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
+    fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
+        if bytes.is_empty() {
+            return Err(DidntWrite);
+        }
         self.extend_from_slice(bytes);
-        Ok(bytes.len())
+        // Safety: this operation is safe since we check if bytes is empty
+        Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {

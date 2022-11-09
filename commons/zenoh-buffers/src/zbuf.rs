@@ -18,9 +18,9 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     SplitBuffer, ZSlice, ZSliceBuffer,
 };
-use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
+use std::{num::NonZeroUsize, sync::Arc};
 use zenoh_collections::SingleOrVec;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
@@ -35,8 +35,8 @@ impl ZBuf {
         self.slices.clear();
     }
 
-    pub fn zslices(&self) -> impl Iterator<Item = ZSlice> + '_ {
-        self.slices.as_ref().iter().map(ZSlice::clone)
+    pub fn zslices(&self) -> impl Iterator<Item = &ZSlice> + '_ {
+        self.slices.as_ref().iter()
     }
 
     pub fn push_zslice(&mut self, zslice: ZSlice) {
@@ -132,6 +132,26 @@ impl PartialEq for ZBuf {
                 }
             }
         }
+        // let mut sreader = self.reader();
+        // let mut oreader = other.reader();
+        // loop {
+        //     match (sreader.read_u8(), oreader.read_u8()) {
+        //         (Ok(s), Ok(o)) => {
+        //             println!("{}:{}", s, o);
+        //             if s != o {
+        //                 return false;
+        //             }
+        //         }
+        //         (Err(_), Err(_)) => {
+        //             println!("YES");
+        //             return true;
+        //         }
+        //         _ => {
+        //             println!("OH NO");
+        //             return false;
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -247,31 +267,33 @@ impl<'a> Reader for ZBufReader<'a> {
         Ok(())
     }
 
+    #[allow(clippy::uninit_vec)]
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {
             std::cmp::Ordering::Less => {
+                let mut buffer = Vec::with_capacity(len);
+                unsafe {
+                    buffer.set_len(len);
+                }
+                self.read_exact(&mut buffer)?;
+                Ok(buffer.into())
+            }
+            std::cmp::Ordering::Equal => {
+                let s = slice
+                    .new_sub_slice(self.cursor.byte, slice.len())
+                    .ok_or(DidntRead)?;
+
+                self.cursor.slice += 1;
+                self.cursor.byte = 0;
+                Ok(s)
+            }
+            std::cmp::Ordering::Greater => {
                 let start = self.cursor.byte;
                 self.cursor.byte += len;
                 slice
                     .new_sub_slice(start, self.cursor.byte)
                     .ok_or(DidntRead)
-            }
-            std::cmp::Ordering::Equal => {
-                self.cursor.slice += 1;
-                self.cursor.byte = 0;
-                Ok(slice.clone())
-            }
-            std::cmp::Ordering::Greater => {
-                self.cursor.slice += 1;
-                self.cursor.byte = 0;
-                let mut buffer = Vec::with_capacity(len);
-                buffer.extend_from_slice(slice.as_slice());
-                unsafe {
-                    self.read_exact(std::mem::transmute(buffer.spare_capacity_mut()))?;
-                    buffer.set_len(len);
-                }
-                Ok(buffer.into())
             }
         }
     }
@@ -291,7 +313,7 @@ impl<'a> BacktrackableReader for ZBufReader<'a> {
 }
 
 impl<'a> SiphonableReader for ZBufReader<'a> {
-    fn siphon<W>(&mut self, mut writer: W) -> Result<usize, DidntSiphon>
+    fn siphon<W>(&mut self, mut writer: W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
     {
@@ -304,9 +326,9 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
             match writer.write(from) {
                 Ok(len) => {
                     // Update the counter
-                    read += len;
+                    read += len.get();
                     // Move the byte cursor
-                    self.cursor.byte += len;
+                    self.cursor.byte += len.get();
                     // We consumed all the current read slice, move to the next slice
                     if self.cursor.byte == slice.len() {
                         self.cursor.slice += 1;
@@ -314,15 +336,11 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
                     }
                 }
                 Err(_) => {
-                    if read == 0 {
-                        return Err(DidntSiphon);
-                    } else {
-                        return Ok(read);
-                    }
+                    return NonZeroUsize::new(read).ok_or(DidntSiphon);
                 }
             }
         }
-        Ok(read)
+        NonZeroUsize::new(read).ok_or(DidntSiphon)
     }
 }
 
@@ -341,17 +359,33 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
         }
 
         let slice = &self.reader.inner.slices[self.reader.cursor.slice];
-        let slen = slice.len();
-        if slen <= self.remaining {
-            self.remaining -= slen;
-            self.reader.cursor.slice += 1;
-            self.reader.cursor.byte = 0;
-            Some(slice.clone())
-        } else {
-            self.reader.cursor.byte += self.remaining;
-            let slice = slice.new_sub_slice(0, self.remaining);
-            self.remaining = 0;
-            slice
+        let start = self.reader.cursor.byte;
+        let current = &slice[start..];
+        let len = current.len();
+        match self.remaining.cmp(&len) {
+            std::cmp::Ordering::Less => {
+                let end = start + self.remaining;
+                let slice = slice.new_sub_slice(start, end);
+                self.reader.cursor.byte = end;
+                self.remaining = 0;
+                slice
+            }
+            std::cmp::Ordering::Equal => {
+                let end = start + self.remaining;
+                let slice = slice.new_sub_slice(start, end);
+                self.reader.cursor.slice += 1;
+                self.reader.cursor.byte = 0;
+                self.remaining = 0;
+                slice
+            }
+            std::cmp::Ordering::Greater => {
+                let end = start + len;
+                let slice = slice.new_sub_slice(start, end);
+                self.reader.cursor.slice += 1;
+                self.reader.cursor.byte = 0;
+                self.remaining -= len;
+                slice
+            }
         }
     }
 
@@ -379,9 +413,13 @@ impl<'a> HasWriter for &'a mut ZBuf {
 }
 
 impl Writer for ZBufWriter<'_> {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
+    fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
+        if bytes.is_empty() {
+            return Err(DidntWrite);
+        }
         self.write_exact(bytes)?;
-        Ok(bytes.len())
+        // Safety: this operation is safe since we check if bytes is empty
+        Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
@@ -412,8 +450,8 @@ impl Writer for ZBufWriter<'_> {
         usize::MAX
     }
 
-    fn write_zslice(&mut self, slice: ZSlice) -> Result<(), DidntWrite> {
-        self.inner.slices.push(slice);
+    fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
+        self.inner.slices.push(slice.clone());
         Ok(())
     }
 
@@ -477,5 +515,36 @@ impl ZBuf {
         let mut zbuf = ZBuf::default();
         zbuf.push_zslice(ZSlice::rand(len));
         zbuf
+    }
+}
+
+mod tests {
+    #[test]
+    fn zbuf_eq() {
+        use super::{ZBuf, ZSlice};
+
+        let slice: ZSlice = [0u8, 1, 2, 3, 4, 5, 6, 7].to_vec().into();
+
+        let mut zbuf1 = ZBuf::default();
+        zbuf1.push_zslice(slice.new_sub_slice(0, 4).unwrap());
+        zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+
+        let mut zbuf2 = ZBuf::default();
+        zbuf2.push_zslice(slice.new_sub_slice(0, 1).unwrap());
+        zbuf2.push_zslice(slice.new_sub_slice(1, 4).unwrap());
+        zbuf2.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+
+        assert_eq!(zbuf1, zbuf2);
+
+        let mut zbuf1 = ZBuf::default();
+        zbuf1.push_zslice(slice.new_sub_slice(2, 4).unwrap());
+        zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+
+        let mut zbuf2 = ZBuf::default();
+        zbuf2.push_zslice(slice.new_sub_slice(2, 3).unwrap());
+        zbuf2.push_zslice(slice.new_sub_slice(3, 6).unwrap());
+        zbuf2.push_zslice(slice.new_sub_slice(6, 8).unwrap());
+
+        assert_eq!(zbuf1, zbuf2);
     }
 }

@@ -33,18 +33,21 @@ pub use shm::*;
 use std::borrow::Cow;
 
 pub mod writer {
+    use crate::ZSlice;
+    use std::num::NonZeroUsize;
+
     #[derive(Debug, Clone, Copy)]
     pub struct DidntWrite;
 
     pub trait Writer {
-        fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite>;
+        fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite>;
         fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite>;
         fn remaining(&self) -> usize;
 
         fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
             self.write_exact(std::slice::from_ref(&byte))
         }
-        fn write_zslice(&mut self, slice: crate::zslice::ZSlice) -> Result<(), DidntWrite> {
+        fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
             self.write_exact(slice.as_slice())
         }
         fn can_write(&self) -> bool {
@@ -52,11 +55,9 @@ pub mod writer {
         }
         /// Provides a buffer of exactly `len` uninitialized bytes to `f` to allow in-place writing.
         /// `f` must return the number of bytes it actually wrote.
-        fn with_slot<F: FnOnce(&mut [u8]) -> usize>(
-            &mut self,
-            len: usize,
-            f: F,
-        ) -> Result<(), DidntWrite>;
+        fn with_slot<F>(&mut self, len: usize, f: F) -> Result<(), DidntWrite>
+        where
+            F: FnOnce(&mut [u8]) -> usize;
     }
 
     pub struct Reservation<'a, 'b, Len> {
@@ -145,6 +146,7 @@ pub mod writer {
 
 pub mod reader {
     use crate::ZSlice;
+    use std::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
@@ -190,7 +192,7 @@ pub mod reader {
     pub struct DidntSiphon;
 
     pub trait SiphonableReader: Reader {
-        fn siphon<W>(&mut self, writer: W) -> Result<usize, DidntSiphon>
+        fn siphon<W>(&mut self, writer: W) -> Result<NonZeroUsize, DidntSiphon>
         where
             W: crate::writer::Writer;
     }

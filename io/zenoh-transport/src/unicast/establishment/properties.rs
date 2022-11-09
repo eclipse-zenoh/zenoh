@@ -24,7 +24,7 @@ use zenoh_protocol::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct EstablishmentProperties(Vec<Property>);
+pub struct EstablishmentProperties(Vec<Property>);
 
 impl Deref for EstablishmentProperties {
     type Target = Vec<Property>;

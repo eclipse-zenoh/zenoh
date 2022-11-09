@@ -16,7 +16,7 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use std::marker::PhantomData;
+use std::{marker::PhantomData, num::NonZeroUsize};
 
 // Writer
 impl HasWriter for &mut [u8] {
@@ -28,14 +28,19 @@ impl HasWriter for &mut [u8] {
 }
 
 impl Writer for &mut [u8] {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
+    fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         let len = bytes.len().min(self.len());
+        if len == 0 {
+            return Err(DidntWrite);
+        }
+
         self[..len].copy_from_slice(&bytes[..len]);
         // Safety: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
         *self = unsafe { std::mem::transmute(&mut self[len..]) };
-        Ok(len)
+        // Safety: this operation is safe since we check if len is non-zero
+        Ok(unsafe { NonZeroUsize::new_unchecked(len) })
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
@@ -177,7 +182,7 @@ impl<'a> BacktrackableReader for &'a [u8] {
 }
 
 impl<'a> SiphonableReader for &'a [u8] {
-    fn siphon<W>(&mut self, mut writer: W) -> Result<usize, DidntSiphon>
+    fn siphon<W>(&mut self, mut writer: W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
     {

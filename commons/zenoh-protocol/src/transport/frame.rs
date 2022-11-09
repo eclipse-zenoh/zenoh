@@ -15,6 +15,7 @@ use crate::{
     core::{Channel, Priority, Reliability, ZInt},
     zenoh::ZenohMessage,
 };
+use rand::seq::SliceRandom;
 use zenoh_buffers::ZSlice;
 
 /// # Frame message
@@ -85,8 +86,8 @@ pub enum FramePayload {
     Messages { messages: Vec<ZenohMessage> },
 }
 
-// Functions mainly used for testing
 impl Frame {
+    // Functions mainly used for testing
     #[doc(hidden)]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -133,5 +134,55 @@ impl Frame {
             sn,
             payload,
         }
+    }
+}
+
+// FrameHeader
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameKind {
+    Messages,
+    SomeFragment,
+    LastFragment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrameHeader {
+    pub channel: Channel,
+    pub sn: ZInt,
+    pub kind: FrameKind,
+}
+
+impl FrameHeader {
+    // Functions mainly used for testing
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        use std::convert::TryInto;
+
+        let mut rng = rand::thread_rng();
+
+        let priority: Priority = rng
+            .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
+            .try_into()
+            .unwrap();
+        let reliability = if rng.gen_bool(0.5) {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        };
+        let channel = Channel {
+            priority,
+            reliability,
+        };
+        let sn: ZInt = rng.gen();
+        let kind = *[
+            FrameKind::Messages,
+            FrameKind::SomeFragment,
+            FrameKind::LastFragment,
+        ]
+        .choose(&mut rng)
+        .unwrap();
+
+        FrameHeader { channel, sn, kind }
     }
 }

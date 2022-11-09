@@ -70,7 +70,11 @@ where
 
     fn write(self, writer: &mut W, x: &[u8]) -> Self::Output {
         self.write(&mut *writer, x.len())?;
-        writer.write_exact(x)
+        if x.is_empty() {
+            Ok(())
+        } else {
+            writer.write_exact(x)
+        }
     }
 }
 

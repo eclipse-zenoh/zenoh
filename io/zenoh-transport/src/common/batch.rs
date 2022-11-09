@@ -13,14 +13,14 @@
 //
 use super::seq_num::SeqNumGenerator;
 use zenoh_buffers::{
-    reader::{Reader, SiphonableReader},
+    reader::SiphonableReader,
     writer::{BacktrackableWriter, HasWriter, Writer},
     BBuf,
 };
 use zenoh_codec::{WCodec, Zenoh060};
 use zenoh_protocol::{
-    core::{Priority, Reliability, ZInt},
-    transport::TransportMessage,
+    core::{Channel, Priority, Reliability, ZInt},
+    transport::{FrameHeader, FrameKind, TransportMessage},
     zenoh::ZenohMessage,
 };
 
@@ -167,7 +167,7 @@ impl SerializationBatch {
         self.buffer.clear();
         if self.is_streamed() {
             let mut writer = self.buffer.writer();
-            writer.write_exact(&LENGTH_BYTES[..]);
+            let _ = writer.write_exact(&LENGTH_BYTES[..]);
         }
         self.sn.clear();
         #[cfg(feature = "stats")]
@@ -262,20 +262,28 @@ impl SerializationBatch {
         let mut writer = self.buffer.writer();
         let mark = writer.mark();
 
+        let codec = Zenoh060::default();
+
         // If a new sequence number has been provided, it means we are in the case we need
         // to start a new frame. Write a new frame header.
         let res = if let Some(frame) = new_frame {
             // Get a new sequence number
             let sn = sn_gen.get();
 
-            // Serialize the new frame and the zenoh message
-            let res = self.buffer.as_mut().write_frame_header(
-                priority,
-                message.channel.reliability,
+            let header = FrameHeader {
+                channel: Channel {
+                    priority,
+                    reliability: message.channel.reliability,
+                },
                 sn,
-                None,
-                None,
-            ) && self.buffer.as_mut().write_zenoh_message(message);
+                kind: FrameKind::Messages,
+            };
+
+            // Serialize the new frame and the zenoh message
+            let res = match codec.write(&mut writer, &header) {
+                Ok(_) => codec.write(&mut writer, &*message).is_ok(),
+                Err(_) => false,
+            };
 
             if res {
                 self.current_frame = frame;
@@ -296,7 +304,7 @@ impl SerializationBatch {
 
             res
         } else {
-            self.buffer.as_mut().write_zenoh_message(message)
+            codec.write(&mut writer, &*message).is_ok()
         };
 
         if !res {
@@ -327,39 +335,50 @@ impl SerializationBatch {
         to_write: usize,
     ) -> usize
     where
-        R: SiphonableReader,
+        R: SiphonableReader + std::fmt::Debug,
     {
+        let mut writer = self.buffer.writer();
+        let codec = Zenoh060::default();
+
         // Assume first that this is not the final fragment
         let sn = sn_gen.get();
-        let mut is_final = false;
-        let mut writer = self.buffer.writer();
+
+        let mut header = FrameHeader {
+            channel: Channel {
+                priority,
+                reliability,
+            },
+            sn,
+            kind: FrameKind::SomeFragment,
+        };
+
         loop {
             // Mark the buffer for the writing operation
             let mark = writer.mark();
             // Write the frame header
-            let fragment = Some(is_final);
-            let attachment = None;
-            let res = self.buffer.as_mut().write_frame_header(
-                priority,
-                reliability,
-                sn,
-                fragment,
-                attachment,
-            );
+            let res = codec.write(&mut writer, &header).is_ok();
 
             if res {
                 // Compute the amount left
                 let space_left = writer.remaining();
                 // Check if it is really the final fragment
-                if !is_final && (to_write <= space_left) {
+                if header.kind == FrameKind::SomeFragment && (to_write <= space_left) {
                     // Revert the buffer
                     writer.rewind(mark);
                     // It is really the finally fragment, reserialize the header
-                    is_final = true;
+                    header.kind = FrameKind::LastFragment;
                     continue;
                 }
                 // Write the fragment
-                let written = to_fragment.siphon(writer).unwrap();
+                let written = match to_fragment.siphon(&mut *writer) {
+                    Ok(w) => w.get(),
+                    Err(_) => {
+                        // Revert the buffer and the SN
+                        sn_gen.set(sn).unwrap();
+                        writer.rewind(mark);
+                        return 0;
+                    }
+                };
 
                 // Keep track of the latest serialized SN
                 let sn_state = SerializationBatchSeqNumState { next: sn_gen.now() };
@@ -540,7 +559,7 @@ mod tests {
                 let routing_context = None;
                 let reply_context = None;
                 let attachment = None;
-                let mut msg_in = ZenohMessage::make_data(
+                let msg_in = ZenohMessage::make_data(
                     key,
                     payload,
                     channel,
@@ -554,7 +573,7 @@ mod tests {
                 let codec = Zenoh060::default();
 
                 // Serialize the message
-                let mut wbuf = vec![];
+                let mut wbuf = ZBuf::default();
                 let mut writer = wbuf.writer();
                 codec.write(&mut writer, &msg_in).unwrap();
 
@@ -589,7 +608,7 @@ mod tests {
                 let mut fragments = ZBuf::default();
                 for batch in batches.iter() {
                     // Convert the buffer into an ZBuf
-                    let reader = batch.get_serialized_messages().reader();
+                    let mut reader = batch.get_serialized_messages().reader();
                     // Deserialize the messages
                     let msg: TransportMessage = codec.read(&mut reader).unwrap();
 

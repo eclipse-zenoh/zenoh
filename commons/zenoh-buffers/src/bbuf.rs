@@ -15,6 +15,7 @@ use crate::{
     reader::HasReader,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
+use std::num::NonZeroUsize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BBuf {
@@ -69,10 +70,10 @@ impl HasWriter for &mut BBuf {
 }
 
 impl Writer for &mut BBuf {
-    fn write(&mut self, bytes: &[u8]) -> Result<usize, DidntWrite> {
+    fn write(&mut self, bytes: &[u8]) -> Result<NonZeroUsize, DidntWrite> {
         let mut writer = self.as_writable_slice().writer();
         let len = writer.write(bytes)?;
-        self.len += len;
+        self.len += len.get();
         Ok(len)
     }
 

@@ -27,7 +27,7 @@ macro_rules! run {
 
         let wbs1: [u8; 4] = [2, 3, 4, 5];
         let w = writer.write(&wbs1).unwrap();
-        assert_eq!(4, w);
+        assert_eq!(4, w.get());
 
         let wbs2: [u8; 4] = [6, 7, 8, 9];
         writer.write_exact(&wbs2).unwrap();
@@ -44,8 +44,8 @@ macro_rules! run {
         writer
             .with_slot(4, |mut buffer| {
                 let w = buffer.write(&wbs4).unwrap();
-                assert_eq!(4, w);
-                w
+                assert_eq!(4, w.get());
+                w.get()
             })
             .unwrap();
 
@@ -99,6 +99,51 @@ macro_rules! run {
     };
 }
 
+macro_rules! run_bound {
+    ($buffer:expr, $capacity:expr) => {
+        println!(">>> Write bound");
+        let mut writer = $buffer.writer();
+
+        for i in 0..$capacity {
+            writer.write_u8(i as u8).unwrap();
+        }
+        assert!(writer.write_u8(0).is_err());
+
+        println!(">>> Read bound");
+        let mut reader = $buffer.reader();
+
+        for i in 0..$capacity {
+            let j = reader.read_u8().unwrap();
+            assert_eq!(i as u8, j);
+        }
+        assert!(reader.read_u8().is_err());
+    };
+}
+
+macro_rules! run_siphon {
+    ($from:expr, $fcap:expr, $into:expr, $icap:expr) => {
+        println!(">>> Write siphon");
+        let mut writer = $from.writer();
+        for i in 0..$fcap {
+            writer.write_u8(i as u8).unwrap();
+        }
+
+        println!(">>> Read siphon");
+        let mut reader = $from.reader();
+        let writer = $into.writer();
+
+        let written = reader.siphon(writer).unwrap();
+        assert_eq!($icap, written.get());
+
+        let mut reader = $into.reader();
+        for i in 0..$icap {
+            let j = reader.read_u8().unwrap();
+            assert_eq!(i as u8, j);
+        }
+        assert!(reader.read_u8().is_err());
+    };
+}
+
 #[test]
 fn buffer_slice() {
     println!("Buffer Slice");
@@ -116,16 +161,13 @@ fn buffer_vec() {
 #[test]
 fn buffer_bbuf() {
     println!("Buffer BBuf");
-    let mut bbuf = BBuf::with_capacity(u8::MAX as usize);
+    let capacity = 1 + u8::MAX as usize;
+    let mut bbuf = BBuf::with_capacity(capacity);
     run!(bbuf);
 
     bbuf.clear();
-    let mut writer = bbuf.writer();
 
-    writer.write_exact(&vec![0u8; u8::MAX as usize]).unwrap();
-    assert!(writer
-        .write_exact(&vec![0u8; 1 + u8::MAX as usize])
-        .is_err());
+    run_bound!(bbuf, capacity);
 }
 
 #[test]
@@ -133,4 +175,34 @@ fn buffer_zbuf() {
     println!("Buffer ZBuf");
     let mut zbuf = ZBuf::default();
     run!(zbuf);
+}
+
+#[test]
+fn buffer_siphon() {
+    let capacity = 1 + u8::MAX as usize;
+
+    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity);
+    let mut bbuf1 = BBuf::with_capacity(capacity);
+    let mut bbuf2 = BBuf::with_capacity(capacity);
+    run_siphon!(bbuf1, capacity, bbuf2, capacity);
+
+    println!("Buffer Siphon ZBuf({}) -> ZBuf({})", capacity, capacity);
+    let mut zbuf1 = ZBuf::default();
+    let mut zbuf2 = ZBuf::default();
+    run_siphon!(zbuf1, capacity, zbuf2, capacity);
+
+    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity);
+    let mut zbuf1 = ZBuf::default();
+    let mut bbuf1 = BBuf::with_capacity(capacity);
+    run_siphon!(zbuf1, capacity, bbuf1, capacity);
+
+    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity / 2);
+    let mut bbuf1 = BBuf::with_capacity(capacity);
+    let mut bbuf2 = BBuf::with_capacity(capacity / 2);
+    run_siphon!(bbuf1, capacity, bbuf2, capacity / 2);
+
+    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity / 2);
+    let mut zbuf1 = ZBuf::default();
+    let mut bbuf1 = BBuf::with_capacity(capacity / 2);
+    run_siphon!(zbuf1, capacity, bbuf1, capacity / 2);
 }

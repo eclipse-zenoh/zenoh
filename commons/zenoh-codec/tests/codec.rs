@@ -42,6 +42,30 @@ macro_rules! run_single {
     };
 }
 
+macro_rules! run_fragmented {
+    ($type:ty, $rand:expr, $wcode:expr, $rcode:expr) => {
+        for _ in 0..NUM_ITER {
+            let x: $type = $rand;
+
+            let mut vbuf = vec![];
+            let mut writer = vbuf.writer();
+            $wcode.write(&mut writer, &x).unwrap();
+
+            let mut zbuf = ZBuf::default();
+            let mut reader = vbuf.reader();
+            while let Ok(b) = reader.read_u8() {
+                zbuf.push_zslice(vec![b].into());
+            }
+
+            let mut reader = zbuf.reader();
+            let y: $type = $rcode.read(&mut reader).unwrap();
+            assert!(!reader.can_read());
+
+            assert_eq!(x, y);
+        }
+    };
+}
+
 macro_rules! run_buffers {
     ($type:ty, $rand:expr, $wcode:expr, $rcode:expr) => {
         println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
@@ -55,6 +79,9 @@ macro_rules! run_buffers {
         println!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
         run_single!($type, $rand, $wcode, $rcode, buffer);
+
+        println!("Fragmented: codec {}", std::any::type_name::<$type>());
+        run_fragmented!($type, $rand, $wcode, $rcode)
     };
 }
 
@@ -162,6 +189,11 @@ fn codec_close() {
 #[test]
 fn codec_keep_alive() {
     run!(KeepAlive, KeepAlive::rand());
+}
+
+#[test]
+fn codec_frame_header() {
+    run!(FrameHeader, FrameHeader::rand());
 }
 
 #[test]

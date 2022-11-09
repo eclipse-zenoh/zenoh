@@ -18,13 +18,13 @@ use zenoh_buffers::{
     ZSlice,
 };
 
-impl<W> WCodec<ZSlice, &mut W> for Zenoh060
+impl<W> WCodec<&ZSlice, &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: ZSlice) -> Self::Output {
+    fn write(self, writer: &mut W, x: &ZSlice) -> Self::Output {
         self.write(&mut *writer, x.len())?;
         writer.write_zslice(x)?;
         Ok(())

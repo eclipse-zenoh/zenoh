@@ -21,8 +21,7 @@ use zenoh_config::{Config, ZN_LINK_KEEP_ALIVE_DEFAULT, ZN_LINK_LEASE_DEFAULT};
 use zenoh_core::{bail, Result as ZResult};
 use zenoh_core::{zerror, zlock, zparse};
 use zenoh_link::*;
-use zenoh_protocol::core::locator::LocatorProtocol;
-use zenoh_protocol::proto::tmsg;
+use zenoh_protocol::{core::locator::LocatorProtocol, transport::tmsg};
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,
@@ -196,22 +195,23 @@ impl TransportManager {
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.new_link_manager_multicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-            if endpoint.config.is_some() {
-                endpoint
-                    .config
-                    .as_mut()
-                    .unwrap()
-                    .extend(config.iter().map(|(k, v)| (k.clone(), v.clone())))
-            } else {
-                endpoint = EndPoint::new(
-                    endpoint.protocol(),
-                    endpoint.address(),
-                    endpoint.metadata(),
-                    config.to_string(),
-                )?;
-            }
-        }
+        // if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
+        //     if endpoint.config.is_some() {
+        //         endpoint
+        //             .config
+        //             .as_mut()
+        //             .unwrap()
+        //             .extend(config.iter().map(|(k, v)| (k.clone(), v.clone())))
+        //     } else {
+        //         endpoint = EndPoint::new(
+        //             endpoint.protocol(),
+        //             endpoint.address(),
+        //             endpoint.metadata(),
+        //             config.to_string(),
+        //         )?;
+        //     }
+        // }
+        unimplemented!();
 
         // Open the link
         let link = manager.new_link(&endpoint).await?;

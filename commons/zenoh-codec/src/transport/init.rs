@@ -162,7 +162,7 @@ where
         if let Some(snr) = x.sn_resolution {
             self.write(&mut *writer, snr)?;
         }
-        self.write(&mut *writer, x.cookie.clone())?;
+        self.write(&mut *writer, &x.cookie)?;
         Ok(())
     }
 }
