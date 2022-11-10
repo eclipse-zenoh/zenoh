@@ -16,6 +16,7 @@ use crate::{
     config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
     TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT,
 };
+use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
 use async_rustls::rustls::version::TLS13;
 pub use async_rustls::rustls::*;
 pub use async_rustls::webpki::*;
@@ -266,9 +267,11 @@ impl LinkManagerUnicastTls {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
+        log::debug!("XXXX NEW LINK");
         let locator = &endpoint.locator;
         let server_name = get_tls_server_name(locator)?;
         let addr = get_tls_addr(locator).await?;
+        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
 
         // Initialize the TcpStream
         let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
@@ -297,7 +300,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         // Initialize the TLS stream
         let mut root_cert_store = RootCertStore::empty();
-        if let Some(config) = endpoint.config {
+        if let Some(config) = &endpoint.config {
             if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
                 let bytes = value.as_bytes().to_vec();
                 let certs = vec![bytes];
@@ -323,12 +326,102 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 });
                 root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
             }
+            if let Some(value) = config.get(TLS_CLIENT_AUTH) {
+                client_auth = value.parse()?
+            }
         }
 
-        let cc = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_cert_store)
-            .with_no_client_auth();
+        let mut tls_client_private_key = Vec::new();
+        let mut tls_client_certificate = Vec::new();
+
+        let cc = if client_auth {
+            log::debug!("XXXX Client auth!");
+            if let Some(config) = &endpoint.config {
+                let config = &**config;
+                if let Some(value) = config.get(TLS_CLIENT_PRIVATE_KEY_RAW) {
+                    tls_client_private_key = value.as_bytes().to_vec()
+                } else if let Some(value) = config.get(TLS_CLIENT_PRIVATE_KEY_FILE) {
+                    tls_client_private_key = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid TLS private key file: {}", e))?
+                }
+                if let Some(value) = config.get(TLS_CLIENT_CERTIFICATE_RAW) {
+                    tls_client_certificate = value.as_bytes().to_vec()
+                } else if let Some(value) = config.get(TLS_CLIENT_CERTIFICATE_FILE) {
+                    tls_client_certificate = fs::read(value)
+                        .await
+                        .map_err(|e| zerror!("Invalid TLS serer certificate file: {}", e))?
+                }
+
+                // Configure the client private key
+                if tls_client_private_key.is_empty() {
+                    bail!(
+                        "Can not create a new TLS listener on {}. Missing client private key.",
+                        addr,
+                    );
+                }
+
+                // Configure the client certificate
+                if tls_client_certificate.is_empty() {
+                    bail!(
+                        "Can not create a new TLS listener on {}. Missing client certificate.",
+                        addr,
+                    );
+                }
+
+                if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                    let bytes = value.as_bytes().to_vec();
+                    let certs = vec![bytes];
+                    let trust_anchors = certs.iter().map(|cert| {
+                        let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                        OwnedTrustAnchor::from_subject_spki_name_constraints(
+                            ta.subject,
+                            ta.spki,
+                            ta.name_constraints,
+                        )
+                    });
+                    root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+                } else if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                    log::debug!("XXXX Client Loading root ca from file {filename}");
+                    let mut pem = BufReader::new(File::open(filename)?);
+                    let certs = rustls_pemfile::certs(&mut pem)?;
+                    let trust_anchors = certs.iter().map(|cert| {
+                        let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                        OwnedTrustAnchor::from_subject_spki_name_constraints(
+                            ta.subject,
+                            ta.spki,
+                            ta.name_constraints,
+                        )
+                    });
+                    root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+                }
+            }
+
+            let certs: Vec<Certificate> =
+                rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
+                    .map_err(|e| zerror!(e))
+                    .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
+
+            let mut keys: Vec<PrivateKey> =
+                rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
+                    .map_err(|e| zerror!(e))
+                    .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+
+            ClientConfig::builder()
+                .with_safe_default_cipher_suites()
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&[&TLS13])
+                .unwrap()
+                .with_root_certificates(root_cert_store)
+                .with_single_cert(certs, keys.remove(0))
+                .expect("bad certificate/key")
+        } else {
+            ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_cert_store)
+                .with_no_client_auth()
+        };
+
         let config = Arc::new(cc);
 
         let connector = TlsConnector::from(config);
@@ -404,12 +497,43 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
 
         let sc = if client_auth {
+            log::debug!("XXXX Client auth");
+
+            let mut root_cert_store = RootCertStore::empty();
+            if let Some(config) = &endpoint.config {
+                if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+                    let bytes = value.as_bytes().to_vec();
+                    let certs = vec![bytes];
+                    let trust_anchors = certs.iter().map(|cert| {
+                        let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                        OwnedTrustAnchor::from_subject_spki_name_constraints(
+                            ta.subject,
+                            ta.spki,
+                            ta.name_constraints,
+                        )
+                    });
+                    root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+                } else if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+                    log::debug!("XXXX Loading root ca from file {filename}");
+                    let mut pem = BufReader::new(File::open(filename)?);
+                    let certs = rustls_pemfile::certs(&mut pem)?;
+                    let trust_anchors = certs.iter().map(|cert| {
+                        let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+                        OwnedTrustAnchor::from_subject_spki_name_constraints(
+                            ta.subject,
+                            ta.spki,
+                            ta.name_constraints,
+                        )
+                    });
+                    root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+                }
+            }
             ServerConfig::builder()
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[&TLS13]) // Force TLS 1.3
                 .map_err(|e| zerror!(e))?
-                .with_no_client_auth()
+                .with_client_cert_verifier(AllowAnyAuthenticatedClient::new(root_cert_store))
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         } else {
