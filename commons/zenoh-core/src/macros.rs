@@ -12,6 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+// This macro allocates a vector with a given capacity and sets the length
+// to the target capacity
+#[macro_export]
+macro_rules! zuninitbuff {
+    ($capacity:expr) => {{
+        let mut vbuf = Vec::with_capacity($capacity);
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            vbuf.set_len($capacity)
+        }
+        vbuf
+    }};
+}
+
 // This macro performs a standard lock on Mutex<T>
 // For performance reasons, it first performs a try_lock() and,
 // if it fails, it falls back on lock().unwrap()

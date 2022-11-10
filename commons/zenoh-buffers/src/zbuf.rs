@@ -22,6 +22,7 @@ use crate::{
 use std::sync::RwLock;
 use std::{num::NonZeroUsize, sync::Arc};
 use zenoh_collections::SingleOrVec;
+use zenoh_core::zuninitbuff;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
@@ -272,10 +273,7 @@ impl<'a> Reader for ZBufReader<'a> {
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {
             std::cmp::Ordering::Less => {
-                let mut buffer = Vec::with_capacity(len);
-                unsafe {
-                    buffer.set_len(len);
-                }
+                let mut buffer = zuninitbuff!(len);
                 self.read_exact(&mut buffer)?;
                 Ok(buffer.into())
             }

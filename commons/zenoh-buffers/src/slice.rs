@@ -1,3 +1,5 @@
+use zenoh_core::zuninitbuff;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -145,17 +147,11 @@ impl Reader for &[u8] {
         Ok(())
     }
 
-    #[allow(clippy::uninit_vec)]
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
-        // We'll be truncating the vector immediately, and u8 is Copy and therefore doesn't have `Drop`
-        let mut buffer: Vec<u8> = Vec::with_capacity(len);
         // Safety: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
         // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
         // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
-        // Therefore, it is safe to suppress the `clippy::uninit_vec` lint.
-        unsafe {
-            buffer.set_len(len);
-        }
+        let mut buffer = zuninitbuff!(len);
         self.read_exact(&mut buffer)?;
         Ok(buffer.into())
     }
