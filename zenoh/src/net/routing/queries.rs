@@ -19,15 +19,16 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
+use zenoh_buffers::ZBuf;
 use zenoh_collections::Timed;
-use zenoh_sync::get_mut_unchecked;
-
-use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
-use zenoh_protocol::core::{
-    ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
+use zenoh_protocol::{
+    core::{
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
+        ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, RoutingContext},
 };
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_sync::get_mut_unchecked;
 
 use crate::prelude::KeyExpr;
 

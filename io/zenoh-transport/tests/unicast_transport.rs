@@ -11,20 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::any::Any;
-use std::convert::TryFrom;
+use async_std::{prelude::FutureExt, task};
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::ZenohMessage;
+use std::{
+    any::Any,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use zenoh_buffers::ZBuf;
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -689,15 +693,19 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     // Define the locator
     let mut endpoint: EndPoint = ("tls/localhost:10451").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
+
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -806,15 +814,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     // Define the locator
     let mut endpoint: EndPoint = ("quic/localhost:10452").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     // Define the reliability and congestion control
     let channel = [

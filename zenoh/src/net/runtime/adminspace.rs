@@ -27,13 +27,13 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
-use zenoh_protocol::core::key_expr::OwnedKeyExpr;
-use zenoh_protocol::core::ConsolidationMode;
-use zenoh_protocol::core::{
-    Channel, CongestionControl, Encoding, KnownEncoding, QueryTarget, QueryableInfo, SubInfo,
-    WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+use zenoh_protocol::{
+    core::{
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, Encoding,
+        KnownEncoding, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    },
+    zenoh::{DataInfo, RoutingContext},
 };
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
 use zenoh_transport::{Primitives, TransportUnicast};
 
 pub struct AdminContext {
@@ -422,7 +422,7 @@ impl Primitives for AdminSpace {
                 |(key, handler)| async {
                     let handler = handler;
                     let (payload, encoding) = handler(&context, &key_expr, &parameters).await;
-                    let mut data_info = DataInfo::new();
+                    let mut data_info = DataInfo::default();
                     data_info.encoding = Some(encoding);
 
                     primitives.send_reply_data(
@@ -446,7 +446,7 @@ impl Primitives for AdminSpace {
                         let plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
-                        let mut data_info = DataInfo::new();
+                        let mut data_info = DataInfo::default();
                         data_info.encoding = Some(KnownEncoding::AppJson.into());
 
                         primitives.send_reply_data(

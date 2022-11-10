@@ -35,12 +35,13 @@ use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
-use zenoh_core::bail;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
+use zenoh_core::{bail, Result as ZResult};
+use zenoh_link::Link;
 use zenoh_protocol;
-use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
-use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
+use zenoh_protocol::{
+    core::{whatami::WhatAmIMatcher, EndPoint, Locator, WhatAmI, ZenohId},
+    zenoh::{ZenohBody, ZenohMessage},
+};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport;
 use zenoh_transport::{

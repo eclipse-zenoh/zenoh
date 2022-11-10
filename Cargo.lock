@@ -3697,6 +3697,7 @@ dependencies = [
  "vec_map",
  "zenoh-buffers",
  "zenoh-cfg-properties",
+ "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",

@@ -13,13 +13,11 @@
 //
 
 //! Sample primitives
-use std::convert::TryInto;
-
-use zenoh_protocol::proto::DataInfo;
-
-use crate::buffers::ZBuf;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
+use std::convert::TryInto;
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::zenoh::DataInfo;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_core::unstable]

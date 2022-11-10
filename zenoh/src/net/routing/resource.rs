@@ -18,11 +18,12 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
+use zenoh_buffers::ZBuf;
 use zenoh_config::WhatAmI;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::core::{QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId};
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol::{
+    core::{key_expr::keyexpr, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId},
+    zenoh::{DataInfo, RoutingContext},
+};
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);

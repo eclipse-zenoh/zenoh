@@ -49,21 +49,17 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 use uhlc::HLC;
-use zenoh_collections::SingleOrVec;
-use zenoh_collections::TimedEvent;
-use zenoh_collections::Timer;
+use zenoh_buffers::ZBuf;
+use zenoh_collections::{SingleOrVec, TimedEvent, Timer};
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
-use zenoh_protocol::core::ZenohId;
-use zenoh_protocol::core::EMPTY_EXPR_ID;
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt,
+        WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
-    io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, RoutingContext},
 };
 use zenoh_util::core::AsyncResolve;
 

@@ -11,29 +11,25 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
+use async_std::{prelude::FutureExt, task};
 #[cfg(feature = "auth_pubkey")]
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
-use std::any::Any;
 #[cfg(feature = "auth_usrpwd")]
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::iter::FromIterator;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::proto::ZenohMessage;
+use std::{any::Any, collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{EndPoint, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 #[cfg(feature = "auth_pubkey")]
 use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]
 use zenoh_transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
 #[cfg(feature = "auth_usrpwd")]
-use zenoh_transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
 use zenoh_transport::{
+    unicast::establishment::authenticator::UserPasswordAuthenticator,
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
@@ -921,15 +917,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     // Define the locator
     let mut endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(run(&endpoint));
 }
@@ -1019,15 +1018,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     // Define the locator
     let mut endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(run(&endpoint));
 }

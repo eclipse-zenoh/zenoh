@@ -21,12 +21,14 @@ use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_sync::get_mut_unchecked;
 
-use zenoh_protocol::core::{
-    Channel, CongestionControl, Priority, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt,
-    ZenohId,
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::{
+    core::{
+        Channel, CongestionControl, Priority, Reliability, SubInfo, SubMode, WhatAmI, WireExpr,
+        ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, RoutingContext},
 };
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
 
 use super::face::FaceState;
 use super::network::Network;
@@ -1093,7 +1095,7 @@ macro_rules! treat_timestamp {
                     }
                 } else {
                     // No DataInfo; add one with a Timestamp
-                    let mut data_info = DataInfo::new();
+                    let mut data_info = DataInfo::default();
                     data_info.timestamp = Some(hlc.new_timestamp());
                     Some(data_info)
                 }

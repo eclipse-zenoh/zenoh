@@ -21,13 +21,8 @@ use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
 use std::future::Ready;
-use zenoh_core::zresult::ZResult;
-use zenoh_core::AsyncResolve;
-use zenoh_core::Resolvable;
-use zenoh_core::Resolve;
-use zenoh_core::{zread, SyncResolve};
-use zenoh_protocol::core::Channel;
-use zenoh_protocol::proto::{DataInfo, Options};
+use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
+use zenoh_protocol::{core::Channel, zenoh::DataInfo};
 
 /// The kind of congestion control.
 pub use zenoh_protocol::core::CongestionControl;
@@ -125,7 +120,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo::new();
+        let mut info = DataInfo::default();
         info.kind = kind;
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
@@ -133,7 +128,11 @@ impl SyncResolve for PutBuilder<'_, '_> {
             None
         };
         info.timestamp = publisher.session.runtime.new_timestamp();
-        let data_info = if info.has_options() { Some(info) } else { None };
+        let data_info = if info != DataInfo::default() {
+            Some(info)
+        } else {
+            None
+        };
 
         primitives.send_data(
             &key_expr.to_wire(&publisher.session),
@@ -391,7 +390,7 @@ impl SyncResolve for Publication<'_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo::new();
+        let mut info = DataInfo::default();
         info.kind = kind;
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
@@ -399,7 +398,11 @@ impl SyncResolve for Publication<'_> {
             None
         };
         info.timestamp = publisher.session.runtime.new_timestamp();
-        let data_info = if info.has_options() { Some(info) } else { None };
+        let data_info = if info != DataInfo::default() {
+            Some(info)
+        } else {
+            None
+        };
 
         primitives.send_data(
             &publisher.key_expr.to_wire(&publisher.session),
@@ -627,7 +630,7 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-impl From<Priority> for crate::net::protocol::core::Priority {
+impl From<Priority> for zenoh_protocol::core::Priority {
     fn from(prio: Priority) -> Self {
         // The Priority in the prelude differs from the Priority in the core protocol only from
         // the missing Control priority. The Control priority is reserved for zenoh internal use
@@ -637,7 +640,7 @@ impl From<Priority> for crate::net::protocol::core::Priority {
         // Priority enum without risking to be in an invalid state.
         // For better robusteness, the correctness of the unsafe transmute operation is covered
         // by the unit test below.
-        unsafe { std::mem::transmute::<Priority, crate::net::protocol::core::Priority>(prio) }
+        unsafe { std::mem::transmute::<Priority, zenoh_protocol::core::Priority>(prio) }
     }
 }
 
@@ -645,8 +648,8 @@ mod tests {
     #[test]
     fn priority_from() {
         use super::Priority as APrio;
-        use crate::net::protocol::core::Priority as TPrio;
         use std::convert::TryInto;
+        use zenoh_protocol::core::Priority as TPrio;
 
         for i in APrio::MAX as u8..=APrio::MIN as u8 {
             let p: APrio = i.try_into().unwrap();

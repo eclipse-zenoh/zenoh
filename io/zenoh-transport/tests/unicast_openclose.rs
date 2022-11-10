@@ -570,15 +570,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     let mut endpoint: EndPoint = ("tls/localhost:8448").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(openclose_transport(&endpoint));
 }
@@ -668,15 +671,18 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 
     // Define the locator
     let mut endpoint: EndPoint = "quic/localhost:8449".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(openclose_transport(&endpoint));
 }

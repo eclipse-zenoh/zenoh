@@ -66,7 +66,7 @@ impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Value{{ payload: {}, encoding: {} }}",
+            "Value{{ payload: {:?}, encoding: {} }}",
             self.payload, self.encoding
         )
     }
@@ -88,30 +88,33 @@ impl std::fmt::Display for Value {
 #[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
-        Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
+        unimplemented!();
+        // Value {
+        //     payload: smb.into(),
+        //     encoding: KnownEncoding::AppOctetStream.into(),
+        // }
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
-        Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
+        unimplemented!();
+        // Value {
+        //     payload: smb.into(),
+        //     encoding: KnownEncoding::AppOctetStream.into(),
+        // }
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
-        Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
+        unimplemented!();
+        // Value {
+        //     payload: smb.into(),
+        //     encoding: KnownEncoding::AppOctetStream.into(),
+        // }
     }
 }
 
