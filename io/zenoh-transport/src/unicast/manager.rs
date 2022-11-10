@@ -315,8 +315,7 @@ impl TransportManager {
         let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-            unimplemented!();
-            // endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
+            endpoint.config_mut().extend(config.iter())?;
         };
         manager.new_listener(endpoint).await
     }
@@ -467,8 +466,7 @@ impl TransportManager {
         let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-            unimplemented!();
-            // endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
+            endpoint.config_mut().extend(config.iter())?;
         };
 
         // Create a new link associated by calling the Link Manager

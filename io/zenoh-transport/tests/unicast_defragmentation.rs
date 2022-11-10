@@ -17,9 +17,10 @@ use std::time::Duration;
 use std::{convert::TryFrom, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
-use zenoh_link::EndPoint;
-use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
-use zenoh_protocol::proto::ZenohMessage;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
 const TIMEOUT: Duration = Duration::from_secs(60);

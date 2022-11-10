@@ -195,23 +195,9 @@ impl TransportManager {
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.new_link_manager_multicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
-        // if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-        //     if endpoint.config.is_some() {
-        //         endpoint
-        //             .config
-        //             .as_mut()
-        //             .unwrap()
-        //             .extend(config.iter().map(|(k, v)| (k.clone(), v.clone())))
-        //     } else {
-        //         endpoint = EndPoint::new(
-        //             endpoint.protocol(),
-        //             endpoint.address(),
-        //             endpoint.metadata(),
-        //             config.to_string(),
-        //         )?;
-        //     }
-        // }
-        unimplemented!();
+        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
+            endpoint.config_mut().extend(config.iter())?;
+        }
 
         // Open the link
         let link = manager.new_link(&endpoint).await?;
