@@ -29,12 +29,29 @@ pub struct PluginConfig {
     #[as_mut]
     pub rest: Map<String, Value>,
 }
+#[derive(Debug, Clone)]
+pub enum Persistence {
+    Volatile, //default
+    Durable, 
+}
+#[derive(Debug, Clone)]
+pub enum History {
+    Latest, //default
+    All,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Location {
+    Local, //default
+    Remote,
+}
 #[derive(Debug, Clone, AsMut, AsRef)]
 pub struct VolumeConfig {
     pub name: String,
     pub backend: Option<String>,
     pub paths: Option<Vec<String>>,
     pub required: bool,
+    pub persistence: Persistence,
+    pub history: History,
     #[as_ref]
     #[as_mut]
     pub rest: Map<String, Value>,
@@ -46,6 +63,7 @@ pub struct StorageConfig {
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
+    pub location: Location,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replica_config: Option<ReplicaConfig>,
     // #[as_ref]
@@ -268,11 +286,43 @@ impl VolumeConfig {
                 None => true,
                 _ => todo!(),
             };
+            let persistence = match config.get("persistence") {
+                Some(serde_json::Value::String(s)) => {
+                    if s.to_lowercase() == "volatile" {
+                        Persistence::Volatile
+                    } else {
+                        if s.to_lowercase() == "durable" {
+                            Persistence::Durable
+                        } else {
+                            bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
+                        }
+                    }
+                },
+                None => Persistence::Volatile,
+                _ => bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
+            };
+            let history = match config.get("history") {
+                Some(serde_json::Value::String(s)) => {
+                    if s.to_lowercase() == "latest" {
+                        History::Latest
+                    } else {
+                        if s.to_lowercase() == "all" {
+                            History::All
+                        } else {
+                            bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
+                        }
+                    }
+                },
+                None => History::Latest,
+                _ => bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
+            };
             volumes.push(VolumeConfig {
                 name: name.clone(),
                 backend,
                 paths,
                 required,
+                persistence,
+                history,
                 rest: config
                     .iter()
                     .filter_map(|(k, v)| {
@@ -373,6 +423,21 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
+        let location = match config.get("location") {
+            Some(serde_json::Value::String(s)) => {
+                if s.to_lowercase() == "local" {
+                    Location::Local
+                } else {
+                    if s.to_lowercase() == "remote" {
+                        Location::Remote
+                    } else {
+                        bail!("`location` field of storage `{}` must be either `local` or `remote`", storage_name)
+                    }
+                }
+            },
+            None => Location::Local,
+            _ => bail!("`location` field of storage `{}` must be either `local` or `remote`", storage_name)
+        };
         let replica_config = match config.get("replica_config") {
             Some(s) => {
                 let mut replica_config = ReplicaConfig::default();
@@ -411,6 +476,7 @@ impl StorageConfig {
             strip_prefix,
             volume_id,
             volume_cfg,
+            location,
             replica_config,
         })
     }

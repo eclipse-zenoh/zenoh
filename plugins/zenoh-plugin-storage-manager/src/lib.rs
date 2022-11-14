@@ -117,6 +117,8 @@ impl StorageRuntimeInner {
             backend: None,
             paths: None,
             required: false,
+            persistence: Persistence::Volatile,
+            history: History::Latest,
             rest: Default::default(),
         })?;
         new_self.update(
