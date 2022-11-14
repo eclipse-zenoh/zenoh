@@ -32,7 +32,7 @@ pub struct PluginConfig {
 #[derive(Debug, Clone)]
 pub enum Persistence {
     Volatile, //default
-    Durable, 
+    Durable,
 }
 #[derive(Debug, Clone)]
 pub enum History {
@@ -290,12 +290,10 @@ impl VolumeConfig {
                 Some(serde_json::Value::String(s)) => {
                     if s.to_lowercase() == "volatile" {
                         Persistence::Volatile
+                    } else if s.to_lowercase() == "durable" {
+                        Persistence::Durable
                     } else {
-                        if s.to_lowercase() == "durable" {
-                            Persistence::Durable
-                        } else {
-                            bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
-                        }
+                        bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
                     }
                 },
                 None => Persistence::Volatile,
@@ -305,12 +303,10 @@ impl VolumeConfig {
                 Some(serde_json::Value::String(s)) => {
                     if s.to_lowercase() == "latest" {
                         History::Latest
+                    } else if s.to_lowercase() == "all" {
+                        History::All
                     } else {
-                        if s.to_lowercase() == "all" {
-                            History::All
-                        } else {
-                            bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
-                        }
+                        bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
                     }
                 },
                 None => History::Latest,
@@ -427,16 +423,20 @@ impl StorageConfig {
             Some(serde_json::Value::String(s)) => {
                 if s.to_lowercase() == "local" {
                     Location::Local
+                } else if s.to_lowercase() == "remote" {
+                    Location::Remote
                 } else {
-                    if s.to_lowercase() == "remote" {
-                        Location::Remote
-                    } else {
-                        bail!("`location` field of storage `{}` must be either `local` or `remote`", storage_name)
-                    }
+                    bail!(
+                        "`location` field of storage `{}` must be either `local` or `remote`",
+                        storage_name
+                    )
                 }
-            },
+            }
             None => Location::Local,
-            _ => bail!("`location` field of storage `{}` must be either `local` or `remote`", storage_name)
+            _ => bail!(
+                "`location` field of storage `{}` must be either `local` or `remote`",
+                storage_name
+            ),
         };
         let replica_config = match config.get("replica_config") {
             Some(s) => {
