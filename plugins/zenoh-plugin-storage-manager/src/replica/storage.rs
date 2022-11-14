@@ -189,7 +189,13 @@ impl StorageService {
         sample.ensure_timestamp();
 
         let mut storage = self.storage.lock().await;
-        let result = storage.on_sample(sample.clone()).await;
+        let result = if sample.kind == SampleKind::Put {
+            storage.put(sample.clone()).await
+        } else if sample.kind == SampleKind::Delete {
+            storage.delete(sample.clone()).await
+        } else {
+            Err("sample kind not impleented".into())
+        };
         if self.replication.is_some()
             && result.is_ok()
             && !matches!(result.unwrap(), StorageInsertionResult::Outdated)

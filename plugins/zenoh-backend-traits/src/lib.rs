@@ -183,7 +183,10 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
+    async fn put(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
+
+    /// Function called for each incoming data ([`Sample`]) to be delted from this storage.
+    async fn delete(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming query matching this storage's keys exp.
     /// This storage should reply with data matching the query calling [`Query::reply()`].
