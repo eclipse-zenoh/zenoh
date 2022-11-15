@@ -669,8 +669,8 @@ async fn load_tls_certificate(
 
 fn load_trust_anchors(config: &ArcProperties, root_cert_store: &mut RootCertStore) -> ZResult<()> {
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-        let bytes = value.as_bytes().to_vec();
-        let certs = vec![bytes];
+        let mut pem = BufReader::new(value.as_bytes());
+        let certs = rustls_pemfile::certs(&mut pem)?;
         let trust_anchors = certs.iter().map(|cert| {
             let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
             OwnedTrustAnchor::from_subject_spki_name_constraints(
