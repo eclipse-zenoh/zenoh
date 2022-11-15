@@ -85,32 +85,33 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
-//!         // When receiving a Sample (i.e. on PUT or DELETE operations)
+//!     async fn put(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
+//!         // When receiving a PUT operation
 //!         // extract Timestamp from sample
 //!         sample.ensure_timestamp();
 //!         let timestamp = sample.timestamp.take().unwrap();
-//!         // Store or delete the sample depending the ChangeKind
-//!         match sample.kind {
-//!             SampleKind::Put => {
-//!                 let _key = sample.key_expr;
-//!                 // @TODO:
-//!                 //  - check if timestamp is newer than the stored one for the same key
-//!                 //  - if yes: store (key, sample)
-//!                 return Ok(StorageInsertionResult::Inserted);
-//!                 //  - if not: drop the sample
-//!                 // return Ok(StorageInsertionResult::Outdated);
-//!             }
-//!             SampleKind::Delete => {
-//!                 let _key = sample.key_expr;
-//!                 // @TODO:
-//!                 //  - check if timestamp is newer than the stored one for the same key
-//!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
-//!                 return Ok(StorageInsertionResult::Deleted);
-//!                 //  - if not: drop the sample
-//!                 // return Ok(StorageInsertionResult::Outdated);
-//!             }
-//!         }
+//!         // Store the sample
+//!         let _key = sample.key_expr;
+//!         // @TODO:
+//!         //  - check if timestamp is newer than the stored one for the same key
+//!         //  - if yes: store (key, sample)
+//!         return Ok(StorageInsertionResult::Inserted);
+//!         //  - if not: drop the sample
+//!         // return Ok(StorageInsertionResult::Outdated);
+//!     }
+//!
+//!     async fn delete(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
+//!         // When receiving a DELETE operation
+//!         // extract Timestamp from sample
+//!         sample.ensure_timestamp();
+//!         let timestamp = sample.timestamp.take().unwrap();
+//!         let _key = sample.key_expr;
+//!         // @TODO:
+//!         //  - check if timestamp is newer than the stored one for the same key
+//!         //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
+//!         return Ok(StorageInsertionResult::Deleted);
+//!         //  - if not: drop the sample
+//!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
 //!     // When receiving a Query (i.e. on GET operations)
