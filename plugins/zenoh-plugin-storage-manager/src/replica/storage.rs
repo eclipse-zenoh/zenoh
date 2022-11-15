@@ -13,10 +13,11 @@
 //
 use crate::storages_mgt::{StorageMessage, StoreIntercept};
 use async_std::sync::Arc;
-use async_std::sync::Mutex;
+use async_std::sync::{Mutex, RwLock};
 use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, trace, warn};
+use std::collections::HashMap;
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
@@ -35,6 +36,7 @@ pub struct StorageService {
     key_expr: OwnedKeyExpr,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
+    tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
 }
@@ -48,18 +50,19 @@ impl StorageService {
         rx: Receiver<StorageMessage>,
         replication: Option<ReplicationService>,
     ) {
-        let storage_service = StorageService {
+        let mut storage_service = StorageService {
             session,
             key_expr,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
+            tombstones: RwLock::new(HashMap::new()),
             out_interceptor: store_intercept.out_interceptor,
             replication,
         };
         storage_service.start_storage_queryable_subscriber(rx).await
     }
 
-    async fn start_storage_queryable_subscriber(&self, rx: Receiver<StorageMessage>) {
+    async fn start_storage_queryable_subscriber(&mut self, rx: Receiver<StorageMessage>) {
         self.initialize_if_empty().await;
 
         // subscribe on key_expr
@@ -179,30 +182,48 @@ impl StorageService {
         trace!("[STORAGE] Processing sample: {}", sample);
         sample.ensure_timestamp();
 
-        let mut storage = self.storage.lock().await;
-        let result = if sample.kind == SampleKind::Put {
-            storage.put(sample.clone()).await
-        } else if sample.kind == SampleKind::Delete {
-            storage.delete(sample.clone()).await
-        } else {
-            Err("sample kind not impleented".into())
-        };
-        if self.replication.is_some()
-            && result.is_ok()
-            && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
+        if !self
+            .is_outdated(
+                &sample.key_expr.clone().into(),
+                sample.get_timestamp().unwrap(),
+            )
+            .await
         {
-            let sending = self.replication.as_ref().unwrap().log_propagation.send((
-                OwnedKeyExpr::from(sample.key_expr.clone()),
-                *sample.get_timestamp().unwrap(),
-            ));
-            match sending {
-                Ok(_) => (),
-                Err(e) => {
-                    error!("Error in sending the sample to the log: {}", e);
+            let mut storage = self.storage.lock().await;
+            let result = if sample.kind == SampleKind::Put {
+                storage.put(sample.clone()).await
+            } else if sample.kind == SampleKind::Delete {
+                // register a tombstone
+                let mut tombstones = self.tombstones.write().await;
+                tombstones.insert(sample.key_expr.clone().into(), sample.timestamp.unwrap());
+                drop(tombstones);
+                storage.delete(sample.clone()).await
+            } else {
+                Err("sample kind not impleented".into())
+            };
+            if self.replication.is_some()
+                && result.is_ok()
+                && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
+            {
+                let sending = self.replication.as_ref().unwrap().log_propagation.send((
+                    OwnedKeyExpr::from(sample.key_expr.clone()),
+                    *sample.get_timestamp().unwrap(),
+                ));
+                match sending {
+                    Ok(_) => (),
+                    Err(e) => {
+                        error!("Error in sending the sample to the log: {}", e);
+                    }
                 }
             }
+            drop(storage);
         }
-        drop(storage);
+    }
+
+    async fn is_outdated(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
+        let tombstones = self.tombstones.read().await;
+        tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp
+        // @TODO: if storage deals with only the latest, check the last timestamp
     }
 
     async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
@@ -226,7 +247,7 @@ impl StorageService {
         drop(storage);
     }
 
-    async fn initialize_if_empty(&self) {
+    async fn initialize_if_empty(&mut self) {
         if self.replication.is_some() && self.replication.as_ref().unwrap().empty_start {
             // align with other storages, querying them on key_expr,
             // with `_time=[..]` to get historical data (in case of time-series)
