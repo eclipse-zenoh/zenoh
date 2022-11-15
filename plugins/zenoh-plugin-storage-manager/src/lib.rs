@@ -257,11 +257,13 @@ impl StorageRuntimeInner {
         let volume_id = storage.volume_id.clone();
         if let Some(backend) = self.volumes.get_mut(&volume_id) {
             let storage_name = storage.name.clone();
+            let in_interceptor = backend.backend.incoming_data_interceptor();
             let out_interceptor = backend.backend.outgoing_data_interceptor();
             let stopper = async_std::task::block_on(create_and_start_storage(
                 admin_key,
                 storage,
                 &mut backend.backend,
+                in_interceptor,
                 out_interceptor,
                 self.session.clone(),
             ))?;

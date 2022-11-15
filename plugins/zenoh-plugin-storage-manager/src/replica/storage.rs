@@ -37,6 +37,7 @@ pub struct StorageService {
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
+    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
 }
@@ -56,6 +57,7 @@ impl StorageService {
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
             tombstones: RwLock::new(HashMap::new()),
+            in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
             replication,
         };
@@ -178,8 +180,15 @@ impl StorageService {
         }
     }
 
-    async fn process_sample(&self, mut sample: Sample) {
+    async fn process_sample(&self, sample: Sample) {
         trace!("[STORAGE] Processing sample: {}", sample);
+        // Call incoming data interceptor (if any)
+        let mut sample = if let Some(ref interceptor) = self.in_interceptor {
+            interceptor(sample)
+        } else {
+            sample
+        };
+
         sample.ensure_timestamp();
 
         if !self

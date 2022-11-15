@@ -44,6 +44,16 @@ impl Volume for MemoryBackend {
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }
 
+    fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
+        // By default: no interception point
+        None
+        // To test interceptors, uncomment this line:
+        // Some(Arc::new(|sample| {
+        //     trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
+        //     sample
+        // }))
+    }
+
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         // By default: no interception point
         None

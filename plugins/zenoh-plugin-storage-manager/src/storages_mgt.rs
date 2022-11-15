@@ -27,6 +27,7 @@ pub enum StorageMessage {
 
 pub struct StoreIntercept {
     pub storage: Box<dyn zenoh_backend_traits::Storage>,
+    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
 }
 
@@ -35,6 +36,7 @@ pub(crate) async fn start_storage(
     config: Option<ReplicaConfig>,
     admin_key: String,
     key_expr: OwnedKeyExpr,
+    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
@@ -51,6 +53,7 @@ pub(crate) async fn start_storage(
     async_std::task::spawn(async move {
         let store_intercept = StoreIntercept {
             storage,
+            in_interceptor,
             out_interceptor,
         };
 
