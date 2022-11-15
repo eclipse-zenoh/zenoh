@@ -518,9 +518,7 @@ impl Reader for &mut ZSlice {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
-        let res = self
-            .new_sub_slice(self.start, self.end + len)
-            .ok_or(DidntRead)?;
+        let res = self.new_sub_slice(0, len).ok_or(DidntRead)?;
         self.start += len;
         Ok(res)
     }

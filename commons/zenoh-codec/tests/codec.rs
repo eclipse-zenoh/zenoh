@@ -13,10 +13,11 @@
 //
 use rand::*;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
-    BBuf, ZBuf,
+    BBuf, ZBuf, ZSlice,
 };
 use zenoh_codec::*;
 use zenoh_protocol::{common::*, core::*, scouting::*, transport::*, zenoh::*};
@@ -79,6 +80,22 @@ macro_rules! run_buffers {
         println!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
         run_single!($type, $rand, $wcode, $rcode, buffer);
+
+        println!("ZSlice: codec {}", std::any::type_name::<$type>());
+        for _ in 0..NUM_ITER {
+            let x: $type = $rand;
+
+            let mut buffer = vec![];
+            let mut writer = buffer.writer();
+            $wcode.write(&mut writer, &x).unwrap();
+
+            let mut zslice = ZSlice::from(Arc::new(buffer));
+            let mut reader = zslice.reader();
+            let y: $type = $rcode.read(&mut reader).unwrap();
+            assert!(!reader.can_read());
+
+            assert_eq!(x, y);
+        }
 
         println!("Fragmented: codec {}", std::any::type_name::<$type>());
         run_fragmented!($type, $rand, $wcode, $rcode)
