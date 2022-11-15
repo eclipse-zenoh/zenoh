@@ -26,9 +26,10 @@ use async_std::task::JoinHandle;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
+use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
 use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::{bail, zerror, Result as ZResult};
+use zenoh_core::{bail, zerror, zuninitbuff, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
@@ -153,14 +154,14 @@ impl TransportLinkUnicast {
         log::trace!("{}: closing", self.link);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
-            // It is safe to unwrap the Arc since we have the ownership of the whole link
+            // Safety: it is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_rx = Arc::try_unwrap(handle).unwrap();
             handle_rx.await;
         }
 
         self.stop_tx();
         if let Some(handle) = self.handle_tx.take() {
-            // It is safe to unwrap the Arc since we have the ownership of the whole link
+            // Safety: it is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
             handle_tx.await;
         }
@@ -265,13 +266,17 @@ async fn rx_task_stream(
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(n, || {
+        let buff: Arc<[u8]> = zuninitbuff!(mtu).into_boxed_slice().into();
+        buff
+    });
     while !signal.is_triggered() {
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-
+        // Safety: this operation is safe because we just retrieved or constructed the buffer
+        let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
+        let action = read(&link, slice)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
@@ -282,7 +287,8 @@ async fn rx_task_stream(
                 transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
 
                 // Deserialize all the messages from the current ZBuf
-                let mut reader = buffer[0..n].reader();
+                let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
+                let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
                         .read(&mut reader)
@@ -330,13 +336,18 @@ async fn rx_task_dgram(
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(n, || {
+        let buff: Arc<[u8]> = zuninitbuff!(mtu).into_boxed_slice().into();
+        buff
+    });
     while !signal.is_triggered() {
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+        // Safety: this operation is safe because we just retrieved or constructed the buffer
+        let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
+        let action = read(&link, slice)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
@@ -352,7 +363,8 @@ async fn rx_task_dgram(
                 transport.stats.inc_rx_bytes(n);
 
                 // Deserialize all the messages from the current ZBuf
-                let mut reader = buffer[0..n].reader();
+                let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
+                let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
                         .read(&mut reader)

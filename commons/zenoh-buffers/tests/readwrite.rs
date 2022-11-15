@@ -11,84 +11,92 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::Arc;
 use zenoh_buffers::reader::*;
 use zenoh_buffers::writer::*;
 use zenoh_buffers::*;
 
 const BYTES: usize = 22;
 
-macro_rules! run {
+const WBS0: u8 = 0;
+const WBS1: u8 = 1;
+const WBS2: [u8; 4] = [2, 3, 4, 5];
+const WBS3: [u8; 4] = [6, 7, 8, 9];
+const WBS4: [u8; 4] = [10, 11, 12, 13];
+const WBS5: [u8; 4] = [14, 15, 16, 17];
+const WBS6: [u8; 4] = [18, 19, 20, 21];
+const WBSN: [u8; 4] = [u8::MAX, u8::MAX, u8::MAX, u8::MAX];
+
+macro_rules! run_write {
     ($buffer:expr) => {
         println!(">>> Write");
         let mut writer = $buffer.writer();
 
-        writer.write_u8(0).unwrap();
-        writer.write_u8(1).unwrap();
+        writer.write_u8(WBS0).unwrap();
+        writer.write_u8(WBS1).unwrap();
 
-        let wbs1: [u8; 4] = [2, 3, 4, 5];
-        let w = writer.write(&wbs1).unwrap();
+        let w = writer.write(&WBS2).unwrap();
         assert_eq!(4, w.get());
 
-        let wbs2: [u8; 4] = [6, 7, 8, 9];
-        writer.write_exact(&wbs2).unwrap();
+        writer.write_exact(&WBS3).unwrap();
 
-        let wbs0: [u8; 4] = [u8::MAX, u8::MAX, u8::MAX, u8::MAX];
         let mark = writer.mark();
-        writer.write_exact(&wbs0).unwrap();
+        writer.write_exact(&WBSN).unwrap();
         writer.rewind(mark);
 
-        let wbs3: [u8; 4] = [10, 11, 12, 13];
-        writer.write_exact(&wbs3).unwrap();
+        writer.write_exact(&WBS4).unwrap();
 
-        let wbs4: [u8; 4] = [14, 15, 16, 17];
         writer
             .with_slot(4, |mut buffer| {
-                let w = buffer.write(&wbs4).unwrap();
+                let w = buffer.write(&WBS5).unwrap();
                 assert_eq!(4, w.get());
                 w.get()
             })
             .unwrap();
 
-        let wbs5: [u8; 4] = [18, 19, 20, 21];
         writer
             .with_reservation::<typenum::U2, _>(|reservation, writer| {
-                writer.write_exact(&wbs5[2..]).unwrap();
-                let r = reservation.write::<typenum::U2>(&wbs5[..2]);
+                writer.write_exact(&WBS6[2..]).unwrap();
+                let r = reservation.write::<typenum::U2>(&WBS6[..2]);
                 Ok(r)
             })
             .unwrap();
+    };
+}
 
+macro_rules! run_read {
+    ($buffer:expr) => {
         println!(">>> Read");
         let mut reader = $buffer.reader();
 
         let b = reader.read_u8().unwrap();
-        assert_eq!(0, b);
+        assert_eq!(WBS0, b);
         assert_eq!(BYTES - 1, reader.remaining());
         let b = reader.read_u8().unwrap();
-        assert_eq!(1, b);
+        assert_eq!(WBS1, b);
         assert_eq!(BYTES - 2, reader.remaining());
 
         let mut rbs: [u8; 4] = [0, 0, 0, 0];
         let r = reader.read(&mut rbs).unwrap();
         assert_eq!(4, r);
         assert_eq!(BYTES - 6, reader.remaining());
-        assert_eq!(wbs1, rbs);
+        assert_eq!(WBS2, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
         assert_eq!(BYTES - 10, reader.remaining());
-        assert_eq!(wbs2, rbs);
+        assert_eq!(WBS3, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
         assert_eq!(BYTES - 14, reader.remaining());
-        assert_eq!(wbs3, rbs);
+        assert_eq!(WBS4, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
         assert_eq!(BYTES - 18, reader.remaining());
-        assert_eq!(wbs4, rbs);
+        assert_eq!(WBS5, rbs);
 
         reader.read_exact(&mut rbs).unwrap();
         assert_eq!(BYTES - 22, reader.remaining());
-        assert_eq!(wbs5, rbs);
+        assert_eq!(WBS6, rbs);
 
         match reader.read(&mut rbs) {
             Ok(bs) => assert_eq!(0, bs),
@@ -148,14 +156,16 @@ macro_rules! run_siphon {
 fn buffer_slice() {
     println!("Buffer Slice");
     let mut sbuf = [0u8; BYTES];
-    run!(sbuf.as_mut());
+    run_write!(sbuf.as_mut());
+    run_read!(sbuf.as_mut());
 }
 
 #[test]
 fn buffer_vec() {
     println!("Buffer Vec");
     let mut vbuf = vec![];
-    run!(vbuf);
+    run_write!(&mut vbuf);
+    run_read!(&vbuf);
 }
 
 #[test]
@@ -163,7 +173,8 @@ fn buffer_bbuf() {
     println!("Buffer BBuf");
     let capacity = 1 + u8::MAX as usize;
     let mut bbuf = BBuf::with_capacity(capacity);
-    run!(bbuf);
+    run_write!(bbuf);
+    run_read!(bbuf);
 
     bbuf.clear();
 
@@ -174,7 +185,18 @@ fn buffer_bbuf() {
 fn buffer_zbuf() {
     println!("Buffer ZBuf");
     let mut zbuf = ZBuf::default();
-    run!(zbuf);
+    run_write!(zbuf);
+    run_read!(zbuf);
+}
+
+#[test]
+fn buffer_zslice() {
+    println!("Buffer ZSlice");
+    let mut vbuf = vec![];
+    run_write!(&mut vbuf);
+
+    let mut zslice = ZSlice::from(Arc::new(vbuf));
+    run_read!(zslice);
 }
 
 #[test]

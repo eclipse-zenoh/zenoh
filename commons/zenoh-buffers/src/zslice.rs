@@ -13,9 +13,9 @@
 //
 #[cfg(feature = "shared-memory")]
 use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
+use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
 use std::convert::AsRef;
 use std::fmt;
-use std::io::IoSlice;
 use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
@@ -31,7 +31,7 @@ use zenoh_core::{zread, zwrite, Result as ZResult};
 /*************************************/
 #[derive(Clone, Debug)]
 pub enum ZSliceBuffer {
-    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
+    NetSharedBuffer(RecyclingObject<Arc<[u8]>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
@@ -137,15 +137,9 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
     }
 }
 
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
+impl From<RecyclingObject<Arc<[u8]>>> for ZSliceBuffer {
+    fn from(buf: RecyclingObject<Arc<[u8]>>) -> Self {
         Self::NetSharedBuffer(buf)
-    }
-}
-
-impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        Self::NetSharedBuffer(buf.into())
     }
 }
 
@@ -158,12 +152,6 @@ impl From<Arc<Vec<u8>>> for ZSliceBuffer {
 impl From<Vec<u8>> for ZSliceBuffer {
     fn from(buf: Vec<u8>) -> Self {
         Self::NetOwnedBuffer(buf.into())
-    }
-}
-
-impl<'a> From<&IoSlice<'a>> for ZSliceBuffer {
-    fn from(buf: &IoSlice) -> Self {
-        Self::NetOwnedBuffer(buf.to_vec().into())
     }
 }
 
@@ -247,11 +235,6 @@ impl ZSlice {
     #[inline]
     pub unsafe fn as_mut_slice(&self) -> &mut [u8] {
         &mut self.buf.as_mut_slice()[self.start..self.end]
-    }
-
-    #[inline]
-    pub fn as_ioslice(&self) -> IoSlice {
-        IoSlice::new(self.as_slice())
     }
 
     #[inline]
@@ -428,19 +411,8 @@ impl From<ZSliceBuffer> for ZSlice {
     }
 }
 
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
+impl From<RecyclingObject<Arc<[u8]>>> for ZSlice {
+    fn from(buf: RecyclingObject<Arc<[u8]>>) -> Self {
         let end = buf.len();
         Self {
             buf: buf.into(),
@@ -463,17 +435,6 @@ impl From<Arc<Vec<u8>>> for ZSlice {
 
 impl From<Vec<u8>> for ZSlice {
     fn from(buf: Vec<u8>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-impl<'a> From<&IoSlice<'a>> for ZSlice {
-    fn from(buf: &IoSlice) -> Self {
         let end = buf.len();
         Self {
             buf: buf.into(),
@@ -516,6 +477,73 @@ impl From<SharedMemoryBuf> for ZSlice {
             start: 0,
             end,
         }
+    }
+}
+
+// Reader
+impl HasReader for &mut ZSlice {
+    type Reader = Self;
+
+    fn reader(self) -> Self::Reader {
+        self
+    }
+}
+
+impl Reader for &mut ZSlice {
+    fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
+        let mut reader = self.as_slice().reader();
+        let len = reader.read(into)?;
+        self.start += len;
+        Ok(len)
+    }
+
+    fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
+        let mut reader = self.as_slice().reader();
+        reader.read_exact(into)?;
+        self.start += into.len();
+        Ok(())
+    }
+
+    fn read_u8(&mut self) -> Result<u8, DidntRead> {
+        let mut reader = self.as_slice().reader();
+        let res = reader.read_u8()?;
+        self.start += 1;
+        Ok(res)
+    }
+
+    fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
+        let zslice = self.read_zslice(len)?;
+        f(zslice);
+        Ok(())
+    }
+
+    fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+        let res = self
+            .new_sub_slice(self.start, self.end + len)
+            .ok_or(DidntRead)?;
+        self.start += len;
+        Ok(res)
+    }
+
+    fn remaining(&self) -> usize {
+        self.len()
+    }
+
+    fn can_read(&self) -> bool {
+        !self.is_empty()
+    }
+}
+
+impl BacktrackableReader for &mut ZSlice {
+    type Mark = usize;
+
+    fn mark(&mut self) -> Self::Mark {
+        self.start
+    }
+
+    fn rewind(&mut self, mark: Self::Mark) -> bool {
+        self.start = mark;
+        true
     }
 }
 

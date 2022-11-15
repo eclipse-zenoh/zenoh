@@ -35,6 +35,14 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
 
+/// # Safety
+///
+/// This operation is unsafe because we don't check wether the reference counter
+/// of the Arc is equal to 1. The developer should ensure that.
+pub unsafe fn as_mut_slice<T>(arc: &mut std::sync::Arc<[T]>) -> &mut [T] {
+    std::slice::from_raw_parts_mut(std::sync::Arc::as_ptr(arc) as *mut T, arc.len())
+}
+
 /// An alias for `Pin<Box<dyn Future<Output = T> + Send>>`.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
