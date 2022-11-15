@@ -289,7 +289,7 @@ impl TryFrom<&Value> for f64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            KnownEncoding::AppFloat => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
