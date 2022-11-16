@@ -25,13 +25,13 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_buffers::reader::{DidntRead, HasReader, Reader};
+use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
 use zenoh_collections::ArcSlicePool;
 use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::{FrameHeader, TransportMessage};
+use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
 
 #[derive(Clone)]
@@ -287,7 +287,6 @@ async fn rx_task_stream(
                 let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
-                    let frame: Result<FrameHeader, DidntRead> = codec.read(&mut reader);
                     let msg: TransportMessage = codec
                         .read(&mut reader)
                         .map_err(|_| zerror!("{}: decoding error", link))?;

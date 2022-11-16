@@ -14,9 +14,9 @@ use std::num::NonZeroUsize;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh_buffers::{
-    reader::{DidntRead, Reader, SiphonableReader},
+    reader::{Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    BBuf, ZBufReader, ZSlice,
+    BBuf, ZBufReader,
 };
 use zenoh_codec::{WCodec, Zenoh060};
 use zenoh_protocol::{
@@ -157,15 +157,6 @@ impl WBatch {
     #[inline(always)]
     pub(crate) fn as_bytes(&self) -> &[u8] {
         self.buffer.as_slice()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn get_serialized_messages(&self) -> &[u8] {
-        if self.is_streamed() {
-            &self.buffer.as_slice()[LENGTH_BYTES.len()..]
-        } else {
-            self.buffer.as_slice()
-        }
     }
 }
 
@@ -322,28 +313,6 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
             writer.rewind(mark);
             DidntWrite
         })
-    }
-}
-
-// Read batch
-#[derive(Debug)]
-pub(crate) struct RBatch {
-    // The buffer to perform the batching on
-    buffer: ZSlice,
-    // The current frame being serialized: BestEffort/Reliable
-    current_frame: CurrentFrame,
-}
-
-pub(crate) enum DecodeResult {
-    Frame(FrameHeader),
-    Zenoh(ZenohMessage),
-    Transport(TransportMessage),
-}
-
-impl Decode<TransportMessage> for &mut RBatch {
-    type Error = DidntRead;
-    fn decode(self) -> Result<TransportMessage, Self::Error> {
-        Err(DidntRead)
     }
 }
 

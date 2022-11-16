@@ -422,8 +422,10 @@ impl Primitives for AdminSpace {
                 |(key, handler)| async {
                     let handler = handler;
                     let (payload, encoding) = handler(&context, &key_expr, &parameters).await;
-                    let mut data_info = DataInfo::default();
-                    data_info.encoding = Some(encoding);
+                    let data_info = DataInfo {
+                        encoding: Some(encoding),
+                        ..Default::default()
+                    };
 
                     primitives.send_reply_data(
                         qid,
@@ -446,8 +448,10 @@ impl Primitives for AdminSpace {
                         let plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
-                        let mut data_info = DataInfo::default();
-                        data_info.encoding = Some(KnownEncoding::AppJson.into());
+                        let data_info = DataInfo {
+                            encoding: Some(KnownEncoding::AppJson.into()),
+                            ..Default::default()
+                        };
 
                         primitives.send_reply_data(
                             qid,

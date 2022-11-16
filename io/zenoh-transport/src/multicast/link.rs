@@ -192,7 +192,7 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
-    mut next_sns: Vec<ConduitSn>,
+    next_sns: Vec<ConduitSn>,
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
