@@ -101,6 +101,7 @@ pub(crate) struct Network {
     pub(crate) full_linkstate: bool,
     pub(crate) router_peers_failover_brokering: bool,
     pub(crate) gossip: bool,
+    pub(crate) gossip_multihop: bool,
     pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
@@ -111,6 +112,7 @@ pub(crate) struct Network {
 }
 
 impl Network {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         name: String,
         zid: ZenohId,
@@ -118,6 +120,7 @@ impl Network {
         full_linkstate: bool,
         router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -134,6 +137,7 @@ impl Network {
             full_linkstate,
             router_peers_failover_brokering,
             gossip,
+            gossip_multihop,
             autoconnect,
             idx,
             links: VecMap::new(),
@@ -283,6 +287,21 @@ impl Network {
                 }
             }
         }
+    }
+
+    // Indicates if locators should be included when propagating Linkstate message
+    // from the given node.
+    // Returns true if gossip is enabled and if multihop gossip is enabled or
+    // the node is one of self neighbours.
+    fn propagate_locators(&self, idx: NodeIndex) -> bool {
+        self.gossip
+            && (self.gossip_multihop
+                || self.links.values().any(|link| {
+                    self.graph
+                        .node_weight(idx)
+                        .map(|node| link.zid == node.zid)
+                        .unwrap_or(true)
+                }))
     }
 
     fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
@@ -436,17 +455,19 @@ impl Network {
 
                 if self.gossip {
                     if let Some(idx) = idx {
-                        self.send_on_links(
-                            vec![(
-                                idx,
-                                Details {
-                                    zid: true,
-                                    locators: self.gossip,
-                                    links: false,
-                                },
-                            )],
-                            |link| link.zid != zid,
-                        );
+                        if self.gossip_multihop || self.links.values().any(|link| link.zid == zid) {
+                            self.send_on_links(
+                                vec![(
+                                    idx,
+                                    Details {
+                                        zid: true,
+                                        locators: true,
+                                        links: false,
+                                    },
+                                )],
+                                |link| link.zid != zid,
+                            );
+                        }
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
@@ -605,7 +626,7 @@ impl Network {
                         idx1,
                         Details {
                             zid: true,
-                            locators: self.gossip,
+                            locators: self.propagate_locators(idx1),
                             links: true,
                         },
                     )
@@ -622,7 +643,7 @@ impl Network {
                                     idx1,
                                     Details {
                                         zid: false,
-                                        locators: self.gossip,
+                                        locators: self.propagate_locators(idx1),
                                         links: true,
                                     },
                                 ))
@@ -710,7 +731,7 @@ impl Network {
                                     self.idx,
                                     Details {
                                         zid: false,
-                                        locators: self.gossip,
+                                        locators: self.propagate_locators(idx),
                                         links: true,
                                     },
                                 ),
@@ -720,7 +741,7 @@ impl Network {
                                 self.idx,
                                 Details {
                                     zid: false,
-                                    locators: self.gossip,
+                                    locators: self.propagate_locators(idx),
                                     links: true,
                                 },
                             )]
@@ -739,7 +760,7 @@ impl Network {
                     idx,
                     Details {
                         zid: true,
-                        locators: self.gossip,
+                        locators: self.propagate_locators(idx),
                         links: self.full_linkstate
                             || (self.router_peers_failover_brokering
                                 && idx == self.idx

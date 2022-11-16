@@ -169,12 +169,7 @@ fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) 
         .fold(info, |accu, ctx| {
             if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
                 || face.whatami != WhatAmI::Peer
-                || (tables.router_peers_failover_brokering
-                    && !tables
-                        .peers_net
-                        .as_ref()
-                        .map(|net| net.get_links(ctx.face.zid).contains(&face.zid))
-                        .unwrap_or(true))
+                || tables.failover_brokering(ctx.face.zid, face.zid)
             {
                 if let Some(info) = ctx.qabl.as_ref() {
                     Some(match accu {
@@ -246,15 +241,10 @@ fn propagate_simple_queryable(
                             && (src_face.is_none()
                                 || src_face.as_ref().unwrap().whatami != WhatAmI::Peer
                                 || dst_face.whatami != WhatAmI::Peer
-                                || (tables.router_peers_failover_brokering
-                                    && !tables
-                                        .peers_net
-                                        .as_ref()
-                                        .map(|net| {
-                                            net.get_links(src_face.as_ref().unwrap().zid)
-                                                .contains(&dst_face.zid)
-                                        })
-                                        .unwrap_or(true)))
+                                || tables.failover_brokering(
+                                    src_face.as_ref().unwrap().zid,
+                                    dst_face.zid,
+                                ))
                     }
                 }
                 WhatAmI::Peer => {
@@ -612,12 +602,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                         && s.qabl.is_some()
                         && (s.face.whatami == WhatAmI::Client
                             || (s.face.whatami == WhatAmI::Peer
-                                && tables.router_peers_failover_brokering
-                                && !tables
-                                    .peers_net
-                                    .as_ref()
-                                    .map(|net| net.get_links(s.face.zid).contains(&face.zid))
-                                    .unwrap_or(true)))
+                                && tables.failover_brokering(s.face.zid, face.zid)))
                 })
             {
                 let key_expr = Resource::get_best_key(res, "", face.id);
@@ -874,14 +859,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                                 s.qabl.is_some()
                                     && (s.face.whatami == WhatAmI::Client
                                         || (s.face.whatami == WhatAmI::Peer
-                                            && tables.router_peers_failover_brokering
-                                            && !tables
-                                                .peers_net
-                                                .as_ref()
-                                                .map(|net| {
-                                                    net.get_links(s.face.zid).contains(&face.zid)
-                                                })
-                                                .unwrap_or(true)))
+                                            && tables.failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
                         let info = local_qabl_info(tables, qabl, face);
@@ -1000,7 +978,7 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                         .collect::<Vec<Arc<FaceState>>>()
                     {
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if links.contains(&dst_face.zid) {
+                            if !Tables::failover_brokering_to(links, dst_face.zid) {
                                 if dst_face.local_qabls.contains_key(res) {
                                     let key_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.forget_queryable(&key_expr, None);
@@ -1333,7 +1311,10 @@ fn compute_final_route(
                     if qabl.direction.0.id != src_face.id
                         && (qabl.direction.0.whatami != WhatAmI::Peer
                             || (tables.router_peers_failover_brokering
-                                && !source_links.contains(&qabl.direction.0.zid)))
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
                     {
                         #[cfg(feature = "complete_n")]
                         {
@@ -1382,7 +1363,10 @@ fn compute_final_route(
                         && qabl.complete > 0
                         && (qabl.direction.0.whatami != WhatAmI::Peer
                             || (tables.router_peers_failover_brokering
-                                && !source_links.contains(&qabl.direction.0.zid)))
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
                     {
                         #[cfg(feature = "complete_n")]
                         {
@@ -1416,7 +1400,10 @@ fn compute_final_route(
                         && qabl.complete > 0
                         && (qabl.direction.0.whatami != WhatAmI::Peer
                             || (tables.router_peers_failover_brokering
-                                && !source_links.contains(&qabl.direction.0.zid)))
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
                     {
                         let nb = std::cmp::min(qabl.complete, remaining);
                         route

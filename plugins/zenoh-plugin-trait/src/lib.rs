@@ -51,7 +51,11 @@ impl Compatibility {
         })
     }
     pub fn are_compatible(a: &Self, b: &Self) -> bool {
-        a == b
+        if a.stable && b.stable {
+            a.major == b.major && a.minor == b.minor && a.patch == b.patch
+        } else {
+            a == b
+        }
     }
 }
 
