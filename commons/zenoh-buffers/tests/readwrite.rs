@@ -53,14 +53,6 @@ macro_rules! run_write {
                 w.get()
             })
             .unwrap();
-
-        writer
-            .with_reservation::<typenum::U2, _>(|reservation, writer| {
-                writer.write_exact(&WBS6[2..]).unwrap();
-                let r = reservation.write::<typenum::U2>(&WBS6[..2]);
-                Ok(r)
-            })
-            .unwrap();
     };
 }
 
