@@ -190,8 +190,14 @@ impl Encode<&TransportMessage> for &mut WBatch {
     }
 }
 
+#[repr(u8)]
+pub(crate) enum WError {
+    NewFrame,
+    DidntWrite,
+}
+
 impl Encode<&ZenohMessage> for &mut WBatch {
-    type Output = Result<(), DidntWrite>;
+    type Output = Result<(), WError>;
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
     ///
@@ -205,7 +211,7 @@ impl Encode<&ZenohMessage> for &mut WBatch {
         | (CurrentFrame::None, _) = (self.current_frame, message.is_reliable())
         {
             // We are not serializing on the right frame.
-            return Err(DidntWrite);
+            return Err(WError::NewFrame);
         };
 
         // Mark the write operation
@@ -213,10 +219,10 @@ impl Encode<&ZenohMessage> for &mut WBatch {
         let mark = writer.mark();
 
         let codec = Zenoh060::default();
-        codec.write(&mut writer, message).map_err(|e| {
+        codec.write(&mut writer, message).map_err(|_| {
             // Revert the write operation
             writer.rewind(mark);
-            e
+            WError::DidntWrite
         })
     }
 }

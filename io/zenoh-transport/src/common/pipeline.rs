@@ -1,3 +1,5 @@
+use crate::common::batch::WError;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -165,15 +167,9 @@ impl StageIn {
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
-        match batch.encode(&*msg) {
+        let e = match batch.encode(&*msg) {
             Ok(_) => zretok!(batch),
-            Err(_) => {
-                if !batch.is_empty() {
-                    // Move out existing batch
-                    self.s_out.move_batch(batch);
-                    batch = zgetbatch_rets!(false);
-                }
-            }
+            Err(e) => e,
         };
 
         // Lock the channel. We are the only one that will be writing on it.
@@ -188,7 +184,20 @@ impl StageIn {
         // Retrieve the next SN
         let mut sn = tch.sn.get();
 
-        // Attempt a second serialization
+        if let WError::NewFrame = e {
+            // Attempt a serialization with a new frame
+            if batch.encode((&*msg, channel, sn)).is_ok() {
+                zretok!(batch);
+            };
+        }
+
+        if !batch.is_empty() {
+            // Move out existing batch
+            self.s_out.move_batch(batch);
+            batch = zgetbatch_rets!(false);
+        }
+
+        // Attempt a second serialization on fully empty batch
         if batch.encode((&*msg, channel, sn)).is_ok() {
             zretok!(batch);
         };
