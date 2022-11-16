@@ -24,6 +24,9 @@ pub use fifo_queue::*;
 pub mod lifo_queue;
 pub use lifo_queue::*;
 
+pub mod arcslice_pool;
+pub use arcslice_pool::*;
+
 pub mod object_pool;
 pub use object_pool::*;
 

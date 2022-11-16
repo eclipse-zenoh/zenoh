@@ -22,7 +22,7 @@ use std::ops::{
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
-use zenoh_collections::RecyclingObject;
+use zenoh_collections::ArcSliceItem;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::{zread, zwrite, Result as ZResult};
 
@@ -31,7 +31,7 @@ use zenoh_core::{zread, zwrite, Result as ZResult};
 /*************************************/
 #[derive(Clone, Debug)]
 pub enum ZSliceBuffer {
-    NetSharedBuffer(RecyclingObject<Arc<[u8]>>),
+    NetSharedBuffer(ArcSliceItem),
     NetOwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
@@ -55,9 +55,7 @@ impl ZSliceBuffer {
     #[allow(clippy::mut_from_ref)]
     unsafe fn as_mut_slice(&self) -> &mut [u8] {
         match self {
-            Self::NetSharedBuffer(buf) => {
-                &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
-            }
+            Self::NetSharedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Box<[u8]>)),
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
             #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf)).as_mut_slice(),
@@ -137,8 +135,8 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
     }
 }
 
-impl From<RecyclingObject<Arc<[u8]>>> for ZSliceBuffer {
-    fn from(buf: RecyclingObject<Arc<[u8]>>) -> Self {
+impl From<ArcSliceItem> for ZSliceBuffer {
+    fn from(buf: ArcSliceItem) -> Self {
         Self::NetSharedBuffer(buf)
     }
 }
@@ -411,8 +409,8 @@ impl From<ZSliceBuffer> for ZSlice {
     }
 }
 
-impl From<RecyclingObject<Arc<[u8]>>> for ZSlice {
-    fn from(buf: RecyclingObject<Arc<[u8]>>) -> Self {
+impl From<ArcSliceItem> for ZSlice {
+    fn from(buf: ArcSliceItem) -> Self {
         let end = buf.len();
         Self {
             buf: buf.into(),

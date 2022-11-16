@@ -133,26 +133,6 @@ impl PartialEq for ZBuf {
                 }
             }
         }
-        // let mut sreader = self.reader();
-        // let mut oreader = other.reader();
-        // loop {
-        //     match (sreader.read_u8(), oreader.read_u8()) {
-        //         (Ok(s), Ok(o)) => {
-        //             println!("{}:{}", s, o);
-        //             if s != o {
-        //                 return false;
-        //             }
-        //         }
-        //         (Err(_), Err(_)) => {
-        //             println!("YES");
-        //             return true;
-        //         }
-        //         _ => {
-        //             println!("OH NO");
-        //             return false;
-        //         }
-        //     }
-        // }
     }
 }
 
@@ -268,7 +248,6 @@ impl<'a> Reader for ZBufReader<'a> {
         Ok(())
     }
 
-    #[allow(clippy::uninit_vec)]
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {

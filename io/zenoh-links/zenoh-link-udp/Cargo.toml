@@ -31,8 +31,8 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 async-std = { version = "=1.12.0", default-features = false }
+crossbeam = "0.8.2"
 async-trait = "0.1.57"
 log = "0.4.17"
 socket2 = "0.4.7"

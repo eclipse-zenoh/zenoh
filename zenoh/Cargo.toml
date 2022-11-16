@@ -53,14 +53,8 @@ transport_serial = ["zenoh-transport/transport_serial"]
 transport_ws = ["zenoh-transport/transport_ws"]
 unstable = []
 default = [
-    "auth_pubkey",
-    "auth_usrpwd",
-    "shared-memory",
-    "transport_quic",
     "transport_tcp",
-    "transport_tls",
     "transport_udp",
-    "transport_unixsock-stream",
 ]
 
 [dependencies]

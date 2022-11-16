@@ -95,7 +95,7 @@ impl LinkUnicastUdpUnconnected {
             *guard = Some((slice, end, len));
         } else {
             // Recycle the buffer
-            slice.recycle().await;
+            drop(slice);
         }
         // Return the amount read
         Ok(len_min)

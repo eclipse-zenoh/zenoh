@@ -28,8 +28,8 @@ use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::{bail, zerror, zuninitbuff, Result as ZResult};
+use zenoh_collections::ArcSlicePool;
+use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
@@ -266,13 +266,10 @@ async fn rx_task_stream(
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
-    let pool = RecyclingObjectPool::new(n, || {
-        let buff: Arc<[u8]> = zuninitbuff!(mtu).into_boxed_slice().into();
-        buff
-    });
+    let pool = ArcSlicePool::new(n, mtu);
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+        let mut buffer = pool.take().unwrap_or_else(|| pool.alloc(mtu));
         // Safety: this operation is safe because we just retrieved or constructed the buffer
         let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
         // Async read from the underlying link
@@ -336,13 +333,10 @@ async fn rx_task_dgram(
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
-    let pool = RecyclingObjectPool::new(n, || {
-        let buff: Arc<[u8]> = zuninitbuff!(mtu).into_boxed_slice().into();
-        buff
-    });
+    let pool = ArcSlicePool::new(n, mtu);
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+        let mut buffer = pool.take().unwrap_or_else(|| pool.alloc(mtu));
         // Safety: this operation is safe because we just retrieved or constructed the buffer
         let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
 
