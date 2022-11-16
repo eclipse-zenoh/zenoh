@@ -289,6 +289,10 @@ impl Network {
         }
     }
 
+    // Indicates if locators should be included when propagating Linkstate message
+    // from the given node.
+    // Returns true if gossip is enabled and if multihop gossip is enabled or
+    // the node is one of self neighbours.
     fn propagate_locators(&self, idx: NodeIndex) -> bool {
         self.gossip
             && (self.gossip_multihop
