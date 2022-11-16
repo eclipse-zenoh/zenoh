@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::Snapshotter;
+use super::{LogEntry, Snapshotter};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use flume::{Receiver, Sender};
@@ -113,7 +113,7 @@ impl Aligner {
 
     async fn get_missing_data(
         &self,
-        missing_content: &[Timestamp],
+        missing_content: &[LogEntry],
         timestamp: Timestamp,
         from: &str,
     ) -> HashMap<OwnedKeyExpr, (Timestamp, Value)> {
@@ -137,7 +137,7 @@ impl Aligner {
         result
     }
 
-    async fn get_missing_content(&self, other: super::Digest, from: &str) -> Vec<Timestamp> {
+    async fn get_missing_content(&self, other: super::Digest, from: &str) -> Vec<LogEntry> {
         // get my digest
         let this = &self.snapshotter.get_digest().await;
 
@@ -177,7 +177,7 @@ impl Aligner {
         this: &super::Digest,
         other_rep: String,
         timestamp: Timestamp,
-    ) -> Vec<Timestamp> {
+    ) -> Vec<LogEntry> {
         let properties = format!("timestamp={}&{}=cold", timestamp, super::ERA);
         // expecting sample.value to be a vec of intervals with their checksum
         let reply_content = self.perform_query(other_rep.to_string(), properties).await;
@@ -231,9 +231,9 @@ impl Aligner {
                     super::SUBINTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of timestamps with their checksum
+                // expecting sample.value to be a vec of log entries with their checksum
                 let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
+                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
                 for each in reply_content {
                     match serde_json::from_str(&each.value.to_string()) {
                         Ok((i, c)) => {
@@ -290,7 +290,7 @@ impl Aligner {
         this: &super::Digest,
         other_rep: String,
         other: super::Digest,
-    ) -> Vec<Timestamp> {
+    ) -> Vec<LogEntry> {
         // get interval hashes for WARM intervals from other
         let other_intervals = other.get_era_content(super::EraType::Warm);
         // get era diff
@@ -333,9 +333,9 @@ impl Aligner {
                     super::SUBINTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of timestamps with their checksum
+                // expecting sample.value to be a vec of log entries with their checksum
                 let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
+                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
                 for each in reply_content {
                     match serde_json::from_str(&each.value.to_string()) {
                         Ok((i, c)) => {
@@ -358,7 +358,7 @@ impl Aligner {
         this: &super::Digest,
         other_rep: String,
         other: super::Digest,
-    ) -> Vec<Timestamp> {
+    ) -> Vec<LogEntry> {
         // get interval hashes for HOT intervals from other
         let other_intervals = other.get_era_content(super::EraType::Hot);
         // get era diff
@@ -381,9 +381,9 @@ impl Aligner {
                 super::SUBINTERVALS,
                 diff_string.join(",")
             );
-            // expecting sample.value to be a vec of timestamps with their checksum
+            // expecting sample.value to be a vec of log entries with their checksum
             let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_content: HashMap<u64, Vec<Timestamp>> = HashMap::new();
+            let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
                 match serde_json::from_str(&each.value.to_string()) {
                     Ok((i, c)) => {
