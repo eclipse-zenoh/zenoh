@@ -165,8 +165,15 @@ impl StageIn {
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
-        if batch.encode(&*msg).is_ok() {
-            zretok!(batch);
+        match batch.encode(&*msg) {
+            Ok(_) => zretok!(batch),
+            Err(_) => {
+                if !batch.is_empty() {
+                    // Move out existing batch
+                    self.s_out.move_batch(batch);
+                    batch = zgetbatch_rets!(false);
+                }
+            }
         };
 
         // Lock the channel. We are the only one that will be writing on it.
@@ -181,15 +188,10 @@ impl StageIn {
         // Retrieve the next SN
         let mut sn = tch.sn.get();
 
-        if !batch.is_empty() {
-            // Move out existing batch
-            self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!(false);
-            // Attempt a second serialization
-            if batch.encode((&*msg, channel, sn)).is_ok() {
-                zretok!(batch);
-            };
-        }
+        // Attempt a second serialization
+        if batch.encode((&*msg, channel, sn)).is_ok() {
+            zretok!(batch);
+        };
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
