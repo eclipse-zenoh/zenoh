@@ -15,7 +15,7 @@ use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline}
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
-use crate::common::batch::SerializationBatch;
+use crate::common::batch::WBatch;
 use crate::common::pipeline::{
     TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
 };
@@ -196,7 +196,7 @@ async fn tx_task(
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
-        Pull((SerializationBatch, usize)),
+        Pull((WBatch, usize)),
         Join,
         KeepAlive,
         Stop,
@@ -234,12 +234,13 @@ async fn tx_task(
                 let bytes = batch.as_bytes();
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
-                if let Some(sn) = batch.sn.reliable {
-                    next_sns[priority].reliable = sn.next;
-                }
-                if let Some(sn) = batch.sn.best_effort {
-                    next_sns[priority].best_effort = sn.next;
-                }
+                // unimplemented!();
+                // if let Some(sn) = batch.sn.reliable {
+                //     next_sns[priority].reliable = sn.next;
+                // }
+                // if let Some(sn) = batch.sn.best_effort {
+                //     next_sns[priority].best_effort = sn.next;
+                // }
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(batch.stats.t_msgs);

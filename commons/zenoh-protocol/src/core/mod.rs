@@ -63,8 +63,8 @@ pub struct Property {
 }
 
 /// The kind of a `Sample`.
-#[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,

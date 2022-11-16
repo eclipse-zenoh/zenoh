@@ -14,8 +14,8 @@
 use super::ZInt;
 use zenoh_core::{bail, zresult::ZError};
 
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum WhatAmI {
     Router = 1,
     Peer = 1 << 1,

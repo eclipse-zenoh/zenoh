@@ -11,7 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::batch::SerializationBatch;
+// use super::batch::SerializationBatch;
+use super::batch::{Encode, WBatch};
 use super::conduit::{TransportChannelTx, TransportConduitTx};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
@@ -20,13 +21,19 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::writer::HasWriter;
-use zenoh_buffers::{SplitBuffer, ZBuf};
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    writer::HasWriter,
+    ZBuf,
+};
 use zenoh_codec::{WCodec, Zenoh060};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
-use zenoh_protocol::{core::Priority, transport::TransportMessage, zenoh::ZenohMessage};
+use zenoh_protocol::{
+    core::{Channel, Priority},
+    transport::TransportMessage,
+    zenoh::ZenohMessage,
+};
 
 // It's faster to work directly with nanoseconds.
 // Backoff will never last more the u32::MAX nanoseconds.
@@ -38,11 +45,11 @@ const TSLOT: NanoSeconds = 100;
 // Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Receiver<()>,
-    s_ref_r: RingBufferReader<SerializationBatch, RBLEN>,
+    s_ref_r: RingBufferReader<WBatch, RBLEN>,
 }
 
 impl StageInRefill {
-    fn pull(&mut self) -> Option<SerializationBatch> {
+    fn pull(&mut self) -> Option<WBatch> {
         self.s_ref_r.pull()
     }
 
@@ -54,7 +61,7 @@ impl StageInRefill {
 // Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Sender<()>,
-    s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
+    s_out_w: RingBufferWriter<WBatch, RBLEN>,
     bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
@@ -69,7 +76,7 @@ impl StageInOut {
     }
 
     #[inline]
-    fn move_batch(&mut self, batch: SerializationBatch) {
+    fn move_batch(&mut self, batch: WBatch) {
         let _ = self.s_out_w.push(batch);
         self.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.try_send(());
@@ -78,13 +85,13 @@ impl StageInOut {
 
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Option<SerializationBatch>>>,
+    current: Arc<Mutex<Option<WBatch>>>,
     conduit: TransportConduitTx,
 }
 
 impl StageInMutex {
     #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<SerializationBatch>> {
+    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
         zlock!(self.current)
     }
 
@@ -108,8 +115,6 @@ struct StageIn {
 
 impl StageIn {
     fn push_zenoh_message(&mut self, msg: &mut ZenohMessage, priority: Priority) -> bool {
-        // Lock the channel. We are the only one that will be writing on it.
-        let mut channel = self.mutex.channel(msg.is_reliable());
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -147,30 +152,45 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize_rets {
+        macro_rules! zretok {
             ($batch:expr) => {{
-                if $batch.serialize_zenoh_message(msg, priority, &mut channel.sn) {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
+                let bytes = $batch.len();
+                *c_guard = Some($batch);
+                drop(c_guard);
+                self.s_out.notify(bytes);
+                return true;
             }};
         }
 
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
-        zserialize_rets!(batch);
+        match batch.encode(&*msg) {
+            Ok(_) => zretok!(batch),
+            Err(_) => {
+                if !batch.is_empty() {
+                    self.s_out.move_batch(batch);
+                    batch = zgetbatch_rets!(false);
+                }
+            }
+        };
 
-        // The first serialization attempt has failed. This means that the current
-        // batch is full. Therefore, we move the current batch to stage out.
-        if !batch.is_empty() {
-            self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!(false);
-            zserialize_rets!(batch);
-        }
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut tch = self.mutex.channel(msg.is_reliable());
+
+        // Create the channel
+        let channel = Channel {
+            reliability: msg.channel.reliability,
+            priority,
+        };
+
+        // Retrieve the next SN
+        let mut sn = tch.sn.get();
+
+        // Attempt a second serialization
+        if batch.encode((&*msg, channel, sn)).is_ok() {
+            zretok!(batch);
+        };
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
@@ -185,36 +205,31 @@ impl StageIn {
         codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
-        let mut to_write = self.fragbuf.len();
         let mut reader = self.fragbuf.reader();
-        while to_write > 0 {
+        while reader.can_read() {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
             batch = zgetbatch_rets!(true);
 
-            // Serialize the message
-            let written = batch.serialize_zenoh_fragment(
-                msg.channel.reliability,
-                priority,
-                &mut channel.sn,
-                &mut reader,
-                to_write,
-            );
-
-            // Update the amount of bytes left to write
-            to_write -= written;
-
-            // 0 bytes written means error
-            if written != 0 {
-                // Move the serialization batch into the OUT pipeline
-                self.s_out.move_batch(batch);
-            } else {
-                *c_guard = Some(batch);
-                log::warn!(
-                    "Zenoh message dropped because it can not be fragmented: {:?}",
-                    msg
-                );
-                break;
+            // Serialize the message fragmnet
+            match batch.encode((&mut reader, channel, sn)) {
+                Ok(_) => {
+                    // Update the SN
+                    sn = tch.sn.get();
+                    // Move the serialization batch into the OUT pipeline
+                    self.s_out.move_batch(batch);
+                }
+                Err(_) => {
+                    // Restore the sequence number
+                    tch.sn.set(sn).unwrap();
+                    // Reinsert the batch
+                    *c_guard = Some(batch);
+                    log::warn!(
+                        "Zenoh message dropped because it can not be fragmented: {:?}",
+                        msg
+                    );
+                    break;
+                }
             }
         }
 
@@ -225,7 +240,7 @@ impl StageIn {
     }
 
     #[inline]
-    fn push_transport_message(&mut self, mut msg: TransportMessage) -> bool {
+    fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -252,38 +267,39 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize_rets {
+        macro_rules! zretok {
             ($batch:expr) => {{
-                if $batch.serialize_transport_message(&mut msg) {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
+                let bytes = $batch.len();
+                *c_guard = Some($batch);
+                drop(c_guard);
+                self.s_out.notify(bytes);
+                return true;
             }};
         }
 
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!();
         // Attempt the serialization on the current batch
-        zserialize_rets!(batch);
+        // Attempt the serialization on the current batch
+        match batch.encode(&msg) {
+            Ok(_) => zretok!(batch),
+            Err(_) => {
+                if !batch.is_empty() {
+                    self.s_out.move_batch(batch);
+                    batch = zgetbatch_rets!();
+                }
+            }
+        };
 
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
-        if !batch.is_empty() {
-            self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!();
-            zserialize_rets!(batch);
-        }
-
-        false
+        batch.encode(&msg).is_ok()
     }
 }
 
 // The result of the pull operation
 enum Pull {
-    Some(SerializationBatch),
+    Some(WBatch),
     None,
     Backoff(NanoSeconds),
 }
@@ -324,8 +340,8 @@ impl Backoff {
 
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
-    s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
-    current: Arc<Mutex<Option<SerializationBatch>>>,
+    s_out_r: RingBufferReader<WBatch, RBLEN>,
+    current: Arc<Mutex<Option<WBatch>>>,
     backoff: Backoff,
 }
 
@@ -394,11 +410,11 @@ impl StageOutIn {
 
 struct StageOutRefill {
     n_ref_w: Sender<()>,
-    s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
+    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
 }
 
 impl StageOutRefill {
-    fn refill(&mut self, batch: SerializationBatch) {
+    fn refill(&mut self, batch: WBatch) {
         assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.try_send(());
     }
@@ -416,14 +432,11 @@ impl StageOut {
     }
 
     #[inline]
-    fn refill(&mut self, batch: SerializationBatch) {
+    fn refill(&mut self, batch: WBatch) {
         self.s_ref.refill(batch);
     }
 
-    fn drain(
-        &mut self,
-        guard: &mut MutexGuard<'_, Option<SerializationBatch>>,
-    ) -> Vec<SerializationBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(mut batch) = self.s_in.s_out_r.pull() {
@@ -484,14 +497,11 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<SerializationBatch, RBLEN>::new();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::new();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
                 assert!(s_ref_w
-                    .push(SerializationBatch::new(
-                        config.batch_size,
-                        config.is_streamed
-                    ))
+                    .push(WBatch::new(config.batch_size, config.is_streamed))
                     .is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
@@ -500,7 +510,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<SerializationBatch, RBLEN>::new();
+            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::new();
 
             // The batch being serialized upon
             let current = Arc::new(Mutex::new(None));
@@ -606,7 +616,7 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
+    pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
         while self.active.load(Ordering::Relaxed) {
             // Calculate the backoff maximum
             let mut bo = NanoSeconds::MAX;
@@ -634,11 +644,11 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: SerializationBatch, priority: usize) {
+    pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(SerializationBatch, usize)> {
+    pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -649,7 +659,7 @@ impl TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<SerializationBatch>>> =
+        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
             locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
@@ -662,342 +672,343 @@ impl TransmissionPipelineConsumer {
         batches
     }
 }
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use async_std::{prelude::FutureExt, task};
-    use std::{
-        convert::TryFrom,
-        sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
-        },
-        time::{Duration, Instant},
-    };
-    use zenoh_buffers::{
-        reader::{DidntRead, HasReader},
-        ZBuf,
-    };
-    use zenoh_codec::{RCodec, Zenoh060};
-    use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
-        defaults::{BATCH_SIZE, SEQ_NUM_RES},
-        transport::{Frame, FramePayload, TransportBody},
-        zenoh::ZenohMessage,
-    };
 
-    const SLEEP: Duration = Duration::from_millis(100);
-    const TIMEOUT: Duration = Duration::from_secs(60);
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use async_std::{prelude::FutureExt, task};
+//     use std::{
+//         convert::TryFrom,
+//         sync::{
+//             atomic::{AtomicUsize, Ordering},
+//             Arc,
+//         },
+//         time::{Duration, Instant},
+//     };
+//     use zenoh_buffers::{
+//         reader::{DidntRead, HasReader},
+//         ZBuf,
+//     };
+//     use zenoh_codec::{RCodec, Zenoh060};
+//     use zenoh_protocol::{
+//         core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+//         defaults::{BATCH_SIZE, SEQ_NUM_RES},
+//         transport::{Frame, FramePayload, TransportBody},
+//         zenoh::ZenohMessage,
+//     };
 
-    const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
-        is_streamed: true,
-        batch_size: BATCH_SIZE,
-        queue_size: [1; Priority::NUM],
-        backoff: Duration::from_micros(1),
-    };
+//     const SLEEP: Duration = Duration::from_millis(100);
+//     const TIMEOUT: Duration = Duration::from_secs(60);
 
-    #[test]
-    fn tx_pipeline_flow() {
-        fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
-            // Send reliable messages
-            let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
+//     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
+//         is_streamed: true,
+//         batch_size: BATCH_SIZE,
+//         queue_size: [1; Priority::NUM],
+//         backoff: Duration::from_micros(1),
+//     };
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+//     #[test]
+//     fn tx_pipeline_flow() {
+//         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
+//             // Send reliable messages
+//             let key = "test".into();
+//             let payload = ZBuf::from(vec![0_u8; payload_size]);
+//             let data_info = None;
+//             let routing_context = None;
+//             let reply_context = None;
+//             let attachment = None;
+//             let channel = Channel {
+//                 priority: Priority::Control,
+//                 reliability: Reliability::Reliable,
+//             };
+//             let congestion_control = CongestionControl::Block;
 
-            println!(
-                "Pipeline Flow [>>>]: Sending {} messages with payload size of {} bytes",
-                num_msg, payload_size
-            );
-            for i in 0..num_msg {
-                println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
-                queue.push_zenoh_message(message.clone());
-            }
-        }
+//             let message = ZenohMessage::make_data(
+//                 key,
+//                 payload,
+//                 channel,
+//                 congestion_control,
+//                 data_info,
+//                 routing_context,
+//                 reply_context,
+//                 attachment,
+//             );
 
-        async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
-            let mut batches: usize = 0;
-            let mut bytes: usize = 0;
-            let mut msgs: usize = 0;
-            let mut fragments: usize = 0;
+//             println!(
+//                 "Pipeline Flow [>>>]: Sending {} messages with payload size of {} bytes",
+//                 num_msg, payload_size
+//             );
+//             for i in 0..num_msg {
+//                 println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
+//                 queue.push_zenoh_message(message.clone());
+//             }
+//         }
 
-            while msgs != num_msg {
-                let (batch, priority) = queue.pull().await.unwrap();
-                batches += 1;
-                bytes += batch.len() as usize;
-                // Create a ZBuf for deserialization starting from the batch
-                let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
-                // Deserialize the messages
-                let mut reader = zbuf.reader();
-                let codec = Zenoh060::default();
+//         async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
+//             let mut batches: usize = 0;
+//             let mut bytes: usize = 0;
+//             let mut msgs: usize = 0;
+//             let mut fragments: usize = 0;
 
-                loop {
-                    let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
-                    match res {
-                        Ok(msg) => {
-                            match msg.body {
-                                TransportBody::Frame(Frame { payload, .. }) => match payload {
-                                    FramePayload::Messages { messages } => {
-                                        msgs += messages.len();
-                                    }
-                                    FramePayload::Fragment { is_final, .. } => {
-                                        fragments += 1;
-                                        if is_final {
-                                            msgs += 1;
-                                        }
-                                    }
-                                },
-                                _ => {
-                                    msgs += 1;
-                                }
-                            }
-                            println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
-                        }
-                        Err(_) => break,
-                    }
-                }
-                println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
-                // Reinsert the batch
-                queue.refill(batch, priority);
-            }
+//             while msgs != num_msg {
+//                 let (batch, priority) = queue.pull().await.unwrap();
+//                 batches += 1;
+//                 bytes += batch.len() as usize;
+//                 // Create a ZBuf for deserialization starting from the batch
+//                 let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+//                 // Deserialize the messages
+//                 let mut reader = zbuf.reader();
+//                 let codec = Zenoh060::default();
 
-            println!(
-                "Pipeline Flow [<<<]: Received {} messages, {} bytes, {} batches, {} fragments",
-                msgs, bytes, batches, fragments
-            );
-        }
+//                 loop {
+//                     let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
+//                     match res {
+//                         Ok(msg) => {
+//                             match msg.body {
+//                                 TransportBody::Frame(Frame { payload, .. }) => match payload {
+//                                     FramePayload::Messages { messages } => {
+//                                         msgs += messages.len();
+//                                     }
+//                                     FramePayload::Fragment { is_final, .. } => {
+//                                         fragments += 1;
+//                                         if is_final {
+//                                             msgs += 1;
+//                                         }
+//                                     }
+//                                 },
+//                                 _ => {
+//                                     msgs += 1;
+//                                 }
+//                             }
+//                             println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
+//                         }
+//                         Err(_) => break,
+//                     }
+//                 }
+//                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
+//                 // Reinsert the batch
+//                 queue.refill(batch, priority);
+//             }
 
-        // Pipeline conduits
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
+//             println!(
+//                 "Pipeline Flow [<<<]: Received {} messages, {} bytes, {} batches, {} fragments",
+//                 msgs, bytes, batches, fragments
+//             );
+//         }
 
-        // Total amount of bytes to send in each test
-        let bytes: usize = 100_000_000;
-        let max_msgs: usize = 1_000;
-        // Payload size of the messages
-        let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
+//         // Pipeline conduits
+//         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+//         let conduits = vec![tct];
 
-        task::block_on(async {
-            for ps in payload_sizes.iter() {
-                if ZInt::try_from(*ps).is_err() {
-                    break;
-                }
+//         // Total amount of bytes to send in each test
+//         let bytes: usize = 100_000_000;
+//         let max_msgs: usize = 1_000;
+//         // Payload size of the messages
+//         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-                // Compute the number of messages to send
-                let num_msg = max_msgs.min(bytes / ps);
+//         task::block_on(async {
+//             for ps in payload_sizes.iter() {
+//                 if ZInt::try_from(*ps).is_err() {
+//                     break;
+//                 }
 
-                let (producer, consumer) = TransmissionPipeline::make(
-                    TransmissionPipelineConf::default(),
-                    conduits.as_slice(),
-                );
+//                 // Compute the number of messages to send
+//                 let num_msg = max_msgs.min(bytes / ps);
 
-                let t_c = task::spawn(async move {
-                    consume(consumer, num_msg).await;
-                });
+//                 let (producer, consumer) = TransmissionPipeline::make(
+//                     TransmissionPipelineConf::default(),
+//                     conduits.as_slice(),
+//                 );
 
-                let c_ps = *ps;
-                let t_s = task::spawn(async move {
-                    schedule(producer, num_msg, c_ps);
-                });
+//                 let t_c = task::spawn(async move {
+//                     consume(consumer, num_msg).await;
+//                 });
 
-                let res = t_c.join(t_s).timeout(TIMEOUT).await;
-                assert!(res.is_ok());
-            }
-        });
-    }
+//                 let c_ps = *ps;
+//                 let t_s = task::spawn(async move {
+//                     schedule(producer, num_msg, c_ps);
+//                 });
 
-    #[test]
-    fn tx_pipeline_blocking() {
-        fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
-            // Make sure to put only one message per batch: set the payload size
-            // to half of the batch in such a way the serialized zenoh message
-            // will be larger then half of the batch size (header + payload).
-            let payload_size = (CONFIG.batch_size / 2) as usize;
+//                 let res = t_c.join(t_s).timeout(TIMEOUT).await;
+//                 assert!(res.is_ok());
+//             }
+//         });
+//     }
 
-            // Send reliable messages
-            let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
+//     #[test]
+//     fn tx_pipeline_blocking() {
+//         fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
+//             // Make sure to put only one message per batch: set the payload size
+//             // to half of the batch in such a way the serialized zenoh message
+//             // will be larger then half of the batch size (header + payload).
+//             let payload_size = (CONFIG.batch_size / 2) as usize;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+//             // Send reliable messages
+//             let key = "test".into();
+//             let payload = ZBuf::from(vec![0_u8; payload_size]);
+//             let channel = Channel {
+//                 priority: Priority::Control,
+//                 reliability: Reliability::Reliable,
+//             };
+//             let congestion_control = CongestionControl::Block;
+//             let data_info = None;
+//             let routing_context = None;
+//             let reply_context = None;
+//             let attachment = None;
 
-            // The last push should block since there shouldn't any more batches
-            // available for serialization.
-            let num_msg = 1 + CONFIG.queue_size[0];
-            for i in 0..num_msg {
-                println!(
-                    "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
-                    id, i,
-                    payload_size
-                );
-                queue.push_zenoh_message(message.clone());
-                let c = counter.fetch_add(1, Ordering::AcqRel);
-                println!(
-                    "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
-                    id, i, c + 1,
-                    payload_size
-                );
-            }
-        }
+//             let message = ZenohMessage::make_data(
+//                 key,
+//                 payload,
+//                 channel,
+//                 congestion_control,
+//                 data_info,
+//                 routing_context,
+//                 reply_context,
+//                 attachment,
+//             );
 
-        // Pipeline
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
-        let (producer, mut consumer) =
-            TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
+//             // The last push should block since there shouldn't any more batches
+//             // available for serialization.
+//             let num_msg = 1 + CONFIG.queue_size[0];
+//             for i in 0..num_msg {
+//                 println!(
+//                     "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
+//                     id, i,
+//                     payload_size
+//                 );
+//                 queue.push_zenoh_message(message.clone());
+//                 let c = counter.fetch_add(1, Ordering::AcqRel);
+//                 println!(
+//                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
+//                     id, i, c + 1,
+//                     payload_size
+//                 );
+//             }
+//         }
 
-        let counter = Arc::new(AtomicUsize::new(0));
+//         // Pipeline
+//         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+//         let conduits = vec![tct];
+//         let (producer, mut consumer) =
+//             TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
 
-        let c_producer = producer.clone();
-        let c_counter = counter.clone();
-        let h1 = task::spawn_blocking(move || {
-            schedule(c_producer, c_counter, 1);
-        });
+//         let counter = Arc::new(AtomicUsize::new(0));
 
-        let c_counter = counter.clone();
-        let h2 = task::spawn_blocking(move || {
-            schedule(producer, c_counter, 2);
-        });
+//         let c_producer = producer.clone();
+//         let c_counter = counter.clone();
+//         let h1 = task::spawn_blocking(move || {
+//             schedule(c_producer, c_counter, 1);
+//         });
 
-        task::block_on(async {
-            // Wait to have sent enough messages and to have blocked
-            println!(
-                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                CONFIG.queue_size[Priority::MAX as usize]
-            );
-            let check = async {
-                while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
-                    task::sleep(SLEEP).await;
-                }
-            };
-            check.timeout(TIMEOUT).await.unwrap();
+//         let c_counter = counter.clone();
+//         let h2 = task::spawn_blocking(move || {
+//             schedule(producer, c_counter, 2);
+//         });
 
-            // Disable and drain the queue
-            task::spawn_blocking(move || {
-                println!("Pipeline Blocking [---]: draining the queue");
-                let _ = consumer.drain();
-            })
-            .timeout(TIMEOUT)
-            .await
-            .unwrap();
+//         task::block_on(async {
+//             // Wait to have sent enough messages and to have blocked
+//             println!(
+//                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+//                 CONFIG.queue_size[Priority::MAX as usize]
+//             );
+//             let check = async {
+//                 while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
+//                     task::sleep(SLEEP).await;
+//                 }
+//             };
+//             check.timeout(TIMEOUT).await.unwrap();
 
-            // Make sure that the tasks scheduling have been unblocked
-            println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
-            h1.timeout(TIMEOUT).await.unwrap();
-            println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
-            h2.timeout(TIMEOUT).await.unwrap();
-        });
-    }
+//             // Disable and drain the queue
+//             task::spawn_blocking(move || {
+//                 println!("Pipeline Blocking [---]: draining the queue");
+//                 let _ = consumer.drain();
+//             })
+//             .timeout(TIMEOUT)
+//             .await
+//             .unwrap();
 
-    #[test]
-    #[ignore]
-    fn tx_pipeline_thr() {
-        // Queue
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
-        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
-        let count = Arc::new(AtomicUsize::new(0));
-        let size = Arc::new(AtomicUsize::new(0));
+//             // Make sure that the tasks scheduling have been unblocked
+//             println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
+//             h1.timeout(TIMEOUT).await.unwrap();
+//             println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
+//             h2.timeout(TIMEOUT).await.unwrap();
+//         });
+//     }
 
-        let c_size = size.clone();
-        task::spawn(async move {
-            loop {
-                let payload_sizes: [usize; 16] = [
-                    8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
-                    65_536, 262_144, 1_048_576,
-                ];
-                for size in payload_sizes.iter() {
-                    c_size.store(*size, Ordering::Release);
+//     #[test]
+//     #[ignore]
+//     fn tx_pipeline_thr() {
+//         // Queue
+//         let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+//         let conduits = vec![tct];
+//         let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
+//         let count = Arc::new(AtomicUsize::new(0));
+//         let size = Arc::new(AtomicUsize::new(0));
 
-                    // Send reliable messages
-                    let key = "pipeline/thr".into();
-                    let payload = ZBuf::from(vec![0_u8; *size]);
-                    let channel = Channel {
-                        priority: Priority::Control,
-                        reliability: Reliability::Reliable,
-                    };
-                    let congestion_control = CongestionControl::Block;
-                    let data_info = None;
-                    let routing_context = None;
-                    let reply_context = None;
-                    let attachment = None;
+//         let c_size = size.clone();
+//         task::spawn(async move {
+//             loop {
+//                 let payload_sizes: [usize; 16] = [
+//                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
+//                     65_536, 262_144, 1_048_576,
+//                 ];
+//                 for size in payload_sizes.iter() {
+//                     c_size.store(*size, Ordering::Release);
 
-                    let message = ZenohMessage::make_data(
-                        key,
-                        payload,
-                        channel,
-                        congestion_control,
-                        data_info,
-                        routing_context,
-                        reply_context,
-                        attachment,
-                    );
+//                     // Send reliable messages
+//                     let key = "pipeline/thr".into();
+//                     let payload = ZBuf::from(vec![0_u8; *size]);
+//                     let channel = Channel {
+//                         priority: Priority::Control,
+//                         reliability: Reliability::Reliable,
+//                     };
+//                     let congestion_control = CongestionControl::Block;
+//                     let data_info = None;
+//                     let routing_context = None;
+//                     let reply_context = None;
+//                     let attachment = None;
 
-                    let duration = Duration::from_millis(5_500);
-                    let start = Instant::now();
-                    while start.elapsed() < duration {
-                        producer.push_zenoh_message(message.clone());
-                    }
-                }
-            }
-        });
+//                     let message = ZenohMessage::make_data(
+//                         key,
+//                         payload,
+//                         channel,
+//                         congestion_control,
+//                         data_info,
+//                         routing_context,
+//                         reply_context,
+//                         attachment,
+//                     );
 
-        let c_count = count.clone();
-        task::spawn(async move {
-            loop {
-                let (batch, priority) = consumer.pull().await.unwrap();
-                c_count.fetch_add(batch.len() as usize, Ordering::AcqRel);
-                consumer.refill(batch, priority);
-            }
-        });
+//                     let duration = Duration::from_millis(5_500);
+//                     let start = Instant::now();
+//                     while start.elapsed() < duration {
+//                         producer.push_zenoh_message(message.clone());
+//                     }
+//                 }
+//             }
+//         });
 
-        task::block_on(async {
-            let mut prev_size: usize = usize::MAX;
-            loop {
-                let received = count.swap(0, Ordering::AcqRel);
-                let current: usize = size.load(Ordering::Acquire);
-                if current == prev_size {
-                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
-                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
-                }
-                prev_size = current;
-                task::sleep(Duration::from_millis(500)).await;
-            }
-        });
-    }
-}
+//         let c_count = count.clone();
+//         task::spawn(async move {
+//             loop {
+//                 let (batch, priority) = consumer.pull().await.unwrap();
+//                 c_count.fetch_add(batch.len() as usize, Ordering::AcqRel);
+//                 consumer.refill(batch, priority);
+//             }
+//         });
+
+//         task::block_on(async {
+//             let mut prev_size: usize = usize::MAX;
+//             loop {
+//                 let received = count.swap(0, Ordering::AcqRel);
+//                 let current: usize = size.load(Ordering::Acquire);
+//                 if current == prev_size {
+//                     let thr = (8.0 * received as f64) / 1_000_000_000.0;
+//                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
+//                 }
+//                 prev_size = current;
+//                 task::sleep(Duration::from_millis(500)).await;
+//             }
+//         });
+//     }
+// }
