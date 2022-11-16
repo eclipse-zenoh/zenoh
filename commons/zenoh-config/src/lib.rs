@@ -147,6 +147,12 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
+                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+                /// When false, gossip scouting informations are only propagated to the next hop.
+                /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+                /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+                /// direct connectivity with each other.
+                multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
