@@ -289,6 +289,17 @@ impl Network {
         }
     }
 
+    fn propagate_locators(&self, idx: NodeIndex) -> bool {
+        self.gossip
+            && (self.gossip_multihop
+                || self.links.values().any(|link| {
+                    self.graph
+                        .node_weight(idx)
+                        .map(|node| link.zid == node.zid)
+                        .unwrap_or(true)
+                }))
+    }
+
     fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::default();
@@ -446,7 +457,7 @@ impl Network {
                                     idx,
                                     Details {
                                         zid: true,
-                                        locators: self.gossip,
+                                        locators: true,
                                         links: false,
                                     },
                                 )],
@@ -611,7 +622,7 @@ impl Network {
                         idx1,
                         Details {
                             zid: true,
-                            locators: self.gossip,
+                            locators: self.propagate_locators(idx1),
                             links: true,
                         },
                     )
@@ -628,7 +639,7 @@ impl Network {
                                     idx1,
                                     Details {
                                         zid: false,
-                                        locators: self.gossip,
+                                        locators: self.propagate_locators(idx1),
                                         links: true,
                                     },
                                 ))
@@ -716,7 +727,7 @@ impl Network {
                                     self.idx,
                                     Details {
                                         zid: false,
-                                        locators: self.gossip,
+                                        locators: self.propagate_locators(idx),
                                         links: true,
                                     },
                                 ),
@@ -726,7 +737,7 @@ impl Network {
                                 self.idx,
                                 Details {
                                     zid: false,
-                                    locators: self.gossip,
+                                    locators: self.propagate_locators(idx),
                                     links: true,
                                 },
                             )]
@@ -745,7 +756,7 @@ impl Network {
                     idx,
                     Details {
                         zid: true,
-                        locators: self.gossip,
+                        locators: self.propagate_locators(idx),
                         links: self.full_linkstate
                             || (self.router_peers_failover_brokering
                                 && idx == self.idx
