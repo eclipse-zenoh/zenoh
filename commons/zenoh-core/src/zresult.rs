@@ -121,3 +121,19 @@ impl ErrNo for dyn std::error::Error {
         }
     }
 }
+impl ErrNo for dyn std::error::Error + Send {
+    fn errno(&self) -> NegativeI8 {
+        match self.downcast_ref::<ZError>() {
+            Some(e) => e.errno(),
+            None => NegativeI8::new(i8::MIN),
+        }
+    }
+}
+impl ErrNo for dyn std::error::Error + Send + Sync {
+    fn errno(&self) -> NegativeI8 {
+        match self.downcast_ref::<ZError>() {
+            Some(e) => e.errno(),
+            None => NegativeI8::new(i8::MIN),
+        }
+    }
+}
