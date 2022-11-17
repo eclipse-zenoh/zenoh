@@ -172,10 +172,9 @@ impl<'a> HasReader for &'a ZBuf {
 impl<'a> Reader for ZBufReader<'a> {
     fn read(&mut self, mut into: &mut [u8]) -> Result<usize, DidntRead> {
         let mut read = 0;
-        let slices = self.inner.slices.as_ref();
-        while let Some(slice) = slices.get(self.cursor.slice) {
+        while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
             // Subslice from the current read slice
-            let from = &slice.as_ref()[self.cursor.byte..];
+            let from = &slice.as_slice()[self.cursor.byte..];
             // Take the minimum length among read and write slices
             let len = from.len().min(into.len());
             // Copy the slice content
@@ -209,12 +208,7 @@ impl<'a> Reader for ZBufReader<'a> {
     }
 
     fn read_u8(&mut self) -> Result<u8, DidntRead> {
-        let slice = self
-            .inner
-            .slices
-            .as_ref()
-            .get(self.cursor.slice)
-            .ok_or(DidntRead)?;
+        let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
 
         let byte = slice[self.cursor.byte];
         self.cursor.byte += 1;
@@ -274,6 +268,10 @@ impl<'a> Reader for ZBufReader<'a> {
             }
         }
     }
+
+    fn can_read(&self) -> bool {
+        self.inner.slices.get(self.cursor.slice).is_some()
+    }
 }
 
 impl<'a> BacktrackableReader for ZBufReader<'a> {
@@ -295,10 +293,9 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
         W: Writer,
     {
         let mut read = 0;
-        let slices = self.inner.slices.as_ref();
-        while let Some(slice) = slices.get(self.cursor.slice) {
+        while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
             // Subslice from the current read slice
-            let from = &slice.as_ref()[self.cursor.byte..];
+            let from = &slice.as_slice()[self.cursor.byte..];
             // Copy the slice content
             match writer.write(from) {
                 Ok(len) => {

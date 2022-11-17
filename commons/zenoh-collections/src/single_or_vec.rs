@@ -131,21 +131,25 @@ impl<T> Default for SingleOrVec<T> {
         Self(Default::default())
     }
 }
+
 impl<T> AsRef<[T]> for SingleOrVec<T> {
     fn as_ref(&self) -> &[T] {
         self.0.as_ref()
     }
 }
+
 impl<T> AsMut<[T]> for SingleOrVec<T> {
     fn as_mut(&mut self) -> &mut [T] {
         self.0.as_mut()
     }
 }
+
 impl<T: std::fmt::Debug> std::fmt::Debug for SingleOrVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
 }
+
 impl<T> IntoIterator for SingleOrVec<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
@@ -165,6 +169,7 @@ impl<T> IntoIterator for SingleOrVec<T> {
         }
     }
 }
+
 impl<T> std::iter::Extend<T> for SingleOrVec<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for value in iter {
