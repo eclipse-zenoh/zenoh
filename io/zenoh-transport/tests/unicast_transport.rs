@@ -151,12 +151,12 @@ impl TransportPeerEventHandler for SCClient {
 async fn open_transport(
     client_endpoints: &[EndPoint],
     server_endpoint: Option<&EndPoint>,
-) -> (
+) -> ZResult<(
     TransportManager,
     Arc<SHRouter>,
     TransportManager,
     TransportUnicast,
-) {
+)> {
     // Define client and router IDs
     let client_id = ZenohId::try_from([1]).unwrap();
     let router_id = ZenohId::try_from([2]).unwrap();
@@ -175,12 +175,12 @@ async fn open_transport(
     if let Some(endpoint) = server_endpoint {
         // Create the listener on the router
         println!("Add endpoint: {}", endpoint);
-        let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+        let _ = ztimeout!(router_manager.add_listener(endpoint.clone()))?;
     } else {
         // Create the listener on the router
         for e in client_endpoints.iter() {
             println!("Add endpoint: {}\n", e);
-            let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+            let _ = ztimeout!(router_manager.add_listener(e.clone()))?;
         }
     }
 
@@ -197,18 +197,18 @@ async fn open_transport(
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(client_manager.open_transport(e.clone()))?;
     }
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Return the handlers
-    (
+    Ok((
         router_manager,
         router_handler,
         client_manager,
         client_transport,
-    )
+    ))
 }
 
 async fn close_transport(
@@ -311,10 +311,10 @@ async fn run_single(
     server_endpoint: Option<&EndPoint>,
     channel: Channel,
     msg_size: usize,
-) {
+) -> ZResult<()> {
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport(client_endpoints, server_endpoint).await;
+        open_transport(client_endpoints, server_endpoint).await?;
 
     test_transport(
         router_handler.clone(),
@@ -343,6 +343,7 @@ async fn run_single(
         client_endpoints,
     )
     .await;
+    Ok(())
 }
 
 async fn run(
@@ -350,12 +351,13 @@ async fn run(
     server_endpoint: Option<&EndPoint>,
     channel: &[Channel],
     msg_size: &[usize],
-) {
+) -> ZResult<()> {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            run_single(client_endpoints, server_endpoint, *ch, *ms).await;
+            run_single(client_endpoints, server_endpoint, *ch, *ms).await?;
         }
     }
+    Ok(())
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -391,7 +393,8 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    assert!(result.is_ok())
 }
 
 #[cfg(feature = "transport_udp")]
@@ -419,7 +422,8 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    assert!(result.is_ok())
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -446,9 +450,10 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
+    assert!(result.is_ok())
 }
 
 #[cfg(feature = "transport_ws")]
@@ -512,7 +517,8 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    assert!(result.is_ok())
 }
 
 #[cfg(all(
@@ -547,9 +553,10 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
+    assert!(result.is_ok())
 }
 
 #[cfg(all(
@@ -584,9 +591,10 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
+    assert!(result.is_ok())
 }
 
 #[cfg(all(
@@ -624,9 +632,10 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
+    assert!(result.is_ok())
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -670,142 +679,8 @@ fn transport_unicast_tls_only() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
-}
-
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
-#[test]
-fn transport_unicast_tls_two_way_auth_correct_certs_success() {
-    use zenoh_link::tls::config::*;
-
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
-    let client_auth = "true";
-
-    // Define the locator
-    let mut client_endpoint: EndPoint = ("tls/localhost:10452").parse().unwrap();
-    client_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
-            (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
-
-    // Define the locator
-    let mut server_endpoint: EndPoint = ("tls/localhost:10452").parse().unwrap();
-    server_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
-    // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
-    // Run
-    let endpoints = vec![client_endpoint];
-    task::block_on(run(
-        &endpoints,
-        Some(&server_endpoint),
-        &channel,
-        &MSG_SIZE_ALL,
-    ));
-}
-
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
-#[test]
-fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
-    use std::panic::catch_unwind;
-
-    use zenoh_link::tls::config::*;
-
-    task::block_on(async {
-        zasync_executor_init!();
-    });
-
-    let client_auth = "true";
-
-    // Define the locator
-    let mut client_endpoint: EndPoint = ("tls/localhost:10453").parse().unwrap();
-    client_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
-
-    // Define the locator
-    let mut server_endpoint: EndPoint = ("tls/localhost:10453").parse().unwrap();
-    server_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
-    // Define the reliability and congestion control
-    let channel = [
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::BestEffort,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::Reliable,
-        },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
-    ];
-    // Run
-    let endpoints = vec![client_endpoint];
-    let result = catch_unwind(|| {
-        task::block_on(run(
-            &endpoints,
-            Some(&server_endpoint),
-            &channel,
-            &MSG_SIZE_ALL,
-        ))
-    });
-    assert!(result.is_err())
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    assert!(result.is_ok())
 }
 
 #[cfg(feature = "transport_quic")]
@@ -818,7 +693,7 @@ fn transport_unicast_quic_only() {
     });
 
     // Define the locator
-    let mut endpoint: EndPoint = ("quic/localhost:10454").parse().unwrap();
+    let mut endpoint: EndPoint = ("quic/localhost:10452").parse().unwrap();
     endpoint.extend_configuration(
         [
             (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
@@ -850,7 +725,226 @@ fn transport_unicast_quic_only() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    assert!(result.is_ok())
+}
+
+//*************************************/
+//*          Two way auth             */
+//*************************************/
+
+// Constants replicating the alert descriptions thrown by the Rustls library.
+// These alert descriptions are internal of the library and cannot be reached from these tests
+// as to do a proper comparison. For the sake of simplicity we verify these constants are contained
+// in the expected error messages from the tests below.
+//
+// See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
+const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
+const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
+
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[test]
+fn transport_unicast_tls_two_way_auth_correct_certs_success() {
+    use zenoh_link::tls::config::*;
+
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let client_auth = "true";
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
+    client_endpoint.extend_configuration(
+        [
+            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+            (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
+            (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
+            (TLS_CLIENT_AUTH, client_auth),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
+    server_endpoint.extend_configuration(
+        [
+            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_CLIENT_AUTH, client_auth),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![client_endpoint];
+    let result = task::block_on(run(
+        &endpoints,
+        Some(&server_endpoint),
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+    assert!(result.is_ok())
+}
+
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[test]
+fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
+    use zenoh_link::tls::config::*;
+
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let client_auth = "true";
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
+    client_endpoint.extend_configuration(
+        [(TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA)]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
+    server_endpoint.extend_configuration(
+        [
+            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_CLIENT_AUTH, client_auth),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![client_endpoint];
+    let result = task::block_on(run(
+        &endpoints,
+        Some(&server_endpoint),
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err
+        .to_string()
+        .contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
+}
+
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[test]
+fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
+    use zenoh_link::tls::config::*;
+
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let client_auth = "true";
+
+    // Define the locator
+    let mut client_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
+    client_endpoint.extend_configuration(
+        [
+            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+            // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
+            // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
+            // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
+            // client.
+            (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
+            (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_CLIENT_AUTH, client_auth),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+
+    // Define the locator
+    let mut server_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
+    server_endpoint.extend_configuration(
+        [
+            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_CLIENT_AUTH, client_auth),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+    );
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![client_endpoint];
+    let result = task::block_on(run(
+        &endpoints,
+        Some(&server_endpoint),
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err
+        .to_string()
+        .contains(RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION));
 }
 
 //*************************************/
