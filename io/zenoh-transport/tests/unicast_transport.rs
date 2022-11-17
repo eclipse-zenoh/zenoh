@@ -740,7 +740,7 @@ const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     use zenoh_link::tls::config::*;
@@ -806,7 +806,7 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     assert!(result.is_ok())
 }
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     use zenoh_link::tls::config::*;
