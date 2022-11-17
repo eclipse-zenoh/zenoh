@@ -729,10 +729,6 @@ fn transport_unicast_quic_only() {
     assert!(result.is_ok())
 }
 
-//*************************************/
-//*          Two way auth             */
-//*************************************/
-
 // Constants replicating the alert descriptions thrown by the Rustls library.
 // These alert descriptions are internal of the library and cannot be reached from these tests
 // as to do a proper comparison. For the sake of simplicity we verify these constants are contained
