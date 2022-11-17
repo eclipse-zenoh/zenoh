@@ -735,7 +735,9 @@ fn transport_unicast_quic_only() {
 // in the expected error messages from the tests below.
 //
 // See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -976,6 +978,7 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
 // certificate brought in by the server. Similarly the server's certificate authority will validate
 // the key and certificate brought in by the client.
 //
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEArNthaKa7u/T7X5LTykqctYnmFmZcx9zUL1R7qXC/uWJWlKk6
 3xvQbUs2IDeIxL3yC6djJulbrqw+XvuclCM4nMFmUB8hcidesoTRb2agapompNOH
@@ -1004,6 +1007,7 @@ Fz66VkcYPMu05ggFIzrsJqPK6LUCb+h8sYnN4464+cJXhIrPvRJ3Pu30NoVBB0yz
 AbQCDGFMp3XCC+FLajMdQQhuXfUfSGjbidhQI87hmMF+gZ+WkNc8+A==
 -----END RSA PRIVATE KEY-----";
 
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIdTp0cmbVlKswDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgN2M1NWNjMB4XDTIyMTEwOTE1MzkwNVoXDTI0MTIw
@@ -1024,6 +1028,7 @@ FnK0IPRdnOl5v3j/62DDBllnJER5aahQcbNx9WszP2ZZb/SNzzQghVJ8yWBrbAJn
 SRCU86jw504Zx5q/SbuXJsPXJbiFF7eclvKEumdF3XmJeMRGPg2ysQ/nfco0nBz8
 -----END CERTIFICATE-----";
 
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIC3MWFI+HOvowDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMGI3MzE2MCAXDTIyMTAyNDEzMDIwNloYDzIxMjIx
@@ -1045,6 +1050,7 @@ yzLeR60HKUulCVzt0UuGH86eN3ym4XeBDurC98sd/COM/3g30LRzRQfm1NagZ46T
 5GkQ3waq7e0CNrbxXnQHgnMrIhD8Te4gSDXswoLgaw==
 -----END CERTIFICATE-----";
 
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0eRJBZe8MzIPBrSZ+2/yLfqFON/QdeJPTu1Oug22fVOlAgG5
 c06qCyurwqB5fWyt61m6ZKUJuWI3qZy8y8cnRFv3WKILq6jWBYxN1z3lHiLM199R
@@ -1073,6 +1079,7 @@ sXX6rPkNHWyymzWhvjxI/eP8d9FzbcvaEfx9dQRYBbcduxGeVq/+pVtgW5OY4L4C
 fNEjJmiv2pXIRoMpfAI5Yg6tdeO3G2glLsv3+1Op+OnuNOicVuo+jg==
 -----END RSA PRIVATE KEY-----";
 
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIbMxjSdRKLkkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMGI3MzE2MB4XDTIyMTAyNDEzMDIwNloXDTI0MTEy
@@ -1093,6 +1100,7 @@ iPOFtCHc3026/D2xBYwApHMK0d3ATO0yk9z+T09e657g5fGVeaNCwuTuwlRXJZGW
 U+sf37D2NmcSgVuhx0k4BP8eAyBbD/fDDqrmEFXC4yvhxxTi8DNJswCa54nUzlUg
 -----END CERTIFICATE-----";
 
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIfFXM74pJVUcwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgN2M1NWNjMCAXDTIyMTEwOTE1MzkwNVoYDzIxMjIx
