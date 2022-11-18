@@ -24,9 +24,9 @@ use zenoh_protocol::{
 pub(crate) struct DefragBuffer {
     reliability: Reliability,
     pub(crate) sn: SeqNum,
+    buffer: ZBuf,
     capacity: usize,
     len: usize,
-    buffer: ZBuf,
 }
 
 impl DefragBuffer {
@@ -38,9 +38,9 @@ impl DefragBuffer {
         let db = DefragBuffer {
             reliability,
             sn: SeqNum::make(0, sn_resolution)?,
+            buffer: ZBuf::default(),
             capacity,
             len: 0,
-            buffer: ZBuf::default(),
         };
         Ok(db)
     }
@@ -52,8 +52,8 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn clear(&mut self) {
-        self.len = 0;
         self.buffer.clear();
+        self.len = 0;
     }
 
     #[inline(always)]
@@ -67,18 +67,19 @@ impl DefragBuffer {
             bail!("Expected SN {}, received {}", self.sn.get(), sn)
         }
 
-        self.len += zslice.len();
-        if self.len > self.capacity {
+        let new_len = self.len + zslice.len();
+        if new_len > self.capacity {
             self.clear();
             bail!(
                 "Defragmentation buffer full: {} bytes. Capacity: {}.",
-                self.len,
+                new_len,
                 self.capacity
             )
         }
 
-        self.buffer.push_zslice(zslice);
         self.sn.increment();
+        self.buffer.push_zslice(zslice);
+        self.len = new_len;
 
         Ok(())
     }
@@ -88,7 +89,7 @@ impl DefragBuffer {
         let mut reader = self.buffer.reader();
         let rcodec = Zenoh060Reliability::new(self.reliability);
         let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
-        self.buffer.clear();
+        self.clear();
         res
     }
 }

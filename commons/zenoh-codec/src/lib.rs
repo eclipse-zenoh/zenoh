@@ -55,10 +55,10 @@ pub struct Zenoh060Reliability {
 }
 
 impl Zenoh060Reliability {
-    pub fn new(reliability: Reliability) -> Self {
+    pub const fn new(reliability: Reliability) -> Self {
         Self {
             reliability,
-            codec: Zenoh060::default(),
+            codec: Zenoh060,
         }
     }
 }
