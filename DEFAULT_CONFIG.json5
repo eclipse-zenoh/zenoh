@@ -51,6 +51,12 @@
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
+      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+      /// When false, gossip scouting informations are only propagated to the next hop.
+      /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+      /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+      /// direct connectivity with each other.
+      multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".

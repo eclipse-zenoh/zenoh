@@ -39,7 +39,7 @@ pub mod storage;
 
 pub use align_queryable::AlignQueryable;
 pub use aligner::Aligner;
-pub use digest::{Digest, DigestConfig, EraType};
+pub use digest::{Digest, DigestConfig, EraType, LogEntry};
 pub use snapshotter::{ReplicationInfo, Snapshotter};
 pub use storage::{ReplicationService, StorageService};
 
@@ -108,13 +108,11 @@ impl Replica {
 
         let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter =
-            Arc::new(Snapshotter::new(rx_log, startup_entries.clone(), config.clone()).await);
+        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
-        let digest_key =
-            Replica::get_digest_key(replica.key_expr.clone(), ALIGN_PREFIX.to_string());
+        let digest_key = Replica::get_digest_key(&replica.key_expr, ALIGN_PREFIX);
         let align_q = AlignQueryable::start_align_queryable(
             replica.session.clone(),
             digest_key.clone(),
@@ -178,7 +176,7 @@ impl Replica {
     pub async fn start_digest_sub(&self, tx: Sender<(String, Digest)>) {
         let mut received = HashMap::<String, Timestamp>::new();
 
-        let digest_key = Replica::get_digest_key(self.key_expr.clone(), ALIGN_PREFIX.to_string())
+        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
             .join("**")
             .unwrap();
 
@@ -201,12 +199,8 @@ impl Replica {
                     continue;
                 }
             };
-            let from = &sample.key_expr.as_str()[Replica::get_digest_key(
-                self.key_expr.clone(),
-                ALIGN_PREFIX.to_string(),
-            )
-            .len()
-                + 1..];
+            let from = &sample.key_expr.as_str()
+                [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
             trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
@@ -245,7 +239,7 @@ impl Replica {
     // Create a publisher to periodically publish digests from the snapshotter
     // Publish on <align_prefix>/<encoded_key_expr>/<replica_name>
     pub async fn start_digest_pub(&self, snapshotter: Arc<Snapshotter>) {
-        let digest_key = Replica::get_digest_key(self.key_expr.clone(), ALIGN_PREFIX.to_string())
+        let digest_key = Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX)
             .join(&self.name)
             .unwrap();
 
@@ -308,9 +302,9 @@ impl Replica {
         true
     }
 
-    fn get_digest_key(key_expr: OwnedKeyExpr, align_prefix: String) -> OwnedKeyExpr {
-        let key_expr = encode(&key_expr).to_string();
-        OwnedKeyExpr::from_str(&align_prefix)
+    fn get_digest_key(key_expr: &OwnedKeyExpr, align_prefix: &str) -> OwnedKeyExpr {
+        let key_expr = encode(key_expr).to_string();
+        OwnedKeyExpr::from_str(align_prefix)
             .unwrap()
             .join(&key_expr)
             .unwrap()

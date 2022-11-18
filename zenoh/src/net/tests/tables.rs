@@ -84,7 +84,7 @@ fn match_test() {
         "ab/*",
         "a/*/c/*/e",
         "a/b/c/d/e",
-        "a/*b/c/$*d/e",
+        "a/$*b/c/$*d/e",
         "a/xb/c/xd/e",
         "a/c/e",
         "a/b/c/d/x/e",

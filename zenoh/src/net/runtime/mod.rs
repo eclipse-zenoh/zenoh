@@ -110,6 +110,7 @@ impl Runtime {
             .unwrap_or(false);
 
         let gossip = config.scouting().gossip().enabled().unwrap_or(true);
+        let gossip_multihop = config.scouting().gossip().multihop().unwrap_or(false);
         let autoconnect = match whatami {
             WhatAmI::Router => {
                 if config.scouting().gossip().enabled().unwrap_or(true) {
@@ -197,6 +198,7 @@ impl Runtime {
             peer_link_state,
             router_peers_failover_brokering,
             gossip,
+            gossip_multihop,
             autoconnect,
         );
 
