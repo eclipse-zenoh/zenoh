@@ -647,13 +647,87 @@ fn transport_unicast_tls_only() {
         zasync_executor_init!();
     });
 
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain. The certificate and key
+    //       have been generated using: https://github.com/jsha/minica
+    let key = "-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsulaew
+4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5hul4
+Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgKE47j
+AgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh1ahd
++VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJKSNEF
+yVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABAoIBAQCq+i208XBqdnwk
+6y7r5Tcl6qErBE3sIk0upjypX7Ju/TlS8iqYckENQ+AqFGBcY8+ehF5O68BHm2hz
+sk8F/H84+wc8zuzYGjPEFtEUb38RecCUqeqog0Gcmm6sN+ioOLAr6DifBojy2mox
+sx6N0oPW9qigp/s4gTcGzTLxhcwNRHWuoWjQwq6y6qwt2PJXnllii5B5iIJhKAxE
+EOmcVCmFbPavQ1Xr9F5jd5rRc1TYq28hXX8dZN2JhdVUbLlHzaiUfTnA/8yI4lyq
+bEmqu29Oqe+CmDtB6jRnrLiIwyZxzXKuxXaO6NqgxqtaVjLcdISEgZMeHEftuOtf
+C1xxodaVAoGBAOb1Y1SvUGx+VADSt1d30h3bBm1kU/1LhLKZOAQrnFMrEfyOfYbz
+AZ4FJgXE6ZsB1BA7hC0eJDVHz8gTgDJQrOOO8WJWDGRe4TbZkCi5IizYg5UH/6az
+I/WKlfdA4j1tftbQhycHL+9bGzdoRzrwIK489PG4oVAJJCaK2CVtx+l3AoGBAOXY
+75sHOiMaIvDA7qlqFbaBkdi1NzH7bCgy8IntNfLxlOCmGjxeNZzKrkode3JWY9SI
+Mo/nuWj8EZBEHj5omCapzOtkW/Nhnzc4C6U3BCspdrQ4mzbmzEGTdhqvxepa7U7K
+iRcoD1iU7kINCEwg2PsB/BvCSrkn6lpIJlYXlJDHAoGAY7QjgXd9fJi8ou5Uf8oW
+RxU6nRbmuz5Sttc2O3aoMa8yQJkyz4Mwe4s1cuAjCOutJKTM1r1gXC/4HyNsAEyb
+llErG4ySJPJgv1EEzs+9VSbTBw9A6jIDoAiH3QmBoYsXapzy+4I6y1XFVhIKTgND
+2HQwOfm+idKobIsb7GyMFNkCgYBIsixWZBrHL2UNsHfLrXngl2qBmA81B8hVjob1
+mMkPZckopGB353Qdex1U464/o4M/nTQgv7GsuszzTBgktQAqeloNuVg7ygyJcnh8
+cMIoxJx+s8ijvKutse4Q0rdOQCP+X6CsakcwRSp2SZjuOxVljmMmhHUNysocc+Vs
+JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
+LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
+ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
+-----END RSA PRIVATE KEY-----";
+
+    let cert = "-----BEGIN CERTIFICATE-----
+MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMB4XDTIxMDIwMjE0NDYzNFoXDTIzMDMw
+NDE0NDYzNFowFDESMBAGA1UEAxMJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsu
+laew4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5
+hul4Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgK
+E47jAgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh
+1ahd+VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJK
+SNEFyVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABo3YwdDAOBgNVHQ8B
+Af8EBAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAwGA1UdEwEB
+/wQCMAAwHwYDVR0jBBgwFoAULXa6lBiO7OLL5Z6XuF5uF5wR9PQwFAYDVR0RBA0w
+C4IJbG9jYWxob3N0MA0GCSqGSIb3DQEBCwUAA4IBAQBOMkNXfzPEDU475zbiSi3v
+JOhpZLyuoaYY62RzZc9VF8YRybJlWKUWdR3szAiUd1xCJe/beNX7b9lPg6wNadKq
+DGTWFmVxSfpVMO9GQYBXLDcNaAUXzsDLC5sbAFST7jkAJELiRn6KtQYxZ2kEzo7G
+QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
+F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
+AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
+-----END CERTIFICATE-----";
+
+    // Configure the client
+    let ca = "-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIIK7mduKtTVxkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMCAXDTIxMDIwMjEzMTc0NVoYDzIxMjEw
+MjAyMTMxNzQ1WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAyYmI5OWQwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCoBZOxIfVq7LoEpVCMlQzuDnFy
+d+yuk5pFasEQvZ3IvWVta4rPFJ3WGl4UNF6v9bZegNHp+oo70guZ8ps9ez34qrwB
+rrNtZ0YJLDvR0ygloinZZeiclrZcu+x9vRdnyfWqrAulJBMlJIbbHcNx2OCkq7MM
+HdpLJMXxKVbIlQQYGUzRkNTAaK2PiFX5BaqmnZZyo7zNbz7L2asg+0K/FpiS2IRA
+coHPTa9BtsLUJUPRHPr08pgTjM1MQwa+Xxg1+wtMh85xdrqMi6Oe0cxefS+0L04F
+KVfMD3bW8AyuugvcTEpGnea2EvMoPfLWpnPGU3XO8lRZyotZDQzrPvNyYKM3AgMB
+AAGjgYYwgYMwDgYDVR0PAQH/BAQDAgKEMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQtdrqUGI7s4svl
+npe4Xm4XnBH09DAfBgNVHSMEGDAWgBQtdrqUGI7s4svlnpe4Xm4XnBH09DANBgkq
+hkiG9w0BAQsFAAOCAQEAJliEt607VUOSDsUeabhG8MIhYDhxe+mjJ4i7N/0xk9JU
+piCUdQr26HyYCzN+bNdjw663rxuVGtTTdHSw2CJHsPSOEDinbYkLMSyDeomsnr0S
+4e0hKUeqXXYg0iC/O2283ZEvvQK5SE+cjm0La0EmqO0mj3Mkc4Fsg8hExYuOur4M
+M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
+pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
+tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
+-----END CERTIFICATE-----";
+
     // Define the locator
     let mut endpoint: EndPoint = ("tls/localhost:10451").parse().unwrap();
     endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+            (TLS_SERVER_CERTIFICATE_RAW, cert),
+            (TLS_SERVER_PRIVATE_KEY_RAW, key),
         ]
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
@@ -691,14 +765,87 @@ fn transport_unicast_quic_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
+    // NOTE: this an auto-generated pair of certificate and key.
+    //       The target domain is localhost, so it has no real
+    //       mapping to any existing domain. The certificate and key
+    //       have been generated using: https://github.com/jsha/minica
+    let key = "-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsulaew
+4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5hul4
+Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgKE47j
+AgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh1ahd
++VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJKSNEF
+yVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABAoIBAQCq+i208XBqdnwk
+6y7r5Tcl6qErBE3sIk0upjypX7Ju/TlS8iqYckENQ+AqFGBcY8+ehF5O68BHm2hz
+sk8F/H84+wc8zuzYGjPEFtEUb38RecCUqeqog0Gcmm6sN+ioOLAr6DifBojy2mox
+sx6N0oPW9qigp/s4gTcGzTLxhcwNRHWuoWjQwq6y6qwt2PJXnllii5B5iIJhKAxE
+EOmcVCmFbPavQ1Xr9F5jd5rRc1TYq28hXX8dZN2JhdVUbLlHzaiUfTnA/8yI4lyq
+bEmqu29Oqe+CmDtB6jRnrLiIwyZxzXKuxXaO6NqgxqtaVjLcdISEgZMeHEftuOtf
+C1xxodaVAoGBAOb1Y1SvUGx+VADSt1d30h3bBm1kU/1LhLKZOAQrnFMrEfyOfYbz
+AZ4FJgXE6ZsB1BA7hC0eJDVHz8gTgDJQrOOO8WJWDGRe4TbZkCi5IizYg5UH/6az
+I/WKlfdA4j1tftbQhycHL+9bGzdoRzrwIK489PG4oVAJJCaK2CVtx+l3AoGBAOXY
+75sHOiMaIvDA7qlqFbaBkdi1NzH7bCgy8IntNfLxlOCmGjxeNZzKrkode3JWY9SI
+Mo/nuWj8EZBEHj5omCapzOtkW/Nhnzc4C6U3BCspdrQ4mzbmzEGTdhqvxepa7U7K
+iRcoD1iU7kINCEwg2PsB/BvCSrkn6lpIJlYXlJDHAoGAY7QjgXd9fJi8ou5Uf8oW
+RxU6nRbmuz5Sttc2O3aoMa8yQJkyz4Mwe4s1cuAjCOutJKTM1r1gXC/4HyNsAEyb
+llErG4ySJPJgv1EEzs+9VSbTBw9A6jIDoAiH3QmBoYsXapzy+4I6y1XFVhIKTgND
+2HQwOfm+idKobIsb7GyMFNkCgYBIsixWZBrHL2UNsHfLrXngl2qBmA81B8hVjob1
+mMkPZckopGB353Qdex1U464/o4M/nTQgv7GsuszzTBgktQAqeloNuVg7ygyJcnh8
+cMIoxJx+s8ijvKutse4Q0rdOQCP+X6CsakcwRSp2SZjuOxVljmMmhHUNysocc+Vs
+JVkf0QKBgHiCVLU60EoPketADvhRJTZGAtyCMSb3q57Nb0VIJwxdTB5KShwpul1k
+LPA8Z7Y2i9+IEXcPT0r3M+hTwD7noyHXNlNuzwXot4B8PvbgKkMLyOpcwBjppJd7
+ns4PifoQbhDFnZPSfnrpr+ZXSEzxtiyv7Ql69jznl/vB8b75hBL4
+-----END RSA PRIVATE KEY-----";
+
+    let cert = "-----BEGIN CERTIFICATE-----
+MIIDLDCCAhSgAwIBAgIIIXlwQVKrtaAwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMB4XDTIxMDIwMjE0NDYzNFoXDTIzMDMw
+NDE0NDYzNFowFDESMBAGA1UEAxMJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEAz105EYUbOdW5uJ8o/TqtxtOtKJL7AQdy5yiXoslosAsu
+laew4JSJetVa6Fa6Bq5BK6fsphGD9bpGGeiBZFBt75JRjOrkj4DwlLGa0CPLTgG5
+hul4Ufe9B7VG3J5P8OwUqIYmPzj8uTbNtkgFRcYumHR28h4GkYdG5Y04AV4vIjgK
+E47jAgV5ACRHkcmGrTzF2HOes2wT73l4yLSkKR4GlIWu5cLRdI8PTUmjMFAh/GIh
+1ahd+VqXz051V3jok0n1klVNjc6DnWuH3j/MSOg/52C3YfcUjCeIJGVfcqDnPTJK
+SNEFyVTYCUjWy+B0B4fMz3MpU17dDWpvS5hfc4VrgQIDAQABo3YwdDAOBgNVHQ8B
+Af8EBAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAwGA1UdEwEB
+/wQCMAAwHwYDVR0jBBgwFoAULXa6lBiO7OLL5Z6XuF5uF5wR9PQwFAYDVR0RBA0w
+C4IJbG9jYWxob3N0MA0GCSqGSIb3DQEBCwUAA4IBAQBOMkNXfzPEDU475zbiSi3v
+JOhpZLyuoaYY62RzZc9VF8YRybJlWKUWdR3szAiUd1xCJe/beNX7b9lPg6wNadKq
+DGTWFmVxSfpVMO9GQYBXLDcNaAUXzsDLC5sbAFST7jkAJELiRn6KtQYxZ2kEzo7G
+QmzNMfNMc1KeL8Qr4nfEHZx642yscSWj9edGevvx4o48j5KXcVo9+pxQQFao9T2O
+F5QxyGdov+uNATWoYl92Gj8ERi7ovHimU3H7HLIwNPqMJEaX4hH/E/Oz56314E9b
+AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
+-----END CERTIFICATE-----";
+
+    // Configure the client
+    let ca = "-----BEGIN CERTIFICATE-----
+MIIDSzCCAjOgAwIBAgIIK7mduKtTVxkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgMmJiOTlkMCAXDTIxMDIwMjEzMTc0NVoYDzIxMjEw
+MjAyMTMxNzQ1WjAgMR4wHAYDVQQDExVtaW5pY2Egcm9vdCBjYSAyYmI5OWQwggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCoBZOxIfVq7LoEpVCMlQzuDnFy
+d+yuk5pFasEQvZ3IvWVta4rPFJ3WGl4UNF6v9bZegNHp+oo70guZ8ps9ez34qrwB
+rrNtZ0YJLDvR0ygloinZZeiclrZcu+x9vRdnyfWqrAulJBMlJIbbHcNx2OCkq7MM
+HdpLJMXxKVbIlQQYGUzRkNTAaK2PiFX5BaqmnZZyo7zNbz7L2asg+0K/FpiS2IRA
+coHPTa9BtsLUJUPRHPr08pgTjM1MQwa+Xxg1+wtMh85xdrqMi6Oe0cxefS+0L04F
+KVfMD3bW8AyuugvcTEpGnea2EvMoPfLWpnPGU3XO8lRZyotZDQzrPvNyYKM3AgMB
+AAGjgYYwgYMwDgYDVR0PAQH/BAQDAgKEMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBQtdrqUGI7s4svl
+npe4Xm4XnBH09DAfBgNVHSMEGDAWgBQtdrqUGI7s4svlnpe4Xm4XnBH09DANBgkq
+hkiG9w0BAQsFAAOCAQEAJliEt607VUOSDsUeabhG8MIhYDhxe+mjJ4i7N/0xk9JU
+piCUdQr26HyYCzN+bNdjw663rxuVGtTTdHSw2CJHsPSOEDinbYkLMSyDeomsnr0S
+4e0hKUeqXXYg0iC/O2283ZEvvQK5SE+cjm0La0EmqO0mj3Mkc4Fsg8hExYuOur4M
+M0AufDKUhroksKKiCmjsFj1x55VcU45Ag8069lzBk7ntcGQpHUUkwZzvD4FXf8IR
+pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
+tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
+-----END CERTIFICATE-----";
 
     // Define the locator
     let mut endpoint: EndPoint = ("quic/localhost:10452").parse().unwrap();
     endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+            (TLS_SERVER_CERTIFICATE_RAW, cert),
+            (TLS_SERVER_PRIVATE_KEY_RAW, key),
         ]
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
@@ -735,12 +882,12 @@ fn transport_unicast_quic_only() {
 // in the expected error messages from the tests below.
 //
 // See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     use zenoh_link::tls::config::*;
@@ -806,7 +953,7 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     assert!(result.is_ok())
 }
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     use zenoh_link::tls::config::*;
@@ -871,7 +1018,7 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
         .contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
 }
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
     use zenoh_link::tls::config::*;
@@ -946,11 +1093,10 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
 }
 
 //*************************************/
-//*          Certificates             */
+//*     2 way auth Certificates       */
 //*************************************/
 //
-// These keys and certificates below are purposedly generated to run both one and two way
-// authentication tests.
+// These keys and certificates below are purposedly generated to run two way authentication tests.
 //
 // With 2 way authentication, using TLS 1.3, we need two pairs of keys and certificates: one for
 // the "server" and another one for the "client".
@@ -978,7 +1124,7 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
 // certificate brought in by the server. Similarly the server's certificate authority will validate
 // the key and certificate brought in by the client.
 //
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEArNthaKa7u/T7X5LTykqctYnmFmZcx9zUL1R7qXC/uWJWlKk6
 3xvQbUs2IDeIxL3yC6djJulbrqw+XvuclCM4nMFmUB8hcidesoTRb2agapompNOH
@@ -1007,7 +1153,7 @@ Fz66VkcYPMu05ggFIzrsJqPK6LUCb+h8sYnN4464+cJXhIrPvRJ3Pu30NoVBB0yz
 AbQCDGFMp3XCC+FLajMdQQhuXfUfSGjbidhQI87hmMF+gZ+WkNc8+A==
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIdTp0cmbVlKswDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgN2M1NWNjMB4XDTIyMTEwOTE1MzkwNVoXDTI0MTIw
@@ -1028,7 +1174,7 @@ FnK0IPRdnOl5v3j/62DDBllnJER5aahQcbNx9WszP2ZZb/SNzzQghVJ8yWBrbAJn
 SRCU86jw504Zx5q/SbuXJsPXJbiFF7eclvKEumdF3XmJeMRGPg2ysQ/nfco0nBz8
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIC3MWFI+HOvowDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMGI3MzE2MCAXDTIyMTAyNDEzMDIwNloYDzIxMjIx
@@ -1050,7 +1196,7 @@ yzLeR60HKUulCVzt0UuGH86eN3ym4XeBDurC98sd/COM/3g30LRzRQfm1NagZ46T
 5GkQ3waq7e0CNrbxXnQHgnMrIhD8Te4gSDXswoLgaw==
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0eRJBZe8MzIPBrSZ+2/yLfqFON/QdeJPTu1Oug22fVOlAgG5
 c06qCyurwqB5fWyt61m6ZKUJuWI3qZy8y8cnRFv3WKILq6jWBYxN1z3lHiLM199R
@@ -1079,7 +1225,7 @@ sXX6rPkNHWyymzWhvjxI/eP8d9FzbcvaEfx9dQRYBbcduxGeVq/+pVtgW5OY4L4C
 fNEjJmiv2pXIRoMpfAI5Yg6tdeO3G2glLsv3+1Op+OnuNOicVuo+jg==
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_CERT: &str = "-----BEGIN CERTIFICATE-----
 MIIDLDCCAhSgAwIBAgIIbMxjSdRKLkkwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgMGI3MzE2MB4XDTIyMTAyNDEzMDIwNloXDTI0MTEy
@@ -1100,7 +1246,7 @@ iPOFtCHc3026/D2xBYwApHMK0d3ATO0yk9z+T09e657g5fGVeaNCwuTuwlRXJZGW
 U+sf37D2NmcSgVuhx0k4BP8eAyBbD/fDDqrmEFXC4yvhxxTi8DNJswCa54nUzlUg
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls"))]
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const SERVER_CA: &str = "-----BEGIN CERTIFICATE-----
 MIIDSzCCAjOgAwIBAgIIfFXM74pJVUcwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
 AxMVbWluaWNhIHJvb3QgY2EgN2M1NWNjMCAXDTIyMTEwOTE1MzkwNVoYDzIxMjIx
