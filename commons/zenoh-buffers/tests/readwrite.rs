@@ -16,7 +16,7 @@ use zenoh_buffers::reader::*;
 use zenoh_buffers::writer::*;
 use zenoh_buffers::*;
 
-const BYTES: usize = 22;
+const BYTES: usize = 18;
 
 const WBS0: u8 = 0;
 const WBS1: u8 = 1;
@@ -24,7 +24,6 @@ const WBS2: [u8; 4] = [2, 3, 4, 5];
 const WBS3: [u8; 4] = [6, 7, 8, 9];
 const WBS4: [u8; 4] = [10, 11, 12, 13];
 const WBS5: [u8; 4] = [14, 15, 16, 17];
-const WBS6: [u8; 4] = [18, 19, 20, 21];
 const WBSN: [u8; 4] = [u8::MAX, u8::MAX, u8::MAX, u8::MAX];
 
 macro_rules! run_write {
@@ -70,7 +69,7 @@ macro_rules! run_read {
 
         let mut rbs: [u8; 4] = [0, 0, 0, 0];
         let r = reader.read(&mut rbs).unwrap();
-        assert_eq!(4, r);
+        assert_eq!(4, r.get());
         assert_eq!(BYTES - 6, reader.remaining());
         assert_eq!(WBS2, rbs);
 
@@ -86,14 +85,7 @@ macro_rules! run_read {
         assert_eq!(BYTES - 18, reader.remaining());
         assert_eq!(WBS5, rbs);
 
-        reader.read_exact(&mut rbs).unwrap();
-        assert_eq!(BYTES - 22, reader.remaining());
-        assert_eq!(WBS6, rbs);
-
-        match reader.read(&mut rbs) {
-            Ok(bs) => assert_eq!(0, bs),
-            Err(_) => {}
-        }
+        assert!(reader.read(&mut rbs).is_err());
         assert!(reader.read_u8().is_err());
         assert!(reader.read_exact(&mut rbs).is_err());
     };

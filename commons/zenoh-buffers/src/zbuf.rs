@@ -170,7 +170,7 @@ impl<'a> HasReader for &'a ZBuf {
 }
 
 impl<'a> Reader for ZBufReader<'a> {
-    fn read(&mut self, mut into: &mut [u8]) -> Result<usize, DidntRead> {
+    fn read(&mut self, mut into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let mut read = 0;
         while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
             // Subslice from the current read slice
@@ -195,12 +195,12 @@ impl<'a> Reader for ZBufReader<'a> {
                 break;
             }
         }
-        Ok(read)
+        NonZeroUsize::new(read).ok_or(DidntRead)
     }
 
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
         let len = self.read(into)?;
-        if len == into.len() {
+        if len.get() == into.len() {
             Ok(())
         } else {
             Err(DidntRead)

@@ -82,7 +82,7 @@ pub mod reader {
     pub struct DidntRead;
 
     pub trait Reader {
-        fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead>;
+        fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
 
@@ -99,7 +99,7 @@ pub mod reader {
         fn read_u8(&mut self) -> Result<u8, DidntRead> {
             let mut byte = 0;
             let read = self.read(std::slice::from_mut(&mut byte))?;
-            if read == 1 {
+            if read.get() == 1 {
                 Ok(byte)
             } else {
                 Err(DidntRead)

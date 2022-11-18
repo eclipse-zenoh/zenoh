@@ -16,6 +16,7 @@ use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
 use std::convert::AsRef;
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::ops::{
     Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
 };
@@ -467,10 +468,10 @@ impl HasReader for &mut ZSlice {
 }
 
 impl Reader for &mut ZSlice {
-    fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
+    fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let mut reader = self.as_slice().reader();
         let len = reader.read(into)?;
-        self.start += len;
+        self.start += len.get();
         Ok(len)
     }
 

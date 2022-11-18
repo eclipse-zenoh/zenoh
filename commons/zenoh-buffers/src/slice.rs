@@ -114,11 +114,11 @@ impl<'a> HasReader for &'a [u8] {
 }
 
 impl Reader for &[u8] {
-    fn read(&mut self, into: &mut [u8]) -> Result<usize, DidntRead> {
+    fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let len = self.len().min(into.len());
         into[..len].copy_from_slice(&self[..len]);
         *self = &self[len..];
-        Ok(len)
+        NonZeroUsize::new(len).ok_or(DidntRead)
     }
 
     fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
