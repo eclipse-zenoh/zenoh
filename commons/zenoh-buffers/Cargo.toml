@@ -34,14 +34,11 @@ description = "Internal crate for zenoh."
 shared-memory = ["shared_memory", "serde", "log", "bincode"]
 
 [dependencies]
-async-std = { version = "=1.12.0", default-features = false }
 bincode = { version = "1.3.3", optional = true }
-hex = "0.4.3"
 log = { version = "0.4.17", optional = true }
 rand = "0.8.5"
 serde = { version = "1.0.145", optional = true }
 shared_memory = { version = "=0.12.4", optional = true }
-typenum = "1.15"
 zenoh-collections = { version = "0.6.0-beta.1", path = "../zenoh-collections/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
 zenoh-sync = { version = "0.6.0-beta.1", path = "../zenoh-sync/" }

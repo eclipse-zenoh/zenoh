@@ -25,6 +25,7 @@ pub(crate) struct DefragBuffer {
     reliability: Reliability,
     pub(crate) sn: SeqNum,
     capacity: usize,
+    len: usize,
     buffer: ZBuf,
 }
 
@@ -38,6 +39,7 @@ impl DefragBuffer {
             reliability,
             sn: SeqNum::make(0, sn_resolution)?,
             capacity,
+            len: 0,
             buffer: ZBuf::default(),
         };
         Ok(db)
@@ -50,7 +52,8 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn clear(&mut self) {
-        self.buffer.clear()
+        self.len = 0;
+        self.buffer.clear();
     }
 
     #[inline(always)]
@@ -64,12 +67,12 @@ impl DefragBuffer {
             bail!("Expected SN {}, received {}", self.sn.get(), sn)
         }
 
-        let new_len = zslice.len() + self.buffer.len();
-        if new_len > self.capacity {
+        self.len += zslice.len();
+        if self.len > self.capacity {
             self.clear();
             bail!(
                 "Defragmentation buffer full: {} bytes. Capacity: {}.",
-                new_len,
+                self.len,
                 self.capacity
             )
         }

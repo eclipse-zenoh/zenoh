@@ -28,8 +28,7 @@ use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_collections::ArcSlicePool;
-use zenoh_core::{bail, zerror, Result as ZResult};
+use zenoh_core::{bail, zerror, zuninitbuff, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
@@ -237,7 +236,7 @@ async fn rx_task_stream(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    rx_buffer_size: usize,
+    _rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -262,18 +261,11 @@ async fn rx_task_stream(
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let mut n = rx_buffer_size / mtu;
-    if rx_buffer_size % mtu != 0 {
-        n += 1;
-    }
-    let pool = ArcSlicePool::new(n, mtu);
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.take().unwrap_or_else(|| pool.alloc(mtu));
-        // Safety: this operation is safe because we just retrieved or constructed the buffer
-        let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
+        let mut buffer = zuninitbuff!(mtu);
         // Async read from the underlying link
-        let action = read(&link, slice)
+        let action = read(&link, buffer.as_mut_slice())
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
@@ -308,7 +300,7 @@ async fn rx_task_dgram(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    rx_buffer_size: usize,
+    _rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -329,19 +321,11 @@ async fn rx_task_dgram(
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let mut n = rx_buffer_size / mtu;
-    if rx_buffer_size % mtu != 0 {
-        n += 1;
-    }
-    let pool = ArcSlicePool::new(n, mtu);
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.take().unwrap_or_else(|| pool.alloc(mtu));
-        // Safety: this operation is safe because we just retrieved or constructed the buffer
-        let slice = unsafe { zenoh_sync::as_mut_slice(&mut buffer) };
-
+        let mut buffer = zuninitbuff!(mtu);
         // Async read from the underlying link
-        let action = read(&link, slice)
+        let action = read(&link, buffer.as_mut_slice())
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
