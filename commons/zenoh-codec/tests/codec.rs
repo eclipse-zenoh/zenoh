@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use rand::*;
+use rand::{
+    distributions::{Alphanumeric, DistString},
+    *,
+};
 use std::convert::TryFrom;
 use std::sync::Arc;
 use zenoh_buffers::{
@@ -116,6 +119,15 @@ macro_rules! run {
 #[test]
 fn codec_zint() {
     run!(ZInt, thread_rng().gen::<ZInt>());
+}
+
+#[test]
+fn codec_string() {
+    let mut rng = thread_rng();
+    run!(String, {
+        let len = rng.gen_range(0..16);
+        Alphanumeric.sample_string(&mut rng, len)
+    });
 }
 
 #[test]

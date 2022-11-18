@@ -89,7 +89,9 @@ where
     fn read(self, reader: &mut R) -> Result<Vec<u8>, Self::Error> {
         let len: usize = self.read(&mut *reader)?;
         let mut buff = zuninitbuff!(len);
-        reader.read_exact(&mut buff[..])?;
+        if len != 0 {
+            reader.read_exact(&mut buff[..])?;
+        }
         Ok(buff)
     }
 }
@@ -103,6 +105,17 @@ where
 
     fn write(self, writer: &mut W, x: &str) -> Self::Output {
         self.write(&mut *writer, x.as_bytes())
+    }
+}
+
+impl<W> WCodec<&String, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &String) -> Self::Output {
+        self.write(&mut *writer, x.as_str())
     }
 }
 
