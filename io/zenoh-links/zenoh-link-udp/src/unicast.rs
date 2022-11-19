@@ -22,9 +22,8 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
-use zenoh_collections::{RecyclingObject, RecyclingObjectPool};
-use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zasynclock, zerror, zlock, zread, zwrite};
+use zenoh_core::{zuninitbuff, Result as ZResult};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
@@ -38,8 +37,8 @@ use super::{
 };
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
-type LinkInput = (RecyclingObject<Box<[u8]>>, usize);
-type LinkLeftOver = (RecyclingObject<Box<[u8]>>, usize, usize);
+type LinkInput = (Vec<u8>, usize);
+type LinkLeftOver = (Vec<u8>, usize, usize);
 
 struct LinkUnicastUdpConnected {
     socket: Arc<UdpSocket>,
@@ -73,7 +72,7 @@ struct LinkUnicastUdpUnconnected {
 }
 
 impl LinkUnicastUdpUnconnected {
-    async fn received(&self, buffer: RecyclingObject<Box<[u8]>>, len: usize) {
+    async fn received(&self, buffer: Vec<u8>, len: usize) {
         self.input.put((buffer, len)).await;
     }
 
@@ -507,9 +506,8 @@ async fn accept_read_task(
 
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
     // Buffers for deserialization
-    let pool = RecyclingObjectPool::new(1, || vec![0_u8; UDP_MAX_MTU as usize].into_boxed_slice());
     while active.load(Ordering::Acquire) {
-        let mut buff = pool.take().await;
+        let mut buff = zuninitbuff!(UDP_MAX_MTU as usize);
         // Wait for incoming connections
         let (n, dst_addr) = match receive(socket.clone(), &mut buff)
             .race(stop(signal.clone()))

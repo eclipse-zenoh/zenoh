@@ -27,8 +27,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+use zenoh_core::{bail, zerror, zlock, zuninitbuff, Result as ZResult};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
@@ -324,7 +323,7 @@ async fn rx_task(
     link: LinkMulticast,
     transport: TransportMulticastInner,
     signal: Signal,
-    rx_buffer_size: usize,
+    _rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read((usize, Locator)),
@@ -346,14 +345,9 @@ async fn rx_task(
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
-    let mut n = rx_buffer_size / mtu;
-    if rx_buffer_size % mtu != 0 {
-        n += 1;
-    }
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+        let mut buffer = zuninitbuff!(mtu);
 
         // Async read from the underlying link
         let action = read(&link, &mut buffer).race(stop(signal.clone())).await?;
