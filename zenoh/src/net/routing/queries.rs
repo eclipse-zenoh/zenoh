@@ -1630,6 +1630,8 @@ pub fn route_query(
 
             let route = compute_final_route(&tables, &route, face, &target);
 
+            drop(tables);
+
             if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
                 face.primitives.clone().send_reply_final(qid)
