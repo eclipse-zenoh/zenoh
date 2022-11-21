@@ -28,7 +28,8 @@ use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_core::{bail, zerror, zuninitbuff, Result as ZResult};
+use zenoh_collections::RecyclingObjectPool;
+use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_sync::Signal;
@@ -236,7 +237,7 @@ async fn rx_task_stream(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    _rx_buffer_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -261,11 +262,16 @@ async fn rx_task_stream(
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
+    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = zuninitbuff!(mtu);
+        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(&link, buffer.as_mut_slice())
+        let action = read(&link, &mut buffer)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
@@ -300,7 +306,7 @@ async fn rx_task_dgram(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
-    _rx_buffer_size: usize,
+    rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
         Read(usize),
@@ -321,11 +327,16 @@ async fn rx_task_dgram(
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
+    let mut n = rx_buffer_size / mtu;
+    if rx_buffer_size % mtu != 0 {
+        n += 1;
+    }
+    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = zuninitbuff!(mtu);
+        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(&link, buffer.as_mut_slice())
+        let action = read(&link, &mut buffer)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await

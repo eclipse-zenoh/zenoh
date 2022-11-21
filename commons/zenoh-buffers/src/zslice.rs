@@ -23,6 +23,7 @@ use std::ops::{
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
+use zenoh_collections::RecyclingObject;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::{zread, zwrite, Result as ZResult};
 
@@ -31,6 +32,7 @@ use zenoh_core::{zread, zwrite, Result as ZResult};
 /*************************************/
 #[derive(Clone, Debug)]
 pub enum ZSliceBuffer {
+    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
     #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
@@ -41,6 +43,7 @@ pub enum ZSliceBuffer {
 impl ZSliceBuffer {
     fn as_slice(&self) -> &[u8] {
         match self {
+            Self::NetSharedBuffer(buf) => buf,
             Self::NetOwnedBuffer(buf) => buf.as_slice(),
             #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => buf.as_slice(),
@@ -53,6 +56,9 @@ impl ZSliceBuffer {
     #[allow(clippy::mut_from_ref)]
     unsafe fn as_mut_slice(&self) -> &mut [u8] {
         match self {
+            Self::NetSharedBuffer(buf) => {
+                &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
+            }
             Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
             #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf)).as_mut_slice(),
@@ -129,6 +135,18 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
 
     fn index(&self, range: RangeToInclusive<usize>) -> &Self::Output {
         &(self.deref())[range]
+    }
+}
+
+impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
+    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
+        Self::NetSharedBuffer(buf)
+    }
+}
+
+impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
+    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
+        Self::NetSharedBuffer(buf.into())
     }
 }
 
@@ -229,7 +247,7 @@ impl ZSlice {
     #[inline]
     pub fn get_kind(&self) -> ZSliceKind {
         match &self.buf {
-            ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
+            ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
             #[cfg(feature = "shared-memory")]
             ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
         }
@@ -397,6 +415,28 @@ impl From<ZSliceBuffer> for ZSlice {
     fn from(buf: ZSliceBuffer) -> Self {
         let end = buf.len();
         Self { buf, start: 0, end }
+    }
+}
+
+impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
+    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
+    }
+}
+
+impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
+    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
     }
 }
 
