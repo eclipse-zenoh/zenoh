@@ -174,14 +174,6 @@ impl LinkUnicast {
             buff[..num].copy_from_slice(len.to_le_bytes().as_slice());
         }
 
-        // writer.with_reservation::<typenum::U2, _>(|reservation, writer| {
-        //     // Serialize the message
-        //     codec.write(&mut *writer, msg)?;
-        //     let len = writer.len() as u16 - 2;
-        //     let reservation = reservation.write::<typenum::U2>(len.to_le_bytes().as_slice());
-        //     Ok(reservation)
-        // })
-
         // Send the message on the link
         self.0.write_all(buff.as_slice()).await?;
 
