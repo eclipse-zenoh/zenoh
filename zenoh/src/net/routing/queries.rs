@@ -1629,12 +1629,11 @@ pub fn route_query(
                     }),
             };
 
-            let route = compute_final_route(&tables, &route, face, &target);
-
-            drop(tables);
+            let mut route = compute_final_route(&tables, &route, face, &target);
 
             if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
+                drop(tables);
                 face.primitives.clone().send_reply_final(qid)
             } else {
                 let query = Arc::new(Query {
@@ -1644,61 +1643,66 @@ pub fn route_query(
 
                 // let timer = tables.timer.clone();
                 // let timeout = tables.queries_default_timeout;
-                // drop(tables);
                 #[cfg(feature = "complete_n")]
-                for ((outface, key_expr, context), t) in route.values() {
-                    let mut outface = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface);
-                    outface_mut.next_qid += 1;
-                    let qid = outface_mut.next_qid;
-                    outface_mut.pending_queries.insert(qid, query.clone());
-                    // timer.add(TimedEvent::once(
-                    //     Instant::now() + timout,
-                    //     QueryCleanup {
-                    //         tables: tables_ref.clone(),
-                    //         face: Arc::downgrade(&outface),
-                    //         qid,
-                    //     },
-                    // ));
+                {
+                    for ((outface, _, _), _) in route.values_mut() {
+                        let outface_mut = get_mut_unchecked(outface);
+                        outface_mut.next_qid += 1;
+                        let qid = outface_mut.next_qid;
+                        outface_mut.pending_queries.insert(qid, query.clone());
+                        // timer.add(TimedEvent::once(
+                        //     Instant::now() + timout,
+                        //     QueryCleanup {
+                        //         tables: tables_ref.clone(),
+                        //         face: Arc::downgrade(&outface),
+                        //         qid,
+                        //     },
+                        // ));
+                    }
+                    drop(tables);
 
-                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
-
-                    outface.primitives.send_query(
-                        key_expr,
-                        parameters,
-                        qid,
-                        *t,
-                        consolidation,
-                        *context,
-                    );
+                    for ((outface, key_expr, context), t) in route.values() {
+                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+                        outface.primitives.send_query(
+                            key_expr,
+                            parameters,
+                            qid,
+                            *t,
+                            consolidation,
+                            *context,
+                        );
+                    }
                 }
 
                 #[cfg(not(feature = "complete_n"))]
-                for (outface, key_expr, context) in route.values() {
-                    let mut outface = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface);
-                    outface_mut.next_qid += 1;
-                    let qid = outface_mut.next_qid;
-                    outface_mut.pending_queries.insert(qid, query.clone());
-                    // timer.add(TimedEvent::once(
-                    //     Instant::now() + timeout,
-                    //     QueryCleanup {
-                    //         tables: tables_ref,
-                    //         face: Arc::downgrade(&outface),
-                    //         qid,
-                    //     },
-                    // ));
+                {
+                    for (outface, _, _) in route.values_mut() {
+                        let outface_mut = get_mut_unchecked(outface);
+                        outface_mut.next_qid += 1;
+                        let qid = outface_mut.next_qid;
+                        outface_mut.pending_queries.insert(qid, query.clone());
+                        // timer.add(TimedEvent::once(
+                        //     Instant::now() + timeout,
+                        //     QueryCleanup {
+                        //         tables: tables_ref,
+                        //         face: Arc::downgrade(&outface),
+                        //         qid,
+                        //     },
+                        // ));
+                    }
+                    drop(tables);
 
-                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
-
-                    outface.primitives.send_query(
-                        key_expr,
-                        parameters,
-                        qid,
-                        target,
-                        consolidation,
-                        *context,
-                    );
+                    for (outface, key_expr, context) in route.values() {
+                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+                        outface.primitives.send_query(
+                            key_expr,
+                            parameters,
+                            qid,
+                            target,
+                            consolidation,
+                            *context,
+                        );
+                    }
                 }
             }
         }
@@ -1707,6 +1711,7 @@ pub fn route_query(
                 "Route query with unknown scope {}! Send final reply.",
                 expr.scope
             );
+            drop(tables);
             face.primitives.clone().send_reply_final(qid)
         }
     }
