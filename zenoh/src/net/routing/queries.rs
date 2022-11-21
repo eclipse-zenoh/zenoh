@@ -17,7 +17,7 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
+use std::sync::{Arc, RwLockWriteGuard};
 use std::sync::{RwLock, Weak};
 use zenoh_collections::Timed;
 use zenoh_sync::get_mut_unchecked;
@@ -1464,7 +1464,7 @@ struct QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
-            let mut _tables = zwrite!(self.tables);
+            let tables_lock = zwrite!(self.tables);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
@@ -1475,7 +1475,7 @@ impl Timed for QueryCleanup {
                     self.qid,
                     face
                 );
-                finalize_pending_query(&mut _tables, &query);
+                finalize_pending_query(Some(tables_lock), query);
             }
         }
     }
@@ -1713,7 +1713,7 @@ pub fn route_query(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_reply_data(
-    _tables: &mut Tables,
+    tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
     qid: ZInt,
     replier_id: ZenohId,
@@ -1721,8 +1721,10 @@ pub(crate) fn route_send_reply_data(
     info: Option<DataInfo>,
     payload: ZBuf,
 ) {
+    let tables_lock = zread!(tables_ref);
     match face.pending_queries.get(&qid) {
         Some(query) => {
+            drop(tables_lock);
             query.src_face.primitives.clone().send_reply_data(
                 query.src_qid,
                 replier_id,
@@ -1740,7 +1742,12 @@ pub(crate) fn route_send_reply_data(
     }
 }
 
-pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
+pub(crate) fn route_send_reply_final(
+    tables_ref: &RwLock<Tables>,
+    face: &mut Arc<FaceState>,
+    qid: ZInt,
+) {
+    let tables_lock = zwrite!(tables_ref);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             log::debug!(
@@ -1749,7 +1756,7 @@ pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceSt
                 qid,
                 face
             );
-            finalize_pending_query(_tables, &query);
+            finalize_pending_query(Some(tables_lock), query);
         }
         None => log::warn!(
             "Route final reply {}:{} from {}: Query nof found!",
@@ -1761,20 +1768,19 @@ pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceSt
 }
 
 pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
-    for query in face.pending_queries.values() {
-        log::debug!(
-            "Finalize reply {}:{} for closing {}",
-            query.src_face,
-            query.src_qid,
-            face
-        );
-        finalize_pending_query(_tables, query);
+    for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
+        finalize_pending_query(None, query);
     }
-    get_mut_unchecked(face).pending_queries.clear();
 }
 
-pub(crate) fn finalize_pending_query(_tables: &mut Tables, query: &Arc<Query>) {
-    if Arc::strong_count(query) == 1 {
+pub(crate) fn finalize_pending_query(
+    tables_lock: Option<RwLockWriteGuard<Tables>>,
+    query: Arc<Query>,
+) {
+    if let Ok(query) = Arc::try_unwrap(query) {
+        if let Some(tables_lock) = tables_lock {
+            drop(tables_lock);
+        }
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face
