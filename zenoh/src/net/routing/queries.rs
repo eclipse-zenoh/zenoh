@@ -17,7 +17,7 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::{Arc, RwLockWriteGuard};
+use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 use zenoh_collections::Timed;
 use zenoh_sync::get_mut_unchecked;
@@ -1469,13 +1469,14 @@ impl Timed for QueryCleanup {
                 .pending_queries
                 .remove(&self.qid)
             {
+                drop(tables_lock);
                 log::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
                     query.src_face,
                     self.qid,
                     face
                 );
-                finalize_pending_query(Some(tables_lock), query);
+                finalize_pending_query(query);
             }
         }
     }
@@ -1750,13 +1751,14 @@ pub(crate) fn route_send_reply_final(
     let tables_lock = zwrite!(tables_ref);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
+            drop(tables_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
                 qid,
                 face
             );
-            finalize_pending_query(Some(tables_lock), query);
+            finalize_pending_query(query);
         }
         None => log::warn!(
             "Route final reply {}:{} from {}: Query nof found!",
@@ -1769,18 +1771,12 @@ pub(crate) fn route_send_reply_final(
 
 pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
     for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
-        finalize_pending_query(None, query);
+        finalize_pending_query(query);
     }
 }
 
-pub(crate) fn finalize_pending_query(
-    tables_lock: Option<RwLockWriteGuard<Tables>>,
-    query: Arc<Query>,
-) {
+pub(crate) fn finalize_pending_query(query: Arc<Query>) {
     if let Ok(query) = Arc::try_unwrap(query) {
-        if let Some(tables_lock) = tables_lock {
-            drop(tables_lock);
-        }
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face
