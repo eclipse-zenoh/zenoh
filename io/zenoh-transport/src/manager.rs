@@ -409,7 +409,7 @@ impl TransportManager {
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.add_listener_unicast(endpoint).await
         }
@@ -422,7 +422,7 @@ impl TransportManager {
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.del_listener_unicast(endpoint).await
         }
@@ -458,7 +458,7 @@ impl TransportManager {
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.open_transport_unicast(endpoint).await
         }

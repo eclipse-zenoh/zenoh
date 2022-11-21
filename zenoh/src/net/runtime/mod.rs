@@ -271,8 +271,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         _transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        // @TODO
-        unimplemented!();
+        bail!("Unimplemented")
     }
 }
 
