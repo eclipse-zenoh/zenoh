@@ -316,6 +316,7 @@ async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn conduits_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -335,6 +336,7 @@ fn conduits_tcp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn conduits_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

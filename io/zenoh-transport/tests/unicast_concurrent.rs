@@ -364,6 +364,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_concurrent() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -397,6 +398,7 @@ fn transport_tcp_concurrent() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_concurrent() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

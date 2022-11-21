@@ -28,9 +28,9 @@ use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]
 use zenoh_transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
 #[cfg(feature = "auth_usrpwd")]
+use zenoh_transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
 use zenoh_transport::{
-    unicast::establishment::authenticator::UserPasswordAuthenticator,
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
@@ -696,6 +696,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 #[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
     use std::convert::TryFrom;
+    use zenoh_transport::TransportManager;
 
     /* [CLIENT] */
     let client_id = ZenohId::try_from([2]).unwrap();
@@ -786,6 +787,7 @@ async fn run(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -797,6 +799,7 @@ fn authenticator_tcp() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -808,6 +811,7 @@ fn authenticator_udp() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn authenticator_ws() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -819,6 +823,7 @@ fn authenticator_ws() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -837,6 +842,7 @@ fn authenticator_unix() {
 fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -938,6 +944,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

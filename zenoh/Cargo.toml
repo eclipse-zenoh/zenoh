@@ -40,6 +40,7 @@ auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 complete_n = ["zenoh-protocol/complete_n", "zenoh-protocol/complete_n"]
 shared-memory = [
     "zenoh-buffers/shared-memory",
+    "zenoh-codec/shared-memory",
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
 ]
@@ -53,12 +54,16 @@ transport_serial = ["zenoh-transport/transport_serial"]
 transport_ws = ["zenoh-transport/transport_ws"]
 unstable = []
 default = [
+    "shared-memory",
+    "transport_quic",
     "transport_tcp",
+    "transport_tls",
     "transport_udp",
+    "transport_unixsock-stream",
+    "transport_ws",
 ]
 
 [dependencies]
-
 async-global-executor = "2.3.0"
 async-std = { version = "=1.12.0", default-features = false, features = [
     "attributes",

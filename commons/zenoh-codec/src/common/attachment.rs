@@ -30,26 +30,26 @@ where
 
     fn write(self, writer: &mut W, x: &Attachment) -> Self::Output {
         // Header
-        let header = tmsg::id::ATTACHMENT;
-        // #[cfg(feature = "shared-memory")]
-        // if self.buffer.has_shminfo() {
-        //     header |= tmsg::flag::Z;
-        // }
+        #[allow(unused_mut)] // mut required with #[cfg(feature = "shared-memory")]
+        let mut header = tmsg::id::ATTACHMENT;
+
+        #[cfg(feature = "shared-memory")]
+        if x.buffer.has_shminfo() {
+            header |= tmsg::flag::Z;
+        }
+
         self.write(&mut *writer, header)?;
 
-        // #[cfg(feature = "shared-memory")]
-        // {
-        //     // self.write_zbuf(&attachment.buffer, attachment.buffer.has_shminfo())
-        //     self.write_zbuf(&attachment.buffer, false)
-        // }
-
-        // #[cfg(not(feature = "shared-memory"))]
-        // {
-        //     self.write_zbuf(&attachment.buffer)
-        // }
-
         // Body
-        self.write(&mut *writer, &x.buffer)
+        #[cfg(feature = "shared-memory")]
+        {
+            let codec = Zenoh060Condition::new(imsg::has_flag(header, tmsg::flag::Z));
+            codec.write(&mut *writer, &x.buffer)
+        }
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            self.write(&mut *writer, &x.buffer)
+        }
     }
 }
 
@@ -79,19 +79,18 @@ where
             return Err(DidntRead);
         }
 
-        // #[cfg(feature = "shared-memory")]
-        // {
-        //     let buffer = self.read_zbuf(imsg::has_flag(header, tmsg::flag::Z))?;
-        //     Some(Attachment { buffer })
-        // }
+        let buffer: ZBuf = {
+            #[cfg(feature = "shared-memory")]
+            {
+                let codec = Zenoh060Condition::new(imsg::has_flag(self.header, tmsg::flag::Z));
+                codec.read(&mut *reader)?
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            {
+                self.codec.read(&mut *reader)?
+            }
+        };
 
-        // #[cfg(not(feature = "shared-memory"))]
-        // {
-        //     let buffer = self.read_zbuf()?;
-        //     Some(Attachment { buffer })
-        // }
-
-        let buffer: ZBuf = self.codec.read(&mut *reader)?;
         Ok(Attachment { buffer })
     }
 }

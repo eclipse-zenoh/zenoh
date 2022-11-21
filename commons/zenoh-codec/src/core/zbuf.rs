@@ -17,7 +17,10 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
     SplitBuffer, ZBuf,
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 
+// ZBuf flat
 impl<W> WCodec<&ZBuf, &mut W> for Zenoh060
 where
     W: Writer,
@@ -44,5 +47,104 @@ where
         let mut zbuf = ZBuf::default();
         reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
         Ok(zbuf)
+    }
+}
+
+// ZBuf sliced
+#[cfg(feature = "shared-memory")]
+#[derive(Default)]
+struct Zenoh060Sliced {
+    codec: Zenoh060,
+}
+
+#[cfg(feature = "shared-memory")]
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh060Sliced
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
+        self.codec.write(&mut *writer, x.zslices().count())?;
+
+        for zs in x.zslices() {
+            match &zs.buf {
+                ZSliceBuffer::ShmInfo(_) => self
+                    .codec
+                    .write(&mut *writer, super::zslice::kind::SHM_INFO)?,
+                _ => self.codec.write(&mut *writer, super::zslice::kind::RAW)?,
+            }
+
+            self.codec.write(&mut *writer, zs)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl<R> RCodec<ZBuf, &mut R> for Zenoh060Sliced
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
+        let num: usize = self.codec.read(&mut *reader)?;
+        let mut zbuf = ZBuf::default();
+        for _ in 0..num {
+            let kind: u8 = self.codec.read(&mut *reader)?;
+            match kind {
+                super::zslice::kind::RAW => {
+                    let len: usize = self.codec.read(&mut *reader)?;
+                    reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
+                }
+                super::zslice::kind::SHM_INFO => {
+                    let bytes: Vec<u8> = self.codec.read(&mut *reader)?;
+                    let zslice: ZSlice = ZSliceBuffer::ShmInfo(bytes.into()).into();
+                    zbuf.push_zslice(zslice);
+                }
+                _ => return Err(DidntRead),
+            }
+        }
+        Ok(zbuf)
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh060Condition
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
+        let is_sliced = self.condition;
+
+        if is_sliced {
+            let codec = Zenoh060Sliced::default();
+            codec.write(&mut *writer, x)
+        } else {
+            self.codec.write(&mut *writer, x)
+        }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl<R> RCodec<ZBuf, &mut R> for Zenoh060Condition
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
+        let is_sliced = self.condition;
+
+        if is_sliced {
+            let codec = Zenoh060Sliced::default();
+            codec.read(&mut *reader)
+        } else {
+            self.codec.read(&mut *reader)
+        }
     }
 }

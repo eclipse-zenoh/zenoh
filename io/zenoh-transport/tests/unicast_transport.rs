@@ -342,6 +342,7 @@ async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_unicast_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -377,6 +378,7 @@ fn transport_unicast_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_unicast_udp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -404,6 +406,7 @@ fn transport_unicast_udp_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn transport_unicast_unix_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -433,6 +436,7 @@ fn transport_unicast_unix_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_unicast_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -468,6 +472,7 @@ fn transport_unicast_ws_only() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_unicast_tcp_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -501,6 +506,7 @@ fn transport_unicast_tcp_udp() {
 ))]
 #[test]
 fn transport_unicast_tcp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -538,6 +544,7 @@ fn transport_unicast_tcp_unix() {
 ))]
 #[test]
 fn transport_unicast_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -576,6 +583,7 @@ fn transport_unicast_udp_unix() {
 ))]
 #[test]
 fn transport_unicast_tcp_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -613,6 +621,7 @@ fn transport_unicast_tcp_udp_unix() {
 fn transport_unicast_tls_only() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -735,6 +744,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 fn transport_unicast_quic_only() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

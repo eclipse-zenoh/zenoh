@@ -28,6 +28,10 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+shared-memory = ["zenoh-buffers/shared-memory", "zenoh-protocol/shared-memory"]
+default = ["shared-memory"]
+
 [dependencies]
 rand = "0.8.5"
 uhlc = "0.5.1"

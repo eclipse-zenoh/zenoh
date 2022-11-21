@@ -313,6 +313,7 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[test]
     fn transport_tcp_simultaneous() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
@@ -338,6 +339,7 @@ mod tests {
     #[cfg(feature = "transport_ws")]
     #[test]
     fn transport_ws_simultaneous() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });

@@ -142,6 +142,7 @@ fn endpoint_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn endpoint_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -168,6 +169,7 @@ fn endpoint_unix() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn endpoint_ws() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -184,6 +186,7 @@ fn endpoint_ws() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn endpoint_tcp_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -206,6 +209,7 @@ fn endpoint_tcp_udp() {
 ))]
 #[test]
 fn endpoint_tcp_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -234,6 +238,7 @@ fn endpoint_tcp_udp_unix() {
 ))]
 #[test]
 fn endpoint_tcp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -260,6 +265,7 @@ fn endpoint_tcp_unix() {
 ))]
 #[test]
 fn endpoint_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -284,6 +290,7 @@ fn endpoint_udp_unix() {
 fn endpoint_tls() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -365,6 +372,7 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 fn endpoint_quic() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

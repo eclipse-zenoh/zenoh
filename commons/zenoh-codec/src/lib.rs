@@ -47,6 +47,15 @@ pub struct Zenoh060Condition {
     pub codec: Zenoh060,
 }
 
+impl Zenoh060Condition {
+    pub const fn new(condition: bool) -> Self {
+        Self {
+            condition,
+            codec: Zenoh060,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
 pub struct Zenoh060Reliability {

@@ -14,18 +14,16 @@
 
 //! Value primitives.
 
-use std::borrow::Cow;
-use std::convert::TryFrom;
-#[cfg(feature = "shared-memory")]
-use std::sync::Arc;
-
-use zenoh_cfg_properties::Properties;
-use zenoh_core::zresult::ZError;
-
 #[cfg(feature = "shared-memory")]
 use crate::buffers::SharedMemoryBuf;
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
+use std::borrow::Cow;
+use std::convert::TryFrom;
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
+use zenoh_cfg_properties::Properties;
+use zenoh_core::zresult::ZError;
 
 /// A zenoh Value.
 #[non_exhaustive]
@@ -88,33 +86,30 @@ impl std::fmt::Display for Value {
 #[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
-        unimplemented!();
-        // Value {
-        //     payload: smb.into(),
-        //     encoding: KnownEncoding::AppOctetStream.into(),
-        // }
+        Value {
+            payload: smb.into(),
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
-        unimplemented!();
-        // Value {
-        //     payload: smb.into(),
-        //     encoding: KnownEncoding::AppOctetStream.into(),
-        // }
+        Value {
+            payload: smb.into(),
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
     }
 }
 
 #[cfg(feature = "shared-memory")]
 impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
-        unimplemented!();
-        // Value {
-        //     payload: smb.into(),
-        //     encoding: KnownEncoding::AppOctetStream.into(),
-        // }
+        Value {
+            payload: smb.into(),
+            encoding: KnownEncoding::AppOctetStream.into(),
+        }
     }
 }
 

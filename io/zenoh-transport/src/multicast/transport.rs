@@ -239,20 +239,16 @@ impl TransportMulticastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
-    #[cfg(feature = "shared-memory")]
-    pub(crate) fn schedule(&self, message: ZenohMessage) {
-        // // Multicast transports do not support SHM for the time being
-        // let res = message.map_to_shmbuf(self.manager.shmr.clone());
-        // if let Err(e) = res {
-        //     log::trace!("Failed SHM conversion: {}", e);
-        //     return;
-        // }
-        // unimplemented!();
-        self.schedule_first_fit(message);
-    }
-
-    #[cfg(not(feature = "shared-memory"))]
-    pub(crate) fn schedule(&self, message: ZenohMessage) {
+    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
+        // Multicast transports do not support SHM for the time being
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = message.map_to_shmbuf(self.manager.shmr.clone());
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return;
+            }
+        }
         self.schedule_first_fit(message);
     }
 

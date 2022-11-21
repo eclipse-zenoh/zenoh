@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::SharedMemoryReader;
 use crate::{
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     SplitBuffer, ZSlice, ZSliceBuffer,
 };
+#[cfg(feature = "shared-memory")]
+use crate::{SharedMemoryBuf, SharedMemoryReader};
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use std::{num::NonZeroUsize, sync::Arc};
@@ -45,7 +45,6 @@ impl ZBuf {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(always)]
     pub fn has_shminfo(&self) -> bool {
         self.slices
             .as_ref()
@@ -54,7 +53,6 @@ impl ZBuf {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(never)]
     pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
         let mut res = false;
         for s in self.slices.as_mut().iter_mut() {
@@ -65,7 +63,6 @@ impl ZBuf {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(always)]
     pub fn has_shmbuf(&self) -> bool {
         self.slices
             .as_ref()
@@ -74,7 +71,6 @@ impl ZBuf {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(never)]
     pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;
         for s in self.slices.as_mut().iter_mut() {
@@ -141,6 +137,33 @@ impl From<Vec<u8>> for ZBuf {
         let zs: ZSlice = v.into();
         let mut zbuf = ZBuf::default();
         zbuf.push_zslice(zs);
+        zbuf
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<Arc<SharedMemoryBuf>> for ZBuf {
+    fn from(smb: Arc<SharedMemoryBuf>) -> ZBuf {
+        let mut zbuf = ZBuf::default();
+        zbuf.push_zslice(smb.into());
+        zbuf
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<Box<SharedMemoryBuf>> for ZBuf {
+    fn from(smb: Box<SharedMemoryBuf>) -> ZBuf {
+        let mut zbuf = ZBuf::default();
+        zbuf.push_zslice(smb.into());
+        zbuf
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<SharedMemoryBuf> for ZBuf {
+    fn from(smb: SharedMemoryBuf) -> ZBuf {
+        let mut zbuf = ZBuf::default();
+        zbuf.push_zslice(smb.into());
         zbuf
     }
 }

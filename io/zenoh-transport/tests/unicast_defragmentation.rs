@@ -128,6 +128,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_unicast_defragmentation_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -164,6 +165,7 @@ fn transport_unicast_defragmentation_tcp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_unicast_defragmentation_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

@@ -239,7 +239,6 @@ impl ZSlice {
     /// Mutating the content of the slice without proper syncrhonization is considered
     /// undefined behavior in Rust. To use with extreme caution.
     #[allow(clippy::mut_from_ref)]
-    #[inline]
     pub unsafe fn as_mut_slice(&self) -> &mut [u8] {
         &mut self.buf.as_mut_slice()[self.start..self.end]
     }
@@ -266,7 +265,6 @@ impl ZSlice {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(never)]
     pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmInfo(info) => {
@@ -294,7 +292,6 @@ impl ZSlice {
     }
 
     #[cfg(feature = "shared-memory")]
-    #[inline(never)]
     pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
         match &self.buf {
             ZSliceBuffer::ShmBuffer(shmb) => {

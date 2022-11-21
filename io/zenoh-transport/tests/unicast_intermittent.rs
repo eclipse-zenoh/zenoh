@@ -386,8 +386,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_intermittent() {
-    env_logger::init();
-
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -399,8 +398,7 @@ fn transport_tcp_intermittent() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_intermittent() {
-    env_logger::init();
-
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });

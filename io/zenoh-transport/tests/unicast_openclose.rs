@@ -440,6 +440,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn openclose_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -451,6 +452,7 @@ fn openclose_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn openclose_udp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -462,6 +464,7 @@ fn openclose_udp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn openclose_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -473,6 +476,7 @@ fn openclose_ws_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn openclose_unix_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -491,6 +495,7 @@ fn openclose_unix_only() {
 fn openclose_tls_only() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
