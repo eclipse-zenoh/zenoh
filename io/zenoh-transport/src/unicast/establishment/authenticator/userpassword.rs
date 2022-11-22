@@ -21,15 +21,16 @@ use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::{SplitBuffer, ZBufReader};
+use zenoh_buffers::{
+    reader::{DidntRead, HasReader, Reader},
+    writer::{DidntWrite, HasWriter, Writer},
+};
 use zenoh_cfg_properties::Properties;
+use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
-use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror};
-use zenoh_core::{zcheck, Result as ZResult};
+use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror, Result as ZResult};
 use zenoh_crypto::hmac;
 
-const WBUF_SIZE: usize = 64;
 const USRPWD_VERSION: ZInt = 1;
 
 /// # Attachment decorator
@@ -64,6 +65,30 @@ struct InitSynProperty {
     version: ZInt,
 }
 
+impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &InitSynProperty) -> Self::Output {
+        self.write(&mut *writer, x.version)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<InitSynProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<InitSynProperty, Self::Error> {
+        let version: ZInt = self.read(&mut *reader)?;
+        Ok(InitSynProperty { version })
+    }
+}
+
 /*************************************/
 /*             InitAck               */
 /*************************************/
@@ -75,6 +100,30 @@ struct InitSynProperty {
 /// +---------------+
 struct InitAckProperty {
     nonce: ZInt,
+}
+
+impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &InitAckProperty) -> Self::Output {
+        self.write(&mut *writer, x.nonce)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<InitAckProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<InitAckProperty, Self::Error> {
+        let nonce: ZInt = self.read(&mut *reader)?;
+        Ok(InitAckProperty { nonce })
+    }
 }
 
 /*************************************/
@@ -93,44 +142,31 @@ struct OpenSynProperty {
     hmac: Vec<u8>,
 }
 
-trait WUsrPw {
-    fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool;
-    fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool;
-    fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool;
-}
-// impl WUsrPw for WBuf {
-//     fn write_init_syn_property_usrpwd(&mut self, init_syn_property: &InitSynProperty) -> bool {
-//         self.write_zint(init_syn_property.version)
-//     }
-//     fn write_init_ack_property_usrpwd(&mut self, init_ack_property: &InitAckProperty) -> bool {
-//         self.write_zint(init_ack_property.nonce)
-//     }
-//     fn write_open_syn_property_usrpwd(&mut self, open_syn_property: &OpenSynProperty) -> bool {
-//         zcheck!(self.write_bytes_array(&open_syn_property.user));
-//         self.write_bytes_array(&open_syn_property.hmac)
-//     }
-// }
+impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-trait ZUsrPw {
-    fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty>;
-    fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty>;
-    fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty>;
+    fn write(self, writer: &mut W, x: &OpenSynProperty) -> Self::Output {
+        self.write(&mut *writer, x.user.as_slice())?;
+        self.write(&mut *writer, x.hmac.as_slice())?;
+        Ok(())
+    }
 }
-// impl ZUsrPw for ZBufReader<'_> {
-//     fn read_init_syn_property_usrpwd(&mut self) -> Option<InitSynProperty> {
-//         let version = self.read_zint()?;
-//         Some(InitSynProperty { version })
-//     }
-//     fn read_init_ack_property_usrpwd(&mut self) -> Option<InitAckProperty> {
-//         let nonce = self.read_zint()?;
-//         Some(InitAckProperty { nonce })
-//     }
-//     fn read_open_syn_property_usrpwd(&mut self) -> Option<OpenSynProperty> {
-//         let user = self.read_bytes_array()?;
-//         let hmac = self.read_bytes_array()?;
-//         Some(OpenSynProperty { user, hmac })
-//     }
-// }
+
+impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<OpenSynProperty, Self::Error> {
+        let user: Vec<u8> = self.read(&mut *reader)?;
+        let hmac: Vec<u8> = self.read(&mut *reader)?;
+        Ok(OpenSynProperty { user, hmac })
+    }
+}
 
 /*************************************/
 /*          Authenticator            */
@@ -224,23 +260,26 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn get_init_syn_properties(
         &self,
-        _link: &AuthenticatedPeerLink,
+        link: &AuthenticatedPeerLink,
         _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
-        // // If credentials are not configured, don't initiate the USRPWD authentication
-        // if self.credentials.is_none() {
-        //     return Ok(None);
-        // }
+        // If credentials are not configured, don't initiate the USRPWD authentication
+        if self.credentials.is_none() {
+            return Ok(None);
+        }
 
-        // let init_syn_property = InitSynProperty {
-        //     version: USRPWD_VERSION,
-        // };
-        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        // wbuf.write_init_syn_property_usrpwd(&init_syn_property);
-        // let attachment = wbuf;
+        let init_syn_property = InitSynProperty {
+            version: USRPWD_VERSION,
+        };
+        let mut wbuf = vec![];
+        let codec = Zenoh060::default();
+        let mut writer = wbuf.writer();
+        codec
+            .write(&mut writer, &init_syn_property)
+            .map_err(|_| zerror!("Error in encoding InitSyn for UsrPwd on link: {}", link))?;
+        let attachment = wbuf;
 
-        // Ok(Some(attachment.contiguous().into_owned()))
-        unimplemented!()
+        Ok(Some(attachment))
     }
 
     async fn handle_init_syn(
@@ -249,30 +288,38 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        // let zbuf: ZBuf = match property {
-        //     Some(p) => p.into(),
-        //     None => bail!("Received InitSyn with no attachment on link: {}", link),
-        // };
-        // let init_syn_property = match zbuf.reader().read_init_syn_property_usrpwd() {
-        //     Some(isa) => isa,
-        //     None => bail!("Received InitSyn with invalid attachment on link: {}", link),
-        // };
+        let p = property.ok_or_else(|| {
+            zerror!(
+                "Received InitSyn with no UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
 
-        // if init_syn_property.version > USRPWD_VERSION {
-        //     bail!("Rejected InitSyn with invalid attachment on link: {}", link)
-        // }
+        let codec = Zenoh060::default();
 
-        // // Create the InitAck attachment
-        // let init_ack_property = InitAckProperty {
-        //     nonce: cookie.nonce,
-        // };
-        // // Encode the InitAck property
-        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        // wbuf.write_init_ack_property_usrpwd(&init_ack_property);
-        // let attachment = wbuf;
+        let mut reader = p.reader();
+        let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
+            zerror!(
+                "Received InitSyn with invalid UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
+        if init_syn_property.version > USRPWD_VERSION {
+            bail!("Rejected InitSyn with invalid attachment on link: {}", link)
+        }
 
-        // Ok((Some(attachment.contiguous().into_owned()), None))
-        unimplemented!()
+        // Create the InitAck attachment
+        let init_ack_property = InitAckProperty {
+            nonce: cookie.nonce,
+        };
+        let mut wbuf = vec![];
+        let mut writer = wbuf.writer();
+        codec
+            .write(&mut writer, &init_ack_property)
+            .map_err(|_| zerror!("Error in encoding InitAck for UsrPwd on link: {}", link))?;
+        let attachment = wbuf;
+
+        Ok((Some(attachment), None))
     }
 
     async fn handle_init_ack(
@@ -282,36 +329,46 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
-        // // If credentials are not configured, don't continue the USRPWD authentication
-        // let credentials = match self.credentials.as_ref() {
-        //     Some(cr) => cr,
-        //     None => return Ok(None),
-        // };
+        // If credentials are not configured, don't continue the USRPWD authentication
+        let credentials = match self.credentials.as_ref() {
+            Some(cr) => cr,
+            None => return Ok(None),
+        };
 
-        // let zbuf: ZBuf = match property {
-        //     Some(p) => p.into(),
-        //     None => bail!("Received InitAck with no attachment on link: {}", link),
-        // };
-        // let init_ack_property = match zbuf.reader().read_init_ack_property_usrpwd() {
-        //     Some(isa) => isa,
-        //     None => bail!("Received InitAck with invalid attachment on link: {}", link),
-        // };
+        let p = property.ok_or_else(|| {
+            zerror!(
+                "Received InitAck with no UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
 
-        // // Create the HMAC of the password using the nonce received as a key (it's a challenge)
-        // let key = init_ack_property.nonce.to_le_bytes();
-        // let hmac = hmac::sign(&key, &credentials.password)?;
-        // // Create the OpenSyn attachment
-        // let open_syn_property = OpenSynProperty {
-        //     user: credentials.user.clone(),
-        //     hmac,
-        // };
-        // // Encode the InitAck attachment
-        // let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        // wbuf.write_open_syn_property_usrpwd(&open_syn_property);
-        // let attachment = wbuf;
+        let codec = Zenoh060::default();
 
-        // Ok(Some(attachment.contiguous().into_owned()))
-        unimplemented!()
+        let mut reader = p.reader();
+        let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
+            zerror!(
+                "Received InitAck with invalid UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
+
+        // Create the HMAC of the password using the nonce received as a key (it's a challenge)
+        let key = init_ack_property.nonce.to_le_bytes();
+        let hmac = hmac::sign(&key, &credentials.password)?;
+        // Create the OpenSyn attachment
+        let open_syn_property = OpenSynProperty {
+            user: credentials.user.clone(),
+            hmac,
+        };
+        // Encode the InitAck attachment
+        let mut wbuf = vec![];
+        let mut writer = wbuf.writer();
+        codec
+            .write(&mut writer, &open_syn_property)
+            .map_err(|_| zerror!("Error in encoding OpenSyn for UsrPwd on link: {}", link))?;
+        let attachment = wbuf;
+
+        Ok(Some(attachment))
     }
 
     async fn handle_open_syn(
@@ -320,52 +377,59 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
         cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
-        // let (attachment, _cookie) = property;
-        // let zbuf: ZBuf = match attachment {
-        //     Some(p) => p.into(),
-        //     None => bail!("Received OpenSyn with no attachment on link: {}", link),
-        // };
-        // let open_syn_property = match zbuf.reader().read_open_syn_property_usrpwd() {
-        //     Some(osp) => osp,
-        //     None => bail!("Received InitAck with invalid attachment on link: {}", link),
-        // };
-        // let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
-        //     Some(password) => password.clone(),
-        //     None => bail!("Received OpenSyn with invalid user on link: {}", link),
-        // };
+        let (attachment, _cookie) = property;
+        let a = attachment.ok_or_else(|| {
+            zerror!(
+                "Received OpenSyn with no UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
 
-        // // Create the HMAC of the password using the nonce received as challenge
-        // let key = cookie.nonce.to_le_bytes();
-        // let hmac = hmac::sign(&key, &password)?;
-        // if hmac != open_syn_property.hmac {
-        //     bail!("Received OpenSyn with invalid password on link: {}", link)
-        // }
+        let codec = Zenoh060::default();
 
-        // // Check PID validity
-        // let mut guard = zasynclock!(self.authenticated);
-        // match guard.get_mut(&cookie.zid) {
-        //     Some(auth) => {
-        //         if open_syn_property.user != auth.credentials.user
-        //             || password != auth.credentials.password
-        //         {
-        //             bail!("Received OpenSyn with invalid password on link: {}", link)
-        //         }
-        //         auth.links.insert((link.src.clone(), link.dst.clone()));
-        //     }
-        //     None => {
-        //         let credentials = Credentials {
-        //             user: open_syn_property.user,
-        //             password,
-        //         };
-        //         let mut links = HashSet::new();
-        //         links.insert((link.src.clone(), link.dst.clone()));
-        //         let auth = Authenticated { credentials, links };
-        //         guard.insert(cookie.zid, auth);
-        //     }
-        // }
+        let mut reader = a.reader();
+        let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {
+            zerror!(
+                "Received OpenSyn with invalid UsrPwd attachment on link: {}",
+                link
+            )
+        })?;
+        let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
+            Some(password) => password.clone(),
+            None => bail!("Received OpenSyn with invalid user on link: {}", link),
+        };
 
-        // Ok(None)
-        unimplemented!()
+        // Create the HMAC of the password using the nonce received as challenge
+        let key = cookie.nonce.to_le_bytes();
+        let hmac = hmac::sign(&key, &password)?;
+        if hmac != open_syn_property.hmac {
+            bail!("Received OpenSyn with invalid password on link: {}", link)
+        }
+
+        // Check PID validity
+        let mut guard = zasynclock!(self.authenticated);
+        match guard.get_mut(&cookie.zid) {
+            Some(auth) => {
+                if open_syn_property.user != auth.credentials.user
+                    || password != auth.credentials.password
+                {
+                    bail!("Received OpenSyn with invalid password on link: {}", link)
+                }
+                auth.links.insert((link.src.clone(), link.dst.clone()));
+            }
+            None => {
+                let credentials = Credentials {
+                    user: open_syn_property.user,
+                    password,
+                };
+                let mut links = HashSet::new();
+                links.insert((link.src.clone(), link.dst.clone()));
+                let auth = Authenticated { credentials, links };
+                guard.insert(cookie.zid, auth);
+            }
+        }
+
+        Ok(None)
     }
 
     async fn handle_open_ack(

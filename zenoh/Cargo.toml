@@ -55,6 +55,7 @@ transport_ws = ["zenoh-transport/transport_ws"]
 unstable = []
 default = [
     "auth_pubkey",
+    "auth_usrpwd",
     "shared-memory",
     "transport_quic",
     "transport_tcp",

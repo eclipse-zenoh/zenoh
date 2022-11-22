@@ -49,7 +49,6 @@ transport_serial = ["zenoh-link/transport_serial"]
 stats = []
 
 [dependencies]
-
 async-executor = "1.4.1"
 async-global-executor = "2.3.0"
 async-std = { version = "=1.12.0", default-features = false }
