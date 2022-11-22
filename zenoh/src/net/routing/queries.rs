@@ -1292,11 +1292,21 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 }
 
 #[inline]
+fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> ZInt {
+    let outface_mut = get_mut_unchecked(outface);
+    outface_mut.next_qid += 1;
+    let qid = outface_mut.next_qid;
+    outface_mut.pending_queries.insert(qid, query);
+    qid
+}
+
+#[inline]
 fn compute_final_route(
     tables: &Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     target: &QueryTarget,
+    query: Arc<Query>,
 ) -> QueryRoute {
     match target {
         QueryTarget::All => {
@@ -1318,15 +1328,19 @@ fn compute_final_route(
                     {
                         #[cfg(feature = "complete_n")]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| (qabl.direction.clone(), *target));
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
                         }
                         #[cfg(not(feature = "complete_n"))]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| qabl.direction.clone());
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
                         }
                     }
                 }
@@ -1335,15 +1349,19 @@ fn compute_final_route(
                     if qabl.direction.0.id != src_face.id {
                         #[cfg(feature = "complete_n")]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| (qabl.direction.clone(), *target));
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
                         }
                         #[cfg(not(feature = "complete_n"))]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| qabl.direction.clone());
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
                         }
                     }
                 }
@@ -1370,15 +1388,19 @@ fn compute_final_route(
                     {
                         #[cfg(feature = "complete_n")]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| (qabl.direction.clone(), *target));
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
                         }
                         #[cfg(not(feature = "complete_n"))]
                         {
-                            route
-                                .entry(qabl.direction.0.id)
-                                .or_insert_with(|| qabl.direction.clone());
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
                         }
                     }
                 }
@@ -1406,9 +1428,11 @@ fn compute_final_route(
                                 )))
                     {
                         let nb = std::cmp::min(qabl.complete, remaining);
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), QueryTarget::Complete(nb)));
+                        route.entry(qabl.direction.0.id).or_insert_with(|| {
+                            let mut direction = qabl.direction.clone();
+                            let qid = insert_pending_query(&mut direction.0, query.clone());
+                            (direction, qid, QueryTarget::Complete(nb))
+                        });
                         remaining -= nb;
                         if remaining == 0 {
                             break;
@@ -1419,9 +1443,11 @@ fn compute_final_route(
                 for qabl in qabls.iter() {
                     if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
                         let nb = std::cmp::min(qabl.complete, remaining);
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), QueryTarget::Complete(nb)));
+                        route.entry(qabl.direction.0.id).or_insert_with(|| {
+                            let mut direction = qabl.direction.clone();
+                            let qid = insert_pending_query(&mut direction.0, query.clone());
+                            (direction, qid, QueryTarget::Complete(nb))
+                        });
                         remaining -= nb;
                         if remaining == 0 {
                             break;
@@ -1439,15 +1465,19 @@ fn compute_final_route(
                 let mut route = HashMap::new();
                 #[cfg(feature = "complete_n")]
                 {
-                    route.insert(qabl.direction.0.id, (qabl.direction.clone(), *target));
+                    let mut direction = qabl.direction.clone();
+                    let qid = insert_pending_query(&mut direction.0, query);
+                    route.insert(direction.0.id, (direction, qid, *target));
                 }
                 #[cfg(not(feature = "complete_n"))]
                 {
-                    route.insert(qabl.direction.0.id, qabl.direction.clone());
+                    let mut direction = qabl.direction.clone();
+                    let qid = insert_pending_query(&mut direction.0, query);
+                    route.insert(direction.0.id, (direction, qid));
                 }
                 route
             } else {
-                compute_final_route(tables, qabls, src_face, &QueryTarget::All)
+                compute_final_route(tables, qabls, src_face, &QueryTarget::All, query)
             }
         }
     }
@@ -1629,44 +1659,37 @@ pub fn route_query(
                     }),
             };
 
-            let mut route = compute_final_route(&tables, &route, face, &target);
+            let query = Arc::new(Query {
+                src_face: face.clone(),
+                src_qid: qid,
+            });
+
+            let route = compute_final_route(&tables, &route, face, &target, query);
+
+            drop(tables);
 
             if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
-                drop(tables);
                 face.primitives.clone().send_reply_final(qid)
             } else {
-                let query = Arc::new(Query {
-                    src_face: face.clone(),
-                    src_qid: qid,
-                });
-
                 // let timer = tables.timer.clone();
                 // let timeout = tables.queries_default_timeout;
                 #[cfg(feature = "complete_n")]
                 {
-                    for ((outface, _, _), _) in route.values_mut() {
-                        let outface_mut = get_mut_unchecked(outface);
-                        outface_mut.next_qid += 1;
-                        let qid = outface_mut.next_qid;
-                        outface_mut.pending_queries.insert(qid, query.clone());
+                    for ((outface, key_expr, context), qid, t) in route.values() {
                         // timer.add(TimedEvent::once(
                         //     Instant::now() + timout,
                         //     QueryCleanup {
                         //         tables: tables_ref.clone(),
                         //         face: Arc::downgrade(&outface),
-                        //         qid,
+                        //         *qid,
                         //     },
                         // ));
-                    }
-                    drop(tables);
-
-                    for ((outface, key_expr, context), t) in route.values() {
-                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
                         outface.primitives.send_query(
                             key_expr,
                             parameters,
-                            qid,
+                            *qid,
                             *t,
                             consolidation,
                             *context,
@@ -1676,28 +1699,20 @@ pub fn route_query(
 
                 #[cfg(not(feature = "complete_n"))]
                 {
-                    for (outface, _, _) in route.values_mut() {
-                        let outface_mut = get_mut_unchecked(outface);
-                        outface_mut.next_qid += 1;
-                        let qid = outface_mut.next_qid;
-                        outface_mut.pending_queries.insert(qid, query.clone());
+                    for ((outface, key_expr, context), qid) in route.values() {
                         // timer.add(TimedEvent::once(
                         //     Instant::now() + timeout,
                         //     QueryCleanup {
-                        //         tables: tables_ref,
+                        //         tables: tables_ref.clone(),
                         //         face: Arc::downgrade(&outface),
-                        //         qid,
+                        //         *qid,
                         //     },
                         // ));
-                    }
-                    drop(tables);
-
-                    for (outface, key_expr, context) in route.values() {
-                        log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
+                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
                         outface.primitives.send_query(
                             key_expr,
                             parameters,
-                            qid,
+                            *qid,
                             target,
                             consolidation,
                             *context,
