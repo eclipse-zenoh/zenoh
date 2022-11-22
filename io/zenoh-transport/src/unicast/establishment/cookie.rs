@@ -41,7 +41,7 @@ where
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         self.write(&mut *writer, x.sn_resolution)?;
-        let is_qos: u8 = if x.is_qos { 1 } else { 0 };
+        let is_qos = u8::from(x.is_qos);
         self.write(&mut *writer, is_qos)?;
         self.write(&mut *writer, x.nonce)?;
         self.write(&mut *writer, x.properties.as_slice())?;

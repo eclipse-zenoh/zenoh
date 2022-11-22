@@ -55,11 +55,7 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 #[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = if this.complete != 0 || info.complete != 0 {
-        1
-    } else {
-        0
-    };
+    this.complete = ZInt::from(this.complete != 0 || info.complete != 0);
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
