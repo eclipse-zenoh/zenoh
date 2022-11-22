@@ -34,8 +34,8 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
-use zenoh_backend_traits::CreateVolume;
-use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
+use zenoh_backend_traits::{CreateVolume, ConfirmCapability};
+use zenoh_backend_traits::{CREATE_VOLUME_FN_NAME, CONFIRM_CAPABILITY_FN_NAME};
 use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::{bail, zlock, Result as ZResult};
 use zenoh_util::LibLoader;
@@ -113,7 +113,7 @@ impl StorageRuntimeInner {
             storages: Default::default(),
         };
         new_self.spawn_volume(VolumeConfig {
-            name: "memory".into(),
+            name: MEMORY_BACKEND_NAME.into(),
             backend: None,
             paths: None,
             required: false,
@@ -155,6 +155,10 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name.clone();
         if volume_id == MEMORY_BACKEND_NAME {
+            // check if capabilities match
+            if !memory_backend::confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
+                bail!("Backend doesn't satisfy the required capabilities")
+            }
             match create_memory_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
@@ -210,6 +214,14 @@ impl StorageRuntimeInner {
         lib_path: PathBuf,
     ) -> ZResult<()> {
         if let Ok(create_backend) = lib.get::<CreateVolume>(CREATE_VOLUME_FN_NAME) {
+            // check for capability check handling
+            if let Ok(confirm_capability) = lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
+                if !confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
+                    bail!("Backend doesn't satisfy the required capabilities")
+                }
+            } else {
+                bail!("Failed to verify backend capability: function {}(Capability) not found in lib", String::from_utf8_lossy(CONFIRM_CAPABILITY_FN_NAME))
+            }
             match create_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(

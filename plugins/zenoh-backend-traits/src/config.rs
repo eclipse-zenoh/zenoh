@@ -29,12 +29,17 @@ pub struct PluginConfig {
     #[as_mut]
     pub rest: Map<String, Value>,
 }
-#[derive(Debug, Clone)]
+pub struct Capability {
+    pub persistence: Option<Persistence>,
+    pub history: Option<History>,
+    pub location: Option<Location>,
+}
+#[derive(Debug, Clone, PartialEq)]
 pub enum Persistence {
     Volatile, //default
     Durable,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum History {
     Latest, //default
     All,

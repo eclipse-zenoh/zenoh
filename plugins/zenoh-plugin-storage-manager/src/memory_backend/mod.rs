@@ -20,10 +20,29 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
+use zenoh_backend_traits::config::{StorageConfig, VolumeConfig, Capability, Persistence, History, Location};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
+
+pub fn confirm_capability(capability: Capability) -> bool {
+    if let Some(persistence) = capability.persistence {
+        if persistence != Persistence::Volatile {
+            return false;
+        }
+    }
+    if let Some(history) = capability.history {
+        if history != History::Latest {
+            return false;
+        }
+    }
+    if let Some(location) = capability.location {
+        if location != Location::Remote {
+            return false;
+        }
+    }
+    true
+}
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))

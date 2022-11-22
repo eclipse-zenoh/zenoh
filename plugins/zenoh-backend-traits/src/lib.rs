@@ -142,7 +142,12 @@ use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-use config::{StorageConfig, VolumeConfig};
+use config::{StorageConfig, VolumeConfig, Capability};
+
+/// Signature of the `confirm_capability` operation to be implemented in the library
+/// This function should confirm that the library provides user requested capability
+pub const CONFIRM_CAPABILITY_FN_NAME: &[u8] = b"confirm_capability";
+pub type ConfirmCapability = fn(Capability) -> bool;
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
 pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
