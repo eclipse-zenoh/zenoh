@@ -20,7 +20,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{StorageConfig, VolumeConfig, Capability, Persistence, History, Location};
+use zenoh_backend_traits::config::{
+    Capability, History, Location, Persistence, StorageConfig, VolumeConfig,
+};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;

@@ -142,7 +142,7 @@ use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-use config::{StorageConfig, VolumeConfig, Capability};
+use config::{Capability, StorageConfig, VolumeConfig};
 
 /// Signature of the `confirm_capability` operation to be implemented in the library
 /// This function should confirm that the library provides user requested capability

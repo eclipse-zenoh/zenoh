@@ -34,9 +34,9 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
-use zenoh_backend_traits::{CreateVolume, ConfirmCapability};
-use zenoh_backend_traits::{CREATE_VOLUME_FN_NAME, CONFIRM_CAPABILITY_FN_NAME};
 use zenoh_backend_traits::{config::*, Volume};
+use zenoh_backend_traits::{ConfirmCapability, CreateVolume};
+use zenoh_backend_traits::{CONFIRM_CAPABILITY_FN_NAME, CREATE_VOLUME_FN_NAME};
 use zenoh_core::{bail, zlock, Result as ZResult};
 use zenoh_util::LibLoader;
 
@@ -156,7 +156,11 @@ impl StorageRuntimeInner {
         let volume_id = config.name.clone();
         if volume_id == MEMORY_BACKEND_NAME {
             // check if capabilities match
-            if !memory_backend::confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
+            if !memory_backend::confirm_capability(Capability {
+                persistence: Some(config.persistence.clone()),
+                history: Some(config.history.clone()),
+                location: None,
+            }) {
                 bail!("Backend doesn't satisfy the required capabilities")
             }
             match create_memory_backend(config) {
@@ -217,7 +221,11 @@ impl StorageRuntimeInner {
             // check for capability check handling
             match lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
                 Ok(confirm_capability) => {
-                    if !confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
+                    if !confirm_capability(Capability {
+                        persistence: Some(config.persistence.clone()),
+                        history: Some(config.history.clone()),
+                        location: None,
+                    }) {
                         bail!("Backend doesn't satisfy the required capabilities")
                     }
                 }

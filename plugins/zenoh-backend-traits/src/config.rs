@@ -34,12 +34,12 @@ pub struct Capability {
     pub history: Option<History>,
     pub location: Option<Location>,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Persistence {
     Volatile, //default
     Durable,
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum History {
     Latest, //default
     All,
