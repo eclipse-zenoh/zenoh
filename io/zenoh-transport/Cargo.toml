@@ -32,10 +32,9 @@ description = "Internal crate for zenoh."
 
 [features]
 shared-memory = [
-	# "bincode",
-	# "shared_memory",
 	"zenoh-buffers/shared-memory",
 	"zenoh-protocol/shared-memory",
+    "zenoh-codec/shared-memory",
 ]
 
 auth_pubkey = ["rsa"]

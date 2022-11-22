@@ -29,7 +29,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = ["zenoh-buffers/shared-memory", "zenoh-protocol/shared-memory"]
+shared-memory = [
+    "zenoh-buffers/shared-memory", 
+    "zenoh-protocol/shared-memory"
+]
 default = ["shared-memory"]
 
 [dependencies]

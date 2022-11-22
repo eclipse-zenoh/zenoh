@@ -40,8 +40,8 @@ auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 complete_n = ["zenoh-protocol/complete_n", "zenoh-protocol/complete_n"]
 shared-memory = [
     "zenoh-buffers/shared-memory",
-    "zenoh-codec/shared-memory",
     "zenoh-protocol/shared-memory",
+    "zenoh-codec/shared-memory",
     "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
