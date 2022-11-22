@@ -215,13 +215,16 @@ impl StorageRuntimeInner {
     ) -> ZResult<()> {
         if let Ok(create_backend) = lib.get::<CreateVolume>(CREATE_VOLUME_FN_NAME) {
             // check for capability check handling
-            if let Ok(confirm_capability) = lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
-                if !confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
-                    bail!("Backend doesn't satisfy the required capabilities")
+            match lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
+                Ok(confirm_capability) => {
+                    if !confirm_capability(Capability { persistence: Some(config.persistence.clone()), history: Some(config.history.clone()), location: None }) {
+                        bail!("Backend doesn't satisfy the required capabilities")
+                    }
                 }
-            } else {
-                bail!("Failed to verify backend capability: function {}(Capability) not found in lib", String::from_utf8_lossy(CONFIRM_CAPABILITY_FN_NAME))
-            }
+                Err(e) => {
+                    bail!("Failed to verify backend capability: function {}(Capability) not found in lib. Failed with error: {}", String::from_utf8_lossy(CONFIRM_CAPABILITY_FN_NAME), e)
+                }
+            };
             match create_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
