@@ -11,13 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
+use async_std::{prelude::FutureExt, task};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_transport::{
@@ -445,7 +441,7 @@ fn openclose_tcp_only() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:8447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
@@ -457,7 +453,7 @@ fn openclose_udp_only() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "udp/127.0.0.1:8447".parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
@@ -469,7 +465,7 @@ fn openclose_ws_only() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:8448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
@@ -481,13 +477,12 @@ fn openclose_unix_only() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-9.sock"
-        .parse()
-        .unwrap();
+    let f1 = "zenoh-test-unix-socket-9.sock";
+    let _ = std::fs::remove_file(f1);
+    let endpoint: EndPoint = format!("unixsock-stream/{}", f1).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_tls")]
@@ -574,7 +569,7 @@ pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
-    let mut endpoint: EndPoint = ("tls/localhost:8448").parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
     endpoint
         .config_mut()
         .extend(
@@ -675,7 +670,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "quic/localhost:8449".parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
     endpoint
         .config_mut()
         .extend(

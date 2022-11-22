@@ -319,16 +319,16 @@ mod tests {
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "tcp/127.0.0.1:15447".parse().unwrap(),
-            "tcp/127.0.0.1:15448".parse().unwrap(),
-            "tcp/127.0.0.1:15449".parse().unwrap(),
-            "tcp/127.0.0.1:15450".parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15000).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15001).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15002).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15003).parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "tcp/127.0.0.1:15451".parse().unwrap(),
-            "tcp/127.0.0.1:15452".parse().unwrap(),
-            "tcp/127.0.0.1:15453".parse().unwrap(),
-            "tcp/127.0.0.1:15454".parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15010).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15011).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15012).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15013).parse().unwrap(),
         ];
 
         task::block_on(async {
@@ -345,16 +345,16 @@ mod tests {
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "ws/127.0.0.1:15547".parse().unwrap(),
-            "ws/127.0.0.1:15548".parse().unwrap(),
-            "ws/127.0.0.1:15549".parse().unwrap(),
-            "ws/127.0.0.1:15550".parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15020).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15021).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15022).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15023).parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "ws/127.0.0.1:15551".parse().unwrap(),
-            "ws/127.0.0.1:15552".parse().unwrap(),
-            "ws/127.0.0.1:15553".parse().unwrap(),
-            "ws/127.0.0.1:15554".parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15030).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15031).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15032).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15033).parse().unwrap(),
         ];
 
         task::block_on(async {

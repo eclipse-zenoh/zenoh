@@ -11,10 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::time::Duration;
-use std::{convert::TryFrom, sync::Arc};
+use async_std::{prelude::FutureExt, task};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_protocol::{
@@ -134,7 +132,7 @@ fn transport_unicast_defragmentation_tcp_only() {
     });
 
     // Define the locators
-    let endpoint: EndPoint = "tcp/127.0.0.1:14447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -171,7 +169,7 @@ fn transport_unicast_defragmentation_ws_only() {
     });
 
     // Define the locators
-    let endpoint: EndPoint = "ws/127.0.0.1:14448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {

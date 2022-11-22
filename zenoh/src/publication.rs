@@ -120,8 +120,10 @@ impl SyncResolve for PutBuilder<'_, '_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo::default();
-        info.kind = kind;
+        let mut info = DataInfo {
+            kind,
+            ..Default::default()
+        };
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {
@@ -390,8 +392,10 @@ impl SyncResolve for Publication<'_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo::default();
-        info.kind = kind;
+        let mut info = DataInfo {
+            kind,
+            ..Default::default()
+        };
         info.encoding = if value.encoding != Encoding::default() {
             Some(value.encoding)
         } else {

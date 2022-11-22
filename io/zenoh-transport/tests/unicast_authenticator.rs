@@ -792,7 +792,7 @@ fn authenticator_tcp() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
@@ -804,7 +804,7 @@ fn authenticator_udp() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
@@ -816,7 +816,7 @@ fn authenticator_ws() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:11449".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
@@ -828,13 +828,12 @@ fn authenticator_unix() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
-    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-10.sock"
-        .parse()
-        .unwrap();
+    let f1 = "zenoh-test-unix-socket-10.sock";
+    let _ = std::fs::remove_file(f1);
+    let endpoint: EndPoint = format!("unixsock-stream/{}", f1).parse().unwrap();
     task::block_on(run(&endpoint));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_tls")]
@@ -922,7 +921,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 8030).parse().unwrap();
     endpoint
         .config_mut()
         .extend(
@@ -1024,7 +1023,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 8040).parse().unwrap();
     endpoint
         .config_mut()
         .extend(

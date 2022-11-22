@@ -524,7 +524,7 @@ impl TryFrom<String> for EndPoint {
         let pidx = s
             .find(PROTO_SEPARATOR)
             .and_then(|i| (!s[..i].is_empty() && !s[i + 1..].is_empty()).then_some(i))
-            .ok_or_else(|| zerror!("{}", ERR))?;
+            .ok_or_else(|| zerror!("{}: {}", ERR, s))?;
 
         match (s.find(METADATA_SEPARATOR), s.find(CONFIG_SEPARATOR)) {
             // No metadata or config at all
@@ -560,7 +560,7 @@ impl TryFrom<String> for EndPoint {
 
                 Ok(EndPoint { inner })
             }
-            _ => Err(zerror!("{}", ERR).into()),
+            _ => Err(zerror!("{}: {}", ERR, s).into()),
         }
     }
 }

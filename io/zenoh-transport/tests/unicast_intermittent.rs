@@ -391,7 +391,7 @@ fn transport_tcp_intermittent() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }
 
@@ -403,6 +403,6 @@ fn transport_ws_intermittent() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:12448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }

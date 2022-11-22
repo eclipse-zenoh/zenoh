@@ -328,7 +328,7 @@ fn conduits_tcp_only() {
         });
     }
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["tcp/127.0.0.1:13447".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
@@ -348,7 +348,7 @@ fn conduits_ws_only() {
         });
     }
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["ws/127.0.0.1:13448".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }

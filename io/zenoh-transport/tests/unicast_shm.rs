@@ -13,15 +13,18 @@
 //
 #[cfg(feature = "shared-memory")]
 mod tests {
-    use async_std::prelude::FutureExt;
-    use async_std::task;
-    use std::any::Any;
-    use std::collections::HashSet;
-    use std::convert::TryFrom;
-    use std::iter::FromIterator;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::Duration;
+    use async_std::{prelude::FutureExt, task};
+    use std::{
+        any::Any,
+        collections::HashSet,
+        convert::TryFrom,
+        iter::FromIterator,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
     use zenoh_buffers::{SharedMemoryManager, SplitBuffer, ZBuf};
     use zenoh_core::{zasync_executor_init, Result as ZResult};
     use zenoh_link::Link;
@@ -131,13 +134,17 @@ mod tests {
     }
 
     async fn run(endpoint: &EndPoint) {
+        println!("Transport SHM [0a]: {:?}", endpoint);
+
         // Define client and router IDs
         let peer_shm01 = ZenohId::try_from([1]).unwrap();
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         // Create the SharedMemoryManager
-        let mut shm01 = SharedMemoryManager::make("peer_shm01".to_string(), 2 * MSG_SIZE).unwrap();
+        let mut shm01 =
+            SharedMemoryManager::make(format!("peer_shm01_{}", endpoint.protocol()), 2 * MSG_SIZE)
+                .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(false));
@@ -174,7 +181,7 @@ mod tests {
             .unwrap();
 
         // Create the listener on the peer
-        println!("\nTransport SHM [1a]");
+        println!("Transport SHM [1a]");
         let _ = ztimeout!(peer_shm01_manager
             .add_listener(endpoint.clone())
             .timeout(TIMEOUT))
@@ -242,7 +249,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("\nTransport SHM [3b]");
+        println!("Transport SHM [3b]");
         ztimeout!(async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -295,7 +302,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("\nTransport SHM [4b]");
+        println!("Transport SHM [4b]");
         ztimeout!(async {
             while peer_net01_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -341,22 +348,24 @@ mod tests {
     #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
     #[test]
     fn transport_tcp_shm() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "tcp/127.0.0.1:16447".parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
         task::block_on(run(&endpoint));
     }
 
     #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
     #[test]
     fn transport_ws_shm() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "ws/127.0.0.1:16448".parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
         task::block_on(run(&endpoint));
     }
 }

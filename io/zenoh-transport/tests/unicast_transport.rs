@@ -349,8 +349,8 @@ fn transport_unicast_tcp_only() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10447".parse().unwrap(),
-        "tcp/[::1]:10447".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16000).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16001).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -385,8 +385,8 @@ fn transport_unicast_udp_only() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:10447".parse().unwrap(),
-        "udp/[::1]:10447".parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16010).parse().unwrap(),
+        format!("udp/[::1]:{}", 16011).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -411,11 +411,10 @@ fn transport_unicast_unix_only() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
+    let f1 = "zenoh-test-unix-socket-5.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
-        .parse()
-        .unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{}", f1).parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -429,8 +428,8 @@ fn transport_unicast_unix_only() {
     ];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -443,8 +442,8 @@ fn transport_unicast_ws_only() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:11447".parse().unwrap(),
-        "ws/[::1]:11447".parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 16020).parse().unwrap(),
+        format!("ws/[::1]:{}", 16021).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -479,10 +478,10 @@ fn transport_unicast_tcp_udp() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10448".parse().unwrap(),
-        "udp/127.0.0.1:10448".parse().unwrap(),
-        "tcp/[::1]:10448".parse().unwrap(),
-        "udp/[::1]:10448".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16030).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16031).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16032).parse().unwrap(),
+        format!("udp/[::1]:{}", 16033).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -511,14 +510,13 @@ fn transport_unicast_tcp_unix() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
+    let f1 = "zenoh-test-unix-socket-6.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10449".parse().unwrap(),
-        "tcp/[::1]:10449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-6.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 16040).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16041).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -533,8 +531,8 @@ fn transport_unicast_tcp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -549,14 +547,13 @@ fn transport_unicast_udp_unix() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
+    let f1 = "zenoh-test-unix-socket-7.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:10449".parse().unwrap(),
-        "udp/[::1]:10449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-7.sock"
-            .parse()
-            .unwrap(),
+        format!("udp/127.0.0.1:{}", 16050).parse().unwrap(),
+        format!("udp/[::1]:{}", 16051).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -571,8 +568,8 @@ fn transport_unicast_udp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -588,16 +585,15 @@ fn transport_unicast_tcp_udp_unix() {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
+    let f1 = "zenoh-test-unix-socket-8.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10450".parse().unwrap(),
-        "udp/127.0.0.1:10450".parse().unwrap(),
-        "tcp/[::1]:10450".parse().unwrap(),
-        "udp/[::1]:10450".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-8.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 16060).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16061).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16062).parse().unwrap(),
+        format!("udp/[::1]:{}", 16063).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -612,8 +608,8 @@ fn transport_unicast_tcp_udp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -701,7 +697,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = ("tls/localhost:10451").parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 16070).parse().unwrap();
     endpoint
         .config_mut()
         .extend(
@@ -823,7 +819,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = ("quic/localhost:10452").parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
     endpoint
         .config_mut()
         .extend(
