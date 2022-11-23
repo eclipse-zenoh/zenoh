@@ -148,6 +148,22 @@ impl Tables {
         self.faces.values().find(|face| face.zid == *zid)
     }
 
+    #[inline]
+    pub(crate) fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
+        // if source_links is empty then gossip is probably disabled in source peer
+        !source_links.is_empty() && !source_links.contains(&dest)
+    }
+
+    #[inline]
+    pub(crate) fn failover_brokering(&self, peer1: ZenohId, peer2: ZenohId) -> bool {
+        self.router_peers_failover_brokering
+            && self
+                .peers_net
+                .as_ref()
+                .map(|net| Tables::failover_brokering_to(&net.get_links(peer1), peer2))
+                .unwrap_or(false)
+    }
+
     fn open_net_face(
         &mut self,
         zid: ZenohId,
@@ -297,6 +313,7 @@ impl Router {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(
         &mut self,
         runtime: Runtime,
@@ -304,6 +321,7 @@ impl Router {
         peer_full_linkstate: bool,
         router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
         let mut tables = zwrite!(self.tables);
@@ -315,6 +333,7 @@ impl Router {
                 router_full_linkstate,
                 router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }
@@ -326,6 +345,7 @@ impl Router {
                 peer_full_linkstate,
                 router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }

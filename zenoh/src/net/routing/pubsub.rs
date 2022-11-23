@@ -82,12 +82,7 @@ fn propagate_simple_subscription_to(
                     dst_face.whatami != WhatAmI::Router
                         && (src_face.whatami != WhatAmI::Peer
                             || dst_face.whatami != WhatAmI::Peer
-                            || (tables.router_peers_failover_brokering
-                                && !tables
-                                    .peers_net
-                                    .as_ref()
-                                    .map(|net| net.get_links(src_face.zid).contains(&dst_face.zid))
-                                    .unwrap_or(true)))
+                            || tables.failover_brokering(src_face.zid, dst_face.zid))
                 }
             }
             WhatAmI::Peer => {
@@ -460,12 +455,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                         && s.subs.is_some()
                         && (s.face.whatami == WhatAmI::Client
                             || (s.face.whatami == WhatAmI::Peer
-                                && tables.router_peers_failover_brokering
-                                && !tables
-                                    .peers_net
-                                    .as_ref()
-                                    .map(|net| net.get_links(s.face.zid).contains(&face.zid))
-                                    .unwrap_or(true)))
+                                && tables.failover_brokering(s.face.zid, face.zid)))
                 })
             {
                 let key_expr = Resource::get_best_key(res, "", face.id);
@@ -712,14 +702,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                                 s.subs.is_some()
                                     && (s.face.whatami == WhatAmI::Client
                                         || (s.face.whatami == WhatAmI::Peer
-                                            && tables.router_peers_failover_brokering
-                                            && !tables
-                                                .peers_net
-                                                .as_ref()
-                                                .map(|net| {
-                                                    net.get_links(s.face.zid).contains(&face.zid)
-                                                })
-                                                .unwrap_or(true)))
+                                            && tables.failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
                         get_mut_unchecked(face).local_subs.insert(sub.clone());
@@ -881,7 +864,7 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                 if !remote_router_subs(tables, res) {
                     for dst_face in tables.faces.values_mut() {
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if links.contains(&dst_face.zid) {
+                            if !Tables::failover_brokering_to(links, dst_face.zid) {
                                 if dst_face.local_subs.contains(res) {
                                     let key_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.forget_subscriber(&key_expr, None);
@@ -1387,12 +1370,7 @@ pub fn full_reentrant_route_data(
                         && (face.whatami != WhatAmI::Peer
                             || outface.whatami != WhatAmI::Peer
                             || peers_full_net
-                            || (tables.router_peers_failover_brokering
-                                && tables
-                                    .peers_net
-                                    .as_ref()
-                                    .map(|net| !net.get_links(face.zid).contains(&outface.zid))
-                                    .unwrap_or(false)))
+                            || tables.failover_brokering(face.zid, outface.zid))
                     {
                         drop(tables);
                         outface.primitives.send_data(
@@ -1430,7 +1408,10 @@ pub fn full_reentrant_route_data(
                             if face.id != outface.id
                                 && (outface.whatami != WhatAmI::Peer
                                     || (router_peers_failover_brokering
-                                        && !source_links.contains(&outface.zid)))
+                                        && Tables::failover_brokering_to(
+                                            &source_links,
+                                            outface.zid,
+                                        )))
                             {
                                 outface.primitives.send_data(
                                     key_expr,
