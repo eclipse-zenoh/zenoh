@@ -266,7 +266,7 @@ impl keyexpr {
     /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
     ///
     /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
-    /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, such as the Zenoh network dropping your messages.
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         std::mem::transmute(s)
     }
@@ -275,9 +275,15 @@ impl keyexpr {
     /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
     ///
     /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
-    /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, such as the Zenoh network dropping your messages.
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         std::mem::transmute(s)
+    }
+    pub fn chunks(&self) -> impl Iterator<Item = &Self> {
+        self.split('/').map(|c| unsafe {
+            // Any chunk of a valid KE is itself a valid KE => we can safely call the unchecked constructor.
+            Self::from_str_unchecked(c)
+        })
     }
 }
 

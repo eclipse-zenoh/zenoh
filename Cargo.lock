@@ -1460,9 +1460,9 @@ checksum = "f9b7d56ba4a8344d6be9729995e6b06f928af29998cdf79fe390cbf6b1fee838"
 
 [[package]]
 name = "keyed-set"
-version = "0.2.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70f95e3fb17fe9d957aa568494a9fd2f0e96a2ad3f9d6ce6fb9d329a439f16e4"
+checksum = "853c9e24b136ce2dbaee88ee80af8f704c5a78ea09831f76dddeb60b941bb868"
 dependencies = [
  "hashbrown",
 ]
