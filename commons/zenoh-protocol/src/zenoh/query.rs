@@ -74,9 +74,8 @@ impl Query {
                 QueryTarget::BestMatching,
                 #[cfg(feature = "complete_n")]
                 QueryTarget::Complete(rng.gen()),
-            ]
-            .choose(&mut rng)
-            .unwrap();
+            ];
+            let t = t.choose(&mut rng).unwrap();
             Some(*t)
         } else {
             None
