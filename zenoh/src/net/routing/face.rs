@@ -381,9 +381,8 @@ impl Primitives for Face {
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
-        let mut tables = zwrite!(self.tables);
         route_send_reply_data(
-            &mut tables,
+            &self.tables,
             &mut self.state.clone(),
             qid,
             replier_id,
@@ -394,8 +393,7 @@ impl Primitives for Face {
     }
 
     fn send_reply_final(&self, qid: ZInt) {
-        let mut tables = zwrite!(self.tables);
-        route_send_reply_final(&mut tables, &mut self.state.clone(), qid);
+        route_send_reply_final(&self.tables, &mut self.state.clone(), qid);
     }
 
     fn send_pull(
