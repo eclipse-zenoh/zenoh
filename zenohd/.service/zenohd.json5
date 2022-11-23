@@ -16,7 +16,7 @@
    * Which endpoints to listen on. E.g. tcp/localhost:7447.
    * By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
    * peers, or client can use to establish a zenoh session.
-   * If none are specified, "tcp/0.0.0.0:7447" will be used (i.e. any interface)
+   * If none are specified, "tcp/[::]:7447" will be used (i.e. any interface)
    */
   listen: {
     endpoints: [

@@ -317,6 +317,17 @@ impl std::fmt::Display for keyexpr {
         f.write_str(self)
     }
 }
+#[repr(i8)]
+enum KeyExprConstructionError {
+    LoneDollarStar = -1,
+    SingleStarAfterDoubleStar = -2,
+    DoubleStarAfterDoubleStar = -3,
+    EmpyChunk = -4,
+    StarsInChunk = -5,
+    DollarAfterDollarOrStar = -6,
+    ContainsSharpOrQMark = -7,
+    ContainsUnboundDollar = -8,
+}
 
 impl<'a> TryFrom<&'a str> for &'a keyexpr {
     type Error = ZError;
@@ -324,21 +335,21 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
         let mut in_big_wild = false;
         for chunk in value.split('/') {
             if chunk.is_empty() {
-                bail!("Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
+                bail!((KeyExprConstructionError::EmpyChunk) "Invalid Key Expr `{}`: empty chunks are forbidden, as well as leading and trailing slashes", value)
             }
             if chunk == "$*" {
-                bail!(
+                bail!((KeyExprConstructionError::LoneDollarStar)
                     "Invalid Key Expr `{}`: lone `$*`s must be replaced by `*` to reach canon-form",
                     value
                 )
             }
             if in_big_wild {
                 match chunk {
-                    "**" => bail!(
+                    "**" => bail!((KeyExprConstructionError::DoubleStarAfterDoubleStar)
                         "Invalid Key Expr `{}`: `**/**` must be replaced by `**` to reach canon-form",
                         value
                     ),
-                    "*" => bail!(
+                    "*" => bail!((KeyExprConstructionError::SingleStarAfterDoubleStar)
                         "Invalid Key Expr `{}`: `**/*` must be replaced by `*/**` to reach canon-form",
                         value
                     ),
@@ -349,11 +360,15 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 in_big_wild = true;
             } else {
                 in_big_wild = false;
-                if chunk.contains("**") {
-                    bail!(
-                        "Invalid Key Expr `{}`: `**` may only be preceded an followed by `/`",
-                        value
-                    )
+                if chunk != "*" {
+                    let mut split = chunk.split('*');
+                    split.next_back();
+                    if split.any(|s| !s.ends_with('$')) {
+                        bail!((KeyExprConstructionError::StarsInChunk)
+                            "Invalid Key Expr `{}`: `*` and `**` may only be preceded an followed by `/`",
+                            value
+                        )
+                    }
                 }
             }
         }
@@ -368,16 +383,16 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
             if forbidden == b'$' {
                 if let Some(b'*') = bytes.get(index + 1) {
                     if let Some(b'$') = bytes.get(index + 2) {
-                        bail!(
+                        bail!((KeyExprConstructionError::DollarAfterDollarOrStar)
                             "Invalid Key Expr `{}`: `$` is not allowed after `$*`",
                             value
                         )
                     }
                 } else {
-                    bail!("Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
+                    bail!((KeyExprConstructionError::ContainsUnboundDollar)"Invalid Key Expr `{}`: `$` is only allowed in `$*`", value)
                 }
             } else {
-                bail!(
+                bail!((KeyExprConstructionError::ContainsSharpOrQMark)
                     "Invalid Key Expr `{}`: `#` and `?` are forbidden characters",
                     value
                 )

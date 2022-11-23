@@ -15,7 +15,7 @@ use serde::de::{Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::fmt;
 
-const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
+const DEFAULT_HTTP_INTERFACE: &str = "[::]";
 
 #[derive(Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]

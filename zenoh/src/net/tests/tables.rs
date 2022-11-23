@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::net::routing::router::*;
-use crate::prelude::keyexpr;
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -22,8 +21,9 @@ use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, Reliability,
-        SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        key_expr::keyexpr, Channel, CongestionControl, ConsolidationMode, QueryTarget,
+        QueryableInfo, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
+        EMPTY_EXPR_ID,
     },
     zenoh::{DataInfo, RoutingContext},
 };
@@ -36,6 +36,7 @@ fn base_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -85,7 +86,7 @@ fn match_test() {
         "ab/*",
         "a/*/c/*/e",
         "a/b/c/d/e",
-        "a/*b/c/$*d/e",
+        "a/$*b/c/$*d/e",
         "a/xb/c/xd/e",
         "a/c/e",
         "a/b/c/d/x/e",
@@ -126,6 +127,7 @@ fn match_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -163,6 +165,7 @@ fn clean_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
@@ -495,6 +498,7 @@ fn client_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     ));
 

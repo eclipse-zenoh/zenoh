@@ -16,9 +16,7 @@ use crate::config::Config;
 use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
-use crate::key_expr::keyexpr;
 use crate::key_expr::KeyExprInner;
-use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -50,12 +48,15 @@ use std::time::Duration;
 use std::time::Instant;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_collections::{SingleOrVec, TimedEvent, Timer};
+use zenoh_collections::SingleOrVec;
+use zenoh_collections::TimedEvent;
+use zenoh_collections::Timer;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
 use zenoh_protocol::{
     core::{
+        key_expr::{keyexpr, OwnedKeyExpr},
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
         WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
@@ -674,14 +675,14 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn put<'a, TryIntoKeyExpr, IntoValue>(
+    pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
         &'a self,
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> PutBuilder<'a, 'a>
+    ) -> PutBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
@@ -707,10 +708,13 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    pub fn delete<'a, TryIntoKeyExpr>(&'a self, key_expr: TryIntoKeyExpr) -> DeleteBuilder<'a, 'a>
+    pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> DeleteBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -739,7 +743,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn get<'a, 'b, IntoSelector>(
+    pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,
     ) -> GetBuilder<'a, 'b, DefaultHandler>
@@ -1105,7 +1109,7 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = ZInt::from(!complete_twin_qabl && complete);
+                let complete = u64::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,

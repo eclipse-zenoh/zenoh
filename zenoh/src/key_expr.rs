@@ -20,8 +20,8 @@ use std::{
     str::FromStr,
 };
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
-use zenoh_protocol::core::key_expr::canon::Canonizable;
 pub use zenoh_protocol::core::key_expr::*;
+use zenoh_protocol::core::{key_expr::canon::Canonizable, WireExpr};
 use zenoh_transport::Primitives;
 
 use crate::{prelude::Selector, Session, Undeclarable};
@@ -300,7 +300,7 @@ impl<'a> From<&'a keyexpr> for KeyExpr<'a> {
         Self(KeyExprInner::Borrowed(ke))
     }
 }
-impl From<OwnedKeyExpr> for KeyExpr<'static> {
+impl<'a> From<OwnedKeyExpr> for KeyExpr<'a> {
     fn from(v: OwnedKeyExpr) -> Self {
         Self(KeyExprInner::Owned(v))
     }
@@ -350,7 +350,7 @@ impl<'a> From<KeyExpr<'a>> for String {
         }
     }
 }
-impl TryFrom<String> for KeyExpr<'static> {
+impl<'a> TryFrom<String> for KeyExpr<'a> {
     type Error = zenoh_core::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Owned(value.try_into()?)))
@@ -493,17 +493,14 @@ impl<'a> KeyExpr<'a> {
             _ => false,
         }
     }
-    pub(crate) fn to_wire(
-        &'a self,
-        session: &crate::Session,
-    ) -> zenoh_protocol::core::WireExpr<'a> {
+    pub(crate) fn to_wire(&'a self, session: &crate::Session) -> WireExpr<'a> {
         match &self.0 {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
                 prefix_len,
                 session_id,
-            } if session.id == *session_id => zenoh_protocol::core::WireExpr {
+            } if session.id == *session_id => WireExpr {
                 scope: *expr_id as u64,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
             },
@@ -512,18 +509,16 @@ impl<'a> KeyExpr<'a> {
                 expr_id,
                 prefix_len,
                 session_id,
-            } if session.id == *session_id => zenoh_protocol::core::WireExpr {
+            } if session.id == *session_id => WireExpr {
                 scope: *expr_id as u64,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
             },
-            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
-                zenoh_protocol::core::WireExpr {
-                    scope: 0,
-                    suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
-                }
-            }
+            KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => WireExpr {
+                scope: 0,
+                suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+            },
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
-                zenoh_protocol::core::WireExpr {
+                WireExpr {
                     scope: 0,
                     suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
                 }

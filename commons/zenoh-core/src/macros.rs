@@ -32,10 +32,7 @@ macro_rules! zuninitbuff {
 #[macro_export]
 macro_rules! zlock {
     ($var:expr) => {
-        match $var.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => $var.lock().unwrap(),
-        }
+        $var.lock().unwrap()
     };
 }
 
@@ -45,10 +42,7 @@ macro_rules! zlock {
 #[macro_export]
 macro_rules! zread {
     ($var:expr) => {
-        match $var.try_read() {
-            Ok(guard) => guard,
-            Err(_) => $var.read().unwrap(),
-        }
+        $var.read().unwrap()
     };
 }
 
@@ -58,10 +52,7 @@ macro_rules! zread {
 #[macro_export]
 macro_rules! zwrite {
     ($var:expr) => {
-        match $var.try_write() {
-            Ok(guard) => guard,
-            Err(_) => $var.write().unwrap(),
-        }
+        $var.write().unwrap()
     };
 }
 
@@ -176,17 +167,29 @@ macro_rules! zconfigurable {
 pub use anyhow::anyhow;
 #[macro_export]
 macro_rules! zerror {
+    (($errno:expr) $source: expr => $($t: tt)*) => {
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8)).set_source($source)
+    };
+    (($errno:expr) $t: literal) => {
+        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
+    };
+    (($errno:expr) $t: expr) => {
+        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
+    };
+    (($errno:expr) $($t: tt)*) => {
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
+    };
     ($source: expr => $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!()).set_source($source)
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::MIN).set_source($source)
     };
     ($t: literal) => {
-        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!())
+        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::MIN)
     };
     ($t: expr) => {
-        $crate::zresult::ZError::new($t, file!(), line!())
+        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::MIN)
     };
     ($($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!())
+        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::MIN)
     };
 }
 

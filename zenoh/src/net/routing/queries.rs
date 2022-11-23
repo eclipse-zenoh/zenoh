@@ -11,6 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::face::FaceState;
+use super::network::Network;
+use super::resource::{
+    elect_router, QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
+};
+use super::router::Tables;
+use crate::prelude::KeyExpr;
 use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
@@ -30,15 +37,6 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-use crate::prelude::KeyExpr;
-
-use super::face::FaceState;
-use super::network::Network;
-use super::resource::{
-    elect_router, QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
-};
-use super::router::Tables;
-
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: ZInt,
@@ -55,7 +53,7 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 #[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = ZInt::from(this.complete != 0 || info.complete != 0);
+    this.complete = u64::from(this.complete != 0 || info.complete != 0);
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
@@ -131,19 +129,13 @@ fn local_peer_qabl_info(tables: &Tables, res: &Arc<Resource>) -> QueryableInfo {
         })
 }
 
-fn local_qabl_info(
-    whatami: WhatAmI,
-    full_peers_net: bool,
-    local_zid: &ZenohId,
-    res: &Arc<Resource>,
-    face: &Arc<FaceState>,
-) -> QueryableInfo {
-    let mut info = if whatami == WhatAmI::Router && res.context.is_some() {
+fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) -> QueryableInfo {
+    let mut info = if tables.whatami == WhatAmI::Router && res.context.is_some() {
         res.context()
             .router_qabls
             .iter()
             .fold(None, |accu, (zid, info)| {
-                if *zid != *local_zid {
+                if *zid != tables.zid {
                     Some(match accu {
                         Some(accu) => merge_qabl_infos(accu, info),
                         None => info.clone(),
@@ -155,13 +147,13 @@ fn local_qabl_info(
     } else {
         None
     };
-    if res.context.is_some() && full_peers_net {
+    if res.context.is_some() && tables.full_net(WhatAmI::Peer) {
         info = res
             .context()
             .peer_qabls
             .iter()
             .fold(info, |accu, (zid, info)| {
-                if *zid != *local_zid {
+                if *zid != tables.zid {
                     Some(match accu {
                         Some(accu) => merge_qabl_infos(accu, info),
                         None => info.clone(),
@@ -174,7 +166,10 @@ fn local_qabl_info(
     res.session_ctxs
         .values()
         .fold(info, |accu, ctx| {
-            if ctx.face.id != face.id {
+            if ctx.face.id != face.id && ctx.face.whatami != WhatAmI::Peer
+                || face.whatami != WhatAmI::Peer
+                || tables.failover_brokering(ctx.face.zid, face.zid)
+            {
                 if let Some(info) = ctx.qabl.as_ref() {
                     Some(match accu {
                         Some(accu) => merge_qabl_infos(accu, info),
@@ -229,11 +224,10 @@ fn propagate_simple_queryable(
     res: &Arc<Resource>,
     src_face: Option<&mut Arc<FaceState>>,
 ) {
-    let whatami = tables.whatami;
     let full_peers_net = tables.full_net(WhatAmI::Peer);
-    let zid = tables.zid;
-    for dst_face in &mut tables.faces.values_mut() {
-        let info = local_qabl_info(whatami, full_peers_net, &zid, res, dst_face);
+    let faces = tables.faces.values().cloned();
+    for mut dst_face in faces {
+        let info = local_qabl_info(tables, res, &dst_face);
         let current_info = dst_face.local_qabls.get(res);
         if (src_face.is_none() || src_face.as_ref().unwrap().id != dst_face.id)
             && (current_info.is_none() || *current_info.unwrap() != info)
@@ -242,10 +236,14 @@ fn propagate_simple_queryable(
                     if full_peers_net {
                         dst_face.whatami == WhatAmI::Client
                     } else {
-                        (src_face.is_none()
-                            || src_face.as_ref().unwrap().whatami != WhatAmI::Peer
-                            || dst_face.whatami != WhatAmI::Peer)
-                            && dst_face.whatami != WhatAmI::Router
+                        dst_face.whatami != WhatAmI::Router
+                            && (src_face.is_none()
+                                || src_face.as_ref().unwrap().whatami != WhatAmI::Peer
+                                || dst_face.whatami != WhatAmI::Peer
+                                || tables.failover_brokering(
+                                    src_face.as_ref().unwrap().zid,
+                                    dst_face.zid,
+                                ))
                     }
                 }
                 WhatAmI::Peer => {
@@ -264,10 +262,10 @@ fn propagate_simple_queryable(
                 }
             }
         {
-            get_mut_unchecked(dst_face)
+            get_mut_unchecked(&mut dst_face)
                 .local_qabls
                 .insert(res.clone(), info.clone());
-            let key_expr = Resource::decl_key(res, dst_face);
+            let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.decl_queryable(&key_expr, &info, None);
         }
     }
@@ -535,7 +533,13 @@ fn remote_peer_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
 fn client_qabls(res: &Arc<Resource>) -> Vec<Arc<FaceState>> {
     res.session_ctxs
         .values()
-        .map(|ctx| ctx.face.clone())
+        .filter_map(|ctx| {
+            if ctx.qabl.is_some() {
+                Some(ctx.face.clone())
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
@@ -575,6 +579,36 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             face.primitives.forget_queryable(&key_expr, None);
 
             get_mut_unchecked(face).local_qabls.remove(res);
+        }
+    }
+}
+
+fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc<Resource>) {
+    if !tables.full_net(WhatAmI::Peer)
+        && res.context().router_qabls.len() == 1
+        && res.context().router_qabls.contains_key(&tables.zid)
+    {
+        for mut face in tables
+            .faces
+            .values()
+            .cloned()
+            .collect::<Vec<Arc<FaceState>>>()
+        {
+            if face.whatami == WhatAmI::Peer
+                && face.local_qabls.contains_key(res)
+                && !res.session_ctxs.values().any(|s| {
+                    face.zid != s.face.zid
+                        && s.qabl.is_some()
+                        && (s.face.whatami == WhatAmI::Client
+                            || (s.face.whatami == WhatAmI::Peer
+                                && tables.failover_brokering(s.face.zid, face.zid)))
+                })
+            {
+                let key_expr = Resource::get_best_key(res, "", face.id);
+                face.primitives.forget_queryable(&key_expr, None);
+
+                get_mut_unchecked(&mut face).local_qabls.remove(res);
+            }
         }
     }
 }
@@ -634,6 +668,8 @@ fn unregister_router_queryable(tables: &mut Tables, res: &mut Arc<Resource>, rou
         }
         propagate_forget_simple_queryable(tables, res);
     }
+
+    propagate_forget_simple_queryable_to_peers(tables, res);
 }
 
 fn undeclare_router_queryable(
@@ -748,6 +784,7 @@ pub(crate) fn undeclare_client_queryable(
             } else {
                 let local_info = local_router_qabl_info(tables, res);
                 register_router_queryable(tables, None, res, &local_info, tables.zid);
+                propagate_forget_simple_queryable_to_peers(tables, res);
             }
         }
         WhatAmI::Peer => {
@@ -802,18 +839,29 @@ pub fn forget_client_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, e
 pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     match tables.whatami {
         WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client
-                || (face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer))
-            {
+            if face.whatami == WhatAmI::Client {
                 for qabl in tables.router_qabls.iter() {
                     if qabl.context.is_some() {
-                        let info = local_qabl_info(
-                            tables.whatami,
-                            tables.full_net(WhatAmI::Peer),
-                            &tables.zid,
-                            qabl,
-                            face,
-                        );
+                        let info = local_qabl_info(tables, qabl, face);
+                        get_mut_unchecked(face)
+                            .local_qabls
+                            .insert(qabl.clone(), info.clone());
+                        let key_expr = Resource::decl_key(qabl, face);
+                        face.primitives.decl_queryable(&key_expr, &info, None);
+                    }
+                }
+            } else if face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                for qabl in tables.router_qabls.iter() {
+                    if qabl.context.is_some()
+                        && (qabl.context().router_qabls.keys().any(|r| *r != tables.zid)
+                            || qabl.session_ctxs.values().any(|s| {
+                                s.qabl.is_some()
+                                    && (s.face.whatami == WhatAmI::Client
+                                        || (s.face.whatami == WhatAmI::Peer
+                                            && tables.failover_brokering(s.face.zid, face.zid)))
+                            }))
+                    {
+                        let info = local_qabl_info(tables, qabl, face);
                         get_mut_unchecked(face)
                             .local_qabls
                             .insert(qabl.clone(), info.clone());
@@ -828,13 +876,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 if face.whatami == WhatAmI::Client {
                     for qabl in &tables.peer_qabls {
                         if qabl.context.is_some() {
-                            let info = local_qabl_info(
-                                tables.whatami,
-                                tables.full_net(WhatAmI::Peer),
-                                &tables.zid,
-                                qabl,
-                                face,
-                            );
+                            let info = local_qabl_info(tables, qabl, face);
                             get_mut_unchecked(face)
                                 .local_qabls
                                 .insert(qabl.clone(), info.clone());
@@ -917,6 +959,44 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
             }
         }
         _ => (),
+    }
+}
+
+pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+    if let Some(src_face) = tables.get_face(zid) {
+        if tables.router_peers_failover_brokering
+            && tables.whatami == WhatAmI::Router
+            && src_face.whatami == WhatAmI::Peer
+        {
+            for res in &src_face.remote_qabls {
+                if !remote_router_qabls(tables, res) {
+                    for mut dst_face in tables
+                        .faces
+                        .values()
+                        .cloned()
+                        .collect::<Vec<Arc<FaceState>>>()
+                    {
+                        if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
+                            if !Tables::failover_brokering_to(links, dst_face.zid) {
+                                if dst_face.local_qabls.contains_key(res) {
+                                    let key_expr = Resource::get_best_key(res, "", dst_face.id);
+                                    dst_face.primitives.forget_queryable(&key_expr, None);
+
+                                    get_mut_unchecked(&mut dst_face).local_qabls.remove(res);
+                                }
+                            } else {
+                                get_mut_unchecked(&mut dst_face)
+                                    .local_subs
+                                    .insert(res.clone());
+                                let key_expr = Resource::decl_key(res, &mut dst_face);
+                                let info = local_qabl_info(tables, res, &dst_face);
+                                dst_face.primitives.decl_queryable(&key_expr, &info, None);
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1024,6 +1104,12 @@ fn compute_query_route(
     if key_expr.ends_with('/') {
         return EMPTY_ROUTE.clone();
     }
+    log::trace!(
+        "compute_query_route({}, {:?}, {:?})",
+        key_expr,
+        source,
+        source_type
+    );
     let key_expr = match KeyExpr::try_from(key_expr) {
         Ok(ke) => ke,
         Err(e) => {
@@ -1104,10 +1190,7 @@ fn compute_query_route(
         if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
             for (sid, context) in &mres.session_ctxs {
                 if match tables.whatami {
-                    WhatAmI::Router => {
-                        (source_type != WhatAmI::Peer || context.face.whatami != WhatAmI::Peer)
-                            && context.face.whatami != WhatAmI::Router
-                    }
+                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
                     _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
                 } {
                     let key_expr = Resource::get_best_key(prefix, suffix, *sid);
@@ -1148,6 +1231,9 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                 routers_query_routes[idx.index()] =
                     compute_query_route(tables, res, "", Some(idx.index()), WhatAmI::Router);
             }
+
+            res_mut.context_mut().peer_query_route =
+                Some(compute_query_route(tables, res, "", None, WhatAmI::Peer));
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && tables.full_net(WhatAmI::Peer)
@@ -1205,27 +1291,77 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 }
 
 #[inline]
+fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> ZInt {
+    let outface_mut = get_mut_unchecked(outface);
+    outface_mut.next_qid += 1;
+    let qid = outface_mut.next_qid;
+    outface_mut.pending_queries.insert(qid, query);
+    qid
+}
+
+#[inline]
 fn compute_final_route(
+    tables: &Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     target: &QueryTarget,
+    query: Arc<Query>,
 ) -> QueryRoute {
     match target {
         QueryTarget::All => {
             let mut route = HashMap::new();
-            for qabl in qabls.iter() {
-                if qabl.direction.0.id != src_face.id {
-                    #[cfg(feature = "complete_n")]
+            if src_face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                let source_links = tables
+                    .peers_net
+                    .as_ref()
+                    .map(|net| net.get_links(src_face.zid))
+                    .unwrap_or_default();
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id
+                        && (qabl.direction.0.whatami != WhatAmI::Peer
+                            || (tables.router_peers_failover_brokering
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
                     {
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), *target));
+                        #[cfg(feature = "complete_n")]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
+                        }
+                        #[cfg(not(feature = "complete_n"))]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
+                        }
                     }
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| qabl.direction.clone());
+                }
+            } else {
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id {
+                        #[cfg(feature = "complete_n")]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
+                        }
+                        #[cfg(not(feature = "complete_n"))]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
+                        }
                     }
                 }
             }
@@ -1233,19 +1369,38 @@ fn compute_final_route(
         }
         QueryTarget::AllComplete => {
             let mut route = HashMap::new();
-            for qabl in qabls.iter() {
-                if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
-                    #[cfg(feature = "complete_n")]
+            if src_face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                let source_links = tables
+                    .peers_net
+                    .as_ref()
+                    .map(|net| net.get_links(src_face.zid))
+                    .unwrap_or_default();
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id
+                        && qabl.complete > 0
+                        && (qabl.direction.0.whatami != WhatAmI::Peer
+                            || (tables.router_peers_failover_brokering
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
                     {
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| (qabl.direction.clone(), *target));
-                    }
-                    #[cfg(not(feature = "complete_n"))]
-                    {
-                        route
-                            .entry(qabl.direction.0.id)
-                            .or_insert_with(|| qabl.direction.clone());
+                        #[cfg(feature = "complete_n")]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
+                        }
+                        #[cfg(not(feature = "complete_n"))]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
+                        }
                     }
                 }
             }
@@ -1255,15 +1410,47 @@ fn compute_final_route(
         QueryTarget::Complete(n) => {
             let mut route = HashMap::new();
             let mut remaining = *n;
-            for qabl in qabls.iter() {
-                if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
-                    let nb = std::cmp::min(qabl.complete, remaining);
-                    route
-                        .entry(qabl.direction.0.id)
-                        .or_insert_with(|| (qabl.direction.clone(), QueryTarget::Complete(nb)));
-                    remaining -= nb;
-                    if remaining == 0 {
-                        break;
+            if src_face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+                let source_links = tables
+                    .peers_net
+                    .as_ref()
+                    .map(|net| net.get_links(src_face.zid))
+                    .unwrap_or_default();
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id
+                        && qabl.complete > 0
+                        && (qabl.direction.0.whatami != WhatAmI::Peer
+                            || (tables.router_peers_failover_brokering
+                                && Tables::failover_brokering_to(
+                                    &source_links,
+                                    qabl.direction.0.zid,
+                                )))
+                    {
+                        let nb = std::cmp::min(qabl.complete, remaining);
+                        route.entry(qabl.direction.0.id).or_insert_with(|| {
+                            let mut direction = qabl.direction.clone();
+                            let qid = insert_pending_query(&mut direction.0, query.clone());
+                            (direction, qid, QueryTarget::Complete(nb))
+                        });
+                        remaining -= nb;
+                        if remaining == 0 {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
+                        let nb = std::cmp::min(qabl.complete, remaining);
+                        route.entry(qabl.direction.0.id).or_insert_with(|| {
+                            let mut direction = qabl.direction.clone();
+                            let qid = insert_pending_query(&mut direction.0, query.clone());
+                            (direction, qid, QueryTarget::Complete(nb))
+                        });
+                        remaining -= nb;
+                        if remaining == 0 {
+                            break;
+                        }
                     }
                 }
             }
@@ -1277,15 +1464,19 @@ fn compute_final_route(
                 let mut route = HashMap::new();
                 #[cfg(feature = "complete_n")]
                 {
-                    route.insert(qabl.direction.0.id, (qabl.direction.clone(), *target));
+                    let mut direction = qabl.direction.clone();
+                    let qid = insert_pending_query(&mut direction.0, query);
+                    route.insert(direction.0.id, (direction, qid, *target));
                 }
                 #[cfg(not(feature = "complete_n"))]
                 {
-                    route.insert(qabl.direction.0.id, qabl.direction.clone());
+                    let mut direction = qabl.direction.clone();
+                    let qid = insert_pending_query(&mut direction.0, query);
+                    route.insert(direction.0.id, (direction, qid));
                 }
                 route
             } else {
-                compute_final_route(qabls, src_face, &QueryTarget::All)
+                compute_final_route(tables, qabls, src_face, &QueryTarget::All, query)
             }
         }
     }
@@ -1302,18 +1493,19 @@ struct QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
-            let mut _tables = zwrite!(self.tables);
+            let tables_lock = zwrite!(self.tables);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
             {
+                drop(tables_lock);
                 log::warn!(
                     "Didn't receive final reply {}:{} from {}: Timeout!",
                     query.src_face,
                     self.qid,
                     face
                 );
-                finalize_pending_query(&mut _tables, &query);
+                finalize_pending_query(query);
             }
         }
     }
@@ -1379,7 +1571,7 @@ pub fn route_query(
                                 })
                         } else {
                             Resource::get_resource(prefix, expr.suffix.as_ref())
-                                .and_then(|res| res.client_query_route(face.whatami))
+                                .and_then(|res| res.peer_query_route())
                                 .unwrap_or_else(|| {
                                     compute_query_route(
                                         &tables,
@@ -1392,7 +1584,7 @@ pub fn route_query(
                         }
                     }
                     _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                        .and_then(|res| res.client_query_route(face.whatami))
+                        .and_then(|res| res.routers_query_route(0))
                         .unwrap_or_else(|| {
                             compute_query_route(
                                 &tables,
@@ -1438,7 +1630,10 @@ pub fn route_query(
                         }
                     } else {
                         Resource::get_resource(prefix, expr.suffix.as_ref())
-                            .and_then(|res| res.client_query_route(face.whatami))
+                            .and_then(|res| match face.whatami {
+                                WhatAmI::Client => res.client_query_route(),
+                                _ => res.peer_query_route(),
+                            })
                             .unwrap_or_else(|| {
                                 compute_query_route(
                                     &tables,
@@ -1451,7 +1646,7 @@ pub fn route_query(
                     }
                 }
                 _ => Resource::get_resource(prefix, expr.suffix.as_ref())
-                    .and_then(|res| res.client_query_route(face.whatami))
+                    .and_then(|res| res.client_query_route())
                     .unwrap_or_else(|| {
                         compute_query_route(
                             &tables,
@@ -1463,74 +1658,65 @@ pub fn route_query(
                     }),
             };
 
-            let route = compute_final_route(&route, face, &target);
+            let query = Arc::new(Query {
+                src_face: face.clone(),
+                src_qid: qid,
+            });
+
+            let route = compute_final_route(&tables, &route, face, &target, query);
+
+            drop(tables);
 
             if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
                 face.primitives.clone().send_reply_final(qid)
             } else {
-                let query = Arc::new(Query {
-                    src_face: face.clone(),
-                    src_qid: qid,
-                });
-
                 // let timer = tables.timer.clone();
                 // let timeout = tables.queries_default_timeout;
-                // drop(tables);
                 #[cfg(feature = "complete_n")]
-                for ((outface, key_expr, context), t) in route.values() {
-                    let mut outface = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface);
-                    outface_mut.next_qid += 1;
-                    let qid = outface_mut.next_qid;
-                    outface_mut.pending_queries.insert(qid, query.clone());
-                    // timer.add(TimedEvent::once(
-                    //     Instant::now() + timout,
-                    //     QueryCleanup {
-                    //         tables: tables_ref.clone(),
-                    //         face: Arc::downgrade(&outface),
-                    //         qid,
-                    //     },
-                    // ));
-
-                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
-
-                    outface.primitives.send_query(
-                        key_expr,
-                        parameters,
-                        qid,
-                        *t,
-                        consolidation,
-                        *context,
-                    );
+                {
+                    for ((outface, key_expr, context), qid, t) in route.values() {
+                        // timer.add(TimedEvent::once(
+                        //     Instant::now() + timout,
+                        //     QueryCleanup {
+                        //         tables: tables_ref.clone(),
+                        //         face: Arc::downgrade(&outface),
+                        //         *qid,
+                        //     },
+                        // ));
+                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        outface.primitives.send_query(
+                            key_expr,
+                            parameters,
+                            *qid,
+                            *t,
+                            consolidation,
+                            *context,
+                        );
+                    }
                 }
 
                 #[cfg(not(feature = "complete_n"))]
-                for (outface, key_expr, context) in route.values() {
-                    let mut outface = outface.clone();
-                    let outface_mut = get_mut_unchecked(&mut outface);
-                    outface_mut.next_qid += 1;
-                    let qid = outface_mut.next_qid;
-                    outface_mut.pending_queries.insert(qid, query.clone());
-                    // timer.add(TimedEvent::once(
-                    //     Instant::now() + timeout,
-                    //     QueryCleanup {
-                    //         tables: tables_ref,
-                    //         face: Arc::downgrade(&outface),
-                    //         qid,
-                    //     },
-                    // ));
-
-                    log::trace!("Propagate query {}:{} to {}", query.src_face, qid, outface);
-
-                    outface.primitives.send_query(
-                        key_expr,
-                        parameters,
-                        qid,
-                        target,
-                        consolidation,
-                        *context,
-                    );
+                {
+                    for ((outface, key_expr, context), qid) in route.values() {
+                        // timer.add(TimedEvent::once(
+                        //     Instant::now() + timeout,
+                        //     QueryCleanup {
+                        //         tables: tables_ref.clone(),
+                        //         face: Arc::downgrade(&outface),
+                        //         *qid,
+                        //     },
+                        // ));
+                        log::trace!("Propagate query {}:{} to {}", face, qid, outface);
+                        outface.primitives.send_query(
+                            key_expr,
+                            parameters,
+                            *qid,
+                            target,
+                            consolidation,
+                            *context,
+                        );
+                    }
                 }
             }
         }
@@ -1539,6 +1725,7 @@ pub fn route_query(
                 "Route query with unknown scope {}! Send final reply.",
                 expr.scope
             );
+            drop(tables);
             face.primitives.clone().send_reply_final(qid)
         }
     }
@@ -1546,7 +1733,7 @@ pub fn route_query(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_reply_data(
-    _tables: &mut Tables,
+    tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
     qid: ZInt,
     replier_id: ZenohId,
@@ -1554,8 +1741,10 @@ pub(crate) fn route_send_reply_data(
     info: Option<DataInfo>,
     payload: ZBuf,
 ) {
+    let tables_lock = zread!(tables_ref);
     match face.pending_queries.get(&qid) {
         Some(query) => {
+            drop(tables_lock);
             query.src_face.primitives.clone().send_reply_data(
                 query.src_qid,
                 replier_id,
@@ -1573,16 +1762,22 @@ pub(crate) fn route_send_reply_data(
     }
 }
 
-pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceState>, qid: ZInt) {
+pub(crate) fn route_send_reply_final(
+    tables_ref: &RwLock<Tables>,
+    face: &mut Arc<FaceState>,
+    qid: ZInt,
+) {
+    let tables_lock = zwrite!(tables_ref);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
+            drop(tables_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
                 qid,
                 face
             );
-            finalize_pending_query(_tables, &query);
+            finalize_pending_query(query);
         }
         None => log::warn!(
             "Route final reply {}:{} from {}: Query nof found!",
@@ -1594,20 +1789,13 @@ pub(crate) fn route_send_reply_final(_tables: &mut Tables, face: &mut Arc<FaceSt
 }
 
 pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
-    for query in face.pending_queries.values() {
-        log::debug!(
-            "Finalize reply {}:{} for closing {}",
-            query.src_face,
-            query.src_qid,
-            face
-        );
-        finalize_pending_query(_tables, query);
+    for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
+        finalize_pending_query(query);
     }
-    get_mut_unchecked(face).pending_queries.clear();
 }
 
-pub(crate) fn finalize_pending_query(_tables: &mut Tables, query: &Arc<Query>) {
-    if Arc::strong_count(query) == 1 {
+pub(crate) fn finalize_pending_query(query: Arc<Query>) {
+    if let Ok(query) = Arc::try_unwrap(query) {
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face

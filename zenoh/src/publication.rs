@@ -120,16 +120,16 @@ impl SyncResolve for PutBuilder<'_, '_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo {
+        let info = DataInfo {
             kind,
+            encoding: if value.encoding != Encoding::default() {
+                Some(value.encoding)
+            } else {
+                None
+            },
+            timestamp: publisher.session.runtime.new_timestamp(),
             ..Default::default()
         };
-        info.encoding = if value.encoding != Encoding::default() {
-            Some(value.encoding)
-        } else {
-            None
-        };
-        info.timestamp = publisher.session.runtime.new_timestamp();
         let data_info = if info != DataInfo::default() {
             Some(info)
         } else {
@@ -392,16 +392,16 @@ impl SyncResolve for Publication<'_> {
             .unwrap()
             .clone();
 
-        let mut info = DataInfo {
+        let info = DataInfo {
             kind,
+            encoding: if value.encoding != Encoding::default() {
+                Some(value.encoding)
+            } else {
+                None
+            },
+            timestamp: publisher.session.runtime.new_timestamp(),
             ..Default::default()
         };
-        info.encoding = if value.encoding != Encoding::default() {
-            Some(value.encoding)
-        } else {
-            None
-        };
-        info.timestamp = publisher.session.runtime.new_timestamp();
         let data_info = if info != DataInfo::default() {
             Some(info)
         } else {

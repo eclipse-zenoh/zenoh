@@ -19,7 +19,6 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
-use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId},
     zenoh::{DataInfo, RoutingContext},
@@ -29,9 +28,9 @@ use zenoh_sync::get_mut_unchecked;
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt, zenoh_protocol::core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = Route;
+pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
     pub(super) complete: ZInt,
@@ -181,12 +180,17 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn client_data_route(&self, source_type: WhatAmI) -> Option<Arc<Route>> {
+    pub fn peer_data_route(&self) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => match source_type {
-                WhatAmI::Client => ctx.client_data_route.clone(),
-                _ => ctx.peer_data_route.clone(),
-            },
+            Some(ctx) => ctx.peer_data_route.clone(),
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn client_data_route(&self) -> Option<Arc<Route>> {
+        match &self.context {
+            Some(ctx) => ctx.client_data_route.clone(),
             None => None,
         }
     }
@@ -210,15 +214,17 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn client_query_route(
-        &self,
-        source_type: WhatAmI,
-    ) -> Option<Arc<QueryTargetQablSet>> {
+    pub(super) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => match source_type {
-                WhatAmI::Client => ctx.client_query_route.clone(),
-                _ => ctx.peer_query_route.clone(),
-            },
+            Some(ctx) => ctx.peer_query_route.clone(),
+            None => None,
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+        match &self.context {
+            Some(ctx) => ctx.client_query_route.clone(),
             None => None,
         }
     }

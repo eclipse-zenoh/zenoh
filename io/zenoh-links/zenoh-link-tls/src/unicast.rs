@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::io::Cursor;
-use std::net::{Ipv4Addr, Ipv6Addr, Shutdown};
+use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -444,52 +444,31 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::new(0, 0, 0, 0);
-        let default_ipv6 = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+        let mut locators = vec![];
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = value.endpoint.to_locator();
-            if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let l = Locator::new(
-                                    TLS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses() {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let l = Locator::new(
-                                    TLS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
-                }
+            let (kip, kpt) = (key.ip(), key.port());
+
+            // Either ipv4/0.0.0.0 or ipv6/[::]
+            if kip.is_unspecified() {
+                let mut addrs = match kip {
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                };
+                let iter = addrs.drain(..).map(|x| {
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
+                });
+                locators.extend(iter);
             } else {
-                locators.push(listener_locator.clone());
+                locators.push(value.endpoint.to_locator());
             }
         }
-        std::mem::drop(guard);
 
         locators
     }

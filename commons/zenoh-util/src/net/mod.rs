@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::net::TcpStream;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::time::Duration;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 
@@ -195,8 +195,8 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     }
     #[cfg(windows)]
     {
-        // On windows, bind to 0.0.0.0, the system will select the default interface
-        vec![IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))]
+        // On windows, bind to [::], the system will select the default interface
+        vec![IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)]
     }
 }
 
@@ -279,7 +279,7 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
     }
     #[cfg(windows)]
     {
-        // On windows, bind to 0.0.0.0 or [::], the system will select the default interface
+        // On windows, bind to [::] or [::], the system will select the default interface
         vec![]
     }
 }
@@ -355,4 +355,55 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
             Ok(addrs)
         }
     }
+}
+
+pub fn get_ipv4_ipaddrs() -> Vec<IpAddr> {
+    get_local_addresses()
+        .unwrap_or_else(|_| vec![])
+        .drain(..)
+        .filter_map(|x| match x {
+            IpAddr::V4(a) => Some(a),
+            IpAddr::V6(_) => None,
+        })
+        .filter(|x| !x.is_loopback() && !x.is_multicast())
+        .map(IpAddr::V4)
+        .collect()
+}
+
+pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
+    const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
+        (addr.segments()[0] & 0xffc0) == 0xfe80
+    }
+
+    let ipaddrs = get_local_addresses().unwrap_or_else(|_| vec![]);
+
+    // Get first all IPv4 addresses
+    let ipv4_iter = ipaddrs
+        .iter()
+        .filter_map(|x| match x {
+            IpAddr::V4(a) => Some(a),
+            IpAddr::V6(_) => None,
+        })
+        .filter(|x| !x.is_loopback() && !x.is_multicast())
+        .map(|x| IpAddr::V4(*x));
+
+    // Get next all IPv6 addresses
+    let ipv6_iter = ipaddrs.iter().filter_map(|x| match x {
+        IpAddr::V4(_) => None,
+        IpAddr::V6(a) => Some(a),
+    });
+
+    // First match non-linklocal IPv6 addresses
+    let nll_addrs = ipv6_iter
+        .clone()
+        .filter(|x| !x.is_loopback() && !x.is_multicast() && !is_unicast_link_local(x))
+        .map(|x| IpAddr::V6(*x));
+
+    // Second match linklocal IPv6 addresses
+    let yll_addrs = ipv6_iter
+        .filter(|x| !x.is_loopback() && !x.is_multicast() && is_unicast_link_local(x))
+        .map(|x| IpAddr::V6(*x));
+
+    // Extend
+    ipv4_iter.chain(nll_addrs).chain(yll_addrs).collect()
 }

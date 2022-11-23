@@ -14,16 +14,18 @@
 
 //! Value primitives.
 
-#[cfg(feature = "shared-memory")]
-use crate::buffers::SharedMemoryBuf;
-use crate::buffers::ZBuf;
-use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
+
 use zenoh_cfg_properties::Properties;
 use zenoh_core::zresult::ZError;
+
+#[cfg(feature = "shared-memory")]
+use crate::buffers::SharedMemoryBuf;
+use crate::buffers::ZBuf;
+use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
 
 /// A zenoh Value.
 #[non_exhaustive]
@@ -287,7 +289,7 @@ impl TryFrom<&Value> for f64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            KnownEncoding::AppFloat => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),

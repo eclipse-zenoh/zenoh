@@ -24,6 +24,14 @@ use zenoh_protocol::{
 };
 use zenoh_transport::TransportUnicast;
 
+#[derive(Clone)]
+struct Details {
+    zid: bool,
+    locators: bool,
+    links: bool,
+}
+
+#[derive(Clone)]
 pub(crate) struct Node {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: Option<WhatAmI>,
@@ -78,6 +86,11 @@ impl Link {
     }
 }
 
+pub(crate) struct Changes {
+    pub(crate) updated_nodes: Vec<(NodeIndex, Node)>,
+    pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
+}
+
 #[derive(Clone)]
 pub(crate) struct Tree {
     pub(crate) parent: Option<NodeIndex>,
@@ -88,7 +101,9 @@ pub(crate) struct Tree {
 pub(crate) struct Network {
     pub(crate) name: String,
     pub(crate) full_linkstate: bool,
+    pub(crate) router_peers_failover_brokering: bool,
     pub(crate) gossip: bool,
+    pub(crate) gossip_multihop: bool,
     pub(crate) autoconnect: WhatAmIMatcher,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
@@ -99,12 +114,15 @@ pub(crate) struct Network {
 }
 
 impl Network {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         name: String,
         zid: ZenohId,
         runtime: Runtime,
         full_linkstate: bool,
+        router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
@@ -119,7 +137,9 @@ impl Network {
         Network {
             name,
             full_linkstate,
+            router_peers_failover_brokering,
             gossip,
+            gossip_multihop,
             autoconnect,
             idx,
             links: VecMap::new(),
@@ -140,6 +160,11 @@ impl Network {
             "{:?}",
             petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
         )
+    }
+
+    #[inline]
+    pub(crate) fn get_node(&self, zid: &ZenohId) -> Option<&Node> {
+        self.graph.node_weights().find(|weight| weight.zid == *zid)
     }
 
     #[inline]
@@ -192,42 +217,50 @@ impl Network {
         idx
     }
 
-    fn make_link_state(&self, idx: NodeIndex, details: bool) -> LinkState {
-        let links = self.graph[idx]
-            .links
-            .iter()
-            .filter_map(|zid| {
-                if let Some(idx2) = self.get_idx(zid) {
-                    Some(idx2.index().try_into().unwrap())
-                } else {
-                    log::error!(
-                        "{} Internal error building link state: cannot get index of {}",
-                        self.name,
-                        zid
-                    );
-                    None
-                }
-            })
-            .collect();
+    fn make_link_state(&self, idx: NodeIndex, details: Details) -> LinkState {
+        let links = if details.links {
+            self.graph[idx]
+                .links
+                .iter()
+                .filter_map(|zid| {
+                    if let Some(idx2) = self.get_idx(zid) {
+                        Some(idx2.index().try_into().unwrap())
+                    } else {
+                        log::error!(
+                            "{} Internal error building link state: cannot get index of {}",
+                            self.name,
+                            zid
+                        );
+                        None
+                    }
+                })
+                .collect()
+        } else {
+            vec![]
+        };
         LinkState {
             psid: idx.index().try_into().unwrap(),
             sn: self.graph[idx].sn,
-            zid: if details {
+            zid: if details.zid {
                 Some(self.graph[idx].zid)
             } else {
                 None
             },
             whatami: self.graph[idx].whatami,
-            locators: if idx == self.idx {
-                self.gossip.then(|| self.runtime.get_locators())
+            locators: if details.locators {
+                if idx == self.idx {
+                    Some(self.runtime.get_locators())
+                } else {
+                    self.graph[idx].locators.clone()
+                }
             } else {
-                self.graph[idx].locators.clone()
+                None
             },
             links,
         }
     }
 
-    fn make_msg(&self, idxs: Vec<(NodeIndex, bool)>) -> ZenohMessage {
+    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> ZenohMessage {
         let mut list = vec![];
         for (idx, details) in idxs {
             list.push(self.make_link_state(idx, details));
@@ -235,7 +268,7 @@ impl Network {
         ZenohMessage::make_link_state_list(list, None)
     }
 
-    fn send_on_link(&self, idxs: Vec<(NodeIndex, bool)>, transport: &TransportUnicast) {
+    fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
         let msg = self.make_msg(idxs);
         log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
         if let Err(e) = transport.handle_message(msg) {
@@ -243,7 +276,7 @@ impl Network {
         }
     }
 
-    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, bool)>, mut parameters: P)
+    fn send_on_links<P>(&self, idxs: Vec<(NodeIndex, Details)>, mut parameters: P)
     where
         P: FnMut(&Link) -> bool,
     {
@@ -256,6 +289,21 @@ impl Network {
                 }
             }
         }
+    }
+
+    // Indicates if locators should be included when propagating Linkstate message
+    // from the given node.
+    // Returns true if gossip is enabled and if multihop gossip is enabled or
+    // the node is one of self neighbours.
+    fn propagate_locators(&self, idx: NodeIndex) -> bool {
+        self.gossip
+            && (self.gossip_multihop
+                || self.links.values().any(|link| {
+                    self.graph
+                        .node_weight(idx)
+                        .map(|node| link.zid == node.zid)
+                        .unwrap_or(true)
+                }))
     }
 
     fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
@@ -272,11 +320,7 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(crate) fn link_states(
-        &mut self,
-        link_states: Vec<LinkState>,
-        src: ZenohId,
-    ) -> Vec<(NodeIndex, Node)> {
+    pub(crate) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) -> Changes {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
         let graph = &self.graph;
@@ -290,7 +334,10 @@ impl Network {
                     self.name,
                     src
                 );
-                return vec![];
+                return Changes {
+                    updated_nodes: vec![],
+                    removed_nodes: vec![],
+                };
             }
         };
 
@@ -374,38 +421,78 @@ impl Network {
         }
 
         if !self.full_linkstate {
+            let mut changes = Changes {
+                updated_nodes: vec![],
+                removed_nodes: vec![],
+            };
             for (zid, whatami, locators, sn, links) in link_states.into_iter() {
-                if self.get_idx(&zid).is_none() {
-                    let idx = self.add_node(Node {
-                        zid,
-                        whatami: Some(whatami),
-                        locators: locators.clone(),
-                        sn,
-                        links,
-                    });
-                    self.send_on_links(vec![(idx, true)], |link| link.zid != zid);
+                let idx = match self.get_idx(&zid) {
+                    None => {
+                        let idx = self.add_node(Node {
+                            zid,
+                            whatami: Some(whatami),
+                            locators: locators.clone(),
+                            sn,
+                            links,
+                        });
+                        changes.updated_nodes.push((idx, self.graph[idx].clone()));
+                        locators.is_some().then_some(idx)
+                    }
+                    Some(idx) => {
+                        let node = &mut self.graph[idx];
+                        let oldsn = node.sn;
+                        (oldsn < sn)
+                            .then(|| {
+                                node.sn = sn;
+                                node.links = links.clone();
+                                changes.updated_nodes.push((idx, node.clone()));
+                                (node.locators != locators && locators.is_some()).then(|| {
+                                    node.locators = locators.clone();
+                                    idx
+                                })
+                            })
+                            .flatten()
+                    }
+                };
 
-                    if !self.autoconnect.is_empty() {
-                        // Connect discovered peers
-                        if self.runtime.manager().get_transport(&zid).is_none()
-                            && self.autoconnect.matches(whatami)
-                        {
-                            if let Some(locators) = locators {
-                                let runtime = self.runtime.clone();
-                                self.runtime.spawn(async move {
-                                    // random backoff
-                                    async_std::task::sleep(std::time::Duration::from_millis(
-                                        rand::random::<u64>() % 100,
-                                    ))
-                                    .await;
-                                    runtime.connect_peer(&zid, &locators).await;
-                                });
+                if self.gossip {
+                    if let Some(idx) = idx {
+                        if self.gossip_multihop || self.links.values().any(|link| link.zid == zid) {
+                            self.send_on_links(
+                                vec![(
+                                    idx,
+                                    Details {
+                                        zid: true,
+                                        locators: true,
+                                        links: false,
+                                    },
+                                )],
+                                |link| link.zid != zid,
+                            );
+                        }
+
+                        if !self.autoconnect.is_empty() {
+                            // Connect discovered peers
+                            if self.runtime.manager().get_transport(&zid).is_none()
+                                && self.autoconnect.matches(whatami)
+                            {
+                                if let Some(locators) = locators {
+                                    let runtime = self.runtime.clone();
+                                    self.runtime.spawn(async move {
+                                        // random backoff
+                                        async_std::task::sleep(std::time::Duration::from_millis(
+                                            rand::random::<u64>() % 100,
+                                        ))
+                                        .await;
+                                        runtime.connect_peer(&zid, &locators).await;
+                                    });
+                                }
                             }
                         }
                     }
                 }
             }
-            return vec![];
+            return changes;
         }
 
         // Add nodes to graph & filter out up to date states
@@ -536,16 +623,32 @@ impl Network {
             ) = link_states.into_iter().partition(|(_, _, new)| *new);
             let new_idxs = new_idxs
                 .into_iter()
-                .map(|(_, idx1, _new_node)| (idx1, true))
-                .collect::<Vec<(NodeIndex, bool)>>();
+                .map(|(_, idx1, _new_node)| {
+                    (
+                        idx1,
+                        Details {
+                            zid: true,
+                            locators: self.propagate_locators(idx1),
+                            links: true,
+                        },
+                    )
+                })
+                .collect::<Vec<(NodeIndex, Details)>>();
             for link in self.links.values() {
                 if link.zid != src {
-                    let updated_idxs: Vec<(NodeIndex, bool)> = updated_idxs
+                    let updated_idxs: Vec<(NodeIndex, Details)> = updated_idxs
                         .clone()
                         .into_iter()
                         .filter_map(|(_, idx1, _)| {
                             if link.zid != self.graph[idx1].zid {
-                                Some((idx1, false))
+                                Some((
+                                    idx1,
+                                    Details {
+                                        zid: false,
+                                        locators: self.propagate_locators(idx1),
+                                        links: true,
+                                    },
+                                ))
                             } else {
                                 None
                             }
@@ -562,7 +665,10 @@ impl Network {
                 }
             }
         }
-        removed
+        Changes {
+            updated_nodes: vec![],
+            removed_nodes: removed,
+        }
     }
 
     pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
@@ -578,7 +684,7 @@ impl Network {
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
 
-        if self.full_linkstate {
+        if self.full_linkstate || self.router_peers_failover_brokering {
             let (idx, new) = match self.get_idx(&zid) {
                 Some(idx) => (idx, false),
                 None => {
@@ -595,20 +701,76 @@ impl Network {
                     )
                 }
             };
-            if self.graph[idx].links.contains(&self.graph[self.idx].zid) {
+            if self.full_linkstate && self.graph[idx].links.contains(&self.graph[self.idx].zid) {
                 log::trace!("Update edge (link) {} {}", self.graph[self.idx].zid, zid);
                 self.update_edge(self.idx, idx);
             }
             self.graph[self.idx].links.push(zid);
             self.graph[self.idx].sn += 1;
 
-            if new {
-                self.send_on_links(vec![(idx, true), (self.idx, false)], |link| link.zid != zid);
-            } else {
-                self.send_on_links(vec![(self.idx, false)], |link| link.zid != zid);
-            }
+            // Send updated self linkstate on all existing links except new one
+            self.links
+                .values()
+                .filter(|link| {
+                    link.zid != zid
+                        && (self.full_linkstate
+                            || link.transport.get_whatami().unwrap_or(WhatAmI::Peer)
+                                == WhatAmI::Router)
+                })
+                .for_each(|link| {
+                    self.send_on_link(
+                        if new {
+                            vec![
+                                (
+                                    idx,
+                                    Details {
+                                        zid: true,
+                                        locators: false,
+                                        links: false,
+                                    },
+                                ),
+                                (
+                                    self.idx,
+                                    Details {
+                                        zid: false,
+                                        locators: self.propagate_locators(idx),
+                                        links: true,
+                                    },
+                                ),
+                            ]
+                        } else {
+                            vec![(
+                                self.idx,
+                                Details {
+                                    zid: false,
+                                    locators: self.propagate_locators(idx),
+                                    links: true,
+                                },
+                            )]
+                        },
+                        &link.transport,
+                    )
+                });
         }
-        let idxs = self.graph.node_indices().map(|i| (i, true)).collect();
+
+        // Send all nodes linkstate on new link
+        let idxs = self
+            .graph
+            .node_indices()
+            .map(|idx| {
+                (
+                    idx,
+                    Details {
+                        zid: true,
+                        locators: self.propagate_locators(idx),
+                        links: self.full_linkstate
+                            || (self.router_peers_failover_brokering
+                                && idx == self.idx
+                                && whatami == WhatAmI::Router),
+                    },
+                )
+            })
+            .collect();
         self.send_on_link(idxs, &transport);
         free_index
     }
@@ -629,35 +791,34 @@ impl Network {
 
             self.graph[self.idx].sn += 1;
 
-            let links = self
-                .links
-                .values()
-                .map(|link| self.get_idx(&link.zid).unwrap().index().try_into().unwrap())
-                .collect::<Vec<ZInt>>();
-
-            let msg = ZenohMessage::make_link_state_list(
-                vec![LinkState {
-                    psid: self.idx.index().try_into().unwrap(),
-                    sn: self.graph[self.idx].sn,
-                    zid: None,
-                    whatami: self.graph[self.idx].whatami,
-                    locators: self.gossip.then(|| self.runtime.get_locators()),
-                    links,
-                }],
-                None,
+            self.send_on_links(
+                vec![(
+                    self.idx,
+                    Details {
+                        zid: false,
+                        locators: self.gossip,
+                        links: true,
+                    },
+                )],
+                |_| true,
             );
-
-            for link in self.links.values() {
-                if let Err(e) = link.transport.handle_message(msg.clone()) {
-                    log::debug!("{} Error sending LinkStateList: {}", self.name, e);
-                }
-            }
 
             removed
         } else {
             if let Some(idx) = self.get_idx(zid) {
                 self.graph.remove_node(idx);
             }
+            self.send_on_links(
+                vec![(
+                    self.idx,
+                    Details {
+                        zid: false,
+                        locators: self.gossip,
+                        links: true,
+                    },
+                )],
+                |link| link.zid != *zid,
+            );
             vec![]
         }
     }
@@ -785,6 +946,13 @@ impl Network {
         }
 
         new_childs
+    }
+
+    #[inline]
+    pub(super) fn get_links(&self, node: ZenohId) -> Vec<ZenohId> {
+        self.get_node(&node)
+            .map(|node| node.links.clone())
+            .unwrap_or_default()
     }
 }
 

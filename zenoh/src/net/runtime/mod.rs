@@ -36,14 +36,12 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_link::Link;
-use zenoh_protocol;
+use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, Locator, WhatAmI, ZenohId},
+    core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
     zenoh::{ZenohBody, ZenohMessage},
 };
 use zenoh_sync::get_mut_unchecked;
-use zenoh_transport;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -111,6 +109,7 @@ impl Runtime {
             .unwrap_or(false);
 
         let gossip = config.scouting().gossip().enabled().unwrap_or(true);
+        let gossip_multihop = config.scouting().gossip().multihop().unwrap_or(false);
         let autoconnect = match whatami {
             WhatAmI::Router => {
                 if config.scouting().gossip().enabled().unwrap_or(true) {
@@ -145,6 +144,12 @@ impl Runtime {
         let peer_link_state = whatami != WhatAmI::Client
             && *config.routing().peer().mode() == Some("linkstate".to_string());
 
+        let router_peers_failover_brokering = config
+            .routing()
+            .router()
+            .peers_failover_brokering()
+            .unwrap_or(true);
+
         let queries_default_timeout = config.queries_default_timeout().unwrap_or_else(|| {
             zenoh_cfg_properties::config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT
                 .parse()
@@ -156,6 +161,7 @@ impl Runtime {
             whatami,
             hlc.clone(),
             drop_future_timestamp,
+            router_peers_failover_brokering,
             Duration::from_millis(queries_default_timeout),
         ));
 
@@ -189,7 +195,9 @@ impl Runtime {
             runtime.clone(),
             router_link_state,
             peer_link_state,
+            router_peers_failover_brokering,
             gossip,
+            gossip_multihop,
             autoconnect,
         );
 
@@ -271,7 +279,8 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         _transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        bail!("Unimplemented")
+        // @TODO
+        unimplemented!();
     }
 }
 

@@ -12,10 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::face::Face;
 use super::Runtime;
-use crate::key_expr::keyexpr;
+use crate::key_expr::KeyExpr;
 use crate::plugins::sealed as plugins;
-use crate::prelude::KeyExpr;
-use crate::prelude::SampleKind;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -29,8 +27,9 @@ use zenoh_config::ValidatedMap;
 use zenoh_core::Result as ZResult;
 use zenoh_protocol::{
     core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, Encoding,
-        KnownEncoding, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        key_expr::{keyexpr, OwnedKeyExpr},
+        Channel, CongestionControl, ConsolidationMode, Encoding, KnownEncoding, QueryTarget,
+        QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{DataInfo, RoutingContext},
 };
