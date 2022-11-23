@@ -57,6 +57,10 @@ impl Locator {
     pub fn metadata_mut(&mut self) -> MetadataMut {
         self.0.metadata_mut()
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
 }
 
 impl From<EndPoint> for Locator {
