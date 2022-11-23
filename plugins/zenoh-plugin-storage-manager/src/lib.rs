@@ -117,8 +117,7 @@ impl StorageRuntimeInner {
             backend: None,
             paths: None,
             required: false,
-            persistence: Persistence::Volatile,
-            history: History::Latest,
+            read_cost: 0,
             rest: Default::default(),
         })?;
         new_self.update(
@@ -157,9 +156,9 @@ impl StorageRuntimeInner {
         if volume_id == MEMORY_BACKEND_NAME {
             // check if capabilities match
             if !memory_backend::confirm_capability(Capability {
-                persistence: Some(config.persistence.clone()),
-                history: Some(config.history.clone()),
-                location: None,
+                persistence: None,
+                history: None,
+                read_cost: Some(config.read_cost),
             }) {
                 bail!("Backend doesn't satisfy the required capabilities")
             }
@@ -222,9 +221,9 @@ impl StorageRuntimeInner {
             match lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
                 Ok(confirm_capability) => {
                     if !confirm_capability(Capability {
-                        persistence: Some(config.persistence.clone()),
-                        history: Some(config.history.clone()),
-                        location: None,
+                        persistence: None,
+                        history: None,
+                        read_cost: Some(config.read_cost),
                     }) {
                         bail!("Backend doesn't satisfy the required capabilities")
                     }

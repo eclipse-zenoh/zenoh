@@ -32,7 +32,7 @@ pub struct PluginConfig {
 pub struct Capability {
     pub persistence: Option<Persistence>,
     pub history: Option<History>,
-    pub location: Option<Location>,
+    pub read_cost: Option<u32>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Persistence {
@@ -44,19 +44,13 @@ pub enum History {
     Latest, //default
     All,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Location {
-    Local, //default
-    Remote,
-}
 #[derive(Debug, Clone, AsMut, AsRef)]
 pub struct VolumeConfig {
     pub name: String,
     pub backend: Option<String>,
     pub paths: Option<Vec<String>>,
     pub required: bool,
-    pub persistence: Persistence,
-    pub history: History,
+    pub read_cost: u32,
     #[as_ref]
     #[as_mut]
     pub rest: Map<String, Value>,
@@ -68,7 +62,8 @@ pub struct StorageConfig {
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
-    pub location: Location,
+    pub persistence: Persistence,
+    pub history: History,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replica_config: Option<ReplicaConfig>,
     // #[as_ref]
@@ -291,39 +286,21 @@ impl VolumeConfig {
                 None => true,
                 _ => todo!(),
             };
-            let persistence = match config.get("persistence") {
-                Some(serde_json::Value::String(s)) => {
-                    if s.to_lowercase() == "volatile" {
-                        Persistence::Volatile
-                    } else if s.to_lowercase() == "durable" {
-                        Persistence::Durable
-                    } else {
-                        bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
+            let read_cost = match config.get("read_cost") {
+                Some(cost) => {
+                    match cost.to_string().parse::<u32>() {
+                        Ok(cost) => cost,
+                        Err(_) => bail!("Invalid type for field `read_cost` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
-                },
-                None => Persistence::Volatile,
-                _ => bail!("`persistence` field of `{}`'s `{}` volume configuration must be either `volatile` or `durable`", plugin_name, name)
-            };
-            let history = match config.get("history") {
-                Some(serde_json::Value::String(s)) => {
-                    if s.to_lowercase() == "latest" {
-                        History::Latest
-                    } else if s.to_lowercase() == "all" {
-                        History::All
-                    } else {
-                        bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
-                    }
-                },
-                None => History::Latest,
-                _ => bail!("`history` field of `{}`'s `{}` volume configuration must be either `latest` or `all`", plugin_name, name)
+                }
+                None => 0,
             };
             volumes.push(VolumeConfig {
                 name: name.clone(),
                 backend,
                 paths,
                 required,
-                persistence,
-                history,
+                read_cost,
                 rest: config
                     .iter()
                     .filter_map(|(k, v)| {
@@ -424,22 +401,32 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
-        let location = match config.get("location") {
+        let persistence = match config.get("persistence") {
             Some(serde_json::Value::String(s)) => {
-                if s.to_lowercase() == "local" {
-                    Location::Local
-                } else if s.to_lowercase() == "remote" {
-                    Location::Remote
+                if s.to_lowercase() == "volatile" {
+                    Persistence::Volatile
+                } else if s.to_lowercase() == "durable" {
+                    Persistence::Durable
                 } else {
-                    bail!(
-                        "`location` field of storage `{}` must be either `local` or `remote`",
-                        storage_name
-                    )
+                    bail!("`persistence` field of `{}` storage configuration must be either `volatile` or `durable`", storage_name)
+                }
+            },
+            None => Persistence::Volatile,
+            _ => bail!("`persistence` field of `{}` storage configuration must be either `volatile` or `durable`", storage_name)
+        };
+        let history = match config.get("history") {
+            Some(serde_json::Value::String(s)) => {
+                if s.to_lowercase() == "latest" {
+                    History::Latest
+                } else if s.to_lowercase() == "all" {
+                    History::All
+                } else {
+                    bail!("`history` field of `{}` storage configuration must be either `latest` or `all`", storage_name)
                 }
             }
-            None => Location::Local,
+            None => History::Latest,
             _ => bail!(
-                "`location` field of storage `{}` must be either `local` or `remote`",
+                "`history` field of `{}` storage configuration must be either `latest` or `all`",
                 storage_name
             ),
         };
@@ -481,7 +468,8 @@ impl StorageConfig {
             strip_prefix,
             volume_id,
             volume_cfg,
-            location,
+            persistence,
+            history,
             replica_config,
         })
     }

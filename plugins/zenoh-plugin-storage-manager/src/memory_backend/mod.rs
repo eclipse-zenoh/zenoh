@@ -20,9 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{
-    Capability, History, Location, Persistence, StorageConfig, VolumeConfig,
-};
+use zenoh_backend_traits::config::{Capability, History, Persistence, StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
@@ -38,8 +36,8 @@ pub fn confirm_capability(capability: Capability) -> bool {
             return false;
         }
     }
-    if let Some(location) = capability.location {
-        if location != Location::Remote {
+    if let Some(read_cost) = capability.read_cost {
+        if read_cost > 0 {
             return false;
         }
     }
