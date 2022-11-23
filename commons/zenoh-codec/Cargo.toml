@@ -33,7 +33,6 @@ shared-memory = [
     "zenoh-buffers/shared-memory", 
     "zenoh-protocol/shared-memory"
 ]
-default = ["shared-memory"]
 
 [dependencies]
 rand = "0.8.5"
