@@ -425,7 +425,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                    Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
                 match zenoh_util::net::get_local_addresses() {
@@ -442,7 +442,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                    Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else {
                 locators.push(listener_locator.clone());

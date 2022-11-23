@@ -26,21 +26,21 @@ macro_rules! stats_struct {
             $vis struct $struct_name {
                 $(
                 $(#[$field_meta:meta])*
-                $field_vis $field_name : usize,
+                $field_vis $field_name: usize,
                 )*
             }
 
             struct [<$struct_name Atomic>] {
                 $(
                 $(#[$field_meta:meta])*
-                $field_name : AtomicUsize,
+                $field_name: AtomicUsize,
                 )*
             }
 
             impl [<$struct_name Atomic>] {
                 fn snapshot(&self) -> $struct_name {
                     $struct_name {
-                        $($field_name : self.[<get_ $field_name>](),)*
+                        $($field_name: self.[<get_ $field_name>](),)*
                     }
                 }
 
@@ -58,7 +58,7 @@ macro_rules! stats_struct {
             impl Default for [<$struct_name Atomic>] {
                 fn default() -> [<$struct_name Atomic>] {
                     [<$struct_name Atomic>] {
-                        $($field_name : AtomicUsize::new(0),)*
+                        $($field_name: AtomicUsize::new(0),)*
                     }
                 }
             }

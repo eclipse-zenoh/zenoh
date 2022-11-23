@@ -335,7 +335,7 @@ impl Runtime {
             match self.manager().add_listener(endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
-                    log::error!("Unable to open listener {} : {}", listener, err);
+                    log::error!("Unable to open listener {}: {}", listener, err);
                     return Err(err);
                 }
             }
@@ -373,7 +373,7 @@ impl Runtime {
                             }
                         },
                         Err(err) => {
-                            log::error!("Unable to find interface {} : {}", name, err);
+                            log::error!("Unable to find interface {}: {}", name, err);
                             None
                         }
                     },
@@ -386,12 +386,12 @@ impl Runtime {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::error!("Unable to create datagram socket : {}", err);
+                log::error!("Unable to create datagram socket: {}", err);
                 bail!(err => "Unable to create datagram socket");
             }
         };
         if let Err(err) = socket.set_reuse_address(true) {
-            log::error!("Unable to set SO_REUSEADDR option : {}", err);
+            log::error!("Unable to set SO_REUSEADDR option: {}", err);
             bail!(err => "Unable to set SO_REUSEADDR option");
         }
         let addr: IpAddr = {
@@ -407,7 +407,7 @@ impl Runtime {
         match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
             Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
-                log::error!("Unable to bind UDP port {} : {}", sockaddr, err);
+                log::error!("Unable to bind UDP port {}: {}", sockaddr, err);
                 bail!(err => "Unable to bind UDP port {}", sockaddr);
             }
         }
@@ -417,7 +417,7 @@ impl Runtime {
                 Ok(()) => log::debug!("Joined multicast group {} on interface 0", sockaddr.ip()),
                 Err(err) => {
                     log::error!(
-                        "Unable to join multicast group {} on interface 0 : {}",
+                        "Unable to join multicast group {} on interface 0: {}",
                         sockaddr.ip(),
                         err
                     );
@@ -437,7 +437,7 @@ impl Runtime {
                                 iface_addr,
                             ),
                             Err(err) => log::warn!(
-                                "Unable to join multicast group {} on interface {} : {}",
+                                "Unable to join multicast group {} on interface {}: {}",
                                 sockaddr.ip(),
                                 iface_addr,
                                 err,
@@ -461,7 +461,7 @@ impl Runtime {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::warn!("Unable to create datagram socket : {}", err);
+                log::warn!("Unable to create datagram socket: {}", err);
                 bail!(err=> "Unable to create datagram socket");
             }
         };
@@ -476,7 +476,7 @@ impl Runtime {
                 log::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
-                log::warn!("Unable to bind udp port {}:0 : {}", addr, err);
+                log::warn!("Unable to bind udp port {}:0: {}", addr, err);
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
@@ -566,7 +566,7 @@ impl Runtime {
                         .await
                     {
                         log::debug!(
-                            "Unable to send {:?} to {} on interface {} : {}",
+                            "Unable to send {:?} to {} on interface {}: {}",
                             scout.body,
                             mcast_addr,
                             socket
@@ -600,18 +600,18 @@ impl Runtime {
                                             break;
                                         }
                                     } else {
-                                        log::warn!("Received unexpected Hello : {:?}", msg.body);
+                                        log::warn!("Received unexpected Hello: {:?}", msg.body);
                                     }
                                 }
                             } else {
                                 log::trace!(
-                                    "Received unexpected UDP datagram from {} : {:?}",
+                                    "Received unexpected UDP datagram from {}: {:?}",
                                     peer,
                                     &buf.as_slice()[..n]
                                 );
                             }
                         }
-                        Err(e) => log::debug!("Error receiving UDP datagram : {}", e),
+                        Err(e) => log::debug!("Error receiving UDP datagram: {}", e),
                     }
                 }
             }
@@ -649,13 +649,13 @@ impl Runtime {
                     );
                 } else {
                     log::warn!(
-                        "Unable to connect any locator of scouted peer {} : {:?}",
+                        "Unable to connect any locator of scouted peer {}: {:?}",
                         zid,
                         locators
                     );
                 }
             } else {
-                log::trace!("Already connected scouted peer : {}", zid);
+                log::trace!("Already connected scouted peer: {}", zid);
             }
         }
     }
@@ -681,7 +681,7 @@ impl Runtime {
                     }
                     log::warn!("Unable to connect to scouted {:?}", hello);
                 } else {
-                    log::warn!("Received Hello with no locators : {:?}", hello);
+                    log::warn!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -707,11 +707,11 @@ impl Runtime {
                     if !hello.locators.is_empty() {
                         self.connect_peer(zid, &hello.locators).await
                     } else {
-                        log::warn!("Received Hello with no locators : {:?}", hello);
+                        log::warn!("Received Hello with no locators: {:?}", hello);
                     }
                 }
                 None => {
-                    log::warn!("Received Hello with no zid : {:?}", hello);
+                    log::warn!("Received Hello with no zid: {:?}", hello);
                 }
             }
             Loop::Continue
@@ -794,13 +794,13 @@ impl Runtime {
                         codec.write(&mut writer, &hello).unwrap();
 
                         if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
-                            log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
+                            log::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
                         }
                     }
                 }
             } else {
                 log::trace!(
-                    "Received unexpected UDP datagram from {} : {:?}",
+                    "Received unexpected UDP datagram from {}: {:?}",
                     peer,
                     &buf.as_slice()[..n]
                 );

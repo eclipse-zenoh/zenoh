@@ -351,7 +351,7 @@ impl Primitives for AdminSpace {
                         }
                     }
                     Err(e) => error!(
-                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
+                        "Received non utf8 conf value on /@/router/{}/config/{}: {}",
                         &self.context.zid_str, key, e
                     ),
                 }

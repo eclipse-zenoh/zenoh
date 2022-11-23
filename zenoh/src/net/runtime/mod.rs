@@ -209,7 +209,7 @@ impl Runtime {
                 while let Some(event) = stream.next().await {
                     if &*event == "connect/endpoints" {
                         if let Err(e) = runtime2.update_peers().await {
-                            log::error!("Error updating peers : {}", e);
+                            log::error!("Error updating peers: {}", e);
                         }
                     }
                 }

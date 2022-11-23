@@ -487,7 +487,7 @@ pub enum ConfigOpenErr {
 impl std::fmt::Display for ConfigOpenErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigOpenErr::IoError(e) => write!(f, "Couldn't open file : {}", e),
+            ConfigOpenErr::IoError(e) => write!(f, "Couldn't open file: {}", e),
             ConfigOpenErr::JsonParseErr(e) => write!(f, "JSON5 parsing error {}", e),
             ConfigOpenErr::InvalidConfiguration(c) => write!(
                 f,

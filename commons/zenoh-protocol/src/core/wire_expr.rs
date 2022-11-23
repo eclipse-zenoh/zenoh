@@ -39,7 +39,7 @@ use zenoh_core::{bail, Result as ZResult};
 //
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// ~      id       — if Expr : id=0
+// ~      id       — if Expr: id=0
 // +-+-+-+-+-+-+-+-+
 // ~    suffix     ~ if flag K==1 in Message's header
 // +---------------+

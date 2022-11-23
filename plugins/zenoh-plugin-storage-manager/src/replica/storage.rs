@@ -68,7 +68,7 @@ impl StorageService {
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
-                error!("Error starting storage {} : {}", self.name, e);
+                error!("Error starting storage {}: {}", self.name, e);
                 return;
             }
         };
@@ -77,7 +77,7 @@ impl StorageService {
         let storage_queryable = match self.session.declare_queryable(&self.key_expr).res().await {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
-                error!("Error starting storage {} : {}", self.name, e);
+                error!("Error starting storage {}: {}", self.name, e);
                 return;
             }
         };
@@ -243,7 +243,7 @@ impl StorageService {
             {
                 Ok(replies) => replies,
                 Err(e) => {
-                    error!("Error aligning storage {} : {}", self.name, e);
+                    error!("Error aligning storage {}: {}", self.name, e);
                     return;
                 }
             };

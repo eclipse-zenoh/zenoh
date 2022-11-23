@@ -354,7 +354,7 @@ impl Session {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -385,7 +385,7 @@ impl Session {
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -500,7 +500,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {:?}", sample);
+    ///     println!("Received: {:?}", sample);
     /// }
     /// # })
     /// ```
@@ -1453,7 +1453,7 @@ impl SessionDeclarations for Arc<Session> {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -1853,7 +1853,7 @@ impl fmt::Debug for Session {
 ///     .unwrap();
 /// async_std::task::spawn(async move {
 ///     while let Ok(sample) = subscriber.recv_async().await {
-///         println!("Received : {:?}", sample);
+///         println!("Received: {:?}", sample);
 ///     }
 /// }).await;
 /// # })
@@ -1877,7 +1877,7 @@ pub trait SessionDeclarations {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })

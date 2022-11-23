@@ -174,7 +174,7 @@ impl LibLoader {
                                     }
                                 } else {
                                     debug!(
-                                        "Do not load plugin {} from {:?} : already loaded.",
+                                        "Do not load plugin {} from {:?}: already loaded.",
                                         name, path
                                     );
                                 }

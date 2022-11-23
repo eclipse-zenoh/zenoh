@@ -217,7 +217,7 @@ impl Aligner {
             // get intervals diff
             let diff_subintervals = this.get_subinterval_diff(other_subintervals);
             trace!(
-                "[ALIGNER] The subintervals that need alignment are : {:?}",
+                "[ALIGNER] The subintervals that need alignment are: {:?}",
                 diff_subintervals
             );
             if !diff_subintervals.is_empty() {

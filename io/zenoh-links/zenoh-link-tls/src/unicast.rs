@@ -81,7 +81,7 @@ impl LinkUnicastTls {
         // Set the TLS nodelay option
         if let Err(err) = tcp_stream.set_nodelay(true) {
             log::warn!(
-                "Unable to set NODEALY option on TLS link {} => {} : {}",
+                "Unable to set NODEALY option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
@@ -96,7 +96,7 @@ impl LinkUnicastTls {
             )),
         ) {
             log::warn!(
-                "Unable to set LINGER option on TLS link {} => {} : {}",
+                "Unable to set LINGER option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err

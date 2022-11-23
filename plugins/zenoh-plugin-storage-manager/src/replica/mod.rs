@@ -262,7 +262,7 @@ impl Replica {
             drop(digests_published);
             drop(digest);
 
-            trace!("[DIGEST_PUB] Putting Digest : {} ...", digest_json);
+            trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
             match publisher.put(digest_json).res().await {
                 Ok(()) => {}
                 Err(e) => error!("Digest publication failed: {}", e),
