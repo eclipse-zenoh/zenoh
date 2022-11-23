@@ -115,8 +115,7 @@ where
             self.write(&mut *writer, x.kind as ZInt)?;
         }
         if let Some(enc) = x.encoding.as_ref() {
-            self.write(&mut *writer, u8::from(*enc.prefix()))?;
-            self.write(&mut *writer, enc.suffix())?;
+            self.write(&mut *writer, enc)?;
         }
         if let Some(ts) = x.timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
@@ -144,9 +143,8 @@ where
             info.kind = kind.try_into().map_err(|_| DidntRead)?;
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
-            let prefix: ZInt = self.read(&mut *reader)?;
-            let suffix: String = self.read(&mut *reader)?;
-            info.encoding = Some(Encoding::new(prefix, suffix).ok_or(DidntRead)?);
+            let encoding: Encoding = self.read(&mut *reader)?;
+            info.encoding = Some(encoding);
         }
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             let timestamp: Timestamp = self.read(&mut *reader)?;

@@ -277,3 +277,27 @@ impl Default for Encoding {
         KnownEncoding::Empty.into()
     }
 }
+
+impl Encoding {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::{
+            distributions::{Alphanumeric, DistString},
+            Rng,
+        };
+
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        let mut rng = rand::thread_rng();
+
+        let prefix: ZInt = rng.gen_range(0..20);
+        let suffix: String = if rng.gen_bool(0.5) {
+            let len = rng.gen_range(MIN..MAX);
+            Alphanumeric.sample_string(&mut rng, len)
+        } else {
+            String::new()
+        };
+        Encoding::new(prefix, suffix).unwrap()
+    }
+}

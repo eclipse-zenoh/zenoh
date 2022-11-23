@@ -132,13 +132,7 @@ pub struct DataInfo {
 impl DataInfo {
     #[doc(hidden)]
     pub fn rand() -> Self {
-        use rand::{
-            distributions::{Alphanumeric, DistString},
-            Rng,
-        };
-
-        const MIN: usize = 2;
-        const MAX: usize = 16;
+        use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
@@ -146,14 +140,7 @@ impl DataInfo {
         let sliced = rng.gen_bool(0.5);
         let kind = SampleKind::try_from(rng.gen_range(0..1)).unwrap();
         let encoding = if rng.gen_bool(0.5) {
-            let prefix: ZInt = rng.gen_range(0..20);
-            let suffix: String = if rng.gen_bool(0.5) {
-                let len = rng.gen_range(MIN..MAX);
-                Alphanumeric.sample_string(&mut rng, len)
-            } else {
-                String::new()
-            };
-            Some(Encoding::new(prefix, suffix).unwrap())
+            Some(Encoding::rand())
         } else {
             None
         };

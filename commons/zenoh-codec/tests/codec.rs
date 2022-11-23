@@ -162,6 +162,11 @@ fn codec_timestamp() {
     });
 }
 
+#[test]
+fn codec_encoding() {
+    run!(Encoding, Encoding::rand());
+}
+
 // Common
 #[test]
 fn codec_attachment() {
