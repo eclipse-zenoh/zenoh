@@ -15,7 +15,6 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
-use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -59,7 +58,7 @@ async fn main() {
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), String::try_from(&sample.value).unwrap());
+                    sample.kind, sample.key_expr.as_str(), sample.value);
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -81,7 +80,7 @@ fn parse_args() -> (Config, String, Option<String>) {
     let args = App::new("zenoh-ext query sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
-                .possible_values(&["peer", "client"]),
+                .possible_values(["peer", "client"]),
         )
         .arg(Arg::from_usage(
             "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",

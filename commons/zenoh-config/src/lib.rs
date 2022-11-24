@@ -147,6 +147,12 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
+                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+                /// When false, gossip scouting informations are only propagated to the next hop.
+                /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+                /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+                /// direct connectivity with each other.
+                multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
@@ -170,6 +176,15 @@ validated_struct::validator! {
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
         RoutingConf {
+            /// The routing strategy to use in routers and it's configuration.
+            pub router: #[derive(Default)]
+            RouterRoutingConf {
+                /// When set to true a router will forward data between two peers
+                /// directly connected to it if it detects that those peers are not
+                /// connected to each other.
+                /// The failover brokering only works if gossip discovery is enabled.
+                peers_failover_brokering: Option<bool>,
+            },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
@@ -294,7 +309,11 @@ validated_struct::validator! {
         },
         /// Configuration of the admin space.
         pub adminspace: #[derive(Default)]
-        /// This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        /// <div class="stab unstable">
+        ///   <span class="emoji">🔬</span>
+        ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+        ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
+        /// </div>
         AdminSpaceConf {
             /// Permissions on the admin space
             pub permissions:

@@ -61,9 +61,8 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     }
 
     /// Restrict the matching queries that will be receive by this [`PublicationCache`]'s queryable
-    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    /// NOTE: this operation is marked as "unstable" because its signature might change in future versions.
-    #[cfg(feature = "unstable")]
+    /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
+    #[zenoh_core::unstable]
     #[inline]
     pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
         self.queryable_origin = origin;

@@ -45,6 +45,7 @@ pub struct Tables {
     #[allow(dead_code)]
     pub(crate) hlc: Option<Arc<HLC>>,
     pub(crate) drop_future_timestamp: bool,
+    pub(crate) router_peers_failover_brokering: bool,
     // pub(crate) timer: Timer,
     // pub(crate) queries_default_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
@@ -67,6 +68,7 @@ impl Tables {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         drop_future_timestamp: bool,
+        router_peers_failover_brokering: bool,
         _queries_default_timeout: Duration,
     ) -> Self {
         Tables {
@@ -75,6 +77,7 @@ impl Tables {
             face_counter: 0,
             hlc,
             drop_future_timestamp,
+            router_peers_failover_brokering,
             // timer: Timer::new(true),
             // queries_default_timeout,
             root_res: Resource::root(),
@@ -143,6 +146,22 @@ impl Tables {
     #[inline]
     pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
+    }
+
+    #[inline]
+    pub(crate) fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
+        // if source_links is empty then gossip is probably disabled in source peer
+        !source_links.is_empty() && !source_links.contains(&dest)
+    }
+
+    #[inline]
+    pub(crate) fn failover_brokering(&self, peer1: ZenohId, peer2: ZenohId) -> bool {
+        self.router_peers_failover_brokering
+            && self
+                .peers_net
+                .as_ref()
+                .map(|net| Tables::failover_brokering_to(&net.get_links(peer1), peer2))
+                .unwrap_or(false)
     }
 
     fn open_net_face(
@@ -278,6 +297,7 @@ impl Router {
         whatami: WhatAmI,
         hlc: Option<Arc<HLC>>,
         drop_future_timestamp: bool,
+        router_peers_failover_brokering: bool,
         queries_default_timeout: Duration,
     ) -> Self {
         Router {
@@ -287,17 +307,21 @@ impl Router {
                 whatami,
                 hlc,
                 drop_future_timestamp,
+                router_peers_failover_brokering,
                 queries_default_timeout,
             ))),
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn init_link_state(
         &mut self,
         runtime: Runtime,
         router_full_linkstate: bool,
         peer_full_linkstate: bool,
+        router_peers_failover_brokering: bool,
         gossip: bool,
+        gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
         let mut tables = zwrite!(self.tables);
@@ -307,7 +331,9 @@ impl Router {
                 tables.zid,
                 runtime.clone(),
                 router_full_linkstate,
+                router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }
@@ -317,7 +343,9 @@ impl Router {
                 tables.zid,
                 runtime,
                 peer_full_linkstate,
+                router_peers_failover_brokering,
                 gossip,
+                gossip_multihop,
                 autoconnect,
             ));
         }
@@ -442,6 +470,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                 .as_mut()
                                 .unwrap()
                                 .link_states(list.link_states, zid)
+                                .removed_nodes
                             {
                                 pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
                                 queries_remove_node(
@@ -463,35 +492,45 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                         (WhatAmI::Router, WhatAmI::Peer)
                         | (WhatAmI::Peer, WhatAmI::Router)
                         | (WhatAmI::Peer, WhatAmI::Peer) => {
-                            if tables.full_net(WhatAmI::Peer) {
-                                for (_, removed_node) in tables
-                                    .peers_net
-                                    .as_mut()
-                                    .unwrap()
-                                    .link_states(list.link_states, zid)
-                                {
-                                    pubsub_remove_node(
-                                        &mut tables,
-                                        &removed_node.zid,
-                                        WhatAmI::Peer,
-                                    );
-                                    queries_remove_node(
-                                        &mut tables,
-                                        &removed_node.zid,
-                                        WhatAmI::Peer,
-                                    );
-                                }
+                            if let Some(net) = tables.peers_net.as_mut() {
+                                let changes = net.link_states(list.link_states, zid);
+                                if tables.full_net(WhatAmI::Peer) {
+                                    for (_, removed_node) in changes.removed_nodes {
+                                        pubsub_remove_node(
+                                            &mut tables,
+                                            &removed_node.zid,
+                                            WhatAmI::Peer,
+                                        );
+                                        queries_remove_node(
+                                            &mut tables,
+                                            &removed_node.zid,
+                                            WhatAmI::Peer,
+                                        );
+                                    }
 
-                                if tables.whatami == WhatAmI::Router {
-                                    tables.shared_nodes = shared_nodes(
-                                        tables.routers_net.as_ref().unwrap(),
-                                        tables.peers_net.as_ref().unwrap(),
-                                    );
-                                }
+                                    if tables.whatami == WhatAmI::Router {
+                                        tables.shared_nodes = shared_nodes(
+                                            tables.routers_net.as_ref().unwrap(),
+                                            tables.peers_net.as_ref().unwrap(),
+                                        );
+                                    }
 
-                                tables.schedule_compute_trees(self.tables.clone(), WhatAmI::Peer);
-                            } else if let Some(net) = tables.peers_net.as_mut() {
-                                net.link_states(list.link_states, zid);
+                                    tables
+                                        .schedule_compute_trees(self.tables.clone(), WhatAmI::Peer);
+                                } else {
+                                    for (_, updated_node) in changes.updated_nodes {
+                                        pubsub_linkstate_change(
+                                            &mut tables,
+                                            &updated_node.zid,
+                                            &updated_node.links,
+                                        );
+                                        queries_linkstate_change(
+                                            &mut tables,
+                                            &updated_node.zid,
+                                            &updated_node.links,
+                                        );
+                                    }
+                                }
                             }
                         }
                         _ => (),

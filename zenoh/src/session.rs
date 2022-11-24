@@ -819,7 +819,7 @@ impl Session {
                     }) = &mut res
                     {
                         for sub in state.subscribers.values() {
-                            if key_expr.intersects(&*sub.key_expr) {
+                            if key_expr.intersects(&sub.key_expr) {
                                 subscribers.push(sub.clone());
                             }
                         }
@@ -1114,11 +1114,7 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = if !complete_twin_qabl && complete {
-                    1
-                } else {
-                    0
-                };
+                let complete = u64::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
@@ -1244,7 +1240,7 @@ impl Session {
                         for sub in state.subscribers.values() {
                             if (sub.origin == Locality::Any
                                 || (local == (sub.origin == Locality::SessionLocal)))
-                                && key_expr.intersects(&*sub.key_expr)
+                                && key_expr.intersects(&sub.key_expr)
                             {
                                 callbacks.push(sub.callback.clone());
                             }
@@ -1596,7 +1592,7 @@ impl Primitives for Session {
             Ok(key_expr) => {
                 let mut subs = Vec::new();
                 for sub in state.subscribers.values() {
-                    if key_expr.intersects(&*sub.key_expr) {
+                    if key_expr.intersects(&sub.key_expr) {
                         subs.push(sub.clone());
                     }
                 }
