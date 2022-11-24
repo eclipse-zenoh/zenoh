@@ -29,15 +29,16 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Sending Query '{}'...", selector);
-    let replies = session
-        .get(&selector)
-        .with_value_opt(value)
-        .target(target)
-        .res()
-        .timeout(timeout)
-        .await
-        .unwrap_or_else(|_| panic!("Query has timed out after {:?}", timeout))
-        .unwrap();
+    let replies = match value {
+        Some(value) => session.get(&selector).with_value(value),
+        None => session.get(&selector),
+    }
+    .target(target)
+    .res()
+    .timeout(timeout)
+    .await
+    .unwrap_or_else(|_| panic!("Query has timed out after {:?}", timeout))
+    .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
             Ok(sample) => println!(

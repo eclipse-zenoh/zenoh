@@ -306,17 +306,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Set/Unset query value.
-    #[zenoh_core::unstable]
-    #[inline]
-    pub fn with_value_opt<IntoValue>(mut self, value: Option<IntoValue>) -> Self
-    where
-        IntoValue: Into<Value>,
-    {
-        self.value = value.map(Into::into);
-        self
-    }
-
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///
