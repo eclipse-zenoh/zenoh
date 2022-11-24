@@ -32,6 +32,28 @@ pub const mode: WhatAmI = WhatAmI::Peer;
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
+pub mod connect {
+    pub mod endpoints {
+        pub const router: &[&str] = &[];
+        pub const peer: &[&str] = &[];
+        pub const client: &[&str] = &[];
+        mode_accessor!([&'static str]);
+    }
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub mod listen {
+    pub mod endpoints {
+        pub const router: &[&str] = &["tcp/[::]:7447"];
+        pub const peer: &[&str] = &["tcp/[::]:0"];
+        pub const client: &[&str] = &[];
+        mode_accessor!([&'static str]);
+    }
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
 pub mod scouting {
     pub const timeout: u64 = 3000;
     pub const delay: u64 = 200;

@@ -93,14 +93,14 @@ fn parse_args() -> (Config, String, QueryTarget, Duration) {
     if let Some(values) = args.values_of("connect") {
         config
             .connect
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .set_endpoints(Some(values.map(|v| v.parse().unwrap()).collect()))
+            .unwrap();
     }
     if let Some(values) = args.values_of("listen") {
         config
             .listen
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .set_endpoints(Some(values.map(|v| v.parse().unwrap()).collect()))
+            .unwrap();
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();

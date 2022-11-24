@@ -123,3 +123,9 @@ impl FromStr for EndPoint {
         })
     }
 }
+impl TryFrom<&str> for EndPoint {
+    type Error = zenoh_core::Error;
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::from_str(s)
+    }
+}

@@ -27,8 +27,6 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
-const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
-
 fn main() {
     task::block_on(async {
         let mut log_builder =
@@ -187,7 +185,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
     if let Some(peers) = args.values_of("connect") {
         config
             .connect
-            .set_endpoints(
+            .set_endpoints(Some(
                 peers
                     .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
@@ -196,13 +194,13 @@ fn config_from_args(args: &ArgMatches) -> Config {
                         }
                     })
                     .collect(),
-            )
+            ))
             .unwrap();
     }
     if let Some(listeners) = args.values_of("listen") {
         config
             .listen
-            .set_endpoints(
+            .set_endpoints(Some(
                 listeners
                     .map(|v| match v.parse::<EndPoint>() {
                         Ok(v) => v,
@@ -211,14 +209,8 @@ fn config_from_args(args: &ArgMatches) -> Config {
                         }
                     })
                     .collect(),
-            )
+            ))
             .unwrap();
-    }
-    if config.listen.endpoints.is_empty() {
-        config
-            .listen
-            .endpoints
-            .push(DEFAULT_LISTENER.parse().unwrap())
     }
     if args.is_present("no-timestamp") {
         config

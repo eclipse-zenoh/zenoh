@@ -220,7 +220,7 @@ where
 ///
 /// let mut config = config::peer();
 /// config.set_id(ZenohId::from_str("F000").unwrap());
-/// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
+/// config.connect.set_endpoints(Some("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()).collect()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();
 /// # })

@@ -34,19 +34,13 @@ macro_rules! ztimeout {
 async fn open_session(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.listen.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config.listen.endpoints = Some(endpoints.iter().map(|e| e.parse().unwrap()).collect());
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][01a] Opening peer01 session");
     let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = endpoints
-        .iter()
-        .map(|e| e.parse().unwrap())
-        .collect::<Vec<_>>();
+    config.connect.endpoints = Some(endpoints.iter().map(|e| e.parse().unwrap()).collect());
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     println!("[  ][02a] Opening peer02 session");
     let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
