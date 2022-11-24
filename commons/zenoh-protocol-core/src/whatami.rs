@@ -135,6 +135,10 @@ impl WhatAmIMatcher {
         self.0.get() == 128
     }
 
+    pub fn empty() -> Self {
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(128) })
+    }
+
     pub fn matches(self, w: WhatAmI) -> bool {
         (self.0.get() & w as u8) != 0
     }

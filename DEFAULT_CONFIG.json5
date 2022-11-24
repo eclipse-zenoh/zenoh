@@ -75,6 +75,9 @@
     drop_future_timestamp: false,
   },
 
+  /// The default timeout to apply to queries in milliseconds.
+  queries_default_timeout: 10000,
+
   /// The routing strategy to use and it's configuration.
   routing: {
       /// The routing strategy to use in routers and it's configuration.
