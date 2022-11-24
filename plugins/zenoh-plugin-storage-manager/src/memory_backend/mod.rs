@@ -58,6 +58,10 @@ impl Volume for MemoryBackend {
         self.config.to_json_value()
     }
 
+    fn confirm_capability(&self, capability: Capability) -> bool {
+        confirm_capability(capability)
+    }
+
     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
         debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))

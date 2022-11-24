@@ -169,6 +169,9 @@ pub trait Volume: Send + Sync {
     /// on the administration space for this backend.
     fn get_admin_status(&self) -> serde_json::Value;
 
+    /// Checks whether the capability of the volume satisfies the requested storage capabilities
+    fn confirm_capability(&self, capability: Capability) -> bool;
+
     /// Creates a storage configured with some properties.
     async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
 

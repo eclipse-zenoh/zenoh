@@ -278,22 +278,26 @@ impl StorageRuntimeInner {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
         if let Some(backend) = self.volumes.get_mut(&volume_id) {
-            let storage_name = storage.name.clone();
-            let in_interceptor = backend.backend.incoming_data_interceptor();
-            let out_interceptor = backend.backend.outgoing_data_interceptor();
-            let stopper = async_std::task::block_on(create_and_start_storage(
-                admin_key,
-                storage,
-                &mut backend.backend,
-                in_interceptor,
-                out_interceptor,
-                self.session.clone(),
-            ))?;
-            self.storages
-                .entry(volume_id)
-                .or_default()
-                .insert(storage_name, stopper);
-            Ok(())
+            if backend.backend.confirm_capability(Capability{persistence: Some(storage.persistence.clone()), history: Some(storage.history.clone()), read_cost: None}) {
+                let storage_name = storage.name.clone();
+                let in_interceptor = backend.backend.incoming_data_interceptor();
+                let out_interceptor = backend.backend.outgoing_data_interceptor();
+                let stopper = async_std::task::block_on(create_and_start_storage(
+                    admin_key,
+                    storage,
+                    &mut backend.backend,
+                    in_interceptor,
+                    out_interceptor,
+                    self.session.clone(),
+                ))?;
+                self.storages
+                    .entry(volume_id)
+                    .or_default()
+                    .insert(storage_name, stopper);
+                Ok(())
+            } else {
+                bail!("`{}` volume doesn't support the required storage configuration", volume_id)
+            }
         } else {
             bail!("`{}` volume not found", volume_id)
         }
