@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
+#[allow(unused_imports)]
 use std::sync::Arc;
 
 use zenoh_cfg_properties::Properties;
