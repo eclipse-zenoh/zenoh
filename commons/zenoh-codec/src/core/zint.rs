@@ -17,18 +17,17 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::ZInt;
 
 const VLE_LEN: usize = 10;
 
 // ZInt
-impl<W> WCodec<ZInt, &mut W> for Zenoh060
+impl<W> WCodec<u64, &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, mut x: ZInt) -> Self::Output {
+    fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
         writer.with_slot(VLE_LEN, move |buffer| {
             let mut len = 0;
             let mut b = x as u8;
@@ -44,37 +43,37 @@ where
     }
 }
 
-impl<W> WCodec<&ZInt, &mut W> for Zenoh060
+impl<W> WCodec<&u64, &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZInt) -> Self::Output {
+    fn write(self, writer: &mut W, x: &u64) -> Self::Output {
         self.write(writer, *x)
     }
 }
 
-impl<R> RCodec<ZInt, &mut R> for Zenoh060
+impl<R> RCodec<u64, &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZInt, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<u64, Self::Error> {
         let mut b = reader.read_u8()?;
 
         let mut v = 0;
         let mut i = 0;
         let mut k = VLE_LEN;
         while b > 0x7f && k > 0 {
-            v |= ((b & 0x7f) as ZInt) << i;
+            v |= ((b & 0x7f) as u64) << i;
             i += 7;
             b = reader.read_u8()?;
             k -= 1;
         }
         if k > 0 {
-            v |= ((b & 0x7f) as ZInt) << i;
+            v |= ((b & 0x7f) as u64) << i;
             Ok(v)
         } else {
             Err(DidntRead)
@@ -90,7 +89,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: usize) -> Self::Output {
-        let x: ZInt = x.try_into().map_err(|_| DidntWrite)?;
+        let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
         self.write(writer, x)
     }
 }
@@ -102,7 +101,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
-        let x: ZInt = <Self as RCodec<ZInt, &mut R>>::read(self, reader)?;
+        let x: u64 = <Self as RCodec<u64, &mut R>>::read(self, reader)?;
         x.try_into().map_err(|_| DidntRead)
     }
 }
