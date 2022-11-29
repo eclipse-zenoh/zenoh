@@ -263,7 +263,8 @@ dependencies = [
 [[package]]
 name = "async-rustls"
 version = "0.3.0"
-source = "git+https://github.com/smol-rs/async-rustls.git#e70f938475ba792e430501f9aa20f3f71a491faf"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93b21a03b7c21702a0110f9f8d228763a533570deb376119042dabf33c37a01a"
 dependencies = [
  "futures-io",
  "rustls",
