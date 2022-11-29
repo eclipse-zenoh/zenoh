@@ -151,6 +151,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
+    pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -182,6 +183,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
             handler: _,
         } = self;
@@ -190,6 +192,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
             handler: callback,
         }
@@ -255,6 +258,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
             handler: _,
         } = self;
@@ -263,6 +267,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
             handler,
         }
@@ -280,6 +285,15 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
         self.consolidation = consolidation.into();
+        self
+    }
+
+    /// Restrict the matching queryables that will receive the query
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.destination = destination;
         self
     }
 
@@ -302,6 +316,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
             handler,
         } = self;
@@ -310,6 +325,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             selector: selector.and_then(|s| s.accept_any_keyexpr(value == ReplyKeyExpr::Any)),
             target,
             consolidation,
+            destination,
             timeout,
             handler,
         }
@@ -355,6 +371,7 @@ where
                 &self.selector?,
                 self.target,
                 self.consolidation,
+                self.destination,
                 self.timeout,
                 callback,
             )

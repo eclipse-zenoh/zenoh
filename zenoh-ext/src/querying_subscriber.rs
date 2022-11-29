@@ -321,7 +321,7 @@ pub struct QueryingSubscriber<'a, Receiver> {
     query_target: QueryTarget,
     query_consolidation: QueryConsolidation,
     query_timeout: Duration,
-    _subscriber: Subscriber<'a, ()>,
+    subscriber: Subscriber<'a, ()>,
     callback: Arc<dyn Fn(Sample) + Send + Sync + 'static>,
     state: Arc<Mutex<InnerState>>,
     receiver: Receiver,
@@ -397,7 +397,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
             query_target: conf.query_target,
             query_consolidation: conf.query_consolidation,
             query_timeout: conf.query_timeout,
-            _subscriber: subscriber,
+            subscriber,
             callback,
             state,
             receiver,
@@ -412,7 +412,15 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
     /// Close this QueryingSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
-        self._subscriber.undeclare()
+        self.subscriber.undeclare()
+    }
+
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        self.subscriber.key_expr()
+    }
+
+    pub fn query_key_expr(&self) -> &KeyExpr<'_> {
+        &self.query_key_expr
     }
 
     /// Issue a new query using the configured selector.
@@ -460,7 +468,7 @@ impl<'a, Receiver> QueryingSubscriber<'a, Receiver> {
         };
 
         // if selector for query is different than subscription keyexpr: accept Any reply
-        let query_accept_replies = if selector.key_expr != *self._subscriber.key_expr() {
+        let query_accept_replies = if selector.key_expr != *self.subscriber.key_expr() {
             ReplyKeyExpr::Any
         } else {
             ReplyKeyExpr::MatchingQuery
