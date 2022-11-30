@@ -160,3 +160,18 @@ where
         async_std::task::block_on(self.0)
     }
 }
+
+#[cold]
+pub const fn cold() {}
+pub const fn likely(b: bool) -> bool {
+    if !b {
+        cold()
+    }
+    b
+}
+pub const fn unlikely(b: bool) -> bool {
+    if b {
+        cold()
+    }
+    b
+}
