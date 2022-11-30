@@ -34,10 +34,10 @@
 //! pub fn create_volume(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
 //!     Ok(Box::new(MyVolumeType { config }))
 //! }
-//! 
+//!
 //! #[no_mangle]
 //! pub fn confirm_capability(capability: Capability) -> bool {
-//!     // This function asserts if the backend implementation in fact provides 
+//!     // This function asserts if the backend implementation in fact provides
 //!     // the capabilities requested by the configuration
 //!     true
 //! }
@@ -55,7 +55,7 @@
 //!         // But we could add dynamic properties for Volume monitoring.
 //!         self.config.to_json_value()
 //!     }
-//! 
+//!
 //!     fn confirm_capability(&self, capability: Capability) -> bool {
 //!         // This operation is used to confirm if the volume indeed supports  
 //!         // the capabilities requested by the configuration
