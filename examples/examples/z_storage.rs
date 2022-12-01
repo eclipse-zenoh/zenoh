@@ -27,7 +27,7 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr) = parse_args();
+    let (config, key_expr, complete) = parse_args();
 
     let mut stored: HashMap<String, Sample> = HashMap::new();
 
@@ -38,7 +38,12 @@ async fn main() {
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
     println!("Declaring Queryable on '{}'...", key_expr);
-    let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
+    let queryable = session
+        .declare_queryable(&key_expr)
+        .complete(complete)
+        .res()
+        .await
+        .unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -77,7 +82,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String) {
+fn parse_args() -> (Config, String, bool) {
     let args = App::new("zenoh storage example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
@@ -98,6 +103,9 @@ fn parse_args() -> (Config, String) {
         ))
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
+        .arg(Arg::from_usage(
+            "--complete 'Declare the storage as complete w.r.t. the key expression.'",
         ))
         .get_matches();
 
@@ -126,6 +134,7 @@ fn parse_args() -> (Config, String) {
     }
 
     let key_expr = args.value_of("key").unwrap().to_string();
+    let complete = args.is_present("complete");
 
-    (config, key_expr)
+    (config, key_expr, complete)
 }

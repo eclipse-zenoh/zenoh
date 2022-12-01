@@ -558,7 +558,7 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -1114,7 +1114,7 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u64::from(!complete_twin_qabl && complete);
+                let complete = ZInt::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
@@ -1528,7 +1528,7 @@ impl SessionDeclarations for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }

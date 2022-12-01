@@ -25,14 +25,19 @@ async fn main() {
     // initiate logging
     env_logger::init();
 
-    let (config, key_expr, value) = parse_args();
+    let (config, key_expr, value, complete) = parse_args();
 
     let key_expr = KeyExpr::try_from(key_expr).unwrap();
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring Queryable on '{}'...", key_expr);
-    let queryable = session.declare_queryable(&key_expr).res().await.unwrap();
+    let queryable = session
+        .declare_queryable(&key_expr)
+        .complete(complete)
+        .res()
+        .await
+        .unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -60,7 +65,7 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, String) {
+fn parse_args() -> (Config, String, String, bool) {
     let args = App::new("zenoh queryable example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -88,6 +93,9 @@ fn parse_args() -> (Config, String, String) {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
+        .arg(Arg::from_usage(
+            "--complete 'Declare the queryable as complete w.r.t. the key expression.'",
+        ))
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.value_of("config") {
@@ -113,9 +121,9 @@ fn parse_args() -> (Config, String, String) {
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
-
     let key_expr = args.value_of("key").unwrap().to_string();
     let value = args.value_of("value").unwrap().to_string();
+    let complete = args.is_present("complete");
 
-    (config, key_expr, value)
+    (config, key_expr, value, complete)
 }
