@@ -7,12 +7,12 @@ use super::*;
 
 pub struct KeyExprTree<
     Weight,
-    Children: ChunkMapType<KeyExprTreeNode<Weight, Children>> = DefaultChunkMapProvider,
+    Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>> = DefaultChunkMapProvider,
 > {
     children: Children::Assoc,
 }
 
-impl<Weight, Children: ChunkMapType<KeyExprTreeNode<Weight, Children>>>
+impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>>
     KeyExprTree<Weight, Children>
 {
     pub fn new() -> Self {
@@ -22,12 +22,12 @@ impl<Weight, Children: ChunkMapType<KeyExprTreeNode<Weight, Children>>>
     }
 }
 
-impl<Weight, Children: ChunkMapType<KeyExprTreeNode<Weight, Children>>> IKeyExprTree<Weight>
+impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> IKeyExprTree<Weight>
     for KeyExprTree<Weight, Children>
 where
     Weight: 'static,
     Children: 'static,
-    Children::Assoc: ChunkMap<KeyExprTreeNode<Weight, Children>> + 'static,
+    Children::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Children>>> + 'static,
 {
     type Node = KeyExprTreeNode<Weight, Children>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node> {
@@ -53,34 +53,36 @@ where
         let mut node = self
             .children
             .entry(chunks.next().unwrap())
-            .get_or_insert_with(move |k| KeyExprTreeNode {
-                parent: Parent::Root(root),
-                chunk: k.into(),
-                children: Default::default(),
-                weight: None,
+            .get_or_insert_with(move |k| {
+                Box::new(KeyExprTreeNode {
+                    parent: Parent::Root(root),
+                    chunk: k.into(),
+                    children: Default::default(),
+                    weight: None,
+                })
             });
         for chunk in chunks {
-            let parent = NonNull::from(&*node);
-            node = node
-                .children
-                .entry(chunk)
-                .get_or_insert_with(move |k| KeyExprTreeNode {
+            let parent = NonNull::from(node.as_ref());
+            node = node.children.entry(chunk).get_or_insert_with(move |k| {
+                Box::new(KeyExprTreeNode {
                     parent: Parent::Node(parent),
                     chunk: k.into(),
                     children: Default::default(),
                     weight: None,
                 })
+            })
         }
         node
     }
     type TreeIterItem<'a> = <Self::TreeIter<'a> as Iterator>::Item;
-    type TreeIter<'a> = TreeIter<'a, Children, KeyExprTreeNode<Weight, Children>, Weight>;
+    type TreeIter<'a> = TreeIter<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
     fn tree_iter(&self) -> Self::TreeIter<'_> {
         TreeIter::new(&self.children)
     }
 
     type IntersectionItem<'a> = <Self::Intersection<'a> as Iterator>::Item;
-    type Intersection<'a> = Intersection<'a, Children, KeyExprTreeNode<Weight, Children>, Weight>;
+    type Intersection<'a> =
+        Intersection<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
     fn intersecting_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Intersection<'a> {
         Intersection::new(&self.children, ke)
     }
@@ -90,7 +92,7 @@ use tree_iter::TreeIter;
 mod intersection;
 use intersection::Intersection;
 
-impl<Weight, Children: ChunkMapType<KeyExprTreeNode<Weight, Children>>> Default
+impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> Default
     for KeyExprTree<Weight, Children>
 {
     fn default() -> Self {
@@ -111,7 +113,7 @@ pub struct DefaultChunkMapProvider;
 impl<T: 'static> ChunkMapType<T> for DefaultChunkMapProvider {
     type Assoc = KeyedSet<T, ChunkExtractor>;
 }
-pub struct KeyExprTreeNode<Weight, Children: ChunkMapType<Self>> {
+pub struct KeyExprTreeNode<Weight, Children: ChunkMapType<Box<Self>>> {
     parent: Parent<Weight, Children>,
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
@@ -167,11 +169,12 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkEx
     }
 }
 
-impl<Weight, Children: ChunkMapType<Self>> IKeyExprTreeNode<Weight>
+impl<Weight, Children: ChunkMapType<Box<Self>>> IKeyExprTreeNode<Weight>
     for KeyExprTreeNode<Weight, Children>
 where
-    Children::Assoc: ChunkMap<Self>,
+    Children::Assoc: ChunkMap<Box<Self>>,
 {
+    type Parent = Self;
     fn parent(&self) -> Option<&Self> {
         match &self.parent {
             Parent::Root(_) => None,
@@ -208,6 +211,7 @@ where
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
         self.weight.replace(weight)
     }
+    type Child = Box<Self>;
     type Children = Children::Assoc;
 
     fn children(&self) -> &Self::Children {
@@ -218,9 +222,9 @@ where
         &mut self.children
     }
 }
-impl<Weight, Children: ChunkMapType<Self>> KeyExprTreeNode<Weight, Children>
+impl<Weight, Children: ChunkMapType<Box<Self>>> KeyExprTreeNode<Weight, Children>
 where
-    Children::Assoc: ChunkMap<Self>,
+    Children::Assoc: ChunkMap<Box<Self>>,
 {
     fn _keyexpr(&self, capacity: usize) -> String {
         let s = match self.parent() {
@@ -231,23 +235,23 @@ where
     }
 }
 
-impl<Weight, Children: ChunkMapType<Self>> HasChunk for KeyExprTreeNode<Weight, Children> {
+impl<Weight, Children: ChunkMapType<Box<Self>>> HasChunk for KeyExprTreeNode<Weight, Children> {
     fn chunk(&self) -> &keyexpr {
         &self.chunk
     }
 }
-impl<Weight, Children: ChunkMapType<Self>> AsRef<Self> for KeyExprTreeNode<Weight, Children> {
+impl<Weight, Children: ChunkMapType<Box<Self>>> AsRef<Self> for KeyExprTreeNode<Weight, Children> {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<Weight, Children: ChunkMapType<Self>> AsMut<Self> for KeyExprTreeNode<Weight, Children> {
+impl<Weight, Children: ChunkMapType<Box<Self>>> AsMut<Self> for KeyExprTreeNode<Weight, Children> {
     fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
 
-enum Parent<Weight, Children: ChunkMapType<KeyExprTreeNode<Weight, Children>>> {
+enum Parent<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> {
     Root(NonNull<KeyExprTree<Weight, Children>>),
     Node(NonNull<KeyExprTreeNode<Weight, Children>>),
 }

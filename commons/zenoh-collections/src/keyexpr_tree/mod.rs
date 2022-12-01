@@ -37,14 +37,16 @@ pub trait IKeyExprTree<Weight> {
     // fn matching_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a>;
 }
 pub trait IKeyExprTreeNode<Weight> {
-    fn parent(&self) -> Option<&Self>;
-    fn parent_mut(&mut self) -> Option<&mut Self>;
+    type Parent;
+    fn parent(&self) -> Option<&Self::Parent>;
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent>;
     fn keyexpr(&self) -> OwnedKeyExpr;
     fn weight(&self) -> Option<&Weight>;
     fn weight_mut(&mut self) -> Option<&mut Weight>;
     fn take_weight(&mut self) -> Option<Weight>;
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight>;
-    type Children: ChunkMap<Self>;
+    type Child;
+    type Children: ChunkMap<Self::Child>;
     fn children(&self) -> &Self::Children;
     fn children_mut(&mut self) -> &mut Self::Children;
 }
@@ -99,6 +101,11 @@ impl<'a, T: HasChunk> HasChunk for &'a mut T {
         T::chunk(self)
     }
 }
+impl<T: HasChunk> HasChunk for Box<T> {
+    fn chunk(&self) -> &keyexpr {
+        T::chunk(self)
+    }
+}
 pub trait AsNode<T: ?Sized> {
     fn as_node(&self) -> &T;
 }
@@ -135,3 +142,38 @@ pub mod keyed_set_tree;
 
 #[cfg(test)]
 mod test;
+
+impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        T::parent(self)
+    }
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
+        T::parent_mut(self)
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        T::keyexpr(self)
+    }
+    fn weight(&self) -> Option<&Weight> {
+        T::weight(self)
+    }
+    fn weight_mut(&mut self) -> Option<&mut Weight> {
+        T::weight_mut(self)
+    }
+    fn take_weight(&mut self) -> Option<Weight> {
+        T::take_weight(self)
+    }
+    fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
+        T::insert_weight(self, weight)
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        T::children(self)
+    }
+    fn children_mut(&mut self) -> &mut Self::Children {
+        T::children_mut(self)
+    }
+}
