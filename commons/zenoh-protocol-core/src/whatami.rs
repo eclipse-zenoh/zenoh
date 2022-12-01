@@ -259,12 +259,12 @@ impl BitOr for WhatAmIMatcher {
 impl BitOr for WhatAmI {
     type Output = WhatAmIMatcher;
     fn bitor(self, rhs: Self) -> Self::Output {
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8) })
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8 | 128) })
     }
 }
 
 impl From<WhatAmI> for WhatAmIMatcher {
     fn from(w: WhatAmI) -> Self {
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8) })
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8 | 128) })
     }
 }
