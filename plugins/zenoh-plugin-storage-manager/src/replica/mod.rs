@@ -14,7 +14,8 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::backends_mgt::StoreIntercept;
+use crate::storages_mgt::StorageMessage;
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;

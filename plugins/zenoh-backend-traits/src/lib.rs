@@ -35,13 +35,6 @@
 //!     Ok(Box::new(MyVolumeType { config }))
 //! }
 //!
-//! #[no_mangle]
-//! pub fn confirm_capability(capability: Capability) -> bool {
-//!     // This function asserts if the backend implementation in fact provides
-//!     // the capabilities requested by the configuration
-//!     true
-//! }
-//!
 //! // Your Backend implementation
 //! struct MyVolumeType {
 //!     config: VolumeConfig,
@@ -56,10 +49,14 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     fn confirm_capability(&self, capability: Capability) -> bool {
+//!     fn get_capability(&self) -> Capability {
 //!         // This operation is used to confirm if the volume indeed supports  
 //!         // the capabilities requested by the configuration
-//!         true
+//!         Capability{
+//!             persistence: Persistence::Volatile,
+//!             history: History::Latest,
+//!             read_cost: 0,
+//!         }
 //!     }
 //!
 //!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {

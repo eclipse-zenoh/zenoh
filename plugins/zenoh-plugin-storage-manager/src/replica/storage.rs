@@ -11,7 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::backends_mgt::StoreIntercept;
+use crate::storages_mgt::StorageMessage;
 use async_std::sync::Arc;
 use async_std::sync::{Mutex, RwLock};
 use flume::{Receiver, Sender};

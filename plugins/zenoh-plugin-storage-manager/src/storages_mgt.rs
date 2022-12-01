@@ -25,20 +25,12 @@ pub enum StorageMessage {
     GetStatus(async_std::channel::Sender<serde_json::Value>),
 }
 
-pub struct StoreIntercept {
-    pub storage: Box<dyn zenoh_backend_traits::Storage>,
-    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-}
-
 pub(crate) async fn start_storage(
-    storage: Box<dyn zenoh_backend_traits::Storage>,
+    store_intercept: super::StoreIntercept,
     capability: zenoh_backend_traits::Capability,
     config: Option<ReplicaConfig>,
     admin_key: String,
     key_expr: OwnedKeyExpr,
-    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
     // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
@@ -52,12 +44,6 @@ pub(crate) async fn start_storage(
     let (tx, rx) = flume::bounded(1);
 
     async_std::task::spawn(async move {
-        let store_intercept = StoreIntercept {
-            storage,
-            in_interceptor,
-            out_interceptor,
-        };
-
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
         if config.is_some() {

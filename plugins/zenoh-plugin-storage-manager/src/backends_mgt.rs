@@ -20,6 +20,12 @@ use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_core::Result as ZResult;
 
+pub struct StoreIntercept {
+    pub storage: Box<dyn zenoh_backend_traits::Storage>,
+    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
+}
+
 pub(crate) async fn create_and_start_storage(
     admin_key: String,
     config: StorageConfig,
@@ -33,14 +39,18 @@ pub(crate) async fn create_and_start_storage(
     let replica_config = config.replica_config.clone();
     let capability = backend.get_capability();
     let storage = backend.create_storage(config).await?;
-    start_storage(
+    let store_intercept = StoreIntercept {
         storage,
+        in_interceptor,
+        out_interceptor,
+    };
+
+    start_storage(
+        store_intercept,
         capability,
         replica_config,
         admin_key,
         key_expr,
-        in_interceptor,
-        out_interceptor,
         zenoh,
     )
     .await
