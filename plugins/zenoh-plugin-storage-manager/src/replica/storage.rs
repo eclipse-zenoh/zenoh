@@ -24,7 +24,7 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
-use zenoh_backend_traits::{Query, StorageInsertionResult};
+use zenoh_backend_traits::{Capability, Persistence, Query, StorageInsertionResult};
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -37,7 +37,10 @@ pub struct StorageService {
     key_expr: OwnedKeyExpr,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
+    capability: Capability,
     tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
+    // wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
+    // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
@@ -50,14 +53,22 @@ impl StorageService {
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
+        capability: Capability,
         replication: Option<ReplicationService>,
     ) {
+        // let mut latest_timestamp_cache = None;
+        // if replication.is_some() || (capability.read_cost > 0 && capability.history.eq(&History::Latest)) {
+        //     latest_timestamp_cache = Some(RwLock::new(HashMap::new()));
+        // }
         let mut storage_service = StorageService {
             session,
             key_expr,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
+            capability,
             tombstones: RwLock::new(HashMap::new()),
+            // wildcard_updates: RwLock::new(HashMap::new()),
+            // latest_timestamp_cache,
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
             replication,
@@ -192,6 +203,10 @@ impl StorageService {
 
         sample.ensure_timestamp();
 
+        // @TODO: if wildcard, update wildcard_updates
+        // @TODO: resolve key_expr into a list of keys
+        // for each key, perform put or delete as seen fit
+
         if !self
             .is_outdated(
                 &sample.key_expr.clone().into(),
@@ -204,9 +219,8 @@ impl StorageService {
                 storage.put(sample.clone()).await
             } else if sample.kind == SampleKind::Delete {
                 // register a tombstone
-                let mut tombstones = self.tombstones.write().await;
-                tombstones.insert(sample.key_expr.clone().into(), sample.timestamp.unwrap());
-                drop(tombstones);
+                self.mark_tombstone(sample.key_expr.clone().into(), sample.timestamp.unwrap())
+                    .await;
                 storage.delete(sample.clone()).await
             } else {
                 Err("sample kind not impleented".into())
@@ -229,6 +243,28 @@ impl StorageService {
             drop(storage);
         }
     }
+
+    async fn mark_tombstone(&self, key_expr: OwnedKeyExpr, timestamp: Timestamp) {
+        // @TODO:change into a better store
+        let mut tombstones = self.tombstones.write().await;
+        tombstones.insert(key_expr, timestamp);
+        if self.capability.persistence.eq(&Persistence::Durable) {
+            // flush to disk to makeit durable
+            todo!("yet to be implemented");
+        }
+        drop(tombstones);
+    }
+
+    // async fn register_wildcard_update(&self, sample: Sample) {
+    //     // @TODO: chenge to a better store
+    //     let mut wildcards = self.wildcard_updates.write().await;
+    //     wildcards.insert(sample.key_expr.clone().into(), sample);
+    //     if self.capability.persistence.eq(&Persistence::Durable) {
+    //         // flush to disk to makeit durable
+    //         todo!("yet to be implemented");
+    //     }
+    //     drop(wildcards);
+    // }
 
     async fn is_outdated(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         let tombstones = self.tombstones.read().await;

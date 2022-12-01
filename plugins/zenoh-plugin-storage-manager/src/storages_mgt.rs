@@ -53,11 +53,21 @@ pub(crate) async fn start_storage(
                 store_intercept,
                 key_expr,
                 &name,
+                capability,
                 rx,
             )
             .await;
         } else {
-            StorageService::start(zenoh.clone(), key_expr, &name, store_intercept, rx, None).await;
+            StorageService::start(
+                zenoh.clone(),
+                key_expr,
+                &name,
+                store_intercept,
+                rx,
+                capability,
+                None,
+            )
+            .await;
         }
     });
 
