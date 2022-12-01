@@ -3621,6 +3621,7 @@ dependencies = [
  "flume",
  "keyed-set",
  "log",
+ "rand 0.8.5",
  "token-cell",
  "zenoh-core",
  "zenoh-protocol-core",
