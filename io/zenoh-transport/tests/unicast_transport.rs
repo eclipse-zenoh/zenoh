@@ -151,12 +151,12 @@ impl TransportPeerEventHandler for SCClient {
 async fn open_transport(
     client_endpoints: &[EndPoint],
     server_endpoint: Option<&EndPoint>,
-) -> ZResult<(
+) -> (
     TransportManager,
     Arc<SHRouter>,
     TransportManager,
     TransportUnicast,
-)> {
+) {
     // Define client and router IDs
     let client_id = ZenohId::try_from([1]).unwrap();
     let router_id = ZenohId::try_from([2]).unwrap();
@@ -175,12 +175,12 @@ async fn open_transport(
     if let Some(endpoint) = server_endpoint {
         // Create the listener on the router
         println!("Add endpoint: {}", endpoint);
-        let _ = ztimeout!(router_manager.add_listener(endpoint.clone()))?;
+        let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     } else {
         // Create the listener on the router
         for e in client_endpoints.iter() {
             println!("Add endpoint: {}\n", e);
-            let _ = ztimeout!(router_manager.add_listener(e.clone()))?;
+            let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
         }
     }
 
@@ -197,18 +197,18 @@ async fn open_transport(
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = ztimeout!(client_manager.open_transport(e.clone()))?;
+        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
     // Return the handlers
-    Ok((
+    (
         router_manager,
         router_handler,
         client_manager,
         client_transport,
-    ))
+    )
 }
 
 async fn close_transport(
@@ -311,10 +311,10 @@ async fn run_single(
     server_endpoint: Option<&EndPoint>,
     channel: Channel,
     msg_size: usize,
-) -> ZResult<()> {
+) {
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport(client_endpoints, server_endpoint).await?;
+        open_transport(client_endpoints, server_endpoint).await;
 
     test_transport(
         router_handler.clone(),
@@ -343,7 +343,6 @@ async fn run_single(
         client_endpoints,
     )
     .await;
-    Ok(())
 }
 
 async fn run(
@@ -351,13 +350,12 @@ async fn run(
     server_endpoint: Option<&EndPoint>,
     channel: &[Channel],
     msg_size: &[usize],
-) -> ZResult<()> {
+) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
-            run_single(client_endpoints, server_endpoint, *ch, *ms).await?;
+            run_single(client_endpoints, server_endpoint, *ch, *ms).await;
         }
     }
-    Ok(())
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -393,8 +391,7 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
-    assert!(result.is_ok())
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -422,8 +419,7 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
-    assert!(result.is_ok())
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -450,10 +446,9 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
-    assert!(result.is_ok())
 }
 
 #[cfg(feature = "transport_ws")]
@@ -517,8 +512,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
-    assert!(result.is_ok())
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(
@@ -553,10 +547,9 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
-    assert!(result.is_ok())
 }
 
 #[cfg(all(
@@ -591,10 +584,9 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
-    assert!(result.is_ok())
 }
 
 #[cfg(all(
@@ -632,10 +624,9 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
-    assert!(result.is_ok())
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -753,8 +744,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     ];
     // Run
     let endpoints = vec![endpoint];
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
-    assert!(result.is_ok())
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -872,8 +862,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
     ];
     // Run
     let endpoints = vec![endpoint];
-    let result = task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
-    assert!(result.is_ok())
+    task::block_on(run(&endpoints, None, &channel, &MSG_SIZE_ALL));
 }
 
 // Constants replicating the alert descriptions thrown by the Rustls library.
@@ -944,13 +933,12 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     ];
     // Run
     let endpoints = vec![client_endpoint];
-    let result = task::block_on(run(
+    task::block_on(run(
         &endpoints,
         Some(&server_endpoint),
         &channel,
         &MSG_SIZE_ALL,
     ));
-    assert!(result.is_ok())
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1005,17 +993,44 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     ];
     // Run
     let endpoints = vec![client_endpoint];
-    let result = task::block_on(run(
+    let result = std::panic::catch_unwind(|| task::block_on(run(
         &endpoints,
         Some(&server_endpoint),
         &channel,
         &MSG_SIZE_ALL,
-    ));
+    )));
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err
-        .to_string()
-        .contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
+    let error_msg = extract_message(&err);
+    assert!(error_msg.contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
+}
+
+fn extract_message(err: &(dyn Any + Send)) -> String {
+    fn extract(err: &(dyn Any + Send), max_tries: usize) -> String {
+        if let Some(&s) = err.downcast_ref::<&'static str>() {
+            return s.into();
+        }
+        if let Some(s) = err.downcast_ref::<String>() {
+            return s.into();
+        }
+        if max_tries != 0 {
+            let wrapped: Option<&Box<dyn Any + Send>> = err.downcast_ref::<Box<dyn Any + Send>>();
+            if let Some(v) = wrapped {
+                // This is very subtle! Without `&**` the &Box will itself
+                // coersce to &dyn Any, which will ofc cause us to recurse
+                // infinitely. See the caveat in the [official docs][dynanyptr]
+                // for some discussion of the related issue. (Note: the
+                // max_tries param exists largely because I got this wrong
+                // the first time...).
+                //
+                // [dynanyptr]: https://doc.rust-lang.org/std/any/index.html#smart-pointers-and-dyn-any
+                return extract(&**v, max_tries - 1);
+            }
+        }
+        return format!("#<unknown error {:?}>", err.type_id());
+    }
+    // Bound recursion to 10. Shouldn't be needed anymore, but you never know...
+    extract(err, 10)
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1079,16 +1094,16 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
     ];
     // Run
     let endpoints = vec![client_endpoint];
-    let result = task::block_on(run(
+    let result = std::panic::catch_unwind(|| task::block_on(run(
         &endpoints,
         Some(&server_endpoint),
         &channel,
         &MSG_SIZE_ALL,
-    ));
+    )));
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(err
-        .to_string()
+    let error_msg = extract_message(&err);
+    assert!(error_msg
         .contains(RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION));
 }
 
