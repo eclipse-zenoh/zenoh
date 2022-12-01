@@ -35,8 +35,8 @@ use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
 use zenoh_backend_traits::{config::*, Volume};
-use zenoh_backend_traits::{ConfirmCapability, CreateVolume};
-use zenoh_backend_traits::{CONFIRM_CAPABILITY_FN_NAME, CREATE_VOLUME_FN_NAME};
+use zenoh_backend_traits::CreateVolume;
+use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_core::{bail, zlock, Result as ZResult};
 use zenoh_util::LibLoader;
 
@@ -117,7 +117,6 @@ impl StorageRuntimeInner {
             backend: None,
             paths: None,
             required: false,
-            read_cost: 0,
             rest: Default::default(),
         })?;
         new_self.update(
@@ -154,14 +153,6 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name.clone();
         if volume_id == MEMORY_BACKEND_NAME {
-            // check if capabilities match
-            if !memory_backend::confirm_capability(Capability {
-                persistence: None,
-                history: None,
-                read_cost: Some(config.read_cost),
-            }) {
-                bail!("Backend doesn't satisfy the required capabilities")
-            }
             match create_memory_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
@@ -217,21 +208,6 @@ impl StorageRuntimeInner {
         lib_path: PathBuf,
     ) -> ZResult<()> {
         if let Ok(create_backend) = lib.get::<CreateVolume>(CREATE_VOLUME_FN_NAME) {
-            // check for capability check handling
-            match lib.get::<ConfirmCapability>(CONFIRM_CAPABILITY_FN_NAME) {
-                Ok(confirm_capability) => {
-                    if !confirm_capability(Capability {
-                        persistence: None,
-                        history: None,
-                        read_cost: Some(config.read_cost),
-                    }) {
-                        bail!("Backend doesn't satisfy the required capabilities")
-                    }
-                }
-                Err(e) => {
-                    bail!("Failed to verify backend capability: function {}(Capability) not found in lib. Failed with error: {}", String::from_utf8_lossy(CONFIRM_CAPABILITY_FN_NAME), e)
-                }
-            };
             match create_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
@@ -278,35 +254,27 @@ impl StorageRuntimeInner {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
         if let Some(backend) = self.volumes.get_mut(&volume_id) {
-            if backend.backend.confirm_capability(Capability {
-                persistence: Some(storage.persistence.clone()),
-                history: Some(storage.history.clone()),
-                read_cost: None,
-            }) {
-                let storage_name = storage.name.clone();
-                let in_interceptor = backend.backend.incoming_data_interceptor();
-                let out_interceptor = backend.backend.outgoing_data_interceptor();
-                let stopper = async_std::task::block_on(create_and_start_storage(
-                    admin_key,
-                    storage,
-                    &mut backend.backend,
-                    in_interceptor,
-                    out_interceptor,
-                    self.session.clone(),
-                ))?;
-                self.storages
-                    .entry(volume_id)
-                    .or_default()
-                    .insert(storage_name, stopper);
-                Ok(())
-            } else {
-                bail!(
-                    "`{}` volume doesn't support the required storage configuration",
-                    volume_id
-                )
-            }
+            let storage_name = storage.name.clone();
+            let in_interceptor = backend.backend.incoming_data_interceptor();
+            let out_interceptor = backend.backend.outgoing_data_interceptor();
+            let stopper = async_std::task::block_on(create_and_start_storage(
+                admin_key,
+                storage,
+                &mut backend.backend,
+                in_interceptor,
+                out_interceptor,
+                self.session.clone(),
+            ))?;
+            self.storages
+                .entry(volume_id)
+                .or_default()
+                .insert(storage_name, stopper);
+            Ok(())
         } else {
-            bail!("`{}` volume not found", volume_id)
+            bail!(
+                "`{}` volume doesn't support the required storage configuration",
+                volume_id
+            )
         }
     }
 }

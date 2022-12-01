@@ -20,29 +20,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{Capability, History, Persistence, StorageConfig, VolumeConfig};
+use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::Result as ZResult;
-
-pub fn confirm_capability(capability: Capability) -> bool {
-    if let Some(persistence) = capability.persistence {
-        if persistence != Persistence::Volatile {
-            return false;
-        }
-    }
-    if let Some(history) = capability.history {
-        if history != History::Latest {
-            return false;
-        }
-    }
-    if let Some(read_cost) = capability.read_cost {
-        if read_cost > 0 {
-            return false;
-        }
-    }
-    true
-}
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))
@@ -58,8 +39,12 @@ impl Volume for MemoryBackend {
         self.config.to_json_value()
     }
 
-    fn confirm_capability(&self, capability: Capability) -> bool {
-        confirm_capability(capability)
+    fn get_capability(&self) -> Capability {
+        Capability {
+            persistence: Persistence::Volatile,
+            history: History::Latest,
+            read_cost: 0,
+        }
     }
 
     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {

@@ -155,12 +155,23 @@ use zenoh::time::Timestamp;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
-use config::{Capability, StorageConfig, VolumeConfig};
+use config::{StorageConfig, VolumeConfig};
 
-/// Signature of the `confirm_capability` operation to be implemented in the library
-/// This function should confirm that the library provides user requested capability
-pub const CONFIRM_CAPABILITY_FN_NAME: &[u8] = b"confirm_capability";
-pub type ConfirmCapability = fn(Capability) -> bool;
+pub struct Capability {
+    pub persistence: Persistence,
+    pub history: History,
+    pub read_cost: u32,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Persistence {
+    Volatile, //default
+    Durable,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum History {
+    Latest, //default
+    All,
+}
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
 pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
@@ -182,8 +193,8 @@ pub trait Volume: Send + Sync {
     /// on the administration space for this backend.
     fn get_admin_status(&self) -> serde_json::Value;
 
-    /// Checks whether the capability of the volume satisfies the requested storage capabilities
-    fn confirm_capability(&self, capability: Capability) -> bool;
+    /// Returns the capability of this backend
+    fn get_capability(&self) -> Capability;
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;

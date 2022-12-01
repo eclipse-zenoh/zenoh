@@ -31,9 +31,11 @@ pub(crate) async fn create_and_start_storage(
     trace!("Create storage {}", &admin_key);
     let key_expr = config.key_expr.clone();
     let replica_config = config.replica_config.clone();
+    let capability = backend.get_capability();
     let storage = backend.create_storage(config).await?;
     start_storage(
         storage,
+        capability,
         replica_config,
         admin_key,
         key_expr,

@@ -33,6 +33,7 @@ pub struct StoreIntercept {
 
 pub(crate) async fn start_storage(
     storage: Box<dyn zenoh_backend_traits::Storage>,
+    capability: zenoh_backend_traits::Capability,
     config: Option<ReplicaConfig>,
     admin_key: String,
     key_expr: OwnedKeyExpr,
