@@ -597,6 +597,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 
@@ -761,6 +762,7 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
+            destination: Locality::default(),
             timeout: Duration::from_secs(10),
             value: None,
             handler: DefaultHandler,
@@ -1275,11 +1277,13 @@ impl Session {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        destination: Locality,
         timeout: Duration,
         value: Option<Value>,
         callback: Callback<'static, Reply>,
@@ -1297,6 +1301,10 @@ impl Session {
             Mode::Manual(mode) => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        let nb_final = match destination {
+            Locality::Any => 2,
+            _ => 1,
+        };
         let timeout = TimedEvent::once(
             Instant::now() + timeout,
             QueryTimeout {
@@ -1306,12 +1314,12 @@ impl Session {
             },
         );
         state.timer.add(timeout);
-        log::trace!("Register query {}", qid);
+        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
             qid,
             QueryState {
-                nb_final: 2,
+                nb_final,
                 selector: selector.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
@@ -1322,38 +1330,42 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
-        primitives.send_query(
-            &selector.key_expr.to_wire(self),
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-            value.as_ref().map(|v| {
-                let mut data_info = DataInfo::new();
-                data_info.encoding = Some(v.encoding.clone());
-                QueryBody {
-                    data_info,
-                    payload: v.payload.clone(),
-                }
-            }),
-            None,
-        );
-        self.handle_query(
-            true,
-            &wexpr,
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-            value.map(|v| {
-                let mut data_info = DataInfo::new();
-                data_info.encoding = Some(v.encoding);
-                QueryBody {
-                    data_info,
-                    payload: v.payload,
-                }
-            }),
-        );
+        if destination != Locality::SessionLocal {
+            primitives.send_query(
+                &selector.key_expr.to_wire(self),
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                value.as_ref().map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding.clone());
+                    QueryBody {
+                        data_info,
+                        payload: v.payload.clone(),
+                    }
+                }),
+                None,
+            );
+        }
+        if destination != Locality::Remote {
+            self.handle_query(
+                true,
+                &wexpr,
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                value.map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding);
+                    QueryBody {
+                        data_info,
+                        payload: v.payload,
+                    }
+                }),
+            );
+        }
         Ok(())
     }
 
@@ -1580,6 +1592,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 }
