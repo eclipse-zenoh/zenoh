@@ -35,6 +35,7 @@ pub struct ReplicationService {
 pub struct StorageService {
     session: Arc<Session>,
     key_expr: OwnedKeyExpr,
+    complete: bool,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
@@ -50,6 +51,7 @@ impl StorageService {
     pub async fn start(
         session: Arc<Session>,
         key_expr: OwnedKeyExpr,
+        complete: bool,
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
@@ -63,6 +65,7 @@ impl StorageService {
         let mut storage_service = StorageService {
             session,
             key_expr,
+            complete,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
             capability,
@@ -89,7 +92,13 @@ impl StorageService {
         };
 
         // answer to queries on key_expr
-        let storage_queryable = match self.session.declare_queryable(&self.key_expr).res().await {
+        let storage_queryable = match self
+            .session
+            .declare_queryable(&self.key_expr)
+            .complete(self.complete)
+            .res()
+            .await
+        {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
                 error!("Error starting storage {} : {}", self.name, e);

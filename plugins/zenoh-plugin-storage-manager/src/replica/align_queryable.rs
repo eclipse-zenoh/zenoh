@@ -70,6 +70,7 @@ impl AlignQueryable {
         let queryable = self
             .session
             .declare_queryable(&self.digest_key)
+            .complete(true) // This queryable is meant to have all the history
             .res()
             .await
             .unwrap();

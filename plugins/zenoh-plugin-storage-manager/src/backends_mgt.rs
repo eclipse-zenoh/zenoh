@@ -35,23 +35,13 @@ pub(crate) async fn create_and_start_storage(
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
     trace!("Create storage {}", &admin_key);
-    let key_expr = config.key_expr.clone();
-    let replica_config = config.replica_config.clone();
     let capability = backend.get_capability();
-    let storage = backend.create_storage(config).await?;
+    let storage = backend.create_storage(config.clone()).await?;
     let store_intercept = StoreIntercept {
         storage,
         in_interceptor,
         out_interceptor,
     };
 
-    start_storage(
-        store_intercept,
-        capability,
-        replica_config,
-        admin_key,
-        key_expr,
-        zenoh,
-    )
-    .await
+    start_storage(store_intercept, capability, config, admin_key, zenoh).await
 }
