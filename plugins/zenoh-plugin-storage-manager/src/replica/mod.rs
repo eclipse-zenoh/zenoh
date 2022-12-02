@@ -31,7 +31,6 @@ use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::config::ReplicaConfig;
-use zenoh_backend_traits::Capability;
 
 pub mod align_queryable;
 pub mod aligner;
@@ -82,7 +81,6 @@ impl Replica {
         key_expr: OwnedKeyExpr,
         complete: bool,
         name: &str,
-        capability: Capability,
         rx: Receiver<StorageMessage>,
     ) {
         trace!("[REPLICA]Opening session...");
@@ -153,7 +151,6 @@ impl Replica {
             &replica.name,
             store_intercept,
             rx,
-            capability,
             Some(replication),
         )
         .fuse();

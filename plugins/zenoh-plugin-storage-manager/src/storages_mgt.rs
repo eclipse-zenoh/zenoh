@@ -26,7 +26,6 @@ pub enum StorageMessage {
 
 pub(crate) async fn start_storage(
     store_intercept: super::StoreIntercept,
-    capability: zenoh_backend_traits::Capability,
     config: StorageConfig,
     admin_key: String,
     zenoh: Arc<Session>,
@@ -53,7 +52,6 @@ pub(crate) async fn start_storage(
                     config.key_expr,
                     config.complete,
                     &name,
-                    capability,
                     rx,
                 )
                 .await
@@ -66,7 +64,6 @@ pub(crate) async fn start_storage(
                     &name,
                     store_intercept,
                     rx,
-                    capability,
                     None,
                 )
                 .await

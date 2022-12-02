@@ -55,7 +55,6 @@ impl StorageService {
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
-        capability: Capability,
         replication: Option<ReplicationService>,
     ) {
         // let mut latest_timestamp_cache = None;
@@ -68,7 +67,7 @@ impl StorageService {
             complete,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
-            capability,
+            capability: store_intercept.capability,
             tombstones: RwLock::new(HashMap::new()),
             // wildcard_updates: RwLock::new(HashMap::new()),
             // latest_timestamp_cache,
