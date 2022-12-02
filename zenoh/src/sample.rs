@@ -15,6 +15,7 @@
 //! Sample primitives
 use std::convert::TryInto;
 
+#[zenoh_core::unstable]
 use serde::Serialize;
 use zenoh_protocol::proto::DataInfo;
 
