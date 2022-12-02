@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-link-ws"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -43,8 +43,8 @@ log = "0.4.17"
 tokio = { version = "1.21.2", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-tungstenite = "0.17.2"
 url = "2.3.1"
-zenoh-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-core/" }
-zenoh-link-commons = { version = "0.6.0-beta.1", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-sync/" }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-util/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
+zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
+zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
+zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

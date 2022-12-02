@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-util"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -50,11 +50,11 @@ lazy_static = "1.4.0"
 libloading = "0.7.3"
 log = "0.4.17"
 shellexpand = "2.1.2"
-zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../zenoh-cfg-properties", optional = true }
-zenoh-collections = { version = "0.6.0-beta.1", path = "../zenoh-collections/", optional = true }
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core" }
-zenoh-crypto = { version = "0.6.0-beta.1", path = "../zenoh-crypto/", optional = true }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../zenoh-sync/", optional = true }
+zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties", optional = true }
+zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", optional = true }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }
+zenoh-crypto = { version = "0.7.0-rc", path = "../zenoh-crypto/", optional = true }
+zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }

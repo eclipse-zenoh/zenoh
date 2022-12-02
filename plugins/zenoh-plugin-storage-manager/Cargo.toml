@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-plugin-storage-manager"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -52,12 +52,12 @@ log = "0.4.17"
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
 urlencoding = "2.1.2"
-zenoh = { version = "0.6.0-beta.1", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-collections/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../commons/zenoh-util" }
-zenoh_backend_traits = { version = "0.6.0-beta.1", path = "../zenoh-backend-traits/" }
+zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
+zenoh-collections = { version = "0.7.0-rc", path = "../../commons/zenoh-collections/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
+zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
+zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
 
 [build-dependencies]
 rustc_version = "0.4.0"

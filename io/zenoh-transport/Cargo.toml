@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-transport"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -62,17 +62,17 @@ rand = "0.8.3"
 ringbuffer-spsc = "0.1.6"
 rsa = { version = "0.6.1", optional = true }
 serde = "1.0.145"
-zenoh-buffers = { version = "0.6.0-beta.1", path = "../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties/" }
-zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-collections/" }
-zenoh-config = { version = "0.6.0-beta.1", path = "../../commons/zenoh-config/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
-zenoh-crypto = { version = "0.6.0-beta.1", path = "../../commons/zenoh-crypto/" }
+zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
+zenoh-collections = { version = "0.7.0-rc", path = "../../commons/zenoh-collections/" }
+zenoh-config = { version = "0.7.0-rc", path = "../../commons/zenoh-config/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
+zenoh-crypto = { version = "0.7.0-rc", path = "../../commons/zenoh-crypto/" }
 
-zenoh-link = { version = "0.6.0-beta.1", path = "../zenoh-link/" }
-zenoh-protocol = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../../commons/zenoh-sync/" }
+zenoh-link = { version = "0.7.0-rc", path = "../zenoh-link/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol/" }
+zenoh-protocol-core = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol-core/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../../commons/zenoh-sync/" }
 
 [dev-dependencies]
 env_logger = "0.9.1"

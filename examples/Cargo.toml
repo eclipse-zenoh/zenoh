@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-examples"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -46,8 +46,8 @@ futures = "0.3.24"
 git-version = "0.3.5"
 json5 = "0.4.1"
 log = "0.4.17"
-zenoh = { version = "0.6.0-beta.1", path = "../zenoh/", default-features = false }
-zenoh-ext = { version = "0.6.0-beta.1", path = "../zenoh-ext/" }
+zenoh = { version = "0.7.0-rc", path = "../zenoh/", default-features = false }
+zenoh-ext = { version = "0.7.0-rc", path = "../zenoh-ext/" }
 
 [dev-dependencies]
 rand = "0.8.5"

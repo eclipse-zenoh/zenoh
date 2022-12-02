@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenohd"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -46,7 +46,7 @@ git-version = "0.3.5"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
 log = "0.4.17"
-zenoh = { version = "0.6.0-beta.1", path = "../zenoh/", features = [
+zenoh = { version = "0.7.0-rc", path = "../zenoh/", features = [
 	"unstable",
 ], default-features = false }
 
