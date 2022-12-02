@@ -62,6 +62,7 @@ rand = "0.8.3"
 ringbuffer-spsc = "0.1.6"
 rsa = { version = "0.6.1", optional = true }
 serde = "1.0.145"
+panic-message = "0.3.0"
 zenoh-buffers = { version = "0.6.0-beta.1", path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties/" }
 zenoh-collections = { version = "0.6.0-beta.1", path = "../../commons/zenoh-collections/" }
