@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[zenoh_core::unstable]
+use super::MultiKeySubscriberBuilder;
 use super::{PublicationCacheBuilder, QueryingSubscriberBuilder};
 use std::convert::TryInto;
 use std::fmt;
@@ -93,6 +95,17 @@ pub trait SessionExt {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [MultiKeySubscriber](super::MultiKeySubscriber) with the given key expressions.
+    #[zenoh_core::unstable]
+    fn declare_multikey_subscriber<'a, 'b, IntoKeyIterator, TryIntoKeyExpr>(
+        &'a self,
+        key_exprs: IntoKeyIterator,
+    ) -> MultiKeySubscriberBuilder<'a, 'b, DefaultHandler>
+    where
+        IntoKeyIterator: IntoIterator<Item = TryIntoKeyExpr>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 }
 
 impl SessionExt for Session {
@@ -120,6 +133,26 @@ impl SessionExt for Session {
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
     }
+
+    /// Create a [MultiKeySubscriber](super::MultiKeySubscriber) with the given key expressions.
+    #[zenoh_core::unstable]
+    fn declare_multikey_subscriber<'a, 'b, IntoKeyIterator, TryIntoKeyExpr>(
+        &'a self,
+        key_exprs: IntoKeyIterator,
+    ) -> MultiKeySubscriberBuilder<'a, 'b, DefaultHandler>
+    where
+        IntoKeyIterator: IntoIterator<Item = TryIntoKeyExpr>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        MultiKeySubscriberBuilder::new(
+            SessionRef::Borrow(self),
+            key_exprs
+                .into_iter()
+                .map(|k| k.try_into().map_err(Into::into))
+                .collect(),
+        )
+    }
 }
 
 impl SessionExt for Arc<Session> {
@@ -146,5 +179,25 @@ impl SessionExt for Arc<Session> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
     {
         PublicationCacheBuilder::new(self, pub_key_expr.try_into().map_err(Into::into))
+    }
+
+    /// Create a [MultiKeySubscriber](super::MultiKeySubscriber) with the given key expressions.
+    #[zenoh_core::unstable]
+    fn declare_multikey_subscriber<'a, 'b, IntoKeyIterator, TryIntoKeyExpr>(
+        &'a self,
+        key_exprs: IntoKeyIterator,
+    ) -> MultiKeySubscriberBuilder<'a, 'b, DefaultHandler>
+    where
+        IntoKeyIterator: IntoIterator<Item = TryIntoKeyExpr>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        MultiKeySubscriberBuilder::new(
+            SessionRef::Borrow(self),
+            key_exprs
+                .into_iter()
+                .map(|k| k.try_into().map_err(Into::into))
+                .collect(),
+        )
     }
 }

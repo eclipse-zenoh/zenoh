@@ -12,10 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod group;
+mod multikey_subscriber;
 mod publication_cache;
 mod querying_subscriber;
 mod session_ext;
 mod subscriber_ext;
+#[zenoh_core::unstable]
+pub use multikey_subscriber::{MultiKeySubscriber, MultiKeySubscriberBuilder};
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
 pub use session_ext::SessionExt;
