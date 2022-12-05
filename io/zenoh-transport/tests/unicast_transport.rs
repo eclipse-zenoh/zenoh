@@ -416,7 +416,7 @@ fn transport_unicast_udp_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
+#[cfg(all(feature = "transport_unixsock-stream"))]
 #[test]
 fn transport_unicast_unix_only() {
     task::block_on(async {
@@ -623,7 +623,7 @@ fn transport_unicast_tcp_udp_unix() {
     let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
 }
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_only() {
     use zenoh_link::tls::config::*;
@@ -865,12 +865,12 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 // in the expected error messages from the tests below.
 //
 // See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     use zenoh_link::tls::config::*;
@@ -885,7 +885,7 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     let mut client_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
     client_endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
             (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
             (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
             (TLS_CLIENT_AUTH, client_auth),
@@ -898,7 +898,7 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     let mut server_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
     server_endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
             (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
             (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
             (TLS_CLIENT_AUTH, client_auth),
@@ -936,7 +936,7 @@ fn transport_unicast_tls_two_way_auth_correct_certs_success() {
     ));
 }
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     use std::vec;
@@ -947,12 +947,10 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
         zasync_executor_init!();
     });
 
-    let client_auth = "true";
-
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
     client_endpoint.extend_configuration(
-        [(TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA)]
+        [(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)]
             .iter()
             .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
     );
@@ -961,10 +959,10 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     let mut server_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
     server_endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
             (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
             (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
+            (TLS_CLIENT_AUTH, "true"),
         ]
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
@@ -1005,7 +1003,7 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
     assert!(error_msg.contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
 }
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 #[test]
 fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
     use zenoh_link::tls::config::*;
@@ -1020,7 +1018,7 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
     let mut client_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
     client_endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
             // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
             // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
             // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
@@ -1037,7 +1035,7 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
     let mut server_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
     server_endpoint.extend_configuration(
         [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
             (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
             (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
             (TLS_CLIENT_AUTH, client_auth),
@@ -1098,14 +1096,14 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
 //   certificates
 //   ├── client
 //   │   ├── localhost
-//   │   │   ├── cert.pem <------- SERVER_CERT
-//   │   │   └── key.pem <-------- SERVER_KEY
+//   │   │   ├── cert.pem <------- CLIENT_CERT
+//   │   │   └── key.pem <-------- CLIENT_KEY
 //   │   ├── minica-key.pem
 //   │   └── minica.pem <--------- CLIENT_CA
 //   └── server
 //       ├── localhost
-//       │   ├── cert.pem <------- CLIENT_CERT
-//       │   └── key.pem <-------- CLIENT_KEY
+//       │   ├── cert.pem <------- SERVER_CERT
+//       │   └── key.pem <-------- SERVER_KEY
 //       ├── minica-key.pem
 //       └── minica.pem <--------- SERVER_CA
 //
@@ -1113,146 +1111,146 @@ fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
 // certificate brought in by the server. Similarly the server's certificate authority will validate
 // the key and certificate brought in by the client.
 //
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const CLIENT_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const CLIENT_CERT: &str = "-----BEGIN CERTIFICATE-----
-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
+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
-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
+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
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const CLIENT_CA: &str = "-----BEGIN CERTIFICATE-----
-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
+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
-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
+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
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const SERVER_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const SERVER_CERT: &str = "-----BEGIN CERTIFICATE-----
-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
+MIIDLDCCAhSgAwIBAgIIXeOjaf4eMxEwDQYJKoZIhvcNAQELBQAwIDEeMBwGA1UE
+AxMVbWluaWNhIHJvb3QgY2EgM2IxODk0MB4XDTIyMTEyNTA5NTMzN1oXDTI0MTIy
+NTA5NTMzN1owFDESMBAGA1UEAxMJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEAzioJ1vjs/5RjuuF0X8dtABcw56fFKo3zJb8TFe+fVWIJ
+1cdeqp/XYyOR/YhFtv4rhVaoqM5jDOKCQTOsEVZtbGmQpxoaGxPYCeN5v9e/aM+5
+/F9e7bQil40pC3tFFU0xA3MoPCJQoWUcKdPx280XDaeAFu3cT2lgLiCKeGhj/jBA
+0MIKyYYpeVpsqIwM1/OXJk2Q+VuSlFo2XsUfTmI59noK+7dnbMgLe06zsDOpha7h
++vxS+6FFSmjP54cC6zWaqGSIu8Z1GfdTzClbEu4PP+xW8k8WbT899a0AZ5atLrnQ
+JZnuIkkM9KcOwqyPbPmEhdvSkXPVTMPZ6J6Iy2XGAwIDAQABo3YwdDAOBgNVHQ8B
 Af8EBAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMAwGA1UdEwEB
-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
+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
 -----END CERTIFICATE-----";
 
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[cfg(all(feature = "transport_tls"))]
 const SERVER_CA: &str = "-----BEGIN CERTIFICATE-----
-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
+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
-BgEFBQcDAjASBgNVHRMBAf8ECDAGAQH/AgEAMB0GA1UdDgQWBBTk2YsiK11mSTA3
-R5UMr81qf5ja7TAfBgNVHSMEGDAWgBTk2YsiK11mSTA3R5UMr81qf5ja7TANBgkq
-hkiG9w0BAQsFAAOCAQEAvKaSjH+X6qOi/HgCGytbf4HA0owCF6IBSYun4i4lYjiD
-M5ItDxdNunZXSFA7JkISnPmjJxKHDcdBOL6L3PxaHwLpHeDb1zxtXiS7ggPYZnC/
-gwtIV9oRgecLgq3t+nNTRBtRqiZcZgYxKN2hXyEBaqFCnUaCzd3pKqRBZm4QLDk3
-Rl6XgFuZYXo07q5B9rLnFcIDAJ8Eu4I4J/Hk/QzGC5XJJfvaFpcSl4Z6nBAXIJBY
-KgGo0jSCkkGSDLBDrM9O9LGqIGA+Jh/QbfafsjN6UHxSQB0tFFCUUgHf62bvv085
-9eRVFKlA/lFduXBmpcbSr07txDV6ujkpyA3WCXINmw==
+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
 -----END CERTIFICATE-----";
