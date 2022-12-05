@@ -797,7 +797,7 @@ fn transport_unicast_tcp_udp_unix() {
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
-fn transport_unicast_tls_only() {
+fn transport_unicast_tls_only_server() {
     use zenoh_link::tls::config::*;
 
     task::block_on(async {
@@ -841,7 +841,7 @@ fn transport_unicast_tls_only() {
 
 #[cfg(feature = "transport_quic")]
 #[test]
-fn transport_unicast_quic_only() {
+fn transport_unicast_quic_only_server() {
     use zenoh_link::quic::config::*;
 
     task::block_on(async {
@@ -886,7 +886,7 @@ fn transport_unicast_quic_only() {
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
-fn transport_unicast_tls_two_way_auth_correct_certs_success() {
+fn transport_unicast_tls_only_mutual_success() {
     use zenoh_link::tls::config::*;
 
     task::block_on(async {
@@ -963,7 +963,7 @@ const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
-fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
+fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
 
     use zenoh_link::tls::config::*;
@@ -1030,7 +1030,7 @@ fn transport_unicast_tls_two_way_auth_missing_certs_fail() {
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
-fn transport_unicast_tls_two_way_auth_wrong_certs_fail() {
+fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     use zenoh_link::tls::config::*;
 
     task::block_on(async {
