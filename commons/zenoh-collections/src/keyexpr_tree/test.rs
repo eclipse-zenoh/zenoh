@@ -57,6 +57,17 @@ fn test_keyset<K: Deref<Target = keyexpr>>(keys: &[K]) {
             let weight = node.weight();
             assert_eq!(expected.get(&ke).unwrap().as_ref(), weight)
         }
+        expected.clear();
+        for (k, v) in &map {
+            if target.includes(k) {
+                assert!(expected.insert(k, v).is_none());
+            }
+        }
+        for node in tree.included_nodes(target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(expected.get(&ke).unwrap().as_ref(), weight)
+        }
     }
 }
 

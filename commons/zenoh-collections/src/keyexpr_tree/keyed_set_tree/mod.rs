@@ -99,11 +99,26 @@ where
     fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a> {
         IntersectionMut::new(&mut self.children, ke)
     }
+
+    type InclusionItem<'a> = <Self::Inclusion<'a> as Iterator>::Item;
+    type Inclusion<'a> = Inclusion<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    fn included_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Inclusion<'a> {
+        Inclusion::new(&self.children, ke)
+    }
+
+    type InclusionItemMut<'a> = <Self::InclusionMut<'a> as Iterator>::Item;
+    type InclusionMut<'a> =
+        InclusionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    fn included_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut<'a> {
+        InclusionMut::new(&mut self.children, ke)
+    }
 }
 mod tree_iter;
 use tree_iter::{TreeIter, TreeIterMut};
 mod intersection;
 use intersection::{Intersection, IntersectionMut};
+mod inclusion;
+use inclusion::{Inclusion, InclusionMut};
 
 impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> Default
     for KeyExprTree<Weight, Children>

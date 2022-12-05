@@ -48,6 +48,22 @@ pub trait IKeyExprTree<Weight> {
         Self: 'a,
         Self::Node: 'a;
     fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a>;
+    type InclusionItem<'a>
+    where
+        Self: 'a;
+    type Inclusion<'a>: Iterator<Item = Self::InclusionItem<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn included_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Inclusion<'a>;
+    type InclusionItemMut<'a>
+    where
+        Self: 'a;
+    type InclusionMut<'a>: Iterator<Item = Self::InclusionItemMut<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn included_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut<'a>;
 }
 pub trait IKeyExprTreeNode<Weight> {
     type Parent;
