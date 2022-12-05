@@ -7,6 +7,14 @@ pub trait IKeyExprTree<Weight> {
     fn node(&self, at: &keyexpr) -> Option<&Self::Node>;
     fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node>;
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node;
+    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
+        self.node(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
+    }
+    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
+        self.node_mut(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight_mut)
+    }
     fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
         self.node_mut_or_create(at).insert_weight(weight)
     }
@@ -17,11 +25,13 @@ pub trait IKeyExprTree<Weight> {
     where
         Self: 'a;
     fn tree_iter(&self) -> Self::TreeIter<'_>;
-    // type TreeIterMut<'a>: Iterator<Item = &'a mut Self::Node>
-    // where
-    //     Self: 'a,
-    //     Self::Node: 'a;
-    // fn tree_iter_mut<'a>(&'a self) -> Self::TreeIterMut<'a>;
+    type TreeIterItemMut<'a>
+    where
+        Self: 'a;
+    type TreeIterMut<'a>: Iterator<Item = Self::TreeIterItemMut<'a>>
+    where
+        Self: 'a;
+    fn tree_iter_mut(&mut self) -> Self::TreeIterMut<'_>;
     type IntersectionItem<'a>
     where
         Self: 'a;
@@ -30,11 +40,14 @@ pub trait IKeyExprTree<Weight> {
         Self: 'a,
         Self::Node: 'a;
     fn intersecting_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Intersection<'a>;
-    // type IntersectionMut<'a>: Iterator<Item = &'a mut Self::Node>
-    // where
-    //     Self: 'a,
-    //     Self::Node: 'a;
-    // fn matching_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a>;
+    type IntersectionItemMut<'a>
+    where
+        Self: 'a;
+    type IntersectionMut<'a>: Iterator<Item = Self::IntersectionItemMut<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a>;
 }
 pub trait IKeyExprTreeNode<Weight> {
     type Parent;

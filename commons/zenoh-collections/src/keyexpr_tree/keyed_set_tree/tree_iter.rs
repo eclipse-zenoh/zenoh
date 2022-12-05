@@ -52,6 +52,54 @@ where
         }
     }
 }
+pub struct TreeIterMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+where
+    Children::Assoc: ChunkMap<Node> + 'a,
+{
+    iterators: Vec<<Children::Assoc as ChunkMap<Node>>::IterMut<'a>>,
+    _marker: std::marker::PhantomData<Weight>,
+}
+
+impl<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+    TreeIterMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: ChunkMap<Node> + 'a,
+{
+    pub(crate) fn new(children: &'a mut Children::Assoc) -> Self {
+        Self {
+            iterators: vec![children.children_mut()],
+            _marker: Default::default(),
+        }
+    }
+}
+
+impl<
+        'a,
+        Children: ChunkMapType<Node>,
+        Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
+        Weight,
+    > Iterator for TreeIterMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: ChunkMap<Node> + 'a,
+{
+    type Item = <Children::Assoc as ChunkMap<Node>>::IterItemMut<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iterators.last_mut()?.next() {
+                Some(mut node) => {
+                    let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
+                        .children_mut()
+                        .children_mut();
+                    self.iterators.push(iterator);
+                    return Some(node);
+                }
+                None => {
+                    self.iterators.pop();
+                }
+            }
+        }
+    }
+}
 
 pub struct DepthInstrumented<T>(T);
 impl<
