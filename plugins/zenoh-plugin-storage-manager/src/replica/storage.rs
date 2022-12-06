@@ -41,7 +41,7 @@ pub struct StorageService {
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     // capability: Capability,
     tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
-    // wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
+    wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
     // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
@@ -70,7 +70,7 @@ impl StorageService {
             storage: Mutex::new(store_intercept.storage),
             // capability: store_intercept.capability,
             tombstones: RwLock::new(HashMap::new()),
-            // wildcard_updates: RwLock::new(HashMap::new()),
+            wildcard_updates: RwLock::new(HashMap::new()),
             // latest_timestamp_cache,
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
@@ -211,6 +211,9 @@ impl StorageService {
         };
 
         // @TODO: if wildcard, update wildcard_updates
+        if sample.key_expr.is_wild() {
+            self.register_wildcard_update(sample.clone()).await;
+        }
 
         let matching_keys = if sample.key_expr.is_wild() {
             self.get_matching_keys(&sample.key_expr).await
@@ -272,20 +275,32 @@ impl StorageService {
         drop(tombstones);
     }
 
-    // async fn register_wildcard_update(&self, sample: Sample) {
-    //     // @TODO: chenge to a better store
-    //     let mut wildcards = self.wildcard_updates.write().await;
-    //     wildcards.insert(sample.key_expr.clone().into(), sample);
-    //     if self.capability.persistence.eq(&Persistence::Durable) {
-    //         // flush to disk to makeit durable
-    //         todo!("yet to be implemented");
-    //     }
-    //     drop(wildcards);
-    // }
+    async fn register_wildcard_update(&self, sample: Sample) {
+        // @TODO: change to a better store
+        let mut wildcards = self.wildcard_updates.write().await;
+        wildcards.insert(sample.key_expr.clone().into(), sample);
+        // @TODO: implement this
+        // if self.capability.persistence.eq(&Persistence::Durable) {
+        //     // flush to disk to makeit durable
+        //     todo!("yet to be implemented");
+        // }
+        drop(wildcards);
+    }
 
     async fn is_outdated(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         let tombstones = self.tombstones.read().await;
-        tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp
+        if tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp {
+            // check wild card store
+            let wildcards = self.wildcard_updates.read().await;
+            for (key, sample) in wildcards.iter() {
+                if key_expr.intersects(key) {
+                    if sample.timestamp.unwrap() > *timestamp {
+                        return true
+                    }
+                }
+            }
+        }
+        false
         // @TODO: if storage deals with only the latest, check the last timestamp
         // if self.capability.history.eq(&History::Latest) {
         //     // @TODO: if cache exists, read from there
