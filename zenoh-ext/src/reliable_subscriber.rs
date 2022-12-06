@@ -1,5 +1,3 @@
-use zenoh::sample::SourceInfo;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -25,6 +23,7 @@ use {
     zenoh::handlers::{locked, DefaultHandler},
     zenoh::prelude::r#async::*,
     zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
+    zenoh::sample::SourceInfo,
     zenoh::subscriber::{Reliability, Subscriber},
     zenoh::Result as ZResult,
     zenoh_collections::timer::Timer,
