@@ -13,19 +13,18 @@
 //
 
 //! Sample primitives
+use crate::buffers::ZBuf;
+use crate::prelude::{KeyExpr, SampleKind, Value, ZenohId};
+use crate::time::{new_reception_timestamp, Timestamp};
+#[zenoh_core::unstable]
+use serde::Serialize;
 use std::convert::TryInto;
-
-use zenoh_config::ZenohId;
 use zenoh_protocol::proto::DataInfo;
 use zenoh_protocol_core::ZInt;
 
-use crate::buffers::ZBuf;
-use crate::prelude::{KeyExpr, SampleKind, Value};
-use crate::time::{new_reception_timestamp, Timestamp};
-
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_core::unstable]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,

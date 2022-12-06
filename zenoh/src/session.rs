@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
@@ -324,13 +325,19 @@ impl Session {
                 aggregated_publishers,
             )));
             let session = Session {
-                runtime,
+                runtime: runtime.clone(),
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
             };
+
+            runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
+
             let primitives = Some(router.new_primitives(Arc::new(session.clone())));
             zwrite!(state).primitives = primitives;
+
+            admin::init(&session);
+
             session
         })
     }
@@ -786,15 +793,23 @@ impl Session {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::new(config).await {
-                Ok(runtime) => {
-                    let session =
-                        Self::init(runtime, aggregated_subscribers, aggregated_publishers)
-                            .res_async()
-                            .await;
-                    // Workaround for the declare_and_shoot problem
-                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                    Ok(session)
+            match Runtime::new(config, false).await {
+                Ok(mut runtime) => {
+                    let session = Self::init(
+                        runtime.clone(),
+                        aggregated_subscribers,
+                        aggregated_publishers,
+                    )
+                    .res_async()
+                    .await;
+                    match runtime.start().await {
+                        Ok(()) => {
+                            // Workaround for the declare_and_shoot problem
+                            task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                            Ok(session)
+                        }
+                        Err(err) => Err(err),
+                    }
                 }
                 Err(err) => Err(err),
             }
