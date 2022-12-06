@@ -50,7 +50,6 @@ transport_serial = ["zenoh-link/transport_serial"]
 stats = []
 
 [dependencies]
-
 async-executor = "1.4.1"
 async-global-executor = "2.3.0"
 async-std = { version = "=1.12.0", default-features = false }
@@ -75,4 +74,5 @@ zenoh-protocol-core = { version = "0.7.0-rc", path = "../../commons/zenoh-protoc
 zenoh-sync = { version = "0.7.0-rc", path = "../../commons/zenoh-sync/" }
 
 [dev-dependencies]
-env_logger = "0.9.1"
+env_logger = "0.10.0"
+panic-message = "0.3.0"
