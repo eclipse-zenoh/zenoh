@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::net::SocketAddr;
+use std::{convert::TryFrom, net::SocketAddr};
 
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ use config::{
 };
 use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
-use zenoh_core::{bail, zconfigurable, Result as ZResult};
+use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol_core::Locator;
 
@@ -149,9 +149,6 @@ pub fn get_tls_host(address: &Locator) -> ZResult<&str> {
     Ok(address.address().split(':').next().unwrap())
 }
 
-pub async fn get_tls_dns(address: &Locator) -> ZResult<DNSName> {
-    match DNSNameRef::try_from_ascii_str(get_tls_host(address)?) {
-        Ok(v) => Ok(v.to_owned()),
-        Err(e) => bail!(e),
-    }
+pub fn get_tls_server_name(address: &Locator) -> ZResult<ServerName> {
+    Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
 }
