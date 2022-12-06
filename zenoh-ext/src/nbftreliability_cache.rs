@@ -29,9 +29,9 @@ use {
     zenoh_util::core::ResolveFuture,
 };
 
-/// The builder of ReliabilityCache, allowing to configure it.
+/// The builder of NBFTReliabilityCache, allowing to configure it.
 #[zenoh_core::unstable]
-pub struct ReliabilityCacheBuilder<'a, 'b, 'c> {
+pub struct NBFTReliabilityCacheBuilder<'a, 'b, 'c> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
@@ -42,12 +42,12 @@ pub struct ReliabilityCacheBuilder<'a, 'b, 'c> {
 }
 
 #[zenoh_core::unstable]
-impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
+impl<'a, 'b, 'c> NBFTReliabilityCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
-    ) -> ReliabilityCacheBuilder<'a, 'b, 'c> {
-        ReliabilityCacheBuilder {
+    ) -> NBFTReliabilityCacheBuilder<'a, 'b, 'c> {
+        NBFTReliabilityCacheBuilder {
             session,
             pub_key_expr,
             queryable_prefix: None,
@@ -68,7 +68,7 @@ impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// Restrict the matching publications that will be cached by this [`ReliabilityCache`]
+    /// Restrict the matching publications that will be cached by this [`NBFTReliabilityCache`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn subscriber_allowed_origin(mut self, origin: Locality) -> Self {
@@ -76,7 +76,7 @@ impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// Restrict the matching queries that will be receive by this [`ReliabilityCache`]'s queryable
+    /// Restrict the matching queries that will be receive by this [`NBFTReliabilityCache`]'s queryable
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
     pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
@@ -98,19 +98,19 @@ impl<'a, 'b, 'c> ReliabilityCacheBuilder<'a, 'b, 'c> {
 }
 
 #[zenoh_core::unstable]
-impl<'a> Resolvable for ReliabilityCacheBuilder<'a, '_, '_> {
-    type To = ZResult<ReliabilityCache<'a>>;
+impl<'a> Resolvable for NBFTReliabilityCacheBuilder<'a, '_, '_> {
+    type To = ZResult<NBFTReliabilityCache<'a>>;
 }
 
 #[zenoh_core::unstable]
-impl SyncResolve for ReliabilityCacheBuilder<'_, '_, '_> {
+impl SyncResolve for NBFTReliabilityCacheBuilder<'_, '_, '_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        ReliabilityCache::new(self)
+        NBFTReliabilityCache::new(self)
     }
 }
 
 #[zenoh_core::unstable]
-impl<'a> AsyncResolve for ReliabilityCacheBuilder<'a, '_, '_> {
+impl<'a> AsyncResolve for NBFTReliabilityCacheBuilder<'a, '_, '_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -143,17 +143,17 @@ fn sample_in_range(sample: &Sample, start: Option<ZInt>, end: Option<ZInt>) -> b
 }
 
 #[zenoh_core::unstable]
-pub struct ReliabilityCache<'a> {
+pub struct NBFTReliabilityCache<'a> {
     _sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
 
 #[zenoh_core::unstable]
-impl<'a> ReliabilityCache<'a> {
-    fn new(conf: ReliabilityCacheBuilder<'a, '_, '_>) -> ZResult<ReliabilityCache<'a>> {
+impl<'a> NBFTReliabilityCache<'a> {
+    fn new(conf: NBFTReliabilityCacheBuilder<'a, '_, '_>) -> ZResult<NBFTReliabilityCache<'a>> {
         let key_expr = conf.pub_key_expr?;
-        // the queryable_prefix (optional), and the key_expr for ReliabilityCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
+        // the queryable_prefix (optional), and the key_expr for NBFTReliabilityCache's queryable ("[<queryable_prefix>]/<pub_key_expr>")
         let (queryable_prefix, queryable_key_expr): (Option<OwnedKeyExpr>, KeyExpr) =
             match conf.queryable_prefix {
                 None => (None, key_expr.clone()),
@@ -164,7 +164,7 @@ impl<'a> ReliabilityCache<'a> {
                 Some(Err(e)) => bail!("Invalid key expression for queryable_prefix: {}", e),
             };
         log::debug!(
-            "Create ReliabilityCache on {} with history={} resource_limit={:?}",
+            "Create NBFTReliabilityCache on {} with history={} resource_limit={:?}",
             &key_expr,
             conf.history,
             conf.resources_limit
@@ -215,7 +215,7 @@ impl<'a> ReliabilityCache<'a> {
                                     }
                                     queue.push_back(sample);
                                 } else if cache.len() >= limit {
-                                    log::error!("ReliabilityCache on {}: resource_limit exceeded - can't cache publication for a new resource",
+                                    log::error!("NBFTReliabilityCache on {}: resource_limit exceeded - can't cache publication for a new resource",
                                     pub_key_expr);
                                 } else {
                                     let mut queue: VecDeque<Sample> = VecDeque::new();
@@ -264,18 +264,18 @@ impl<'a> ReliabilityCache<'a> {
             }
         });
 
-        Ok(ReliabilityCache {
+        Ok(NBFTReliabilityCache {
             _sub: sub,
             _queryable: queryable,
             _stoptx: stoptx,
         })
     }
 
-    /// Close this ReliabilityCache
+    /// Close this NBFTReliabilityCache
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
         ResolveFuture::new(async move {
-            let ReliabilityCache {
+            let NBFTReliabilityCache {
                 _queryable,
                 _sub,
                 _stoptx,

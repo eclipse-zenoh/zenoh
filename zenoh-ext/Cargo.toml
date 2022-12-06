@@ -70,16 +70,16 @@ name = "z_view_size"
 path = "examples/z_view_size.rs"
 
 [[example]]
-name = "z_rel_sub"
-path = "examples/z_rel_sub.rs"
+name = "z_nbftr_sub"
+path = "examples/z_nbftr_sub.rs"
 required-features = ["unstable"]
 
 [[example]]
-name = "z_rel_pub"
-path = "examples/z_rel_pub.rs"
+name = "z_nbftr_pub"
+path = "examples/z_nbftr_pub.rs"
 required-features = ["unstable"]
 
 [[example]]
-name = "z_rel_cache"
-path = "examples/z_rel_cache.rs"
+name = "z_nbftr_cache"
+path = "examples/z_nbftr_cache.rs"
 required-features = ["unstable"]

@@ -31,9 +31,9 @@ use {
     zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve},
 };
 
-/// The builder of ReliableSubscriber, allowing to configure it.
+/// The builder of NBFTReliableSubscriber, allowing to configure it.
 #[zenoh_core::unstable]
-pub struct ReliableSubscriberBuilder<'b, Handler> {
+pub struct NBFTReliableSubscriberBuilder<'b, Handler> {
     session: Arc<Session>,
     key_expr: ZResult<KeyExpr<'b>>,
     reliability: Reliability,
@@ -46,12 +46,12 @@ pub struct ReliableSubscriberBuilder<'b, Handler> {
 }
 
 #[zenoh_core::unstable]
-impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
+impl<'b> NBFTReliableSubscriberBuilder<'b, DefaultHandler> {
     pub(crate) fn new(
         session: Arc<Session>,
         key_expr: ZResult<KeyExpr<'b>>,
-    ) -> ReliableSubscriberBuilder<'b, DefaultHandler> {
-        ReliableSubscriberBuilder {
+    ) -> NBFTReliableSubscriberBuilder<'b, DefaultHandler> {
+        NBFTReliableSubscriberBuilder {
             session,
             key_expr,
             reliability: Reliability::default(),
@@ -64,13 +64,16 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
         }
     }
 
-    /// Add callback to ReliableSubscriber.
+    /// Add callback to NBFTReliableSubscriber.
     #[inline]
-    pub fn callback<Callback>(self, callback: Callback) -> ReliableSubscriberBuilder<'b, Callback>
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> NBFTReliableSubscriberBuilder<'b, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
     {
-        let ReliableSubscriberBuilder {
+        let NBFTReliableSubscriberBuilder {
             session,
             key_expr,
             reliability,
@@ -81,7 +84,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             history,
             handler: _,
         } = self;
-        ReliableSubscriberBuilder {
+        NBFTReliableSubscriberBuilder {
             session,
             key_expr,
             reliability,
@@ -94,28 +97,28 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
         }
     }
 
-    /// Add callback to `ReliableSubscriber`.
+    /// Add callback to `NBFTReliableSubscriber`.
     ///
     /// Using this guarantees that your callback will never be called concurrently.
-    /// If your callback is also accepted by the [`callback`](ReliableSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    /// If your callback is also accepted by the [`callback`](NBFTReliableSubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> ReliableSubscriberBuilder<'b, impl Fn(Sample) + Send + Sync + 'static>
+    ) -> NBFTReliableSubscriberBuilder<'b, impl Fn(Sample) + Send + Sync + 'static>
     where
         CallbackMut: FnMut(Sample) + Send + Sync + 'static,
     {
         self.callback(locked(callback))
     }
 
-    /// Make the built ReliableSubscriber a [`ReliableSubscriber`](ReliableSubscriber).
+    /// Make the built NBFTReliableSubscriber a [`NBFTReliableSubscriber`](NBFTReliableSubscriber).
     #[inline]
-    pub fn with<Handler>(self, handler: Handler) -> ReliableSubscriberBuilder<'b, Handler>
+    pub fn with<Handler>(self, handler: Handler) -> NBFTReliableSubscriberBuilder<'b, Handler>
     where
         Handler: zenoh::prelude::IntoCallbackReceiverPair<'static, Sample>,
     {
-        let ReliableSubscriberBuilder {
+        let NBFTReliableSubscriberBuilder {
             session,
             key_expr,
             reliability,
@@ -126,7 +129,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
             history,
             handler: _,
         } = self;
-        ReliableSubscriberBuilder {
+        NBFTReliableSubscriberBuilder {
             session,
             key_expr,
             reliability,
@@ -141,7 +144,7 @@ impl<'b> ReliableSubscriberBuilder<'b, DefaultHandler> {
 }
 
 #[zenoh_core::unstable]
-impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
+impl<'b, Handler> NBFTReliableSubscriberBuilder<'b, Handler> {
     /// Change the subscription reliability.
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
@@ -200,8 +203,8 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
         self
     }
 
-    fn with_static_keys(self) -> ReliableSubscriberBuilder<'static, Handler> {
-        ReliableSubscriberBuilder {
+    fn with_static_keys(self) -> NBFTReliableSubscriberBuilder<'static, Handler> {
+        NBFTReliableSubscriberBuilder {
             session: self.session,
             key_expr: self.key_expr.map(|s| s.into_owned()),
             reliability: self.reliability,
@@ -216,27 +219,27 @@ impl<'b, Handler> ReliableSubscriberBuilder<'b, Handler> {
 }
 
 #[zenoh_core::unstable]
-impl<'a, Handler> Resolvable for ReliableSubscriberBuilder<'a, Handler>
+impl<'a, Handler> Resolvable for NBFTReliableSubscriberBuilder<'a, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample>,
     Handler::Receiver: Send,
 {
-    type To = ZResult<ReliableSubscriber<'a, Handler::Receiver>>;
+    type To = ZResult<NBFTReliableSubscriber<'a, Handler::Receiver>>;
 }
 
 #[zenoh_core::unstable]
-impl<Handler> SyncResolve for ReliableSubscriberBuilder<'_, Handler>
+impl<Handler> SyncResolve for NBFTReliableSubscriberBuilder<'_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        ReliableSubscriber::new(self.with_static_keys())
+        NBFTReliableSubscriber::new(self.with_static_keys())
     }
 }
 
 #[zenoh_core::unstable]
-impl<Handler> AsyncResolve for ReliableSubscriberBuilder<'_, Handler>
+impl<Handler> AsyncResolve for NBFTReliableSubscriberBuilder<'_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
@@ -256,13 +259,13 @@ struct InnerState {
 }
 
 #[zenoh_core::unstable]
-pub struct ReliableSubscriber<'a, Receiver> {
+pub struct NBFTReliableSubscriber<'a, Receiver> {
     _subscriber: Subscriber<'a, ()>,
     receiver: Receiver,
 }
 
 #[zenoh_core::unstable]
-impl<Receiver> std::ops::Deref for ReliableSubscriber<'_, Receiver> {
+impl<Receiver> std::ops::Deref for NBFTReliableSubscriber<'_, Receiver> {
     type Target = Receiver;
     fn deref(&self) -> &Self::Target {
         &self.receiver
@@ -270,7 +273,7 @@ impl<Receiver> std::ops::Deref for ReliableSubscriber<'_, Receiver> {
 }
 
 #[zenoh_core::unstable]
-impl<Receiver> std::ops::DerefMut for ReliableSubscriber<'_, Receiver> {
+impl<Receiver> std::ops::DerefMut for NBFTReliableSubscriber<'_, Receiver> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.receiver
     }
@@ -385,8 +388,8 @@ impl Timed for PeriodicQuery {
 }
 
 #[zenoh_core::unstable]
-impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
-    fn new<Handler>(conf: ReliableSubscriberBuilder<'a, Handler>) -> ZResult<Self>
+impl<'a, Receiver> NBFTReliableSubscriber<'a, Receiver> {
+    fn new<Handler>(conf: NBFTReliableSubscriberBuilder<'a, Handler>) -> ZResult<Self>
     where
         Handler: IntoCallbackReceiverPair<'static, Sample, Receiver = Receiver> + Send,
     {
@@ -504,7 +507,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
                 .res_sync();
         }
 
-        let reliable_subscriber = ReliableSubscriber {
+        let reliable_subscriber = NBFTReliableSubscriber {
             _subscriber: subscriber,
             receiver,
         };
@@ -512,7 +515,7 @@ impl<'a, Receiver> ReliableSubscriber<'a, Receiver> {
         Ok(reliable_subscriber)
     }
 
-    /// Close this ReliableSubscriber
+    /// Close this NBFTReliableSubscriber
     #[inline]
     pub fn close(self) -> impl Resolve<ZResult<()>> + 'a {
         self._subscriber.undeclare()

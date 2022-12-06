@@ -25,11 +25,11 @@ use {
 use zenoh::sample::SourceInfo;
 
 #[zenoh_core::unstable]
-use crate::{ReliabilityCache, SessionExt};
+use crate::{NBFTReliabilityCache, SessionExt};
 
-/// The builder of ReliablePublisher, allowing to configure it.
+/// The builder of NBFTReliablePublisher, allowing to configure it.
 #[zenoh_core::unstable]
-pub struct ReliablePublisherBuilder<'a, 'b> {
+pub struct NBFTReliablePublisherBuilder<'a, 'b> {
     session: &'a Session,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     with_cache: bool,
@@ -38,12 +38,12 @@ pub struct ReliablePublisherBuilder<'a, 'b> {
 }
 
 #[zenoh_core::unstable]
-impl<'a, 'b> ReliablePublisherBuilder<'a, 'b> {
+impl<'a, 'b> NBFTReliablePublisherBuilder<'a, 'b> {
     pub(crate) fn new(
         session: &'a Session,
         pub_key_expr: ZResult<KeyExpr<'b>>,
-    ) -> ReliablePublisherBuilder<'a, 'b> {
-        ReliablePublisherBuilder {
+    ) -> NBFTReliablePublisherBuilder<'a, 'b> {
+        NBFTReliablePublisherBuilder {
             session,
             pub_key_expr,
             with_cache: true,
@@ -72,19 +72,19 @@ impl<'a, 'b> ReliablePublisherBuilder<'a, 'b> {
 }
 
 #[zenoh_core::unstable]
-impl<'a> Resolvable for ReliablePublisherBuilder<'a, '_> {
-    type To = ZResult<ReliablePublisher<'a>>;
+impl<'a> Resolvable for NBFTReliablePublisherBuilder<'a, '_> {
+    type To = ZResult<NBFTReliablePublisher<'a>>;
 }
 
 #[zenoh_core::unstable]
-impl SyncResolve for ReliablePublisherBuilder<'_, '_> {
+impl SyncResolve for NBFTReliablePublisherBuilder<'_, '_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        ReliablePublisher::new(self)
+        NBFTReliablePublisher::new(self)
     }
 }
 
 #[zenoh_core::unstable]
-impl<'a> AsyncResolve for ReliablePublisherBuilder<'a, '_> {
+impl<'a> AsyncResolve for NBFTReliablePublisherBuilder<'a, '_> {
     type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
@@ -93,16 +93,16 @@ impl<'a> AsyncResolve for ReliablePublisherBuilder<'a, '_> {
 }
 
 #[zenoh_core::unstable]
-pub struct ReliablePublisher<'a> {
+pub struct NBFTReliablePublisher<'a> {
     _id: ZenohId,
     _seqnum: AtomicU64,
     _publisher: Publisher<'a>,
-    _cache: Option<ReliabilityCache<'a>>,
+    _cache: Option<NBFTReliabilityCache<'a>>,
 }
 
 #[zenoh_core::unstable]
-impl<'a> ReliablePublisher<'a> {
-    fn new(conf: ReliablePublisherBuilder<'a, '_>) -> ZResult<Self> {
+impl<'a> NBFTReliablePublisher<'a> {
+    fn new(conf: NBFTReliablePublisherBuilder<'a, '_>) -> ZResult<Self> {
         let key_expr = conf.pub_key_expr?;
         let id = conf.session.info().zid().res_sync();
 
@@ -127,7 +127,7 @@ impl<'a> ReliablePublisher<'a> {
             None
         };
 
-        Ok(ReliablePublisher {
+        Ok(NBFTReliablePublisher {
             _id: id,
             _seqnum: AtomicU64::new(0),
             _publisher: publisher,
@@ -227,7 +227,7 @@ impl<'a> ReliablePublisher<'a> {
     /// ```
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         ResolveFuture::new(async move {
-            let ReliablePublisher {
+            let NBFTReliablePublisher {
                 _id,
                 _seqnum,
                 _publisher,

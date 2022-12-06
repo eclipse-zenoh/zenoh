@@ -31,7 +31,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap().into_arc();
 
-    println!("Declaring ReliableSubscriber on {}", key_expr);
+    println!("Declaring NBFTReliableSubscriber on {}", key_expr);
     let subscriber = session
         .declare_reliable_subscriber(key_expr)
         .history(history)
@@ -63,7 +63,7 @@ async fn main() {
 }
 
 fn parse_args() -> (Config, String, bool, Option<Duration>) {
-    let args = App::new("zenoh-ext reliable sub example")
+    let args = App::new("zenoh-ext non blocking fault tolerant reliable subscriber example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(["peer", "client"]),

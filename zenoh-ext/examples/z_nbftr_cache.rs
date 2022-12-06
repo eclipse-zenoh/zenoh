@@ -13,6 +13,7 @@
 //
 use async_std::task::sleep;
 use clap::{App, Arg};
+use futures::prelude::*;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -23,58 +24,60 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, key_expr, value, cache, history) = parse_args();
+    let (config, key_expr, history, prefix) = parse_args();
 
     println!("Opening session...");
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).res().await.unwrap().into_arc();
 
-    println!("Declaring ReliablePublisher on {}", &key_expr);
-    let publ = session
-        .declare_reliable_publisher(&key_expr)
-        .with_cache(cache)
+    println!("Declaring NBFTReliabilityCache on {}", key_expr);
+    let _cache = session
+        .declare_reliability_cache(key_expr)
         .history(history)
+        .queryable_prefix(prefix)
         .res()
         .await
         .unwrap();
 
-    for idx in 0..u32::MAX {
-        sleep(Duration::from_secs(1)).await;
-        let buf = format!("[{:4}] {}", idx, value);
-        println!("Pub Data ('{}': '{}')", &key_expr, buf);
-        publ.put(buf).res().await.unwrap();
+    println!("Enter 'q' to quit...");
+    let mut stdin = async_std::io::stdin();
+    let mut input = [0_u8];
+    loop {
+        let _ = stdin.read_exact(&mut input).await;
+        match input[0] {
+            b'q' => break,
+            0 => sleep(Duration::from_secs(1)).await,
+            _ => (),
+        }
     }
 }
 
-fn parse_args() -> (Config, String, String, bool, usize) {
-    let args = App::new("zenoh-ext reliable pub example")
+fn parse_args() -> (Config, String, usize, String) {
+    let args = App::new("zenoh-ext non blocking fault tolerant reliability cache example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
+            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(["peer", "client"]),
         )
         .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
+            "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
         ))
         .arg(Arg::from_usage(
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish.'")
-                .default_value("demo/example/zenoh-rs-pub"),
-        )
-        .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
-                .default_value("Pub from Rust!"),
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
+                .default_value("demo/example/**"),
         )
         .arg(Arg::from_usage(
-            "-n, --no-cache 'Disable local reliability cache'",
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(
             Arg::from_usage("-h, --history=[SIZE] 'The number of publications to keep in cache'")
                 .default_value("1024"),
         )
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
+        .arg(
+            Arg::from_usage("-x, --prefix=[STRING] 'The id of publishers to cache'")
+                .default_value("*"),
+        )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
@@ -105,9 +108,8 @@ fn parse_args() -> (Config, String, String, bool, usize) {
     }
 
     let key_expr = args.value_of("key").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-    let cache = !args.is_present("no-cache");
     let history: usize = args.value_of("history").unwrap().parse().unwrap();
+    let prefix = args.value_of("prefix").unwrap().to_string();
 
-    (config, key_expr, value, cache, history)
+    (config, key_expr, history, prefix)
 }
