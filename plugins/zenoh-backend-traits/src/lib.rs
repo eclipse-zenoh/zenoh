@@ -95,45 +95,28 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn put(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
-//!         // When receiving a PUT operation
-//!         // extract Timestamp from sample
-//!         sample.ensure_timestamp();
-//!         let timestamp = sample.timestamp.take().unwrap();
+//!     async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult> {
 //!         // Store the sample
 //!         let _key = sample.key_expr;
 //!         // @TODO:
-//!         //  - check if timestamp is newer than the stored one for the same key
-//!         //  - if yes: store (key, sample)
+//!         // store (key, sample)
 //!         return Ok(StorageInsertionResult::Inserted);
-//!         //  - if not: drop the sample
+//!         //  - if any issue: drop the sample
 //!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     async fn delete(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
-//!         // When receiving a DELETE operation
-//!         // extract Timestamp from sample
-//!         sample.ensure_timestamp();
-//!         let timestamp = sample.timestamp.take().unwrap();
-//!         let _key = sample.key_expr;
+//!     async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult> {
 //!         // @TODO:
-//!         //  - check if timestamp is newer than the stored one for the same key
-//!         //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
+//!         // delete the actual entry from storage
 //!         return Ok(StorageInsertionResult::Deleted);
-//!         //  - if not: drop the sample
-//!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     // When receiving a Query (i.e. on GET operations)
-//!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-//!         let _key_elector = query.key_expr();
+//!     // When receiving a GET operation
+//!     async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Sample> {
 //!         // @TODO:
-//!         //  - test if key selector contains *
-//!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
-//!         //  - if yes: get all the samples with key matching key_selector and call for each: query.reply(sample.clone()).await;
-//!         //
-//!         // NOTE: in case query.parameters() is not empty something smarter should be done with returned samples...
-//!         Ok(())
+//!         // get the sample with key_expr and return it
+//!         // NOTE: in case parameters is not empty something smarter should be done with returned samples...
+//!         Ok(Sample::new(key_expr, ""))
 //!     }
 //!
 //!     // To get all entries in the datastore
@@ -213,14 +196,13 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn put(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
+    async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult>;
 
-    /// Function called for each incoming data ([`Sample`]) to be delted from this storage.
-    async fn delete(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
+    /// Function called for each incoming delete request to this storage.
+    async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult>;
 
-    /// Function called for each incoming query matching this storage's keys exp.
-    /// This storage should reply with data matching the query calling [`Query::reply()`].
-    async fn on_query(&mut self, query: Query) -> ZResult<()>;
+    /// Function to retrieve the samepl associated with a single key.
+    async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Sample>;
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.

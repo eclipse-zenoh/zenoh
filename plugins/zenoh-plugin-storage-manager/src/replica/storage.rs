@@ -24,7 +24,8 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
-use zenoh_backend_traits::{Capability, Persistence, Query, StorageInsertionResult};
+// use zenoh_backend_traits::{Capability, Persistence, StorageInsertionResult};
+use zenoh_backend_traits::StorageInsertionResult;
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -38,7 +39,7 @@ pub struct StorageService {
     complete: bool,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
-    capability: Capability,
+    // capability: Capability,
     tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
     // wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
     // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
@@ -67,7 +68,7 @@ impl StorageService {
             complete,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
-            capability: store_intercept.capability,
+            // capability: store_intercept.capability,
             tombstones: RwLock::new(HashMap::new()),
             // wildcard_updates: RwLock::new(HashMap::new()),
             // latest_timestamp_cache,
@@ -203,52 +204,59 @@ impl StorageService {
     async fn process_sample(&self, sample: Sample) {
         trace!("[STORAGE] Processing sample: {}", sample);
         // Call incoming data interceptor (if any)
-        let mut sample = if let Some(ref interceptor) = self.in_interceptor {
+        let sample = if let Some(ref interceptor) = self.in_interceptor {
             interceptor(sample)
         } else {
             sample
         };
 
-        sample.ensure_timestamp();
-
         // @TODO: if wildcard, update wildcard_updates
-        // @TODO: resolve key_expr into a list of keys
-        // for each key, perform put or delete as seen fit
 
-        if !self
-            .is_outdated(
-                &sample.key_expr.clone().into(),
-                sample.get_timestamp().unwrap(),
-            )
-            .await
-        {
-            let mut storage = self.storage.lock().await;
-            let result = if sample.kind == SampleKind::Put {
-                storage.put(sample.clone()).await
-            } else if sample.kind == SampleKind::Delete {
-                // register a tombstone
-                self.mark_tombstone(sample.key_expr.clone().into(), sample.timestamp.unwrap())
-                    .await;
-                storage.delete(sample.clone()).await
-            } else {
-                Err("sample kind not impleented".into())
-            };
-            if self.replication.is_some()
-                && result.is_ok()
-                && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
+        let matching_keys = if sample.key_expr.is_wild() {
+            self.get_matching_keys(&sample.key_expr).await
+        } else {
+            vec![sample.key_expr.clone().into()]
+        };
+
+        for k in matching_keys {
+            if !self
+                .is_outdated(&k.clone(), sample.get_timestamp().unwrap())
+                .await
             {
-                let sending = self.replication.as_ref().unwrap().log_propagation.send((
-                    OwnedKeyExpr::from(sample.key_expr.clone()),
-                    *sample.get_timestamp().unwrap(),
-                ));
-                match sending {
-                    Ok(_) => (),
-                    Err(e) => {
-                        error!("Error in sending the sample to the log: {}", e);
+                let mut storage = self.storage.lock().await;
+                let result = if sample.kind == SampleKind::Put {
+                    storage
+                        .put(
+                            k.clone(),
+                            Sample::new(KeyExpr::from(k), sample.value.clone())
+                                .with_timestamp(sample.timestamp.unwrap()),
+                        )
+                        .await
+                } else if sample.kind == SampleKind::Delete {
+                    // register a tombstone
+                    self.mark_tombstone(k.clone(), sample.timestamp.unwrap())
+                        .await;
+                    storage.delete(k).await
+                } else {
+                    Err("sample kind not implemented".into())
+                };
+                if self.replication.is_some()
+                    && result.is_ok()
+                    && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
+                {
+                    let sending = self.replication.as_ref().unwrap().log_propagation.send((
+                        OwnedKeyExpr::from(sample.key_expr.clone()),
+                        *sample.get_timestamp().unwrap(),
+                    ));
+                    match sending {
+                        Ok(_) => (),
+                        Err(e) => {
+                            error!("Error in sending the sample to the log: {}", e);
+                        }
                     }
                 }
+                drop(storage);
             }
-            drop(storage);
         }
     }
 
@@ -256,10 +264,11 @@ impl StorageService {
         // @TODO:change into a better store
         let mut tombstones = self.tombstones.write().await;
         tombstones.insert(key_expr, timestamp);
-        if self.capability.persistence.eq(&Persistence::Durable) {
-            // flush to disk to makeit durable
-            todo!("yet to be implemented");
-        }
+        // @TODO: implement this
+        // if self.capability.persistence.eq(&Persistence::Durable) {
+        //     // flush to disk to makeit durable
+        //     todo!("yet to be implemented");
+        // }
         drop(tombstones);
     }
 
@@ -278,6 +287,17 @@ impl StorageService {
         let tombstones = self.tombstones.read().await;
         tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp
         // @TODO: if storage deals with only the latest, check the last timestamp
+        // if self.capability.history.eq(&History::Latest) {
+        //     // @TODO: if cache exists, read from there
+        //     let mut storage = self.storage.lock().await;
+        //     if let Err(e) = storage.on_query(query).await {
+        //         warn!(
+        //             "Storage {} raised an error receiving a query: {}",
+        //             self.name, e
+        //         );
+        //     }
+        //     drop(storage);
+        // }
     }
 
     async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
@@ -288,17 +308,56 @@ impl StorageService {
                 return;
             }
         };
-        // wrap zenoh::Query in zenoh_backend_traits::Query
-        // with outgoing interceptor
-        let query = Query::new(q, self.out_interceptor.clone());
         let mut storage = self.storage.lock().await;
-        if let Err(e) = storage.on_query(query).await {
-            warn!(
-                "Storage {} raised an error receiving a query: {}",
-                self.name, e
-            );
+        // resolve key expr into individual keys
+        let matching_keys = if q.key_expr().is_wild() {
+            self.get_matching_keys(q.key_expr()).await
+        } else {
+            vec![OwnedKeyExpr::new(q.key_expr().as_str()).unwrap()]
+        };
+        for key in matching_keys {
+            match storage.get(key, q.parameters()).await {
+                Ok(sample) => {
+                    // apply outgoing interceptor on results
+                    let sample = if let Some(ref interceptor) = self.out_interceptor {
+                        interceptor(sample)
+                    } else {
+                        sample
+                    };
+                    if let Err(e) = q.reply(Ok(sample)).res().await {
+                        warn!(
+                            "Storage {} raised an error sending a query: {}",
+                            self.name, e
+                        )
+                    }
+                }
+                Err(e) => warn!(
+                    "Storage {} raised an error receiving a query: {}",
+                    self.name, e
+                ),
+            };
         }
         drop(storage);
+    }
+
+    async fn get_matching_keys(&self, key_expr: &KeyExpr<'_>) -> Vec<OwnedKeyExpr> {
+        let mut result = Vec::new();
+        // @TODO: if cache exists, use that to get the list
+        let storage = self.storage.lock().await;
+        match storage.get_all_entries().await {
+            Ok(entries) => {
+                for (k, _ts) in entries {
+                    if k.intersects(key_expr) {
+                        result.push(k);
+                    }
+                }
+            }
+            Err(e) => warn!(
+                "Storage {} raised an error while retrieving keys: {}",
+                self.name, e
+            ),
+        }
+        result
     }
 
     async fn initialize_if_empty(&mut self) {
