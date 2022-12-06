@@ -3668,6 +3668,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "flume",
+ "serde",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-core",

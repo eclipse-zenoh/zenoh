@@ -15,6 +15,8 @@
 //! Sample primitives
 use std::convert::TryInto;
 
+#[zenoh_core::unstable]
+use serde::Serialize;
 use zenoh_protocol::proto::DataInfo;
 
 use crate::buffers::ZBuf;
@@ -23,7 +25,7 @@ use crate::time::{new_reception_timestamp, Timestamp};
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_core::unstable]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,

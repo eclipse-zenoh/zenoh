@@ -254,30 +254,28 @@ pub(super) async fn transport_finalize(
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications
     let a_guard = transport.get_alive().await;
-    match transport.get_callback() {
-        Some(callback) => {
-            // Notify the transport handler there is a new link on this transport
-            callback.new_link(Link::from(link));
-        }
-        None => {
-            let peer = TransportPeer {
-                zid: transport.get_zid(),
-                whatami: transport.get_whatami(),
-                is_qos: transport.is_qos(),
-                is_shm: transport.is_shm(),
-                links: vec![Link::from(link)],
-            };
-            // Notify the transport handler that there is a new transport and get back a callback
-            // NOTE: the read loop of the link the open message was sent on remains blocked
-            //       until new_unicast() returns. The read_loop in the various links
-            //       waits for any eventual transport to associate to.
-            let callback = manager
-                .config
-                .handler
-                .new_unicast(peer, input.transport.clone())?;
-            // Set the callback on the transport
-            transport.set_callback(callback);
-        }
+    if transport.get_callback().is_none() {
+        let peer = TransportPeer {
+            zid: transport.get_zid(),
+            whatami: transport.get_whatami(),
+            is_qos: transport.is_qos(),
+            is_shm: transport.is_shm(),
+            links: vec![Link::from(link)],
+        };
+        // Notify the transport handler that there is a new transport and get back a callback
+        // NOTE: the read loop of the link the open message was sent on remains blocked
+        //       until new_unicast() returns. The read_loop in the various links
+        //       waits for any eventual transport to associate to.
+        let callback = manager
+            .config
+            .handler
+            .new_unicast(peer, input.transport.clone())?;
+        // Set the callback on the transport
+        transport.set_callback(callback);
+    }
+    if let Some(callback) = transport.get_callback() {
+        // Notify the transport handler there is a new link on this transport
+        callback.new_link(Link::from(link));
     }
     drop(a_guard);
 
