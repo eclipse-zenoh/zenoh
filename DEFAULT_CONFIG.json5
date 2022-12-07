@@ -299,6 +299,13 @@
 //            delta: 1000,
 //          }
 //        },
+//        demo3: {          
+//          key_expr: "demo/memory3/**",
+//          volume: "memory",
+//          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
+//          /// If not configured, complete defaults to false.
+//          complete: "true",
+//        },
 //        influx_demo: {
 //          key_expr: "demo/influxdb/**",
 //          /// This prefix will be stripped of the received keys when storing.

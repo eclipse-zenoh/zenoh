@@ -559,7 +559,7 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -597,6 +597,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 
@@ -762,6 +763,7 @@ impl Session {
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
+            destination: Locality::default(),
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
             handler: DefaultHandler,
         }
@@ -1114,7 +1116,7 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u64::from(!complete_twin_qabl && complete);
+                let complete = ZInt::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
@@ -1280,6 +1282,7 @@ impl Session {
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        destination: Locality,
         timeout: Duration,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
@@ -1296,6 +1299,10 @@ impl Session {
             Mode::Manual(mode) => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        let nb_final = match destination {
+            Locality::Any => 2,
+            _ => 1,
+        };
         let timeout = TimedEvent::once(
             Instant::now() + timeout,
             QueryTimeout {
@@ -1305,12 +1312,12 @@ impl Session {
             },
         );
         state.timer.add(timeout);
-        log::trace!("Register query {}", qid);
+        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
             qid,
             QueryState {
-                nb_final: 2,
+                nb_final,
                 selector: selector.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
@@ -1321,22 +1328,26 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
-        primitives.send_query(
-            &selector.key_expr.to_wire(self),
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-            None,
-        );
-        self.handle_query(
-            true,
-            &wexpr,
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-        );
+        if destination != Locality::SessionLocal {
+            primitives.send_query(
+                &selector.key_expr.to_wire(self),
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                None,
+            );
+        }
+        if destination != Locality::Remote {
+            self.handle_query(
+                true,
+                &wexpr,
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+            );
+        }
         Ok(())
     }
 
@@ -1519,7 +1530,7 @@ impl SessionDeclarations for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -1557,6 +1568,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 }
