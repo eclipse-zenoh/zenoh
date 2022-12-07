@@ -3494,6 +3494,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki-roots"
+version = "0.22.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "368bfe657969fb01238bb756d351dcade285e0f6fcbd36dcb23359a5169975be"
+dependencies = [
+ "webpki",
+]
+
+[[package]]
 name = "wepoll-ffi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3963,6 +3972,8 @@ dependencies = [
  "futures",
  "log",
  "rustls-pemfile",
+ "webpki",
+ "webpki-roots",
  "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
