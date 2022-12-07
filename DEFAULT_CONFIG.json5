@@ -181,11 +181,19 @@
       },
       /// Configure TLS specific parameters
       tls: {
+        /// Path to the certificate of the certificate authority used to validate either the server
+        /// or the client's keys and certificates, depending on the node's mode. If not specified
+        /// on router mode then the default WebPKI certificates are used instead.
         root_ca_certificate: null,
+        /// Path to the TLS server private key
         server_private_key: null,
+        /// Path to the TLS server public certificate
         server_certificate: null,
-        client_auth: null,
+        /// Client authentication, if true enables mTLS (mutual authentication)
+        client_auth: false,
+        /// Path to the TLS client private key
         client_private_key: null,
+        /// Path to the TLS client public certificate
         client_certificate: null,
       },
     },
