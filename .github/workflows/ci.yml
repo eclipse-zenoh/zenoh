@@ -73,7 +73,7 @@ jobs:
       - name: Set rustflags
         shell: bash
         run: |
-          case ${{ matrix.job.target }} in
+          case ${{ matrix.os }} in
             *windows*) RUSTFLAGS="$RUSTFLAGS -Clink-arg=/DEBUG:NONE" ;;
           esac
 
