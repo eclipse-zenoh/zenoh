@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-collections"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -30,8 +30,8 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 async-std = { version = "=1.12.0", features = ["unstable"] }
-async-trait = "0.1.57"
+async-trait = "0.1.59"
 flume = "0.10.14"
 log = "0.4.17"
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../zenoh-sync/" }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/" }

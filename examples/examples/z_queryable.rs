@@ -46,7 +46,10 @@ async fn main() {
         select!(
             query = queryable.recv_async() => {
                 let query = query.unwrap();
-                println!(">> [Queryable ] Received Query '{}'", query.selector());
+                match query.value() {
+                    None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
+                    Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
+                }
                 query
                     .reply(Ok(Sample::new(key_expr.clone(), value.clone())))
                     .res()

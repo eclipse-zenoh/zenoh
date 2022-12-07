@@ -22,6 +22,7 @@ use super::protocol::io::ZBuf;
 use super::protocol::proto::{DataInfo, RoutingContext};
 pub use demux::*;
 pub use mux::*;
+use protocol::proto::QueryBody;
 use zenoh_protocol_core::ConsolidationMode;
 
 pub trait Primitives: Send + Sync {
@@ -57,6 +58,7 @@ pub trait Primitives: Send + Sync {
         routing_context: Option<RoutingContext>,
     );
 
+    #[allow(clippy::too_many_arguments)]
     fn send_query(
         &self,
         key_expr: &WireExpr,
@@ -64,6 +66,7 @@ pub trait Primitives: Send + Sync {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     );
 
@@ -140,6 +143,7 @@ impl Primitives for DummyPrimitives {
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
     }

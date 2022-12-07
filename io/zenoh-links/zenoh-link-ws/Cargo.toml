@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-link-ws"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -32,19 +32,18 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 async-std = { version = "=1.12.0", default-features = false, features = [
 	"unstable",
 	"tokio1",
 ] }
-async-trait = "0.1.57"
-futures-util = { version = "0.3.24", default-features = false, features = ["sink", "std"] }
+async-trait = "0.1.59"
+futures-util = { version = "0.3.25", default-features = false, features = ["sink", "std"] }
 log = "0.4.17"
-tokio = { version = "1.21.2", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
-tokio-tungstenite = "0.17.2"
+tokio = { version = "1.23.0", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
+tokio-tungstenite = "0.18.0"
 url = "2.3.1"
-zenoh-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-core/" }
-zenoh-link-commons = { version = "0.6.0-beta.1", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-sync/" }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-util/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
+zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
+zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
+zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

@@ -21,7 +21,7 @@ pub mod defaults {
     // +-+-+-+-+-+-+-+-+
     // | v_maj | v_min |
     // +-------+-------+
-    pub const VERSION: u8 = 0x06;
+    pub const VERSION: u8 = 0x07;
 
     // The default sequence number resolution takes 4 bytes on the wire.
     // Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.

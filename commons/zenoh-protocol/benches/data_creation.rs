@@ -17,7 +17,7 @@ extern crate criterion;
 use criterion::Criterion;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use zenoh_protocol_core::SampleKind;
+use zenoh_protocol_core::{SampleKind, ZenohId};
 
 use zenoh_protocol::core::Encoding;
 use zenoh_protocol::core::{Channel, CongestionControl, WireExpr};
@@ -50,6 +50,8 @@ fn criterion_benchmark(c: &mut Criterion) {
                         Default::default(),
                         uhlc::ID::try_from([2u8; uhlc::ID::MAX_SIZE]).unwrap(),
                     )),
+                    source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
+                    source_sn: Some(12345),
                 });
 
                 let msg = ZenohMessage::make_data(
@@ -99,6 +101,8 @@ fn criterion_benchmark(c: &mut Criterion) {
             Default::default(),
             uhlc::ID::try_from([1_u8; uhlc::ID::MAX_SIZE]).unwrap(),
         )),
+        source_id: Some(ZenohId::try_from([1_u8; ZenohId::MAX_SIZE]).unwrap()),
+        source_sn: Some(12345),
     });
     let payload = ZBuf::from(vec![0; 1024]);
     let channel = Channel::default();

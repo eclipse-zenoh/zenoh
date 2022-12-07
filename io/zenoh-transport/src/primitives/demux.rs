@@ -111,6 +111,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                 qid,
                 target,
                 consolidation,
+                body,
                 ..
             }) => {
                 self.primitives.send_query(
@@ -119,6 +120,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
                     qid,
                     target.unwrap_or_default(),
                     consolidation,
+                    body,
                     msg.routing_context,
                 );
             }

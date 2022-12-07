@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-plugin-rest"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -38,25 +38,25 @@ name = "zplugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.65"
+anyhow = "1.0.66"
 async-std = "=1.12.0"
-base64 = "0.13.0"
-clap = "3.2.22"
-env_logger = "0.9.1"
+base64 = "0.13.1"
+clap = "3.2.23"
+env_logger = "0.10.0"
 flume = "0.10.14"
-futures = "0.3.24"
+futures = "0.3.25"
 git-version = "0.3.5"
 http-types = "2.12.0"
 lazy_static = "1.4.0"
 log = "0.4.17"
-serde = "1.0.145"
-serde_json = "1.0.85"
+serde = "1.0.149"
+serde_json = "1.0.89"
 tide = "0.16.0"
-zenoh = { version = "0.6.0-beta.1", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../commons/zenoh-cfg-properties" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.6.0-beta.1", path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../commons/zenoh-util/" }
+zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
+zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties" }
+zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
+zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util/" }
 
 [build-dependencies]
 rustc_version = "0.4.0"
