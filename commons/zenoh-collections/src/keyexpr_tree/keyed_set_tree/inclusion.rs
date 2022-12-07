@@ -78,14 +78,36 @@ where
                     let chunk = node.chunk();
                     for i in *start..*end {
                         let kec_start = self.ke_indices[i];
+                        if kec_start == self.key.len() {
+                            break;
+                        }
                         let key = &self.key.as_bytes()[kec_start..];
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
-                                let key = unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
-                                if unlikely(key == "**") {
+                                let subkey =
+                                    unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
+                                if unlikely(subkey == "**") {
                                     push!(kec_start);
                                     push!(kec_start + kec_end + 1);
-                                } else if key.includes(chunk) {
+                                    let post_key = &key[kec_end + 1..];
+                                    match post_key.iter().position(|&c| c == b'/') {
+                                        Some(sec_end) => {
+                                            let post_key = unsafe {
+                                                keyexpr::from_slice_unchecked(&post_key[..sec_end])
+                                            };
+                                            if post_key.includes(chunk) {
+                                                push!(kec_start + kec_end + sec_end + 2);
+                                            }
+                                        }
+                                        None => {
+                                            if unsafe { keyexpr::from_slice_unchecked(post_key) }
+                                                .includes(chunk)
+                                            {
+                                                node_matches = true;
+                                            }
+                                        }
+                                    }
+                                } else if subkey.includes(chunk) {
                                     push!(kec_start + kec_end + 1);
                                 }
                             }
@@ -95,12 +117,19 @@ where
                                     push!(kec_start);
                                     node_matches = true;
                                 } else if key.includes(chunk) {
+                                    push!(self.key.len());
                                     node_matches = true;
                                 }
                             }
                         }
                     }
-                    if new_end != new_start {
+                    if new_end > new_start {
+                        for &i in &self.ke_indices[new_start..new_end] {
+                            if &self.key.as_bytes()[i..] == b"**" {
+                                node_matches = true;
+                                break;
+                            }
+                        }
                         let iterator = unsafe { &*(node.as_node() as *const Node) }
                             .children()
                             .children();
@@ -202,14 +231,36 @@ where
                     let chunk = node.chunk();
                     for i in *start..*end {
                         let kec_start = self.ke_indices[i];
+                        if kec_start == self.key.len() {
+                            break;
+                        }
                         let key = &self.key.as_bytes()[kec_start..];
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
-                                let key = unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
-                                if unlikely(key == "**") {
+                                let subkey =
+                                    unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
+                                if unlikely(subkey == "**") {
                                     push!(kec_start);
                                     push!(kec_start + kec_end + 1);
-                                } else if key.includes(chunk) {
+                                    let post_key = &key[kec_end + 1..];
+                                    match post_key.iter().position(|&c| c == b'/') {
+                                        Some(sec_end) => {
+                                            let post_key = unsafe {
+                                                keyexpr::from_slice_unchecked(&post_key[..sec_end])
+                                            };
+                                            if post_key.includes(chunk) {
+                                                push!(kec_start + kec_end + sec_end + 2);
+                                            }
+                                        }
+                                        None => {
+                                            if unsafe { keyexpr::from_slice_unchecked(post_key) }
+                                                .includes(chunk)
+                                            {
+                                                node_matches = true;
+                                            }
+                                        }
+                                    }
+                                } else if subkey.includes(chunk) {
                                     push!(kec_start + kec_end + 1);
                                 }
                             }
@@ -219,12 +270,19 @@ where
                                     push!(kec_start);
                                     node_matches = true;
                                 } else if key.includes(chunk) {
+                                    push!(self.key.len());
                                     node_matches = true;
                                 }
                             }
                         }
                     }
-                    if new_end != new_start {
+                    if new_end > new_start {
+                        for &i in &self.ke_indices[new_start..new_end] {
+                            if &self.key.as_bytes()[i..] == b"**" {
+                                node_matches = true;
+                                break;
+                            }
+                        }
                         let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                             .children_mut()
                             .children_mut();
