@@ -74,7 +74,7 @@ jobs:
         shell: bash
         run: |
           case ${{ matrix.os }} in
-            *windows*) RUSTFLAGS="$RUSTFLAGS -Clink-arg=/DEBUG:NONE" ;;
+            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
           esac
 
       - name: Install nextest
