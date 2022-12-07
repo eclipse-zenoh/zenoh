@@ -47,7 +47,7 @@ flume = "0.10.14"
 futures = "0.3.25"
 git-version = "0.3.5"
 lazy_static = "1.4.0"
-libloading = "0.7.3"
+libloading = "0.7.4"
 log = "0.4.17"
 serde = { version = "1.0.149", features = ["derive"] }
 serde_json = "1.0.89"

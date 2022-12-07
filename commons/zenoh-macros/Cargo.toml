@@ -31,10 +31,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proc-macro2 = "1.0.43"
+proc-macro2 = "1.0.47"
 quote = "1.0.21"
 rustc_version = "0.4.0"
-syn = { version = "1.0.101", features = ["full"] }
+syn = { version = "1.0.105", features = ["full"] }
 unzip-n = "0.1.2"
 
 [lib]
