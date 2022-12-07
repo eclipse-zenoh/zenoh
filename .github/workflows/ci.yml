@@ -70,6 +70,13 @@ jobs:
           command: build
           args: --verbose --all-targets
 
+      - name: Set rustflags
+        shell: bash
+        run: |
+          case ${{ matrix.job.target }} in
+            *windows*) RUSTFLAGS="$RUSTFLAGS -Clink-arg=/DEBUG:NONE" ;;
+          esac
+
       - name: Install nextest
         run: cargo install cargo-nextest
 
