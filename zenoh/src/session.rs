@@ -53,6 +53,7 @@ use uhlc::HLC;
 use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
+use zenoh_config::unwrap_or_default;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
@@ -763,13 +764,14 @@ impl Session {
         <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
+        let conf = self.runtime.config.lock();
         GetBuilder {
             session: self,
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             destination: Locality::default(),
-            timeout: Duration::from_secs(10),
+            timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
             handler: DefaultHandler,
         }
     }
