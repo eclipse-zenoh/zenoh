@@ -1,3 +1,4 @@
+use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol_core::ConsolidationMode;
 
 //
@@ -155,6 +156,7 @@ impl Primitives for Mux {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     ) {
         let target_opt = if target == QueryTarget::default() {
@@ -168,6 +170,7 @@ impl Primitives for Mux {
             qid,
             target_opt,
             consolidation,
+            body,
             routing_context,
             None,
         ));

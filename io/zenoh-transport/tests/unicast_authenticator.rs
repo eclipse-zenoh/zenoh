@@ -160,7 +160,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
             0x18, 0x78, 0x18, 0xd0,
         ]),
     ];
-    let router_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let router_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
     let peer_auth_router = Arc::new(PubKeyAuthenticator::new(router_pub_key, router_pri_key));
     let unicast = TransportManager::config_unicast()
         .max_links(2)
@@ -212,7 +212,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
             0xaa, 0xf9, 0x6b, 0xdf,
         ]),
     ];
-    let client01_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let client01_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
     let peer_auth_client01 = PubKeyAuthenticator::new(client01_pub_key, client01_pri_key);
     let unicast = TransportManager::config_unicast()
         .max_links(2)
@@ -264,7 +264,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
             0xb9, 0xbc, 0xdd, 0xe8,
         ]),
     ];
-    let client02_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let client02_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
 
     let peer_auth_client02 = PubKeyAuthenticator::new(client02_pub_key, client02_pri_key);
     let unicast = TransportManager::config_unicast()
@@ -317,7 +317,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
             0x5d, 0x66, 0xdf, 0xf0,
         ]),
     ];
-    let client01_spoof_pri_key = RsaPrivateKey::from_components(n, e, d, primes);
+    let client01_spoof_pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
 
     let peer_auth_client01_spoof =
         PubKeyAuthenticator::new(client01_spoof_pub_key, client01_spoof_pri_key);

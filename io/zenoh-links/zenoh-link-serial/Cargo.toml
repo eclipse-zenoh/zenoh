@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-link-serial"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -37,17 +37,17 @@ async-std = { version = "=1.12.0", default-features = false, features = [
 	"unstable",
 	"tokio1",
 ] }
-async-trait = "0.1.57"
-futures = "0.3.24"
+async-trait = "0.1.59"
+futures = "0.3.25"
 log = "0.4.17"
-tokio = { version = "1.21.2", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
-uuid = { version = "1.1.2", features = ["v4"] }
-z-serial = "0.2.0 "
-zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-cfg-properties/" }
-zenoh-collections = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-collections/" }
-zenoh-config = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-config/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-core/" }
-zenoh-link-commons = { version = "0.6.0-beta.1", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-sync/" }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-util/" }
+tokio = { version = "1.23.0", default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
+uuid = { version = "1.2.2", features = ["v4"] }
+z-serial = "0.2.0"
+zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../../commons/zenoh-cfg-properties/" }
+zenoh-collections = { version = "0.7.0-rc", path = "../../../commons/zenoh-collections/" }
+zenoh-config = { version = "0.7.0-rc", path = "../../../commons/zenoh-config/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
+zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
+zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
+zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

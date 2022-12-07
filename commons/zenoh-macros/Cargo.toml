@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-macros"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -31,10 +31,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proc-macro2 = "1.0.43"
+proc-macro2 = "1.0.47"
 quote = "1.0.21"
 rustc_version = "0.4.0"
-syn = { version = "1.0.101", features = ["full"] }
+syn = { version = "1.0.105", features = ["full"] }
 unzip-n = "0.1.2"
 
 [lib]

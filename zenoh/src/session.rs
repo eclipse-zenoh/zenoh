@@ -57,6 +57,7 @@ use zenoh_config::unwrap_or_default;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
+use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
@@ -772,6 +773,7 @@ impl Session {
             consolidation: QueryConsolidation::default(),
             destination: Locality::default(),
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
+            value: None,
             handler: DefaultHandler,
         }
     }
@@ -1292,6 +1294,7 @@ impl Session {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
         selector: &Selector<'_>,
@@ -1299,6 +1302,7 @@ impl Session {
         consolidation: QueryConsolidation,
         destination: Locality,
         timeout: Duration,
+        value: Option<Value>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1350,6 +1354,14 @@ impl Session {
                 qid,
                 target,
                 consolidation,
+                value.as_ref().map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding.clone());
+                    QueryBody {
+                        data_info,
+                        payload: v.payload.clone(),
+                    }
+                }),
                 None,
             );
         }
@@ -1361,11 +1373,20 @@ impl Session {
                 qid,
                 target,
                 consolidation,
+                value.map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding);
+                    QueryBody {
+                        data_info,
+                        payload: v.payload,
+                    }
+                }),
             );
         }
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,
         local: bool,
@@ -1374,6 +1395,7 @@ impl Session {
         qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
     ) {
         let (primitives, key_expr, senders) = {
             let state = zread!(self.state);
@@ -1425,6 +1447,10 @@ impl Session {
                 key_expr: key_expr.clone().into_owned(),
                 parameters: parameters.clone(),
                 replies_sender: rep_sender.clone(),
+                value: body.as_ref().map(|b| Value {
+                    payload: b.payload.clone(),
+                    encoding: b.data_info.encoding.as_ref().cloned().unwrap_or_default(),
+                }),
             });
         }
         drop(rep_sender); // all senders need to be dropped for the channel to close
@@ -1679,6 +1705,7 @@ impl Primitives for Session {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
@@ -1688,7 +1715,15 @@ impl Primitives for Session {
             target,
             consolidation
         );
-        self.handle_query(false, key_expr, parameters, qid, target, consolidation)
+        self.handle_query(
+            false,
+            key_expr,
+            parameters,
+            qid,
+            target,
+            consolidation,
+            body,
+        )
     }
 
     fn send_reply_data(
