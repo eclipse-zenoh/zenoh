@@ -528,8 +528,14 @@ impl TlsServerConfig {
         }
 
         let sc = if client_auth {
-            let mut root_cert_store = RootCertStore::empty();
-            load_trust_anchors(config, &mut root_cert_store)?;
+            let root_cert_store = load_trust_anchors(config)?.map_or_else(
+                || {
+                    Err(zerror!(
+                        "Missing root certificates while client authentication is enabled."
+                    ))
+                },
+                Ok,
+            )?;
             ServerConfig::builder()
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
@@ -574,11 +580,15 @@ struct TlsClientConfig {
 impl TlsClientConfig {
     pub async fn new(config: &ArcProperties) -> ZResult<TlsClientConfig> {
         let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
-        let mut root_cert_store = RootCertStore::empty();
         if let Some(value) = config.get(TLS_CLIENT_AUTH) {
             client_auth = value.parse()?
         }
-        load_trust_anchors(config, &mut root_cert_store)?;
+
+        let root_cert_store =
+            load_trust_anchors(config)?.map_or_else(|| {
+                log::debug!("Field 'root_ca_certificate' not specified. Loading default Web PKI certificates instead.");
+                load_default_webpki_certs()
+            }, |certs| certs);
         let cc = if client_auth {
             log::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
@@ -667,7 +677,8 @@ async fn load_tls_certificate(
     Err(zerror!("Missing tls certificates.").into())
 }
 
-fn load_trust_anchors(config: &ArcProperties, root_cert_store: &mut RootCertStore) -> ZResult<()> {
+fn load_trust_anchors(config: &ArcProperties) -> ZResult<Option<RootCertStore>> {
+    let mut root_cert_store = RootCertStore::empty();
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());
         let certs = rustls_pemfile::certs(&mut pem)?;
@@ -680,6 +691,7 @@ fn load_trust_anchors(config: &ArcProperties, root_cert_store: &mut RootCertStor
             )
         });
         root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        return Ok(Some(root_cert_store));
     }
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
         let mut pem = BufReader::new(File::open(filename)?);
@@ -693,6 +705,19 @@ fn load_trust_anchors(config: &ArcProperties, root_cert_store: &mut RootCertStor
             )
         });
         root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        return Ok(Some(root_cert_store));
     }
-    Ok(())
+    Ok(None)
+}
+
+fn load_default_webpki_certs() -> RootCertStore {
+    let mut root_cert_store = RootCertStore::empty();
+    root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+    root_cert_store
 }

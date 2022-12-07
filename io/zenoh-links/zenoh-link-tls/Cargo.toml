@@ -38,6 +38,8 @@ async-trait = "0.1.57"
 futures = "0.3.24"
 log = "0.4.17"
 rustls-pemfile = "1.0.1"
+webpki = "0.22.0"
+webpki-roots = "0.22.5"
 zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-cfg-properties/" }
 zenoh-config = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-config/" }
 zenoh-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-core/" }
