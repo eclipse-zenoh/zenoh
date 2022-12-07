@@ -64,32 +64,31 @@ default = [
 ]
 
 [dependencies]
-
-async-global-executor = "2.3.0"
+async-global-executor = "2.3.1"
 async-std = { version = "=1.12.0", default-features = false, features = [
     "attributes",
 ] }
-async-trait = "0.1.57"
-base64 = "0.13.0"
-env_logger = "0.9.1"
+async-trait = "0.1.59"
+base64 = "0.13.1"
+env_logger = "0.10.0"
 event-listener = "2.5.3"
 flume = "0.10.14"
 form_urlencoded = "1.1.0"
-futures = "0.3.24"
+futures = "0.3.25"
 git-version = "0.3.5"
 hex = "0.4.3"
 lazy_static = "1.4.0"
 log = "0.4.17"
-ordered-float = "3.1.0"
+ordered-float = "3.4.0"
 petgraph = "0.6.2"
 rand = "0.8.5"
-regex = "1.6.0"
-serde = "1.0.123"
-serde_json = "1.0.85"
-socket2 = "0.4.0"
+regex = "1.7.0"
+serde = "1.0.149"
+serde_json = "1.0.89"
+socket2 = "0.4.7"
 stop-token = "0.7.0"
-uhlc = "0.5.0"
-uuid = { version = "1.1.2", features = ["v4"] }
+uhlc = "0.5.1"
+uuid = { version = "1.2.2", features = ["v4"] }
 vec_map = "0.8.2"
 zenoh-buffers = { version = "0.7.0-rc", path = "../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../commons/zenoh-cfg-properties/" }
@@ -97,9 +96,7 @@ zenoh-collections = { version = "0.7.0-rc", path = "../commons/zenoh-collections
 zenoh-config = { version = "0.7.0-rc", path = "../commons/zenoh-config/" }
 zenoh-core = { version = "0.7.0-rc", path = "../commons/zenoh-core/" }
 zenoh-crypto = { version = "0.7.0-rc", path = "../commons/zenoh-crypto/" }
-
 zenoh-link = { version = "0.7.0-rc", path = "../io/zenoh-link/" }
-
 zenoh-plugin-trait = { version = "0.7.0-rc", path = "../plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "0.7.0-rc", path = "../commons/zenoh-protocol/" }
 zenoh-protocol-core = { version = "0.7.0-rc", path = "../commons/zenoh-protocol-core/" }

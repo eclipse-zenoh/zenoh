@@ -40,16 +40,16 @@ default = ["compat"]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = { version = "=1.12.0" }
-clap = "3.2.22"
-futures = "0.3.24"
+async-std = "=1.12.0"
+clap = "3.2.23"
+futures = "0.3.25"
 hex = "0.4.3"
 home = "0.5.3"
 humantime = "2.1.0"
 lazy_static = "1.4.0"
 libloading = "0.7.3"
 log = "0.4.17"
-shellexpand = "2.1.2"
+shellexpand = "3.0.0"
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties", optional = true }
 zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", optional = true }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }

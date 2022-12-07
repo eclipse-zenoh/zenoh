@@ -22,7 +22,6 @@ use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use futures::stream::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::BufReader;
@@ -39,7 +38,7 @@ use zenoh_protocol_core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
-    connection: quinn::NewConnection,
+    connection: quinn::Connection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
@@ -49,7 +48,7 @@ pub struct LinkUnicastQuic {
 
 impl LinkUnicastQuic {
     fn new(
-        connection: quinn::NewConnection,
+        connection: quinn::Connection,
         src_addr: SocketAddr,
         dst_locator: Locator,
         send: quinn::SendStream,
@@ -76,9 +75,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         if let Err(e) = guard.finish().await {
             log::trace!("Error closing QUIC stream {}: {}", self, e);
         }
-        self.connection
-            .connection
-            .close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
         Ok(())
     }
 
@@ -156,9 +153,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
 
 impl Drop for LinkUnicastQuic {
     fn drop(&mut self) {
-        self.connection
-            .connection
-            .close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
     }
 }
 
@@ -168,7 +163,7 @@ impl fmt::Display for LinkUnicastQuic {
             f,
             "{} => {}",
             self.src_addr,
-            self.connection.connection.remote_address()
+            self.connection.remote_address()
         )?;
         Ok(())
     }
@@ -178,7 +173,7 @@ impl fmt::Debug for LinkUnicastQuic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Quic")
             .field("src", &self.src_addr)
-            .field("dst", &self.connection.connection.remote_address())
+            .field("dst", &self.connection.remote_address())
             .finish()
     }
 }
@@ -293,7 +288,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
 
         let (send, recv) = quic_conn
-            .connection
             .open_bi()
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
@@ -376,7 +370,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .max_concurrent_bidi_streams(1_u8.into());
 
         // Initialize the Endpoint
-        let (quic_endpoint, acceptor) = quinn::Endpoint::server(server_config, addr)
+        let quic_endpoint = quinn::Endpoint::server(server_config, addr)
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         let local_addr = quic_endpoint
@@ -397,7 +391,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let c_addr = local_addr;
         let handle = task::spawn(async move {
             // Wait for the accept loop to terminate
-            let res = accept_task(quic_endpoint, acceptor, c_active, c_signal, c_manager).await;
+            let res = accept_task(quic_endpoint, c_active, c_signal, c_manager).await;
             zwrite!(c_listeners).remove(&c_addr);
             res
         });
@@ -468,19 +462,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
 async fn accept_task(
     endpoint: quinn::Endpoint,
-    mut acceptor: quinn::Incoming,
     active: Arc<AtomicBool>,
     signal: Signal,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
     enum Action {
-        Accept(quinn::NewConnection),
+        Accept(quinn::Connection),
         Stop,
     }
 
-    async fn accept(acceptor: &mut quinn::Incoming) -> ZResult<Action> {
+    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<Action> {
         let qc = acceptor
-            .next()
             .await
             .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
 
@@ -506,7 +498,7 @@ async fn accept_task(
     log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
     while active.load(Ordering::Acquire) {
         // Wait for incoming connections
-        let mut quic_conn = match accept(&mut acceptor).race(stop(signal.clone())).await {
+        let quic_conn = match accept(endpoint.accept()).race(stop(signal.clone())).await {
             Ok(action) => match action {
                 Action::Accept(qc) => qc,
                 Action::Stop => break,
@@ -525,21 +517,15 @@ async fn accept_task(
         };
 
         // Get the bideractional streams. Note that we don't allow unidirectional streams.
-        let (send, recv) = match quic_conn.bi_streams.next().await {
-            Some(bs) => match bs {
-                Ok((send, recv)) => (send, recv),
-                Err(e) => {
-                    log::warn!("QUIC acceptor failed: {:?}", e);
-                    continue;
-                }
-            },
-            None => {
-                log::warn!("QUIC connection has no streams: {:?}", quic_conn.connection);
+        let (send, recv) = match quic_conn.accept_bi().await {
+            Ok(stream) => stream,
+            Err(e) => {
+                log::warn!("QUIC connection has no streams: {:?}", e);
                 continue;
             }
         };
 
-        let dst_addr = quic_conn.connection.remote_address();
+        let dst_addr = quic_conn.remote_address();
         log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
         // Create the new link object
         let link = Arc::new(LinkUnicastQuic::new(

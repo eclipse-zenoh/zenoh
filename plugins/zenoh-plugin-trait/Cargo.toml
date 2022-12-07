@@ -39,7 +39,7 @@ default = ["no_mangle"]
 [dependencies]
 libloading = "0.7.3"
 log = "0.4.17"
-serde_json = "1.0.85"
+serde_json = "1.0.89"
 zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
 zenoh-macros = { version = "0.7.0-rc", path = "../../commons/zenoh-macros/" }
 zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
