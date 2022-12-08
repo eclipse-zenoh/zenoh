@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::admin;
 use crate::config::Config;
 use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
@@ -52,9 +53,11 @@ use uhlc::HLC;
 use zenoh_collections::SingleOrVec;
 use zenoh_collections::TimedEvent;
 use zenoh_collections::Timer;
+use zenoh_config::unwrap_or_default;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
+use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol::{
     core::{
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
@@ -323,13 +326,19 @@ impl Session {
                 aggregated_publishers,
             )));
             let session = Session {
-                runtime,
+                runtime: runtime.clone(),
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
             };
+
+            runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
+
             let primitives = Some(router.new_primitives(Arc::new(session.clone())));
             zwrite!(state).primitives = primitives;
+
+            admin::init(&session);
+
             session
         })
     }
@@ -558,7 +567,7 @@ impl Session {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -596,6 +605,7 @@ impl Session {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 
@@ -755,12 +765,15 @@ impl Session {
         <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
+        let conf = self.runtime.config.lock();
         GetBuilder {
             session: self,
             selector,
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
-            timeout: Duration::from_secs(10),
+            destination: Locality::default(),
+            timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
+            value: None,
             handler: DefaultHandler,
         }
     }
@@ -782,15 +795,23 @@ impl Session {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::new(config).await {
-                Ok(runtime) => {
-                    let session =
-                        Self::init(runtime, aggregated_subscribers, aggregated_publishers)
-                            .res_async()
-                            .await;
-                    // Workaround for the declare_and_shoot problem
-                    task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
-                    Ok(session)
+            match Runtime::new(config, false).await {
+                Ok(mut runtime) => {
+                    let session = Self::init(
+                        runtime.clone(),
+                        aggregated_subscribers,
+                        aggregated_publishers,
+                    )
+                    .res_async()
+                    .await;
+                    match runtime.start().await {
+                        Ok(()) => {
+                            // Workaround for the declare_and_shoot problem
+                            task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                            Ok(session)
+                        }
+                        Err(err) => Err(err),
+                    }
                 }
                 Err(err) => Err(err),
             }
@@ -1112,7 +1133,7 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u64::from(!complete_twin_qabl && complete);
+                let complete = ZInt::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
@@ -1273,12 +1294,15 @@ impl Session {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn query(
         &self,
         selector: &Selector<'_>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
+        destination: Locality,
         timeout: Duration,
+        value: Option<Value>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1294,6 +1318,10 @@ impl Session {
             Mode::Manual(mode) => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        let nb_final = match destination {
+            Locality::Any => 2,
+            _ => 1,
+        };
         let timeout = TimedEvent::once(
             Instant::now() + timeout,
             QueryTimeout {
@@ -1303,12 +1331,12 @@ impl Session {
             },
         );
         state.timer.add(timeout);
-        log::trace!("Register query {}", qid);
+        log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
             qid,
             QueryState {
-                nb_final: 2,
+                nb_final,
                 selector: selector.clone().into_owned(),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
@@ -1319,25 +1347,46 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
-        primitives.send_query(
-            &selector.key_expr.to_wire(self),
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-            None,
-        );
-        self.handle_query(
-            true,
-            &wexpr,
-            selector.parameters(),
-            qid,
-            target,
-            consolidation,
-        );
+        if destination != Locality::SessionLocal {
+            primitives.send_query(
+                &selector.key_expr.to_wire(self),
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                value.as_ref().map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding.clone());
+                    QueryBody {
+                        data_info,
+                        payload: v.payload.clone(),
+                    }
+                }),
+                None,
+            );
+        }
+        if destination != Locality::Remote {
+            self.handle_query(
+                true,
+                &wexpr,
+                selector.parameters(),
+                qid,
+                target,
+                consolidation,
+                value.map(|v| {
+                    let mut data_info = DataInfo::new();
+                    data_info.encoding = Some(v.encoding);
+                    QueryBody {
+                        data_info,
+                        payload: v.payload,
+                    }
+                }),
+            );
+        }
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,
         local: bool,
@@ -1346,6 +1395,7 @@ impl Session {
         qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
     ) {
         let (primitives, key_expr, senders) = {
             let state = zread!(self.state);
@@ -1397,6 +1447,10 @@ impl Session {
                 key_expr: key_expr.clone().into_owned(),
                 parameters: parameters.clone(),
                 replies_sender: rep_sender.clone(),
+                value: body.as_ref().map(|b| Value {
+                    payload: b.payload.clone(),
+                    encoding: b.data_info.encoding.as_ref().cloned().unwrap_or_default(),
+                }),
             });
         }
         drop(rep_sender); // all senders need to be dropped for the channel to close
@@ -1517,7 +1571,7 @@ impl SessionDeclarations for Arc<Session> {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            complete: true,
+            complete: false,
             origin: Locality::default(),
             handler: DefaultHandler,
         }
@@ -1555,6 +1609,7 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
             priority: Priority::default(),
+            destination: Locality::default(),
         }
     }
 }
@@ -1650,6 +1705,7 @@ impl Primitives for Session {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(
@@ -1659,7 +1715,15 @@ impl Primitives for Session {
             target,
             consolidation
         );
-        self.handle_query(false, key_expr, parameters, qid, target, consolidation)
+        self.handle_query(
+            false,
+            key_expr,
+            parameters,
+            qid,
+            target,
+            consolidation,
+            body,
+        )
     }
 
     fn send_reply_data(

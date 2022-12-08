@@ -725,12 +725,31 @@ impl MessageReader for ZBufReader<'_> {
         };
         let consolidation = self.read_consolidation()?;
 
+        let body = if imsg::has_flag(header, zmsg::flag::I) {
+            #[allow(unused_assignments)]
+            #[cfg(feature = "shared-memory")]
+            let mut sliced = false;
+            let data_info = self.read_data_info()?;
+            #[cfg(feature = "shared-memory")]
+            {
+                sliced = data_info.sliced;
+            }
+            #[cfg(feature = "shared-memory")]
+            let payload = self.read_zbuf(sliced)?;
+            #[cfg(not(feature = "shared-memory"))]
+            let payload = self.read_zbuf()?;
+            Some(QueryBody { data_info, payload })
+        } else {
+            None
+        };
+
         Some(ZenohBody::Query(Query {
             key,
             parameters,
             qid,
             target,
             consolidation,
+            body,
         }))
     }
 

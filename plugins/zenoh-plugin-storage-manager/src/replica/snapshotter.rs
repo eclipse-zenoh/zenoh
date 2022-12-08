@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{Digest, DigestConfig};
+use super::{Digest, DigestConfig, LogEntry};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
@@ -52,8 +52,8 @@ impl Snapshotter {
     // Initialize the snapshot parameters, logs and digest
     pub async fn new(
         rx_sample: Receiver<(OwnedKeyExpr, Timestamp)>,
-        initial_entries: Vec<(OwnedKeyExpr, Timestamp)>,
-        replica_config: ReplicaConfig,
+        initial_entries: &Vec<(OwnedKeyExpr, Timestamp)>,
+        replica_config: &ReplicaConfig,
     ) -> Self {
         // compute snapshot time and snapshot interval to start with
         // from initial entries, populate the log - stable and volatile
@@ -106,8 +106,8 @@ impl Snapshotter {
 
     // Listen to storage updates
     async fn listener_log(&self) {
-        while let Ok((key, ts)) = self.storage_update.recv_async().await {
-            self.update_log(key, ts).await;
+        while let Ok((key, timestamp)) = self.storage_update.recv_async().await {
+            self.update_log(key, timestamp).await;
         }
     }
 
@@ -157,29 +157,29 @@ impl Snapshotter {
     }
 
     // initialize the log from the storage entries at startup
-    async fn initialize_log(&self, log: Vec<(OwnedKeyExpr, Timestamp)>) {
+    async fn initialize_log(&self, log: &Vec<(OwnedKeyExpr, Timestamp)>) {
         let replica_data = &self.content;
         let last_snapshot_time = replica_data.last_snapshot_time.read().await;
 
         let mut stable_log = replica_data.stable_log.write().await;
         let mut volatile_log = replica_data.volatile_log.write().await;
-        for (k, ts) in log {
+        for (key, timestamp) in log {
             // depending on the associated timestamp, either to stable_log or volatile log
             // entries until last_snapshot_time goes to stable
-            if ts > *last_snapshot_time {
-                if volatile_log.contains_key(&k) {
-                    if *volatile_log.get(&k).unwrap() < ts {
-                        (*volatile_log).insert(k, ts);
+            if *timestamp > *last_snapshot_time {
+                if volatile_log.contains_key(key) {
+                    if *volatile_log.get(key).unwrap() < *timestamp {
+                        (*volatile_log).insert(key.clone(), *timestamp);
                     }
                 } else {
-                    (*volatile_log).insert(k, ts);
+                    (*volatile_log).insert(key.clone(), *timestamp);
                 }
-            } else if stable_log.contains_key(&k) {
-                if *stable_log.get(&k).unwrap() < ts {
-                    (*stable_log).insert(k, ts);
+            } else if stable_log.contains_key(key) {
+                if *stable_log.get(key).unwrap() < *timestamp {
+                    (*stable_log).insert(key.clone(), *timestamp);
                 }
             } else {
-                (*stable_log).insert(k, ts);
+                (*stable_log).insert(key.clone(), *timestamp);
             }
         }
         drop(volatile_log);
@@ -197,6 +197,13 @@ impl Snapshotter {
         let log_locked = replica_data.stable_log.read().await;
         let latest_interval = replica_data.last_interval.read().await;
         let latest_snapshot_time = replica_data.last_snapshot_time.read().await;
+        let mut log = Vec::new();
+        for (key, timestamp) in &*log_locked {
+            log.push(LogEntry {
+                timestamp: *timestamp,
+                key: key.clone(),
+            });
+        }
         let digest = Digest::create_digest(
             now,
             super::DigestConfig {
@@ -211,7 +218,7 @@ impl Snapshotter {
                     self.replica_config.delta,
                 ),
             },
-            (*log_locked).values().copied().collect(),
+            log,
             *latest_interval,
         );
         drop(latest_interval);
@@ -235,12 +242,15 @@ impl Snapshotter {
             drop(log);
         } else {
             let mut log = replica_data.stable_log.write().await;
-            let deleted = (*log).insert(key, ts);
-            if deleted.is_some() {
-                deleted_content.insert(deleted.unwrap());
+            let deleted = (*log).insert(key.clone(), ts);
+            if let Some(deleted) = deleted {
+                deleted_content.insert(LogEntry {
+                    timestamp: deleted,
+                    key: key.clone(),
+                });
             }
             drop(log);
-            new_stable_content.insert(ts);
+            new_stable_content.insert(LogEntry { timestamp: ts, key });
         }
         let mut digest = replica_data.digest.write().await;
         let updated_digest = Digest::update_digest(
@@ -268,11 +278,17 @@ impl Snapshotter {
             if ts > *last_snapshot_time {
                 remains_volatile.insert(k, ts);
             } else {
-                let deleted = stable.insert(k, ts);
-                if deleted.is_some() {
-                    deleted_stable.insert(deleted.unwrap());
+                let deleted = stable.insert(k.clone(), ts);
+                if let Some(deleted) = deleted {
+                    deleted_stable.insert(LogEntry {
+                        timestamp: deleted,
+                        key: k.clone(),
+                    });
                 }
-                new_stable.insert(ts);
+                new_stable.insert(LogEntry {
+                    timestamp: ts,
+                    key: k,
+                });
             }
         }
         drop(stable);
@@ -303,11 +319,6 @@ impl Snapshotter {
         let volatile = replica_data.volatile_log.read().await;
         trace!("Stable log updated:: {:?}", stable);
         trace!("Volatile log updated:: {:?}", volatile);
-    }
-
-    // Expose content of stable log
-    pub async fn get_stable_log(&self) -> HashMap<OwnedKeyExpr, Timestamp> {
-        self.content.stable_log.read().await.clone()
     }
 
     // Expose digest

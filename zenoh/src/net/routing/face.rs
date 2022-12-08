@@ -17,7 +17,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol::proto::{DataInfo, QueryBody, RoutingContext};
 use zenoh_protocol_core::{
     Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo, WhatAmI,
     WireExpr, ZInt, ZenohId,
@@ -359,6 +359,7 @@ impl Primitives for Face {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     ) {
         route_query(
@@ -369,6 +370,7 @@ impl Primitives for Face {
             qid,
             target,
             consolidation,
+            body,
             routing_context,
         );
     }
@@ -381,9 +383,8 @@ impl Primitives for Face {
         info: Option<DataInfo>,
         payload: ZBuf,
     ) {
-        let mut tables = zwrite!(self.tables);
         route_send_reply_data(
-            &mut tables,
+            &self.tables,
             &mut self.state.clone(),
             qid,
             replier_id,
@@ -394,8 +395,7 @@ impl Primitives for Face {
     }
 
     fn send_reply_final(&self, qid: ZInt) {
-        let mut tables = zwrite!(self.tables);
-        route_send_reply_final(&mut tables, &mut self.state.clone(), qid);
+        route_send_reply_final(&self.tables, &mut self.state.clone(), qid);
     }
 
     fn send_pull(

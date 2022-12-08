@@ -13,6 +13,90 @@
 //
 use super::*;
 
+macro_rules! mode_accessor {
+    ($type:ty) => {
+        #[inline]
+        pub fn get(whatami: zenoh_protocol_core::WhatAmI) -> &'static $type {
+            match whatami {
+                zenoh_protocol_core::WhatAmI::Router => router,
+                zenoh_protocol_core::WhatAmI::Peer => peer,
+                zenoh_protocol_core::WhatAmI::Client => client,
+            }
+        }
+    };
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub const mode: WhatAmI = WhatAmI::Peer;
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub mod scouting {
+    pub const timeout: u64 = 3000;
+    pub const delay: u64 = 200;
+    pub mod multicast {
+        pub const enabled: bool = true;
+        pub const address: ([u8; 4], u16) = ([224, 0, 0, 224], 7446);
+        pub const interface: &str = "auto";
+        pub mod autoconnect {
+            pub const router: &crate::WhatAmIMatcher = // ""
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(128) });
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+            pub const client: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+            mode_accessor!(crate::WhatAmIMatcher);
+        }
+        pub mod listen {
+            pub const router: &bool = &true;
+            pub const peer: &bool = &true;
+            pub const client: &bool = &false;
+            mode_accessor!(bool);
+        }
+    }
+    pub mod gossip {
+        pub const enabled: bool = true;
+        pub const multihop: bool = false;
+        pub mod autoconnect {
+            pub const router: &crate::WhatAmIMatcher = // ""
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(128) });
+            pub const peer: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+            pub const client: &crate::WhatAmIMatcher = // "router|peer"
+                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+            mode_accessor!(crate::WhatAmIMatcher);
+        }
+    }
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub mod timestamping {
+    pub mod enabled {
+        pub const router: &bool = &true;
+        pub const peer: &bool = &false;
+        pub const client: &bool = &false;
+        mode_accessor!(bool);
+    }
+    pub const drop_future_timestamp: bool = false;
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub const queries_default_timeout: u64 = 10000;
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
+pub mod routing {
+    pub mod router {
+        pub const peers_failover_brokering: bool = true;
+    }
+    pub mod peer {
+        pub const mode: &str = "peer_to_peer";
+    }
+}
+
 impl Default for TransportUnicastConf {
     fn default() -> Self {
         Self {

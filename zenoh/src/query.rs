@@ -151,8 +151,10 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) selector: ZResult<Selector<'b>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
+    pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
+    pub(crate) value: Option<Value>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -182,7 +184,9 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler: _,
         } = self;
         GetBuilder {
@@ -190,7 +194,9 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler: callback,
         }
     }
@@ -255,7 +261,9 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler: _,
         } = self;
         GetBuilder {
@@ -263,7 +271,9 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             selector,
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler,
         }
     }
@@ -283,10 +293,30 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
+    /// Restrict the matching queryables that will receive the query
+    /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn allowed_destination(mut self, destination: Locality) -> Self {
+        self.destination = destination;
+        self
+    }
+
     /// Set query timeout.
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    /// Set query value.
+    #[zenoh_core::unstable]
+    #[inline]
+    pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
+    where
+        IntoValue: Into<Value>,
+    {
+        self.value = Some(value.into());
         self
     }
 
@@ -296,21 +326,25 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
     /// expressions that don't intersect with the query's.
     #[zenoh_core::unstable]
-    pub fn accept_replies(self, value: ReplyKeyExpr) -> Self {
+    pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         let Self {
             session,
             selector,
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler,
         } = self;
         Self {
             session,
-            selector: selector.and_then(|s| s.accept_any_keyexpr(value == ReplyKeyExpr::Any)),
+            selector: selector.and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
             target,
             consolidation,
+            destination,
             timeout,
+            value,
             handler,
         }
     }
@@ -355,7 +389,9 @@ where
                 &self.selector?,
                 self.target,
                 self.consolidation,
+                self.destination,
                 self.timeout,
+                self.value,
                 callback,
             )
             .map(|_| receiver)

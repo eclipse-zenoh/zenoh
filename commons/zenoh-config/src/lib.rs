@@ -147,6 +147,12 @@ validated_struct::validator! {
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
                 enabled: Option<bool>,
+                /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+                /// When false, gossip scouting informations are only propagated to the next hop.
+                /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+                /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+                /// direct connectivity with each other.
+                multihop: Option<bool>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through gossip.
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
@@ -170,6 +176,15 @@ validated_struct::validator! {
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
         RoutingConf {
+            /// The routing strategy to use in routers and it's configuration.
+            pub router: #[derive(Default)]
+            RouterRoutingConf {
+                /// When set to true a router will forward data between two peers
+                /// directly connected to it if it detects that those peers are not
+                /// connected to each other.
+                /// The failover brokering only works if gossip discovery is enabled.
+                peers_failover_brokering: Option<bool>,
+            },
             /// The routing strategy to use in peers and it's configuration.
             pub peer: #[derive(Default)]
             PeerRoutingConf {
@@ -1085,6 +1100,14 @@ pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
     fn peer(&self) -> Option<&T>;
     fn client(&self) -> Option<&T>;
+    #[inline]
+    fn get(&self, whatami: WhatAmI) -> Option<&T> {
+        match whatami {
+            WhatAmI::Router => self.router(),
+            WhatAmI::Peer => self.peer(),
+            WhatAmI::Client => self.client(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1098,14 +1121,17 @@ pub struct ModeValues<T> {
 }
 
 impl<T> ModeDependent<T> for ModeValues<T> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         self.router.as_ref()
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         self.peer.as_ref()
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         self.client.as_ref()
     }
@@ -1118,6 +1144,7 @@ pub enum ModeDependentValue<T> {
 }
 
 impl<T> ModeDependent<T> for ModeDependentValue<T> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1125,6 +1152,7 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
         }
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1132,6 +1160,7 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
         }
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1223,6 +1252,7 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
 }
 
 impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1231,6 +1261,7 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
         }
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1239,6 +1270,7 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
         }
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1246,4 +1278,11 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
             None => None,
         }
     }
+}
+
+#[macro_export]
+macro_rules! unwrap_or_default {
+    ($val:ident$(.$field:ident($($param:ident)?))*) => {
+        $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
+    };
 }

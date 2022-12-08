@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-core"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -29,7 +29,7 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { version = "1.0.65", default-features = false, features = ["std"] }
+anyhow = { version = "1.0.66", default-features = false, features = ["std"] }
 async-std = "=1.12.0"
 lazy_static = "1.4.0"
-zenoh-macros = { version = "0.6.0-beta.1", path = "../zenoh-macros/" }
+zenoh-macros = { version = "0.7.0-rc", path = "../zenoh-macros/" }

@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-examples"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -35,19 +35,18 @@ readme = "README.md"
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-
 async-std = { version = "=1.12.0", default-features = false, features = [
   "attributes",
 ] }
-clap = "3.2.22"
-env_logger = "0.9.1"
+clap = "3.2.23"
+env_logger = "0.10.0"
 flume = "0.10.14"
-futures = "0.3.24"
+futures = "0.3.25"
 git-version = "0.3.5"
 json5 = "0.4.1"
 log = "0.4.17"
-zenoh = { version = "0.6.0-beta.1", path = "../zenoh/", default-features = false }
-zenoh-ext = { version = "0.6.0-beta.1", path = "../zenoh-ext/" }
+zenoh = { version = "0.7.0-rc", path = "../zenoh/", default-features = false }
+zenoh-ext = { version = "0.7.0-rc", path = "../zenoh-ext/" }
 
 [dev-dependencies]
 rand = "0.8.5"

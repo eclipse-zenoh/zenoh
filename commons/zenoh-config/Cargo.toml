@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-config"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -28,16 +28,16 @@ edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
-[dependencies]
 
+[dependencies]
 flume = "0.10.14"
 json5 = "0.4.1"
-num_cpus = "1.13.1"
-serde = "1.0.145"
-serde_json = "1.0.85"
-serde_yaml = "0.9.13"
+num_cpus = "1.14.0"
+serde = "1.0.149"
+serde_json = "1.0.89"
+serde_yaml = "0.9.14"
 validated_struct = { version = "2.1.0", features = ["json5", "json_get"] }
-zenoh-cfg-properties = { version = "0.6.0-beta.1", path = "../zenoh-cfg-properties" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core" }
-zenoh-protocol-core = { version = "0.6.0-beta.1", path = "../zenoh-protocol-core/" }
-zenoh-util = { version = "0.6.0-beta.1", path = "../zenoh-util" }
+zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties" }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }
+zenoh-protocol-core = { version = "0.7.0-rc", path = "../zenoh-protocol-core/" }
+zenoh-util = { version = "0.7.0-rc", path = "../zenoh-util" }

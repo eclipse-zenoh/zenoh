@@ -51,6 +51,12 @@
     gossip: {
       /// Whether gossip scouting is enabled or not
       enabled: true,
+      /// When true, gossip scouting informations are propagated multiple hops to all nodes in the local network.
+      /// When false, gossip scouting informations are only propagated to the next hop.
+      /// Activating multihop gossip implies more scouting traffic and a lower scalability.
+      /// It mostly makes sense when using "linkstate" routing mode where all nodes in the subsystem don't have
+      /// direct connectivity with each other.
+      multihop: false,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on gossip.
       /// Accepts a single value or different values for router, peer and client.
       /// Each value is bit-or-like combinations of "peer", "router" and "client".
@@ -69,8 +75,19 @@
     drop_future_timestamp: false,
   },
 
+  /// The default timeout to apply to queries in milliseconds.
+  queries_default_timeout: 10000,
+
   /// The routing strategy to use and it's configuration.
   routing: {
+      /// The routing strategy to use in routers and it's configuration.
+      router: {
+          /// When set to true a router will forward data between two peers
+          /// directly connected to it if it detects that those peers are not
+          /// connected to each other.
+          /// The failover brokering only works if gossip discovery is enabled.
+          peers_failover_brokering: true,
+      },
       /// The routing strategy to use in peers and it's configuration.
       peer: {
           /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
@@ -164,11 +181,19 @@
       },
       /// Configure TLS specific parameters
       tls: {
+        /// Path to the certificate of the certificate authority used to validate either the server
+        /// or the client's keys and certificates, depending on the node's mode. If not specified
+        /// on router mode then the default WebPKI certificates are used instead.
         root_ca_certificate: null,
+        /// Path to the TLS server private key
         server_private_key: null,
+        /// Path to the TLS server public certificate
         server_certificate: null,
-        client_auth: null,
+        /// Client authentication, if true enables mTLS (mutual authentication)
+        client_auth: false,
+        /// Path to the TLS client private key
         client_private_key: null,
+        /// Path to the TLS client public certificate
         client_certificate: null,
       },
     },
@@ -281,6 +306,13 @@
 //            /// To be efficient, delta should be the time containing no more than 100,000 samples
 //            delta: 1000,
 //          }
+//        },
+//        demo3: {          
+//          key_expr: "demo/memory3/**",
+//          volume: "memory",
+//          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
+//          /// If not configured, complete defaults to false.
+//          complete: "true",
 //        },
 //        influx_demo: {
 //          key_expr: "demo/influxdb/**",

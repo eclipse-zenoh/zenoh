@@ -20,7 +20,7 @@ use uhlc::HLC;
 use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol::proto::{DataInfo, QueryBody, RoutingContext};
 use zenoh_protocol_core::{
     Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, Reliability,
     SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
@@ -34,6 +34,7 @@ fn base_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -83,7 +84,7 @@ fn match_test() {
         "ab/*",
         "a/*/c/*/e",
         "a/b/c/d/e",
-        "a/*b/c/$*d/e",
+        "a/$*b/c/$*d/e",
         "a/xb/c/xd/e",
         "a/c/e",
         "a/b/c/d/x/e",
@@ -124,6 +125,7 @@ fn match_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
     let primitives = Arc::new(DummyPrimitives::new());
@@ -161,6 +163,7 @@ fn clean_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     );
 
@@ -459,6 +462,7 @@ impl Primitives for ClientPrimitives {
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
     }
@@ -493,6 +497,7 @@ fn client_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         false,
+        true,
         Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
     ));
 

@@ -17,11 +17,27 @@ use std::fmt;
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 pub type ZResult<T> = Result<T, Error>;
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NegativeI8(i8);
+impl NegativeI8 {
+    pub const fn new(v: i8) -> Self {
+        if v >= 0 {
+            panic!("Non-negative value used in NegativeI8")
+        }
+        NegativeI8(v)
+    }
+    pub const fn get(self) -> i8 {
+        self.0
+    }
+    pub const MIN: Self = Self::new(i8::MIN);
+}
 
 pub struct ZError {
     error: AnyError,
     file: &'static str,
     line: u32,
+    errno: NegativeI8,
     source: Option<Error>,
 }
 
@@ -29,11 +45,17 @@ unsafe impl Send for ZError {}
 unsafe impl Sync for ZError {}
 
 impl ZError {
-    pub fn new<E: Into<AnyError>>(error: E, file: &'static str, line: u32) -> ZError {
+    pub fn new<E: Into<AnyError>>(
+        error: E,
+        file: &'static str,
+        line: u32,
+        errno: NegativeI8,
+    ) -> ZError {
         ZError {
             error: error.into(),
             file,
             line,
+            errno,
             source: None,
         }
     }
@@ -75,5 +97,43 @@ impl fmt::Display for ShmError {
 impl std::error::Error for ShmError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
+    }
+}
+
+pub trait ErrNo {
+    fn errno(&self) -> NegativeI8;
+}
+impl ErrNo for ZError {
+    fn errno(&self) -> NegativeI8 {
+        self.errno
+    }
+}
+impl ErrNo for ShmError {
+    fn errno(&self) -> NegativeI8 {
+        self.0.errno
+    }
+}
+impl ErrNo for dyn std::error::Error {
+    fn errno(&self) -> NegativeI8 {
+        match self.downcast_ref::<ZError>() {
+            Some(e) => e.errno(),
+            None => NegativeI8::new(i8::MIN),
+        }
+    }
+}
+impl ErrNo for dyn std::error::Error + Send {
+    fn errno(&self) -> NegativeI8 {
+        match self.downcast_ref::<ZError>() {
+            Some(e) => e.errno(),
+            None => NegativeI8::new(i8::MIN),
+        }
+    }
+}
+impl ErrNo for dyn std::error::Error + Send + Sync {
+    fn errno(&self) -> NegativeI8 {
+        match self.downcast_ref::<ZError>() {
+            Some(e) => e.errno(),
+            None => NegativeI8::new(i8::MIN),
+        }
     }
 }
