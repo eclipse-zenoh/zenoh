@@ -34,7 +34,7 @@ default = ["no_mangle"]
 
 [lib]
 name = "zplugin_storage_manager"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 async-std = "=1.12.0"
