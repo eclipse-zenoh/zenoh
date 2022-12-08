@@ -293,10 +293,8 @@ impl StorageService {
             // check wild card store
             let wildcards = self.wildcard_updates.read().await;
             for (key, sample) in wildcards.iter() {
-                if key_expr.intersects(key) {
-                    if sample.timestamp.unwrap() > *timestamp {
-                        return true
-                    }
+                if key_expr.intersects(key) && sample.timestamp.unwrap() > *timestamp {
+                    return true;
                 }
             }
         }
