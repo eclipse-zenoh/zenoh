@@ -477,7 +477,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<SerializationBatch, RBLEN>::new();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<SerializationBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
                 assert!(s_ref_w
@@ -493,7 +493,7 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<SerializationBatch, RBLEN>::new();
+            let (s_out_w, s_out_r) = RingBuffer::<SerializationBatch, RBLEN>::init();
 
             // The batch being serialized upon
             let current = Arc::new(Mutex::new(None));
