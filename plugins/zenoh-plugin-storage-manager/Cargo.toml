@@ -62,6 +62,9 @@ zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/"
 [build-dependencies]
 rustc_version = "0.4.0"
 
+[dev-dependencies]
+zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = true, features = [ "unstable" ] }
+
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
 maintainer = "zenoh-dev@eclipse.org"
