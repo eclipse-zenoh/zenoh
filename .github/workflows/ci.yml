@@ -50,6 +50,12 @@ jobs:
           command: clippy
           args: --all-targets -- -D warnings
 
+      - name: Clippy unstable
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets --features unstable -- -D warnings
+
   test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -63,6 +69,13 @@ jobs:
 
       - name: Install latest Rust toolchain
         uses: actions-rs/toolchain@v1
+
+      - name: Set rustflags
+        shell: bash
+        run: |
+          case ${{ matrix.os }} in
+            *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
+          esac
 
       - name: Build
         uses: actions-rs/cargo@v1
