@@ -32,6 +32,12 @@ async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timest
     session.put(key_expr, value).res().await.unwrap();
 }
 
+async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
+    println!("Deleting Data '{}'...", key_expr);
+    //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
+    session.delete(key_expr).res().await.unwrap();
+}
+
 async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
     let replies: Vec<Reply> = session
         .get(key_expr)
@@ -86,20 +92,22 @@ async fn test_updates_in_order() {
             .unwrap(),
     )
     .await;
-    sleep(std::time::Duration::from_millis(100));
+    sleep(std::time::Duration::from_millis(500));
 
     // expects exactly one sample
     let data = get_data(&session, "demo/example/a").await;
     assert_eq!(data.len(), 1);
+    assert_eq!(format!("{}", data[0].value), "1");
 
     // expects exactly one sample
     let data = get_data(&session, "demo/example/*").await;
     assert_eq!(data.len(), 1);
+    assert_eq!(format!("{}", data[0].value), "1");
 
     put_data(
         &session,
         "demo/example/b",
-        "1",
+        "2",
         Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
@@ -108,6 +116,25 @@ async fn test_updates_in_order() {
     // expects exactly two samples
     let data = get_data(&session, "demo/example/*").await;
     assert_eq!(data.len(), 2);
+
+    // expects exactly one sample
+    let data = get_data(&session, "demo/example/b").await;
+    assert_eq!(data.len(), 1);
+    assert_eq!(format!("{}", data[0].value), "2");
+
+    delete_data(
+        &session,
+        "demo/example/a",
+        Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+            .unwrap(),
+    )
+    .await;
+
+    // expects exactly one sample
+    let data = get_data(&session, "demo/example/*").await;
+    assert_eq!(data.len(), 1);
+    assert_eq!(format!("{}", data[0].value), "2");
+    assert_eq!(data[0].key_expr.as_str(), "demo/example/b");
 
     drop(storage);
 }
