@@ -16,6 +16,7 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
+use std::thread::sleep;
 use std::{collections::HashMap, str::FromStr};
 
 // use std::collections::HashMap;
@@ -25,6 +26,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
+use zenoh::query::Reply;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, timestamp: Timestamp) {
     println!("Putting Data ('{}': '{}')...", key_expr, value);
@@ -33,26 +35,23 @@ async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, timesta
     session.put(key_expr, value).res().await.unwrap();
 }
 
-async fn get_data(session: &zenoh::Session, key_expr: &str) -> HashMap<OwnedKeyExpr, Value> {
-    let replies = session.get(key_expr).res().await.unwrap();
-    let mut data = HashMap::new();
-    while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
-            Ok(sample) => {
-                println!(
-                    ">> Received ('{}': '{}')",
-                    sample.key_expr.as_str(),
-                    sample.value,
-                );
-                data.insert(
-                    OwnedKeyExpr::from_str(sample.key_expr.as_str()).unwrap(),
-                    sample.value,
-                );
-            }
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
+    let replies: Vec<Reply> = session
+        .get(key_expr)
+        .res()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    println!("Getting replies on '{}': '{:?}'...", key_expr, replies);
+    let mut samples = Vec::new();
+    for reply in replies {
+        if let Ok(sample) = reply.sample {
+            samples.push(sample);
         }
     }
-    data
+    println!("Getting Data on '{}': '{:?}'...", key_expr, samples);
+    samples
 }
 
 async fn test_wild_card_in_order() {
@@ -82,15 +81,34 @@ async fn test_wild_card_in_order() {
 
     let session = zenoh::init(runtime).res().await.unwrap();
 
+    // put *, ts: 1
     put_data(
         &session,
-        "*",
+        "demo/example/a",
         "1",
         Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
-    let data = get_data(&session, "*").await;
+    sleep(std::time::Duration::from_millis(100));
+    // expected no data
+    let data = get_data(&session, "demo/example/a").await;
+    assert_eq!(data.len(), 1);
+
+    // let data = get_data(&session, "demo/example/*").await;
+    // assert_eq!(data.len(), 1);
+
+    // put_data(
+    //     &session,
+    //     "demo/example/b",
+    //     "1",
+    //     Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+    //         .unwrap(),
+    // )
+    // .await;
+
+    // let data = get_data(&session, "demo/example/*").await;
+    // assert_eq!(data.len(), 2);
 
     println!("received: {:?}", data);
     drop(storage);
