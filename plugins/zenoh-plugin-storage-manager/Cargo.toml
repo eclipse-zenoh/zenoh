@@ -59,10 +59,6 @@ zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
 zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
-async-global-executor = "2.3.1"
-
-[dev-dependencies]
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = true, features = [ "unstable", "transport_tcp" ] }
 
 [build-dependencies]
 rustc_version = "0.4.0"
