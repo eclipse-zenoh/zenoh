@@ -84,6 +84,8 @@ async fn test_updates_in_order() {
 
     let session = zenoh::init(runtime).res().await.unwrap();
 
+    sleep(std::time::Duration::from_secs(2));
+
     put_data(
         &session,
         "demo/example/a",
@@ -92,15 +94,9 @@ async fn test_updates_in_order() {
             .unwrap(),
     )
     .await;
-    sleep(std::time::Duration::from_millis(500));
 
     // expects exactly one sample
     let data = get_data(&session, "demo/example/a").await;
-    assert_eq!(data.len(), 1);
-    assert_eq!(format!("{}", data[0].value), "1");
-
-    // expects exactly one sample
-    let data = get_data(&session, "demo/example/*").await;
     assert_eq!(data.len(), 1);
     assert_eq!(format!("{}", data[0].value), "1");
 
@@ -112,10 +108,6 @@ async fn test_updates_in_order() {
             .unwrap(),
     )
     .await;
-
-    // expects exactly two samples
-    let data = get_data(&session, "demo/example/*").await;
-    assert_eq!(data.len(), 2);
 
     // expects exactly one sample
     let data = get_data(&session, "demo/example/b").await;
@@ -130,8 +122,12 @@ async fn test_updates_in_order() {
     )
     .await;
 
+    // expects zero sample
+    let data = get_data(&session, "demo/example/a").await;
+    assert_eq!(data.len(), 0);
+    
     // expects exactly one sample
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "demo/example/b").await;
     assert_eq!(data.len(), 1);
     assert_eq!(format!("{}", data[0].value), "2");
     assert_eq!(data[0].key_expr.as_str(), "demo/example/b");
