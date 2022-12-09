@@ -125,7 +125,7 @@ async fn test_updates_in_order() {
     // expects zero sample
     let data = get_data(&session, "demo/example/a").await;
     assert_eq!(data.len(), 0);
-    
+
     // expects exactly one sample
     let data = get_data(&session, "demo/example/b").await;
     assert_eq!(data.len(), 1);
