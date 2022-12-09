@@ -80,6 +80,7 @@ async fn test_wild_card_in_order() {
         zplugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
     let session = zenoh::init(runtime).res().await.unwrap();
+    sleep(std::time::Duration::from_secs(1));
 
     // put *, ts: 1
     put_data(
@@ -90,7 +91,6 @@ async fn test_wild_card_in_order() {
             .unwrap(),
     )
     .await;
-    sleep(std::time::Duration::from_millis(100));
     // expected no data
     let data = get_data(&session, "demo/example/a").await;
     assert_eq!(data.len(), 1);
