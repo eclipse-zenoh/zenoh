@@ -23,10 +23,10 @@ use std::{collections::HashMap, str::FromStr};
 use async_std::task;
 use std::convert::TryFrom;
 use zenoh::prelude::r#async::*;
+use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
-use zenoh::query::Reply;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, timestamp: Timestamp) {
     println!("Putting Data ('{}': '{}')...", key_expr, value);
