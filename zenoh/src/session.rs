@@ -795,7 +795,7 @@ impl Session {
             log::debug!("Config: {:?}", &config);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
-            match Runtime::new(config, false).await {
+            match Runtime::init(config).await {
                 Ok(mut runtime) => {
                     let session = Self::init(
                         runtime.clone(),

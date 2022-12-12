@@ -74,7 +74,15 @@ impl std::ops::Deref for Runtime {
 }
 
 impl Runtime {
-    pub async fn new(config: Config, start: bool) -> ZResult<Runtime> {
+    pub async fn new(config: Config) -> ZResult<Runtime> {
+        let mut runtime = Runtime::init(config).await?;
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
+            Err(err) => Err(err),
+        }
+    }
+
+    pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
         // Make sure to have have enough threads spawned in the async futures executor
         zasync_executor_init!();
@@ -127,7 +135,7 @@ impl Runtime {
 
         let config = Notifier::new(config);
 
-        let mut runtime = Runtime {
+        let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid,
                 whatami,
@@ -166,14 +174,7 @@ impl Runtime {
             }
         });
 
-        if start {
-            match runtime.start().await {
-                Ok(()) => Ok(runtime),
-                Err(err) => Err(err),
-            }
-        } else {
-            Ok(runtime)
-        }
+        Ok(runtime)
     }
 
     #[inline(always)]

@@ -14,12 +14,15 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-use crate::prelude::{KeyExpr, SampleKind, Value, ZenohId};
+#[zenoh_core::unstable]
+use crate::prelude::ZenohId;
+use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_core::unstable]
 use serde::Serialize;
 use std::convert::TryInto;
 use zenoh_protocol::proto::DataInfo;
+#[zenoh_core::unstable]
 use zenoh_protocol_core::ZInt;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
@@ -59,6 +62,7 @@ fn source_info_stack_size() {
     assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
 }
 
+#[zenoh_core::unstable]
 impl SourceInfo {
     pub(crate) fn empty() -> Self {
         SourceInfo {
@@ -68,6 +72,7 @@ impl SourceInfo {
     }
 }
 
+#[zenoh_core::unstable]
 impl From<DataInfo> for SourceInfo {
     fn from(data_info: DataInfo) -> Self {
         SourceInfo {
@@ -77,6 +82,7 @@ impl From<DataInfo> for SourceInfo {
     }
 }
 
+#[zenoh_core::unstable]
 impl From<Option<DataInfo>> for SourceInfo {
     fn from(data_info: Option<DataInfo>) -> Self {
         match data_info {
@@ -190,8 +196,12 @@ impl Sample {
             sliced: false,
             #[cfg(feature = "unstable")]
             source_id: self.source_info.source_id,
+            #[cfg(not(feature = "unstable"))]
+            source_id: None,
             #[cfg(feature = "unstable")]
             source_sn: self.source_info.source_sn,
+            #[cfg(not(feature = "unstable"))]
+            source_sn: None,
         };
         (self.key_expr, self.value.payload, info)
     }
