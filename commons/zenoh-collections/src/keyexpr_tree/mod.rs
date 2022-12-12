@@ -129,8 +129,9 @@ pub trait ChunkMapType<T> {
 }
 
 pub trait ChunkMap<T: ?Sized> {
-    fn child_at<'a, 'b>(&'a self, chunk: &'b keyexpr) -> Option<&'a T>;
-    fn child_at_mut<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Option<&'a mut T>;
+    type Node: HasChunk + AsNode<T> + AsNodeMut<T>;
+    fn child_at<'a, 'b>(&'a self, chunk: &'b keyexpr) -> Option<&'a Self::Node>;
+    fn child_at_mut<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Option<&'a mut Self::Node>;
     type Entry<'a, 'b>: IEntry<'a, 'b, T>
     where
         Self: 'a + 'b,
@@ -139,21 +140,17 @@ pub trait ChunkMap<T: ?Sized> {
     where
         Self: 'a + 'b,
         T: 'b;
-    type IterItem<'a>: HasChunk + AsNode<T>
+    type Iter<'a>: Iterator<Item = &'a Self::Node>
     where
-        Self: 'a;
-    type Iter<'a>: Iterator<Item = Self::IterItem<'a>>
-    where
-        Self: 'a;
+        Self: 'a,
+        Self::Node: 'a;
     fn children<'a>(&'a self) -> Self::Iter<'a>
     where
         Self: 'a;
-    type IterItemMut<'a>: HasChunk + AsNodeMut<T>
+    type IterMut<'a>: Iterator<Item = &'a mut Self::Node>
     where
-        Self: 'a;
-    type IterMut<'a>: Iterator<Item = Self::IterItemMut<'a>>
-    where
-        Self: 'a;
+        Self: 'a,
+        Self::Node: 'a;
     fn children_mut<'a>(&'a mut self) -> Self::IterMut<'a>
     where
         Self: 'a;

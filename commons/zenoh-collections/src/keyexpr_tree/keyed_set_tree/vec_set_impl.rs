@@ -24,6 +24,7 @@ pub enum Entry<'a, 'b, T> {
     Occupied(&'a mut T),
 }
 impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
+    type Node = T;
     fn child_at(&self, chunk: &keyexpr) -> Option<&T> {
         self.iter().find(|t| unlikely(t.chunk() == chunk))
     }
@@ -43,7 +44,6 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
         }
     }
 
-    type IterItem<'a> = &'a T where Self: 'a;
     type Iter<'a> = std::slice::Iter<'a, T> where Self: 'a;
     fn children<'a>(&'a self) -> Self::Iter<'a>
     where
@@ -52,9 +52,6 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
         self.iter()
     }
 
-    type IterItemMut<'a> = &'a mut T
-where
-    Self: 'a;
     type IterMut<'a> = std::slice::IterMut<'a, T>
 where
     Self: 'a;

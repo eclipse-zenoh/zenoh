@@ -1,4 +1,7 @@
-use std::ptr::NonNull;
+use std::{
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 
 use zenoh_protocol_core::key_expr::keyexpr;
 
@@ -28,24 +31,27 @@ impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> IKe
 where
     Weight: 'static,
     Children: 'static,
-    Children::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Children>>> + 'static,
+    Children::Assoc: ChunkMap<
+            Box<KeyExprTreeNode<Weight, Children>>,
+            Node = Box<KeyExprTreeNode<Weight, Children>>,
+        > + 'static,
 {
     type Node = KeyExprTreeNode<Weight, Children>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node> {
         let mut chunks = at.chunks();
         let mut node = self.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
-            node = node.children.child_at(chunk)?;
+            node = node.as_node().children.child_at(chunk)?;
         }
-        Some(node)
+        Some(node.as_node())
     }
     fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node> {
         let mut chunks = at.chunks();
         let mut node = self.children.child_at_mut(chunks.next().unwrap())?;
         for chunk in chunks {
-            node = node.children.child_at_mut(chunk)?;
+            node = node.as_node_mut().children.child_at_mut(chunk)?;
         }
-        Some(node)
+        Some(node.as_node_mut())
     }
 
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node {
@@ -91,30 +97,93 @@ where
     }
 
     type IntersectionItem<'a> = <Self::Intersection<'a> as Iterator>::Item;
-    type Intersection<'a> =
-        Intersection<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    type Intersection<'a> = IterOrOption<
+        Intersection<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        &'a Self::Node,
+    >;
     fn intersecting_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Intersection<'a> {
-        Intersection::new(&self.children, ke)
+        if self.has_wilds || ke.is_wild() {
+            Intersection::new(&self.children, ke).into()
+        } else {
+            let node = self.node(ke);
+            IterOrOption::Opt(node)
+        }
     }
 
     type IntersectionItemMut<'a> = <Self::IntersectionMut<'a> as Iterator>::Item;
-    type IntersectionMut<'a> =
-        IntersectionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    type IntersectionMut<'a> = IterOrOption<
+        IntersectionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        &'a mut Self::Node,
+    >;
     fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a> {
-        IntersectionMut::new(&mut self.children, ke)
+        if self.has_wilds || ke.is_wild() {
+            IntersectionMut::new(&mut self.children, ke).into()
+        } else {
+            let node = self.node_mut(ke);
+            IterOrOption::Opt(node)
+        }
     }
 
     type InclusionItem<'a> = <Self::Inclusion<'a> as Iterator>::Item;
-    type Inclusion<'a> = Inclusion<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    type Inclusion<'a> = IterOrOption<
+        Inclusion<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        &'a Self::Node,
+    >;
     fn included_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Inclusion<'a> {
-        Inclusion::new(&self.children, ke)
+        if self.has_wilds || ke.is_wild() {
+            Inclusion::new(&self.children, ke).into()
+        } else {
+            let node = self.node(ke);
+            IterOrOption::Opt(node)
+        }
     }
 
     type InclusionItemMut<'a> = <Self::InclusionMut<'a> as Iterator>::Item;
-    type InclusionMut<'a> =
-        InclusionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    type InclusionMut<'a> = IterOrOption<
+        InclusionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        &'a mut Self::Node,
+    >;
     fn included_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut<'a> {
-        InclusionMut::new(&mut self.children, ke)
+        if self.has_wilds || ke.is_wild() {
+            InclusionMut::new(&mut self.children, ke).into()
+        } else {
+            let node = self.node_mut(ke);
+            IterOrOption::Opt(node)
+        }
+    }
+}
+pub enum IterOrOption<Iter: Iterator, Item> {
+    Opt(Option<Item>),
+    Iter(Iter),
+}
+impl<Iter: Iterator, Item> Iterator for IterOrOption<Iter, Item>
+where
+    Iter::Item: Coerce<Item>,
+{
+    type Item = Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IterOrOption::Opt(v) => v.take(),
+            IterOrOption::Iter(it) => it.next().map(Coerce::coerce),
+        }
+    }
+}
+trait Coerce<Into> {
+    fn coerce(self) -> Into;
+}
+impl<'a, T> Coerce<&'a T> for &'a Box<T> {
+    fn coerce(self) -> &'a T {
+        self.deref()
+    }
+}
+impl<'a, T> Coerce<&'a mut T> for &'a mut Box<T> {
+    fn coerce(self) -> &'a mut T {
+        self.deref_mut()
+    }
+}
+impl<Iter: Iterator, Item> From<Iter> for IterOrOption<Iter, Item> {
+    fn from(it: Iter) -> Self {
+        Self::Iter(it)
     }
 }
 mod tree_iter;
@@ -135,7 +204,7 @@ impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> Def
     }
 }
 
-pub type DefaultChunkMapProvider = VecSetProvider;
+pub type DefaultChunkMapProvider = KeyedSetProvider;
 pub use keyed_set_impl::KeyedSetProvider;
 pub use vec_set_impl::VecSetProvider;
 mod keyed_set_impl;

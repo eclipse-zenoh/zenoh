@@ -4,6 +4,7 @@ use super::*;
 struct StackFrame<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: ChunkMap<Node> + 'a,
+    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
 {
     iterator: <Children::Assoc as ChunkMap<Node>>::Iter<'a>,
     start: usize,
@@ -47,7 +48,7 @@ impl<
 where
     Children::Assoc: ChunkMap<Node> + 'a,
 {
-    type Item = <Children::Assoc as ChunkMap<Node>>::IterItem<'a>;
+    type Item = &'a <Children::Assoc as ChunkMap<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let StackFrame {
@@ -156,6 +157,7 @@ where
 struct StackFrameMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: ChunkMap<Node> + 'a,
+    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
 {
     iterator: <Children::Assoc as ChunkMap<Node>>::IterMut<'a>,
     start: usize,
@@ -200,7 +202,7 @@ impl<
 where
     Children::Assoc: ChunkMap<Node> + 'a,
 {
-    type Item = <Children::Assoc as ChunkMap<Node>>::IterItemMut<'a>;
+    type Item = &'a mut <Children::Assoc as ChunkMap<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let StackFrameMut {
@@ -210,7 +212,7 @@ where
                 _marker,
             } = self.iterators.last_mut()?;
             match iterator.next() {
-                Some(mut node) => {
+                Some(node) => {
                     let mut node_matches = false;
                     let new_start = *end;
                     let mut new_end = *end;

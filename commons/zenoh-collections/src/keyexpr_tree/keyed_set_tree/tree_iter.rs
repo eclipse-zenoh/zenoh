@@ -4,6 +4,7 @@ use super::*;
 pub struct TreeIter<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: ChunkMap<Node> + 'a,
+    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
 {
     iterators: Vec<<Children::Assoc as ChunkMap<Node>>::Iter<'a>>,
     _marker: std::marker::PhantomData<Weight>,
@@ -34,7 +35,7 @@ impl<
 where
     Children::Assoc: ChunkMap<Node> + 'a,
 {
-    type Item = <Children::Assoc as ChunkMap<Node>>::IterItem<'a>;
+    type Item = &'a <Children::Assoc as ChunkMap<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iterators.last_mut()?.next() {
@@ -55,6 +56,7 @@ where
 pub struct TreeIterMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: ChunkMap<Node> + 'a,
+    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
 {
     iterators: Vec<<Children::Assoc as ChunkMap<Node>>::IterMut<'a>>,
     _marker: std::marker::PhantomData<Weight>,
@@ -82,11 +84,11 @@ impl<
 where
     Children::Assoc: ChunkMap<Node> + 'a,
 {
-    type Item = <Children::Assoc as ChunkMap<Node>>::IterItemMut<'a>;
+    type Item = &'a mut <Children::Assoc as ChunkMap<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iterators.last_mut()?.next() {
-                Some(mut node) => {
+                Some(node) => {
                     let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                         .children_mut()
                         .children_mut();
@@ -111,10 +113,7 @@ impl<
 where
     Children::Assoc: ChunkMap<Node> + 'a,
 {
-    type Item = (
-        NonZeroUsize,
-        <Children::Assoc as ChunkMap<Node>>::IterItem<'a>,
-    );
+    type Item = (NonZeroUsize, &'a <Children::Assoc as ChunkMap<Node>>::Node);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let depth = self.0.iterators.len();

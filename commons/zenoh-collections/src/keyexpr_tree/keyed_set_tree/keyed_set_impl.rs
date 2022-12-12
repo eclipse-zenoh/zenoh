@@ -22,6 +22,7 @@ impl<'a, 'b, T: HasChunk> IEntry<'a, 'b, T>
 }
 
 impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkExtractor> {
+    type Node = T;
     fn child_at(&self, chunk: &keyexpr) -> Option<&T> {
         self.get(&chunk)
     }
@@ -37,7 +38,6 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkEx
         self.entry(chunk)
     }
 
-    type IterItem<'a> = &'a T where Self: 'a;
     type Iter<'a> = keyed_set::Iter<'a, T> where Self: 'a;
     fn children<'a>(&'a self) -> Self::Iter<'a>
     where
@@ -46,9 +46,6 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkEx
         self.iter()
     }
 
-    type IterItemMut<'a> = &'a mut T
-where
-    Self: 'a;
     type IterMut<'a> = keyed_set::IterMut<'a, T>
 where
     Self: 'a;
