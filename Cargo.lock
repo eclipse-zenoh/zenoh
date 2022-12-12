@@ -3618,6 +3618,7 @@ version = "0.6.0-beta.1"
 dependencies = [
  "async-std",
  "async-trait",
+ "criterion",
  "flume",
  "keyed-set",
  "log",

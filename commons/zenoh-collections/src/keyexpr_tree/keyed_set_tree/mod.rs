@@ -1,6 +1,5 @@
 use std::ptr::NonNull;
 
-use keyed_set::{KeyExtractor, KeyedSet};
 use zenoh_protocol_core::key_expr::keyexpr;
 
 use super::*;
@@ -10,6 +9,7 @@ pub struct KeyExprTree<
     Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>> = DefaultChunkMapProvider,
 > {
     children: Children::Assoc,
+    has_wilds: bool,
 }
 
 impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>>
@@ -18,6 +18,7 @@ impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>>
     pub fn new() -> Self {
         KeyExprTree {
             children: Default::default(),
+            has_wilds: false,
         }
     }
 }
@@ -48,6 +49,9 @@ where
     }
 
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node {
+        if at.is_wild() {
+            self.has_wilds = true;
+        }
         let mut chunks = at.chunks();
         let root = NonNull::from(&*self);
         let mut node = self
@@ -126,75 +130,22 @@ impl<Weight, Children: ChunkMapType<Box<KeyExprTreeNode<Weight, Children>>>> Def
     fn default() -> Self {
         Self {
             children: Default::default(),
+            has_wilds: false,
         }
     }
 }
-impl<'a, 'b, T: HasChunk> IEntry<'a, 'b, T>
-    for keyed_set::Entry<'a, T, ChunkExtractor, &'b keyexpr>
-{
-    fn get_or_insert_with<F: FnOnce(&'b keyexpr) -> T>(self, f: F) -> &'a mut T {
-        Self::get_or_insert_with(self, f)
-    }
-}
 
-pub struct DefaultChunkMapProvider;
-impl<T: 'static> ChunkMapType<T> for DefaultChunkMapProvider {
-    type Assoc = KeyedSet<T, ChunkExtractor>;
-}
+pub type DefaultChunkMapProvider = VecSetProvider;
+pub use keyed_set_impl::KeyedSetProvider;
+pub use vec_set_impl::VecSetProvider;
+mod keyed_set_impl;
+mod vec_set_impl;
+
 pub struct KeyExprTreeNode<Weight, Children: ChunkMapType<Box<Self>>> {
     parent: Parent<Weight, Children>,
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ChunkExtractor;
-impl<'a, T: HasChunk> KeyExtractor<'a, T> for ChunkExtractor {
-    type Key = &'a keyexpr;
-    fn extract(&self, from: &'a T) -> Self::Key {
-        from.chunk()
-    }
-}
-
-impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkExtractor> {
-    fn child_at(&self, chunk: &keyexpr) -> Option<&T> {
-        self.get(&chunk)
-    }
-    fn child_at_mut(&mut self, chunk: &keyexpr) -> Option<&mut T> {
-        self.get_mut_unguarded(&chunk)
-    }
-    type Entry<'a, 'b> = keyed_set::Entry<'a, T, ChunkExtractor, &'b keyexpr> where Self: 'a + 'b, T: 'b;
-    fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
-    where
-        Self: 'a + 'b,
-        T: 'b,
-    {
-        self.entry(chunk)
-    }
-
-    type IterItem<'a> = &'a T where Self: 'a;
-    type Iter<'a> = keyed_set::Iter<'a, T> where Self: 'a;
-    fn children<'a>(&'a self) -> Self::Iter<'a>
-    where
-        Self: 'a,
-    {
-        self.iter()
-    }
-
-    type IterItemMut<'a> = &'a mut T
-    where
-        Self: 'a;
-    type IterMut<'a> = keyed_set::IterMut<'a, T>
-    where
-        Self: 'a;
-
-    fn children_mut<'a>(&'a mut self) -> Self::IterMut<'a>
-    where
-        Self: 'a,
-    {
-        self.iter_mut()
-    }
 }
 
 impl<Weight, Children: ChunkMapType<Box<Self>>> IKeyExprTreeNode<Weight>

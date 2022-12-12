@@ -41,3 +41,8 @@ zenoh-sync = { version = "0.6.0-beta.1", path = "../zenoh-sync/" }
 
 [dev-dependencies]
 rand = "0.8.5"
+criterion = "0.4.0"
+
+[[bench]]
+name = "keyexpr_tree"
+harness = false

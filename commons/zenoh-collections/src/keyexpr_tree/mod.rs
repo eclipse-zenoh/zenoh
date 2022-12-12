@@ -1,23 +1,24 @@
+pub use keyed_set_tree::KeyExprTree;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 
-pub type KeyExprTree<Weight> =
-    keyed_set_tree::KeyExprTree<Weight, keyed_set_tree::DefaultChunkMapProvider>;
+use self::keyed_set_tree::KeyExprTreeNode;
+pub trait IKeTreeProvider<Weight>:
+    ChunkMapType<Box<KeyExprTreeNode<Weight, Self>>> + Sized + 'static
+where
+    Self::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Self>>> + 'static,
+{
+}
+impl<Weight, T: ChunkMapType<Box<KeyExprTreeNode<Weight, Self>>> + Sized + 'static>
+    IKeTreeProvider<Weight> for T
+where
+    Self::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Self>>> + 'static,
+{
+}
 pub trait IKeyExprTree<Weight> {
     type Node: IKeyExprTreeNode<Weight>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node>;
     fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node>;
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node;
-    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
-        self.node(at)
-            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
-    }
-    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
-        self.node_mut(at)
-            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight_mut)
-    }
-    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
-        self.node_mut_or_create(at).insert_weight(weight)
-    }
     type TreeIterItem<'a>
     where
         Self: 'a;
@@ -39,7 +40,7 @@ pub trait IKeyExprTree<Weight> {
     where
         Self: 'a,
         Self::Node: 'a;
-    fn intersecting_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Intersection<'a>;
+    fn intersecting_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Intersection<'a>;
     type IntersectionItemMut<'a>
     where
         Self: 'a;
@@ -47,7 +48,7 @@ pub trait IKeyExprTree<Weight> {
     where
         Self: 'a,
         Self::Node: 'a;
-    fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a>;
+    fn intersecting_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut<'a>;
     type InclusionItem<'a>
     where
         Self: 'a;
@@ -55,7 +56,7 @@ pub trait IKeyExprTree<Weight> {
     where
         Self: 'a,
         Self::Node: 'a;
-    fn included_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Inclusion<'a>;
+    fn included_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Inclusion<'a>;
     type InclusionItemMut<'a>
     where
         Self: 'a;
@@ -63,7 +64,50 @@ pub trait IKeyExprTree<Weight> {
     where
         Self: 'a,
         Self::Node: 'a;
-    fn included_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut<'a>;
+    fn included_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a>;
+}
+type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
+pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
+    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
+        self.node(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
+    }
+    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
+        self.node_mut(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight_mut)
+    }
+    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
+        self.node_mut_or_create(at).insert_weight(weight)
+    }
+    fn intersecting_keys<'a>(
+        &'a mut self,
+        key: &'a keyexpr,
+    ) -> Keys<Self::Intersection<'a>, Self::IntersectionItem<'a>>
+    where
+        Self::IntersectionItem<'a>: AsNode<Self::Node>,
+        Self::Node: IKeyExprTreeNode<Weight>,
+    {
+        self.intersecting_nodes(key)
+            .filter_map(filter_map_weighted_node_to_key)
+    }
+    fn included_keys<'a>(
+        &'a mut self,
+        key: &'a keyexpr,
+    ) -> Keys<Self::Inclusion<'a>, Self::InclusionItem<'a>>
+    where
+        Self::InclusionItem<'a>: AsNode<Self::Node>,
+        Self::Node: IKeyExprTreeNode<Weight>,
+    {
+        self.included_nodes(key)
+            .filter_map(filter_map_weighted_node_to_key)
+    }
+}
+impl<Weight, T: IKeyExprTree<Weight>> IKeyExprTreeExt<Weight> for T {}
+fn filter_map_weighted_node_to_key<N: IKeyExprTreeNode<W>, I: AsNode<N>, W>(
+    item: I,
+) -> Option<OwnedKeyExpr> {
+    let node = item.as_node();
+    node.weight().is_some().then(|| node.keyexpr())
 }
 pub trait IKeyExprTreeNode<Weight> {
     type Parent;
