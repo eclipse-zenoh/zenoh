@@ -58,7 +58,7 @@ flume = "0.10.14"
 log = "0.4.17"
 paste = "1.0.9"
 rand = "0.8.5"
-ringbuffer-spsc = "0.1.7"
+ringbuffer-spsc = "0.1.8"
 rsa = { version = "0.7.2", optional = true }
 serde = "1.0.149"
 zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/" }

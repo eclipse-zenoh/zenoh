@@ -2392,9 +2392,9 @@ dependencies = [
 
 [[package]]
 name = "ringbuffer-spsc"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30701acb51131a2457e1259a099d8d2b5bd3c8f8fc82b5228802b5f06bc73cad"
+checksum = "7ae677c20a3502f9d82efa27b24aa0d9ca49ee458c43f0fc7bb0a8db3c6b69b6"
 dependencies = [
  "array-init",
  "cache-padded",
