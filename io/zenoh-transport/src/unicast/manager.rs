@@ -565,19 +565,13 @@ impl TransportManager {
                 peer_id,
             };
 
-            let res = super::establishment::accept::accept_link(&link, &c_manager, &mut auth_link)
-                .timeout(c_manager.config.unicast.accept_timeout)
-                .await;
-            match res {
-                Ok(res) => {
-                    if let Err(e) = res {
-                        log::debug!("{}", e);
-                    }
-                }
-                Err(e) => {
-                    log::debug!("{}", e);
-                    let _ = link.close().await;
-                }
+            if let Err(e) =
+                super::establishment::accept::accept_link(&link, &c_manager, &mut auth_link)
+                    .timeout(c_manager.config.unicast.accept_timeout)
+                    .await
+            {
+                log::debug!("{}", e);
+                let _ = link.close().await;
             }
             let mut guard = zasynclock!(c_manager.state.unicast.incoming);
             *guard -= 1;
