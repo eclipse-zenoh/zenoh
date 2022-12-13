@@ -321,13 +321,13 @@ impl StorageService {
                 return;
             }
         };
-        let mut storage = self.storage.lock().await;
         // resolve key expr into individual keys
         let matching_keys = if q.key_expr().is_wild() {
             self.get_matching_keys(q.key_expr()).await
         } else {
             vec![OwnedKeyExpr::new(q.key_expr().as_str()).unwrap()]
         };
+        let mut storage = self.storage.lock().await;
         for key in matching_keys {
             match storage.get(key, q.parameters()).await {
                 Ok(sample) => {
@@ -345,7 +345,7 @@ impl StorageService {
                     }
                 }
                 Err(e) => warn!(
-                    "Storage {} raised an error receiving a query: {}",
+                    "Storage {} raised an error on query: {}",
                     self.name, e
                 ),
             };
