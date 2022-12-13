@@ -417,6 +417,12 @@ impl MessageWriter for WBuf {
         if let Some(ts) = info.timestamp.as_ref() {
             zcheck!(self.write_timestamp(ts));
         }
+        if let Some(zid) = info.source_id.as_ref() {
+            zcheck!(self.write_zid(zid));
+        }
+        if let Some(sn) = info.source_sn {
+            zcheck!(self.write_zint(sn));
+        }
         true
     }
 
@@ -518,7 +524,29 @@ impl MessageWriter for WBuf {
         if let Some(t) = query.target.as_ref() {
             zcheck!(self.write_query_target(t));
         }
-        self.write_consolidation(query.consolidation)
+        zcheck!(self.write_consolidation(query.consolidation));
+        if let Some(b) = query.body.as_ref() {
+            #[allow(unused_assignments)]
+            #[cfg(feature = "shared-memory")]
+            let mut sliced = false;
+
+            zcheck!(self.write_data_info(&b.data_info));
+            #[cfg(feature = "shared-memory")]
+            {
+                sliced = b.data_info.sliced
+            }
+
+            #[cfg(feature = "shared-memory")]
+            {
+                self.write_zbuf(&b.payload, sliced)
+            }
+            #[cfg(not(feature = "shared-memory"))]
+            {
+                self.write_zbuf(&b.payload)
+            }
+        } else {
+            true
+        }
     }
 
     fn write_link_state_list(&mut self, link_state_list: &LinkStateList) -> bool {

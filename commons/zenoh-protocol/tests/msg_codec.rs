@@ -22,7 +22,7 @@ use zenoh_protocol::io::{WBufCodec, ZBufCodec};
 use zenoh_protocol::proto::defaults::SEQ_NUM_RES;
 use zenoh_protocol::proto::{
     Attachment, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-    ForgetSubscriber, FramePayload, MessageReader, MessageWriter, Publisher, Queryable,
+    ForgetSubscriber, FramePayload, MessageReader, MessageWriter, Publisher, QueryBody, Queryable,
     ReplierInfo, ReplyContext, Resource, RoutingContext, Subscriber, TransportMessage,
     ZenohMessage,
 };
@@ -206,6 +206,8 @@ fn gen_data_info() -> DataInfo {
         timestamp: option_gen!(gen_timestamp()),
         #[cfg(feature = "shared-memory")]
         sliced: false,
+        source_id: option_gen!(gen_zid()),
+        source_sn: option_gen!(gen!(ZInt)),
     }
 }
 
@@ -819,21 +821,31 @@ fn codec_query() {
         let target = [None, Some(gen_query_target())];
         let routing_context = [None, Some(gen_routing_context())];
         let attachment = [None, Some(gen_attachment())];
+        let body = [
+            None,
+            Some(QueryBody {
+                data_info: gen_data_info(),
+                payload: ZBuf::from(gen_buffer(MAX_PAYLOAD_SIZE)),
+            }),
+        ];
 
         for p in parameters.iter() {
             for t in target.iter() {
                 for roc in routing_context.iter() {
                     for a in attachment.iter() {
-                        let msg = ZenohMessage::make_query(
-                            gen_key(),
-                            p.clone(),
-                            gen!(ZInt),
-                            *t,
-                            gen_consolidation_mode(),
-                            *roc,
-                            a.clone(),
-                        );
-                        test_write_read_zenoh_message(msg);
+                        for b in body.iter() {
+                            let msg = ZenohMessage::make_query(
+                                gen_key(),
+                                p.clone(),
+                                gen!(ZInt),
+                                *t,
+                                gen_consolidation_mode(),
+                                b.clone(),
+                                *roc,
+                                a.clone(),
+                            );
+                            test_write_read_zenoh_message(msg);
+                        }
                     }
                 }
             }

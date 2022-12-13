@@ -20,8 +20,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
-use zenoh_cfg_properties::config::*;
-use zenoh_config::{EndPoint, ModeDependent};
+use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
@@ -49,7 +48,7 @@ pub enum Loop {
 }
 
 impl Runtime {
-    pub async fn start(&mut self) -> ZResult<()> {
+    pub(crate) async fn start(&mut self) -> ZResult<()> {
         match self.whatami {
             WhatAmI::Client => self.start_client().await,
             WhatAmI::Peer => self.start_peer().await,
@@ -62,21 +61,10 @@ impl Runtime {
             let guard = self.config.lock();
             (
                 guard.connect().endpoints().clone(),
-                guard.scouting().multicast().enabled().unwrap_or(true),
-                guard
-                    .scouting()
-                    .multicast()
-                    .address()
-                    .unwrap_or_else(|| "224.0.0.224:7446".parse().unwrap()),
-                guard
-                    .scouting()
-                    .multicast()
-                    .interface()
-                    .as_ref()
-                    .map(AsRef::as_ref)
-                    .unwrap_or("auto")
-                    .to_owned(),
-                std::time::Duration::from_millis(guard.scouting().timeout().unwrap_or(3000)),
+                unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.scouting().multicast().address()),
+                unwrap_or_default!(guard.scouting().multicast().interface()),
+                std::time::Duration::from_millis(unwrap_or_default!(guard.scouting().timeout())),
             )
         };
         match peers.len() {
@@ -130,39 +118,15 @@ impl Runtime {
             } else {
                 guard.listen().endpoints().clone()
             };
-            let peers = guard.connect().endpoints().clone();
             (
                 listeners,
-                peers,
-                guard.scouting().multicast().enabled().unwrap_or(true),
-                guard
-                    .scouting()
-                    .multicast()
-                    .listen()
-                    .peer()
-                    .cloned()
-                    .unwrap_or(true),
-                guard
-                    .scouting()
-                    .multicast()
-                    .autoconnect()
-                    .peer()
-                    .cloned()
-                    .unwrap_or_else(|| WhatAmIMatcher::try_from(131).unwrap()),
-                guard
-                    .scouting()
-                    .multicast()
-                    .address()
-                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
-                guard
-                    .scouting()
-                    .multicast()
-                    .interface()
-                    .as_ref()
-                    .map(AsRef::as_ref)
-                    .unwrap_or_else(|| ZN_MULTICAST_INTERFACE_DEFAULT)
-                    .to_string(),
-                Duration::from_millis(guard.scouting().delay().unwrap_or(200)),
+                guard.connect().endpoints().clone(),
+                unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
+                *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
+                unwrap_or_default!(guard.scouting().multicast().address()),
+                unwrap_or_default!(guard.scouting().multicast().interface()),
+                Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
             )
         };
 
@@ -188,38 +152,14 @@ impl Runtime {
             } else {
                 guard.listen().endpoints().clone()
             };
-            let peers = guard.connect().endpoints().clone();
             (
                 listeners,
-                peers,
-                guard.scouting().multicast().enabled().unwrap_or(true),
-                guard
-                    .scouting()
-                    .multicast()
-                    .listen()
-                    .peer()
-                    .cloned()
-                    .unwrap_or(true),
-                guard
-                    .scouting()
-                    .multicast()
-                    .autoconnect()
-                    .peer()
-                    .cloned()
-                    .unwrap_or_else(|| WhatAmIMatcher::try_from(128).unwrap()),
-                guard
-                    .scouting()
-                    .multicast()
-                    .address()
-                    .unwrap_or_else(|| ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse().unwrap()),
-                guard
-                    .scouting()
-                    .multicast()
-                    .interface()
-                    .as_ref()
-                    .map(AsRef::as_ref)
-                    .unwrap_or(ZN_MULTICAST_INTERFACE_DEFAULT)
-                    .to_string(),
+                guard.connect().endpoints().clone(),
+                unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().router()),
+                *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
+                unwrap_or_default!(guard.scouting().multicast().address()),
+                unwrap_or_default!(guard.scouting().multicast().interface()),
             )
         };
 

@@ -567,6 +567,7 @@ impl MessageReader for ZBufReader<'_> {
     #[inline(always)]
     fn read_data_info(&mut self) -> Option<DataInfo> {
         let mut info = DataInfo::new();
+
         let options = self.read_zint()?;
         #[cfg(feature = "shared-memory")]
         {
@@ -589,13 +590,13 @@ impl MessageReader for ZBufReader<'_> {
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             info.timestamp = Some(self.read_timestamp()?);
         }
-        const RESERVED_FIELDS: u64 = zmsg::data::info::SRCID
-            | zmsg::data::info::SRCSN
-            | zmsg::data::info::RTRID
-            | zmsg::data::info::RTRSN;
-        if options & RESERVED_FIELDS != 0 {
-            log::error!("A message with set reserved bits has been received. This is likely to be because your network has different versions of zenoh linked together.")
+        if imsg::has_option(options, zmsg::data::info::SRCID) {
+            info.source_id = Some(self.read_zid()?);
         }
+        if imsg::has_option(options, zmsg::data::info::SRCSN) {
+            info.source_sn = Some(self.read_zint()?);
+        }
+
         Some(info)
     }
 
@@ -724,12 +725,31 @@ impl MessageReader for ZBufReader<'_> {
         };
         let consolidation = self.read_consolidation()?;
 
+        let body = if imsg::has_flag(header, zmsg::flag::I) {
+            #[allow(unused_assignments)]
+            #[cfg(feature = "shared-memory")]
+            let mut sliced = false;
+            let data_info = self.read_data_info()?;
+            #[cfg(feature = "shared-memory")]
+            {
+                sliced = data_info.sliced;
+            }
+            #[cfg(feature = "shared-memory")]
+            let payload = self.read_zbuf(sliced)?;
+            #[cfg(not(feature = "shared-memory"))]
+            let payload = self.read_zbuf()?;
+            Some(QueryBody { data_info, payload })
+        } else {
+            None
+        };
+
         Some(ZenohBody::Query(Query {
             key,
             parameters,
             qid,
             target,
             consolidation,
+            body,
         }))
     }
 

@@ -26,6 +26,7 @@ pub mod unicast;
 pub use manager::*;
 pub use multicast::*;
 pub use primitives::*;
+use serde::Serialize;
 use std::any::Any;
 use std::sync::Arc;
 pub use unicast::*;
@@ -99,12 +100,14 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 /*             CALLBACK              */
 /*************************************/
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
+#[serde(rename = "Transport")]
 pub struct TransportPeer {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
     pub is_shm: bool,
+    #[serde(skip)]
     pub links: Vec<Link>,
 }
 

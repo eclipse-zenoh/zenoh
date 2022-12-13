@@ -23,7 +23,7 @@ use zenoh_collections::Timed;
 use zenoh_sync::get_mut_unchecked;
 
 use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
+use zenoh_protocol::proto::{DataInfo, QueryBody, RoutingContext};
 use zenoh_protocol_core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol_core::{
     ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
@@ -54,7 +54,7 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 #[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = u64::from(this.complete != 0 || info.complete != 0);
+    this.complete = ZInt::from(this.complete != 0 || info.complete != 0);
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
@@ -1521,6 +1521,7 @@ pub fn route_query(
     qid: ZInt,
     target: QueryTarget,
     consolidation: ConsolidationMode,
+    body: Option<QueryBody>,
     routing_context: Option<RoutingContext>,
 ) {
     let tables = zwrite!(tables_ref);
@@ -1692,6 +1693,7 @@ pub fn route_query(
                             *qid,
                             *t,
                             consolidation,
+                            body.clone(),
                             *context,
                         );
                     }
@@ -1715,6 +1717,7 @@ pub fn route_query(
                             *qid,
                             target,
                             consolidation,
+                            body.clone(),
                             *context,
                         );
                     }
