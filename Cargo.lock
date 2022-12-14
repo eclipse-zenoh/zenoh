@@ -3867,7 +3867,6 @@ dependencies = [
  "zenoh",
  "zenoh-collections",
  "zenoh-core",
- "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]

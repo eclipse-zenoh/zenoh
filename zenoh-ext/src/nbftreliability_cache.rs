@@ -17,6 +17,7 @@ use {
     async_std::task,
     futures::select,
     futures::{FutureExt, StreamExt},
+    std::borrow::Borrow,
     std::collections::{HashMap, VecDeque},
     std::convert::TryInto,
     std::future::Ready,
@@ -242,7 +243,7 @@ impl<'a> NBFTReliabilityCache<'a> {
                                 }
                             } else {
                                 for (key_expr, queue) in cache.iter() {
-                                    if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
+                                    if query.selector().key_expr.intersects(key_expr.borrow()) {
                                         for sample in queue {
                                             if sample_in_range(sample, start, end) {
                                                 if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
