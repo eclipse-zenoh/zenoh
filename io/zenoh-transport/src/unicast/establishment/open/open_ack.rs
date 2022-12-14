@@ -53,26 +53,25 @@ pub(super) async fn recv(
     let open_ack = match msg.body {
         TransportBody::OpenAck(open_ack) => open_ack,
         TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                    tmsg::close_reason_to_str(reason),
-                    link,
-                )
-                .into(),
-                None,
-            ));
+            let e = zerror!(
+                "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
+                tmsg::close_reason_to_str(reason),
+                link,
+            );
+            match reason {
+                tmsg::close_reason::MAX_LINKS => log::debug!("{}", e),
+                _ => log::error!("{}", e),
+            }
+            return Err((e.into(), None));
         }
         _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an OpenSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
+            let e = zerror!(
+                "Received an invalid message in response to an OpenSyn on {}: {:?}",
+                link,
+                msg.body
+            );
+            log::error!("{}", e);
+            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
         }
     };
 

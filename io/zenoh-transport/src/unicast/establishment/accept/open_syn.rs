@@ -65,6 +65,10 @@ pub(super) async fn recv(
                 tmsg::close_reason_to_str(reason),
                 link,
             );
+            match reason {
+                tmsg::close_reason::MAX_LINKS => log::debug!("{}", e),
+                _ => log::error!("{}", e),
+            }
             return Err((e.into(), None));
         }
         _ => {
@@ -73,6 +77,7 @@ pub(super) async fn recv(
                 link,
                 msg.body
             );
+            log::error!("{}", e);
             return Err((e.into(), Some(tmsg::close_reason::INVALID)));
         }
     };

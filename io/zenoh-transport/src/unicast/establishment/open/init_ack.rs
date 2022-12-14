@@ -65,26 +65,25 @@ pub(super) async fn recv(
     let init_ack = match msg.body {
         TransportBody::InitAck(init_ack) => init_ack,
         TransportBody::Close(Close { reason, .. }) => {
-            return Err((
-                zerror!(
-                    "Received a close message (reason {}) in response to an InitSyn on: {}",
-                    tmsg::close_reason_to_str(reason),
-                    link,
-                )
-                .into(),
-                None,
-            ));
+            let e = zerror!(
+                "Received a close message (reason {}) in response to an InitSyn on: {}",
+                tmsg::close_reason_to_str(reason),
+                link,
+            );
+            match reason {
+                tmsg::close_reason::MAX_LINKS => log::debug!("{}", e),
+                _ => log::error!("{}", e),
+            }
+            return Err((e.into(), None));
         }
         _ => {
-            return Err((
-                zerror!(
-                    "Received an invalid message in response to an InitSyn on {}: {:?}",
-                    link,
-                    msg.body
-                )
-                .into(),
-                Some(tmsg::close_reason::INVALID),
-            ));
+            let e = zerror!(
+                "Received an invalid message in response to an InitSyn on {}: {:?}",
+                link,
+                msg.body
+            );
+            log::error!("{}", e);
+            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
         }
     };
 

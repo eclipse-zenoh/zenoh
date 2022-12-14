@@ -39,6 +39,7 @@ pub(crate) async fn accept_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
+                    log::error!("{}", e);
                     close_link(link, manager, auth_link, reason).await;
                     return Err(e);
                 }
@@ -51,18 +52,6 @@ pub(crate) async fn accept_link(
     let output = step!(open_syn::recv(link, manager, auth_link, output).await);
 
     // Initialize the transport
-    macro_rules! step {
-        ($s: expr) => {
-            match $s {
-                Ok(output) => output,
-                Err(e) => {
-                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
-                    return Err(e);
-                }
-            }
-        };
-    }
-
     let zid = output.cookie.zid;
     let input = super::InputInit {
         zid: output.cookie.zid,
@@ -71,7 +60,9 @@ pub(crate) async fn accept_link(
         is_shm: output.is_shm,
         is_qos: output.cookie.is_qos,
     };
-    let transport = step!(transport_init(manager, input).await);
+    let transport = step!(transport_init(manager, input)
+        .await
+        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))));
 
     // OPEN handshake
     macro_rules! step {
@@ -79,6 +70,10 @@ pub(crate) async fn accept_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
+                    match reason {
+                        Some(tmsg::close_reason::MAX_LINKS) => log::debug!("{}", e),
+                        _ => log::error!("{}", e),
+                    }
                     if let Ok(ll) = transport.get_links() {
                         if ll.is_empty() {
                             let _ = manager.del_transport_unicast(&zid).await;
