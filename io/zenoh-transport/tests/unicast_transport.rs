@@ -724,6 +724,11 @@ fn transport_unicast_tcp_unix() {
     let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
+#[cfg(all(
+    feature = "transport_udp",
+    feature = "transport_unixsock-stream",
+    target_family = "unix"
+))]
 #[test]
 fn transport_unicast_udp_unix() {
     let _ = env_logger::try_init();
