@@ -359,7 +359,7 @@ impl Timed for PeriodicQuery {
         let (states, _wait) = &mut *lock;
         if let Some(state) = states.get_mut(&self.source_id) {
             state.pending_queries += 1;
-            let key_expr = (&self.source_id.into_keyexpr()) / &self.key_expr;
+            let query_expr = (&self.source_id.into_keyexpr()) / &self.key_expr;
             let seq_num_range = seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
             drop(lock);
             let handler = RepliesHandler {
@@ -369,12 +369,15 @@ impl Timed for PeriodicQuery {
             };
             let _ = self
                 .session
-                .get(Selector::from(key_expr).with_parameters(&seq_num_range))
+                .get(Selector::from(query_expr).with_parameters(&seq_num_range))
                 .callback({
+                    let key_expr = self.key_expr.clone().into_owned();
                     move |r: Reply| {
                         if let Ok(s) = r.sample {
-                            let (ref mut states, wait) = &mut *zlock!(handler.statesref);
-                            handle_sample(states, *wait, s, &handler.callback);
+                            if key_expr.intersects(&s.key_expr) {
+                                let (ref mut states, wait) = &mut *zlock!(handler.statesref);
+                                handle_sample(states, *wait, s, &handler.callback);
+                            }
                         }
                     }
                 })
@@ -441,7 +444,7 @@ impl<'a, Receiver> NBFTReliableSubscriber<'a, Receiver> {
                     if let Some(state) = states.get_mut(&source_id) {
                         if state.pending_queries == 0 && !state.pending_samples.is_empty() {
                             state.pending_queries += 1;
-                            let key_expr = (&source_id.into_keyexpr()) / &key_expr;
+                            let query_expr = (&source_id.into_keyexpr()) / &key_expr;
                             let seq_num_range =
                                 seq_num_range(Some(state.last_seq_num.unwrap() + 1), None);
                             drop(lock);
@@ -451,13 +454,16 @@ impl<'a, Receiver> NBFTReliableSubscriber<'a, Receiver> {
                                 callback: callback.clone(),
                             };
                             let _ = session
-                                .get(Selector::from(key_expr).with_parameters(&seq_num_range))
+                                .get(Selector::from(query_expr).with_parameters(&seq_num_range))
                                 .callback({
+                                    let key_expr = key_expr.clone().into_owned();
                                     move |r: Reply| {
                                         if let Ok(s) = r.sample {
-                                            let (ref mut states, wait) =
-                                                &mut *zlock!(handler.statesref);
-                                            handle_sample(states, *wait, s, &handler.callback);
+                                            if key_expr.intersects(&s.key_expr) {
+                                                let (ref mut states, wait) =
+                                                    &mut *zlock!(handler.statesref);
+                                                handle_sample(states, *wait, s, &handler.callback);
+                                            }
                                         }
                                     }
                                 })
@@ -493,10 +499,13 @@ impl<'a, Receiver> NBFTReliableSubscriber<'a, Receiver> {
                         .with_parameters("0.."),
                 )
                 .callback({
+                    let key_expr = key_expr.clone().into_owned();
                     move |r: Reply| {
                         if let Ok(s) = r.sample {
-                            let (ref mut states, wait) = &mut *zlock!(handler.statesref);
-                            handle_sample(states, *wait, s, &handler.callback);
+                            if key_expr.intersects(&s.key_expr) {
+                                let (ref mut states, wait) = &mut *zlock!(handler.statesref);
+                                handle_sample(states, *wait, s, &handler.callback);
+                            }
                         }
                     }
                 })
