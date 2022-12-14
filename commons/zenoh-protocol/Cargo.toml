@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-protocol"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -34,12 +34,14 @@ shared-memory = ["zenoh-buffers/shared-memory"]
 complete_n = []
 
 [dependencies]
-hex = "0.4.3"
-lazy_static = "1.4.0"
 log = "0.4.17"
+hex = "0.4.3"
 rand = "0.8.5"
 serde = "1.0.147"
 uhlc = "0.5.1"
 uuid = "1.2.1"
-zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+
+[dev-dependencies]
+lazy_static = "1.4.0"

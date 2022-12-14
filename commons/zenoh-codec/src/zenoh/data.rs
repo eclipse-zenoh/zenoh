@@ -109,6 +109,12 @@ where
         if x.timestamp.is_some() {
             options |= zmsg::data::info::TIMESTAMP;
         }
+        if x.source_id.is_some() {
+            options |= zmsg::data::info::SRCID;
+        }
+        if x.source_sn.is_some() {
+            options |= zmsg::data::info::SRCSN;
+        }
         self.write(&mut *writer, options)?;
 
         if x.kind != SampleKind::Put {
@@ -119,6 +125,12 @@ where
         }
         if let Some(ts) = x.timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
+        }
+        if let Some(si) = x.source_id.as_ref() {
+            self.write(&mut *writer, si)?;
+        }
+        if let Some(sn) = x.source_sn {
+            self.write(&mut *writer, sn)?;
         }
 
         Ok(())
@@ -149,6 +161,14 @@ where
         if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
             let timestamp: Timestamp = self.read(&mut *reader)?;
             info.timestamp = Some(timestamp);
+        }
+        if imsg::has_option(options, zmsg::data::info::SRCID) {
+            let source_id: ZenohId = self.read(&mut *reader)?;
+            info.source_id = Some(source_id);
+        }
+        if imsg::has_option(options, zmsg::data::info::SRCSN) {
+            let source_sn: ZInt = self.read(&mut *reader)?;
+            info.source_sn = Some(source_sn);
         }
 
         Ok(info)

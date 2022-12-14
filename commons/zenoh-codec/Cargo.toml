@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-codec"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -35,10 +35,9 @@ complete_n = ["zenoh-protocol/complete_n"]
 [dependencies]
 rand = "0.8.5"
 uhlc = "0.5.1"
-zenoh-buffers = { version = "0.6.0-beta.1", path = "../zenoh-buffers/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
-zenoh-protocol = { version = "0.6.0-beta.1", path = "../zenoh-protocol/" }
-
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
 
 [dev-dependencies]
 criterion = "0.4.0"

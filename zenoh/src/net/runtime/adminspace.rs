@@ -31,7 +31,7 @@ use zenoh_protocol::{
         Channel, CongestionControl, ConsolidationMode, Encoding, KnownEncoding, QueryTarget,
         QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -366,6 +366,7 @@ impl Primitives for AdminSpace {
         qid: ZInt,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
         trace!(

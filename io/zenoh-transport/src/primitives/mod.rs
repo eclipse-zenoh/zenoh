@@ -22,7 +22,7 @@ use zenoh_protocol::{
         Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
         WireExpr, ZInt, ZenohId,
     },
-    zenoh::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 
 pub trait Primitives: Send + Sync {
@@ -58,6 +58,7 @@ pub trait Primitives: Send + Sync {
         routing_context: Option<RoutingContext>,
     );
 
+    #[allow(clippy::too_many_arguments)]
     fn send_query(
         &self,
         key_expr: &WireExpr,
@@ -65,6 +66,7 @@ pub trait Primitives: Send + Sync {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     );
 
@@ -141,6 +143,7 @@ impl Primitives for DummyPrimitives {
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
     }

@@ -95,6 +95,7 @@ pub use zenoh_core::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
+mod admin;
 #[macro_use]
 mod session;
 pub use session::*;

@@ -111,10 +111,6 @@ impl ReplyContext {
 /// +---------------+
 /// ~   source_sn   ~ if options & (1 << 8)
 /// +---------------+
-/// ~first_router_id~ if options & (1 << 9)
-/// +---------------+
-/// ~first_router_sn~ if options & (1 << 10)
-/// +---------------+
 ///
 /// - if options & (1 << 5) then the payload is sliced
 ///
@@ -126,6 +122,8 @@ pub struct DataInfo {
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
+    pub source_id: Option<ZenohId>,
+    pub source_sn: Option<ZInt>,
 }
 
 // Functions mainly used for testing
@@ -139,18 +137,14 @@ impl DataInfo {
         #[cfg(feature = "shared-memory")]
         let sliced = rng.gen_bool(0.5);
         let kind = SampleKind::try_from(rng.gen_range(0..1)).unwrap();
-        let encoding = if rng.gen_bool(0.5) {
-            Some(Encoding::rand())
-        } else {
-            None
-        };
-        let timestamp = if rng.gen_bool(0.5) {
+        let encoding = rng.gen_bool(0.5).then(Encoding::rand);
+        let timestamp = rng.gen_bool(0.5).then(|| {
             let time = uhlc::NTP64(rng.gen());
             let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
-            Some(Timestamp::new(time, id))
-        } else {
-            None
-        };
+            Timestamp::new(time, id)
+        });
+        let source_id = rng.gen_bool(0.5).then(ZenohId::rand);
+        let source_sn = rng.gen_bool(0.5).then(|| rng.gen());
 
         Self {
             #[cfg(feature = "shared-memory")]
@@ -158,6 +152,8 @@ impl DataInfo {
             kind,
             encoding,
             timestamp,
+            source_id,
+            source_sn,
         }
     }
 }

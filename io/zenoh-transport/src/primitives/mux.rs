@@ -1,5 +1,3 @@
-use zenoh_protocol::core::ConsolidationMode;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -18,11 +16,12 @@ use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
-        Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
+        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
+        WireExpr, ZInt, ZenohId,
     },
     zenoh::{
         zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-        ForgetSubscriber, Publisher, Queryable, ReplierInfo, ReplyContext, Resource,
+        ForgetSubscriber, Publisher, QueryBody, Queryable, ReplierInfo, ReplyContext, Resource,
         RoutingContext, Subscriber, ZenohMessage,
     },
 };
@@ -157,6 +156,7 @@ impl Primitives for Mux {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     ) {
         let target_opt = if target == QueryTarget::default() {
@@ -170,6 +170,7 @@ impl Primitives for Mux {
             qid,
             target_opt,
             consolidation,
+            body,
             routing_context,
             None,
         ));

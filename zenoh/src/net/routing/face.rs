@@ -22,7 +22,7 @@ use zenoh_protocol::{
         Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
         WhatAmI, WireExpr, ZInt, ZenohId,
     },
-    zenoh::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::Primitives;
 
@@ -361,6 +361,7 @@ impl Primitives for Face {
         qid: ZInt,
         target: QueryTarget,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
     ) {
         route_query(
@@ -371,6 +372,7 @@ impl Primitives for Face {
             qid,
             target,
             consolidation,
+            body,
             routing_context,
         );
     }

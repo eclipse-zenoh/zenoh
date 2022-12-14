@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-crypto"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -29,9 +29,9 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aes = "0.8.1"
+aes = "0.8.2"
 hmac = { version = "0.12.1", features = ["std"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
-sha3 = "0.10.5"
-zenoh-core = { version = "0.6.0-beta.1", path = "../zenoh-core/" }
+sha3 = "0.10.6"
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }

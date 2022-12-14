@@ -15,11 +15,12 @@ use crate::*;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
+    ZBuf,
 };
 use zenoh_protocol::{
     common::imsg,
     core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
-    zenoh::{zmsg, Query},
+    zenoh::{zmsg, DataInfo, Query, QueryBody},
 };
 
 // QueryTarget
@@ -104,6 +105,33 @@ where
     }
 }
 
+// QueryBody
+impl<W> WCodec<&QueryBody, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &QueryBody) -> Self::Output {
+        self.write(&mut *writer, &x.data_info)?;
+        self.write(&mut *writer, &x.payload)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<QueryBody, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<QueryBody, Self::Error> {
+        let data_info: DataInfo = self.read(&mut *reader)?;
+        let payload: ZBuf = self.read(&mut *reader)?;
+        Ok(QueryBody { data_info, payload })
+    }
+}
+
 // Query
 impl<W> WCodec<&Query, &mut W> for Zenoh060
 where
@@ -116,6 +144,9 @@ where
         let mut header = zmsg::id::QUERY;
         if x.target.is_some() {
             header |= zmsg::flag::T;
+        }
+        if x.body.is_some() {
+            header |= zmsg::flag::B;
         }
         if x.key.has_suffix() {
             header |= zmsg::flag::K;
@@ -130,6 +161,9 @@ where
             self.write(&mut *writer, t)?;
         }
         self.write(&mut *writer, &x.consolidation)?;
+        if let Some(b) = x.body.as_ref() {
+            self.write(&mut *writer, b)?;
+        }
 
         Ok(())
     }
@@ -176,6 +210,12 @@ where
             None
         };
         let consolidation: ConsolidationMode = self.codec.read(&mut *reader)?;
+        let body = if imsg::has_flag(self.header, zmsg::flag::B) {
+            let qb: QueryBody = self.codec.read(&mut *reader)?;
+            Some(qb)
+        } else {
+            None
+        };
 
         Ok(Query {
             key,
@@ -183,6 +223,7 @@ where
             qid,
             target,
             consolidation,
+            body,
         })
     }
 }

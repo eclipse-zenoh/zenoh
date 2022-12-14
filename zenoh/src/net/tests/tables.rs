@@ -25,7 +25,7 @@ use zenoh_protocol::{
         QueryableInfo, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
         EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
@@ -464,6 +464,7 @@ impl Primitives for ClientPrimitives {
         _qid: ZInt,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
+        _body: Option<QueryBody>,
         _routing_context: Option<RoutingContext>,
     ) {
     }

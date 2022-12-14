@@ -33,6 +33,7 @@ members = [
   "io/zenoh-links/zenoh-link-tls/",
   "io/zenoh-links/zenoh-link-udp/",
   "io/zenoh-links/zenoh-link-unixsock_stream/",
+  "io/zenoh-links/zenoh-link-serial",
   "io/zenoh-links/zenoh-link-ws/",
   "io/zenoh-transport",
   "plugins/example-plugin",

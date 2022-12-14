@@ -43,14 +43,12 @@ pub struct VolumeConfig {
 pub struct StorageConfig {
     pub name: String,
     pub key_expr: OwnedKeyExpr,
+    pub complete: bool,
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replica_config: Option<ReplicaConfig>,
-    // #[as_ref]
-    // #[as_mut]
-    // pub rest: Map<String, Value>,
 }
 // Note: All parameters should be same for replicas, else will result on huge overhead
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,6 +321,18 @@ impl StorageConfig {
             plugin_name,)
             }
         };
+        let complete = match config.get("complete").and_then(|x| x.as_str()) {
+            Some(s) => {
+                match s {
+                    "true" => true,
+                    "false" => false,
+                    e => {
+                        bail!("complete='{}' is not a valid value. Accepted values: ['true', 'false']", e)
+                    }
+                }
+            }
+            None => false,
+        };
         let strip_prefix: Option<OwnedKeyExpr> = match config.get("strip_prefix") {
             Some(Value::String(s)) => {
                 if !key_expr.starts_with(s) {
@@ -408,6 +418,7 @@ impl StorageConfig {
         Ok(StorageConfig {
             name: storage_name.into(),
             key_expr,
+            complete,
             strip_prefix,
             volume_id,
             volume_cfg,

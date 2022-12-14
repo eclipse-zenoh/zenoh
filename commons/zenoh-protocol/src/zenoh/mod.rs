@@ -62,6 +62,7 @@ pub mod zmsg {
 
     // Zenoh message flags
     pub mod flag {
+        pub const B: u8 = 1 << 6; // 0x40 QueryBody     if B==1 then QueryBody is present
         pub const D: u8 = 1 << 5; // 0x20 Drop          if D==1 then the message can be dropped
         pub const F: u8 = 1 << 5; // 0x20 Final         if F==1 then this is the final message (e.g., ReplyContext, Pull)
         pub const I: u8 = 1 << 6; // 0x40 DataInfo      if I==1 then DataInfo is present
@@ -93,8 +94,6 @@ pub mod zmsg {
                                                 // 0x40: Reserved
             pub const SRCID: ZInt = 1 << 7; // 0x80
             pub const SRCSN: ZInt = 1 << 8; // 0x100
-            pub const RTRID: ZInt = 1 << 9; // 0x200
-            pub const RTRSN: ZInt = 1 << 10; // 0x400
         }
     }
 
@@ -298,6 +297,7 @@ impl ZenohMessage {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[inline(always)]
     pub fn make_query(
         key: WireExpr<'static>,
@@ -305,6 +305,7 @@ impl ZenohMessage {
         qid: ZInt,
         target: Option<QueryTarget>,
         consolidation: ConsolidationMode,
+        body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
         attachment: Option<Attachment>,
     ) -> ZenohMessage {
@@ -315,6 +316,7 @@ impl ZenohMessage {
                 qid,
                 target,
                 consolidation,
+                body,
             }),
             channel: zmsg::default_channel::QUERY,
             routing_context,

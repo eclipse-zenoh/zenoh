@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_trait::async_trait;
+use serde::Serialize;
 use std::{
     borrow::Cow,
     cmp::PartialEq,
@@ -42,7 +43,7 @@ use zenoh_protocol::{
 /*************************************/
 /*            GENERAL                */
 /*************************************/
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
     pub src: Locator,
     pub dst: Locator,

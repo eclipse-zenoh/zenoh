@@ -15,7 +15,7 @@ use async_std::sync::Arc;
 use log::trace;
 use zenoh::prelude::r#async::*;
 use zenoh::Session;
-use zenoh_backend_traits::config::ReplicaConfig;
+use zenoh_backend_traits::config::StorageConfig;
 use zenoh_core::Result as ZResult;
 
 pub use super::replica::{Replica, StorageService};
@@ -33,9 +33,8 @@ pub struct StoreIntercept {
 
 pub(crate) async fn start_storage(
     storage: Box<dyn zenoh_backend_traits::Storage>,
-    config: Option<ReplicaConfig>,
+    config: StorageConfig,
     admin_key: String,
-    key_expr: OwnedKeyExpr,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
@@ -46,7 +45,7 @@ pub(crate) async fn start_storage(
     let storage_name = parts[7];
     let name = format!("{}/{}", uuid, storage_name);
 
-    trace!("Start storage {} on {}", name, key_expr);
+    trace!("Start storage {} on {}", name, config.key_expr);
 
     let (tx, rx) = flume::bounded(1);
 
@@ -59,18 +58,31 @@ pub(crate) async fn start_storage(
 
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
-        if config.is_some() {
-            Replica::start(
-                config.unwrap(),
-                zenoh.clone(),
-                store_intercept,
-                key_expr,
-                &name,
-                rx,
-            )
-            .await;
-        } else {
-            StorageService::start(zenoh.clone(), key_expr, &name, store_intercept, rx, None).await;
+        match config.replica_config {
+            Some(replica_config) => {
+                Replica::start(
+                    replica_config,
+                    zenoh.clone(),
+                    store_intercept,
+                    config.key_expr,
+                    config.complete,
+                    &name,
+                    rx,
+                )
+                .await
+            }
+            None => {
+                StorageService::start(
+                    zenoh.clone(),
+                    config.key_expr,
+                    config.complete,
+                    &name,
+                    store_intercept,
+                    rx,
+                    None,
+                )
+                .await
+            }
         }
     });
 

@@ -1100,6 +1100,14 @@ pub trait ModeDependent<T> {
     fn router(&self) -> Option<&T>;
     fn peer(&self) -> Option<&T>;
     fn client(&self) -> Option<&T>;
+    #[inline]
+    fn get(&self, whatami: WhatAmI) -> Option<&T> {
+        match whatami {
+            WhatAmI::Router => self.router(),
+            WhatAmI::Peer => self.peer(),
+            WhatAmI::Client => self.client(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1113,14 +1121,17 @@ pub struct ModeValues<T> {
 }
 
 impl<T> ModeDependent<T> for ModeValues<T> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         self.router.as_ref()
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         self.peer.as_ref()
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         self.client.as_ref()
     }
@@ -1133,6 +1144,7 @@ pub enum ModeDependentValue<T> {
 }
 
 impl<T> ModeDependent<T> for ModeDependentValue<T> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1140,6 +1152,7 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
         }
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1147,6 +1160,7 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
         }
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         match self {
             Self::Unique(v) => Some(v),
@@ -1238,6 +1252,7 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
 }
 
 impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
+    #[inline]
     fn router(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1246,6 +1261,7 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
         }
     }
 
+    #[inline]
     fn peer(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1254,6 +1270,7 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
         }
     }
 
+    #[inline]
     fn client(&self) -> Option<&T> {
         match self {
             Some(ModeDependentValue::Unique(v)) => Some(v),
@@ -1261,4 +1278,11 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
             None => None,
         }
     }
+}
+
+#[macro_export]
+macro_rules! unwrap_or_default {
+    ($val:ident$(.$field:ident($($param:ident)?))*) => {
+        $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
+    };
 }

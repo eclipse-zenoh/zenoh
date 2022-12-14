@@ -14,7 +14,7 @@
 [package]
 rust-version = "1.62.1"
 name = "zenoh-link-udp"
-version = "0.6.0-beta.1"
+version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
@@ -32,14 +32,12 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 async-std = { version = "=1.12.0", default-features = false }
-crossbeam = "0.8.2"
-async-trait = "0.1.57"
+async-trait = "0.1.59"
 log = "0.4.17"
 socket2 = "0.4.7"
-zenoh-collections = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-collections/" }
-zenoh-core = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-core/" }
-
-zenoh-link-commons = { version = "0.6.0-beta.1", path = "../../zenoh-link-commons/" }
-zenoh-protocol = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-protocol/" }
-zenoh-sync = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-sync/" }
-zenoh-util = { version = "0.6.0-beta.1", path = "../../../commons/zenoh-util/" }
+zenoh-collections = { version = "0.7.0-rc", path = "../../../commons/zenoh-collections/" }
+zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
+zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol/" }
+zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
+zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

@@ -13,14 +13,54 @@ use rand::seq::SliceRandom;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{ConsolidationMode, QueryTarget, WireExpr, ZInt};
+use crate::{
+    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
+    zenoh::DataInfo,
+};
+use zenoh_buffers::ZBuf;
+
+/// # QueryBody
+///
+/// QueryBody data structure is optionally included in Query messages
+///
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+---------+
+/// ~    DataInfo   ~
+/// +---------------+
+/// ~    Payload    ~
+/// +---------------+
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct QueryBody {
+    pub data_info: DataInfo,
+    pub payload: ZBuf,
+}
+
+// Functions mainly used for testing
+impl QueryBody {
+    #[doc(hidden)]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        const MIN: usize = 2;
+        const MAX: usize = 16;
+
+        let mut rng = rand::thread_rng();
+
+        let data_info = DataInfo::rand();
+        let payload = ZBuf::rand(rng.gen_range(MIN..MAX));
+
+        Self { data_info, payload }
+    }
+}
 
 /// # Query message
 ///
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |K|X|T|  QUERY  |
+/// |K|B|T|  QUERY  |
 /// +-+-+-+---------+
 /// ~    KeyExpr     ~ if K==1 then key_expr has suffix
 /// +---------------+
@@ -32,7 +72,8 @@ use crate::core::{ConsolidationMode, QueryTarget, WireExpr, ZInt};
 /// +---------------+
 /// ~ consolidation ~
 /// +---------------+
-/// ```
+/// ~   QueryBody   ~ if B==1
+/// +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
     pub key: WireExpr<'static>,
@@ -40,6 +81,7 @@ pub struct Query {
     pub qid: ZInt,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
+    pub body: Option<QueryBody>,
 }
 
 // Functions mainly used for testing
@@ -88,12 +130,19 @@ impl Query {
         .choose(&mut rng)
         .unwrap();
 
+        let body = if rng.gen_bool(0.5) {
+            Some(QueryBody::rand())
+        } else {
+            None
+        };
+
         Self {
             key,
             parameters,
             qid,
             target,
             consolidation,
+            body,
         }
     }
 }

@@ -438,19 +438,10 @@ pub struct SubInfo {
     pub mode: SubMode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct QueryableInfo {
-    pub complete: ZInt,
-    pub distance: ZInt,
-}
-
-impl Default for QueryableInfo {
-    fn default() -> QueryableInfo {
-        QueryableInfo {
-            complete: 1,
-            distance: 0,
-        }
-    }
+    pub complete: ZInt, // Default 0: incomplete
+    pub distance: ZInt, // Default 0: no distance
 }
 
 /// The kind of consolidation.

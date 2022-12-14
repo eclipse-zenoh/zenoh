@@ -70,6 +70,14 @@ impl ZenohMessage {
                 res = res || payload.map_to_shmbuf(shmr)?;
                 unset_sliced!(self, data_info);
             }
+        } else if let ZenohBody::Query(Query {
+            body: Some(body), ..
+        }) = &mut self.body
+        {
+            if body.payload.has_shminfo() {
+                res = res || body.payload.map_to_shmbuf(shmr)?;
+                body.data_info.sliced = false;
+            }
         }
 
         Ok(res)
@@ -89,6 +97,14 @@ impl ZenohMessage {
             if payload.has_shmbuf() {
                 res = res || payload.map_to_shminfo()?;
                 set_sliced!(self, data_info);
+            }
+        } else if let ZenohBody::Query(Query {
+            body: Some(body), ..
+        }) = &mut self.body
+        {
+            if body.payload.has_shmbuf() {
+                res = res || body.payload.map_to_shminfo()?;
+                body.data_info.sliced = true;
             }
         }
 

@@ -78,6 +78,7 @@ impl Replica {
         session: Arc<Session>,
         store_intercept: StoreIntercept,
         key_expr: OwnedKeyExpr,
+        complete: bool,
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
@@ -145,6 +146,7 @@ impl Replica {
         let storage_task = StorageService::start(
             replica.session.clone(),
             replica.key_expr.clone(),
+            complete,
             &replica.name,
             store_intercept,
             rx,

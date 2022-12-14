@@ -110,8 +110,8 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Protocol<'a>(pub(super) &'a str);
 
-impl Protocol<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> Protocol<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         self.0
     }
 }
@@ -132,8 +132,8 @@ impl fmt::Display for Protocol<'_> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ProtocolMut<'a>(&'a mut EndPoint);
 
-impl ProtocolMut<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> ProtocolMut<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         address(self.0.as_str())
     }
 
@@ -162,8 +162,8 @@ impl fmt::Display for ProtocolMut<'_> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Address<'a>(pub(super) &'a str);
 
-impl Address<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> Address<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         self.0
     }
 }
@@ -184,12 +184,12 @@ impl fmt::Display for Address<'_> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AddressMut<'a>(&'a mut EndPoint);
 
-impl AddressMut<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> AddressMut<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         address(self.0.as_str())
     }
 
-    pub fn set(&mut self, a: &str) -> ZResult<()> {
+    pub fn set(&'a mut self, a: &str) -> ZResult<()> {
         let ep = EndPoint::new(self.0.protocol(), a, self.0.metadata(), self.0.config())?;
 
         self.0.inner = ep.inner;
@@ -214,16 +214,20 @@ impl fmt::Display for AddressMut<'_> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Metadata<'a>(pub(super) &'a str);
 
-impl Metadata<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> Metadata<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         self.0
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn is_empty(&'a self) -> bool {
+        self.as_str().is_empty()
+    }
+
+    pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
         read_properties(self.0)
     }
 
-    pub fn get(&self, k: &str) -> Option<&str> {
+    pub fn get(&'a self, k: &str) -> Option<&'a str> {
         self.iter().find(|x| x.0 == k).map(|x| x.1)
     }
 }
@@ -244,11 +248,17 @@ impl fmt::Display for Metadata<'_> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct MetadataMut<'a>(&'a mut EndPoint);
 
-impl MetadataMut<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> MetadataMut<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         metadata(self.0.as_str())
     }
 
+    pub fn is_empty(&'a self) -> bool {
+        self.as_str().is_empty()
+    }
+}
+
+impl MetadataMut<'_> {
     pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
         I: Iterator<Item = (K, V)>,
@@ -305,16 +315,20 @@ impl fmt::Display for MetadataMut<'_> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Config<'a>(pub(super) &'a str);
 
-impl Config<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> Config<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         self.0
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+    pub fn is_empty(&'a self) -> bool {
+        self.as_str().is_empty()
+    }
+
+    pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
         read_properties(self.0)
     }
 
-    pub fn get(&self, k: &str) -> Option<&str> {
+    pub fn get(&'a self, k: &str) -> Option<&'a str> {
         self.iter().find(|x| x.0 == k).map(|x| x.1)
     }
 }
@@ -335,11 +349,17 @@ impl fmt::Display for Config<'_> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ConfigMut<'a>(&'a mut EndPoint);
 
-impl ConfigMut<'_> {
-    pub fn as_str(&self) -> &str {
+impl<'a> ConfigMut<'a> {
+    pub fn as_str(&'a self) -> &'a str {
         config(self.0.as_str())
     }
 
+    pub fn is_empty(&'a self) -> bool {
+        self.as_str().is_empty()
+    }
+}
+
+impl ConfigMut<'_> {
     pub fn extend<I, K, V>(&mut self, iter: I) -> ZResult<()>
     where
         I: Iterator<Item = (K, V)>,

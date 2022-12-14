@@ -719,7 +719,7 @@ impl Network {
                 })
                 .for_each(|link| {
                     self.send_on_link(
-                        if new {
+                        if new || (!self.full_linkstate && !self.gossip_multihop) {
                             vec![
                                 (
                                     idx,
@@ -757,18 +757,26 @@ impl Network {
         let idxs = self
             .graph
             .node_indices()
-            .map(|idx| {
-                (
-                    idx,
-                    Details {
-                        zid: true,
-                        locators: self.propagate_locators(idx),
-                        links: self.full_linkstate
-                            || (self.router_peers_failover_brokering
-                                && idx == self.idx
-                                && whatami == WhatAmI::Router),
-                    },
-                )
+            .filter_map(|idx| {
+                (self.full_linkstate
+                    || self.gossip_multihop
+                    || self.links.values().any(|link| link.zid == zid)
+                    || (self.router_peers_failover_brokering
+                        && idx == self.idx
+                        && whatami == WhatAmI::Router))
+                    .then(|| {
+                        (
+                            idx,
+                            Details {
+                                zid: true,
+                                locators: self.propagate_locators(idx),
+                                links: self.full_linkstate
+                                    || (self.router_peers_failover_brokering
+                                        && idx == self.idx
+                                        && whatami == WhatAmI::Router),
+                            },
+                        )
+                    })
             })
             .collect();
         self.send_on_link(idxs, &transport);
@@ -808,17 +816,23 @@ impl Network {
             if let Some(idx) = self.get_idx(zid) {
                 self.graph.remove_node(idx);
             }
-            self.send_on_links(
-                vec![(
-                    self.idx,
-                    Details {
-                        zid: false,
-                        locators: self.gossip,
-                        links: true,
+            if self.router_peers_failover_brokering {
+                self.send_on_links(
+                    vec![(
+                        self.idx,
+                        Details {
+                            zid: false,
+                            locators: self.gossip,
+                            links: true,
+                        },
+                    )],
+                    |link| {
+                        link.zid != *zid
+                            && link.transport.get_whatami().unwrap_or(WhatAmI::Peer)
+                                == WhatAmI::Router
                     },
-                )],
-                |link| link.zid != *zid,
-            );
+                );
+            }
             vec![]
         }
     }

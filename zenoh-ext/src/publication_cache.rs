@@ -101,7 +101,7 @@ impl<'a> AsyncResolve for PublicationCacheBuilder<'a, '_, '_> {
 }
 
 pub struct PublicationCache<'a> {
-    _local_sub: FlumeSubscriber<'a>,
+    local_sub: FlumeSubscriber<'a>,
     _queryable: Queryable<'a, flume::Receiver<Query>>,
     _stoptx: Sender<bool>,
 }
@@ -222,7 +222,7 @@ impl<'a> PublicationCache<'a> {
         });
 
         Ok(PublicationCache {
-            _local_sub: local_sub,
+            local_sub,
             _queryable: queryable,
             _stoptx: stoptx,
         })
@@ -234,13 +234,17 @@ impl<'a> PublicationCache<'a> {
         ResolveFuture::new(async move {
             let PublicationCache {
                 _queryable,
-                _local_sub,
+                local_sub,
                 _stoptx,
             } = self;
             _queryable.undeclare().res_async().await?;
-            _local_sub.undeclare().res_async().await?;
+            local_sub.undeclare().res_async().await?;
             drop(_stoptx);
             Ok(())
         })
+    }
+
+    pub fn key_expr(&self) -> &KeyExpr<'static> {
+        self.local_sub.key_expr()
     }
 }
