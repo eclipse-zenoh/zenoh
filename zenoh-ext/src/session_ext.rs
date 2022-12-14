@@ -99,7 +99,7 @@ pub trait SessionExt {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
     #[zenoh_core::unstable]
-    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_nbftreliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliabilityCacheBuilder<'a, 'b, 'c>
@@ -108,7 +108,7 @@ pub trait SessionExt {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>;
 
     #[zenoh_core::unstable]
-    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+    fn declare_nbftreliable_publisher<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliablePublisherBuilder<'a, 'b>
@@ -144,7 +144,7 @@ impl SessionExt for Session {
     }
 
     #[zenoh_core::unstable]
-    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_nbftreliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliabilityCacheBuilder<'a, 'b, 'c>
@@ -156,7 +156,7 @@ impl SessionExt for Session {
     }
 
     #[zenoh_core::unstable]
-    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+    fn declare_nbftreliable_publisher<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliablePublisherBuilder<'a, 'b>
@@ -169,7 +169,7 @@ impl SessionExt for Session {
 }
 pub trait ArcSessionExt {
     #[zenoh_core::unstable]
-    fn declare_reliable_subscriber<'b, TryIntoKeyExpr>(
+    fn declare_nbftreliable_subscriber<'b, TryIntoKeyExpr>(
         &self,
         sub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliableSubscriberBuilder<'b, DefaultHandler>
@@ -205,7 +205,7 @@ impl SessionExt for Arc<Session> {
     }
 
     #[zenoh_core::unstable]
-    fn declare_reliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+    fn declare_nbftreliability_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliabilityCacheBuilder<'a, 'b, 'c>
@@ -217,7 +217,7 @@ impl SessionExt for Arc<Session> {
     }
 
     #[zenoh_core::unstable]
-    fn declare_reliable_publisher<'a, 'b, TryIntoKeyExpr>(
+    fn declare_nbftreliable_publisher<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliablePublisherBuilder<'a, 'b>
@@ -231,7 +231,7 @@ impl SessionExt for Arc<Session> {
 
 impl ArcSessionExt for Arc<Session> {
     #[zenoh_core::unstable]
-    fn declare_reliable_subscriber<'b, TryIntoKeyExpr>(
+    fn declare_nbftreliable_subscriber<'b, TryIntoKeyExpr>(
         &self,
         sub_key_expr: TryIntoKeyExpr,
     ) -> NBFTReliableSubscriberBuilder<'b, DefaultHandler>

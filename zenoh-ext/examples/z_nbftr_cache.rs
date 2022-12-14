@@ -31,7 +31,7 @@ async fn main() {
 
     println!("Declaring NBFTReliabilityCache on {}", key_expr);
     let _cache = session
-        .declare_reliability_cache(key_expr)
+        .declare_nbftreliability_cache(key_expr)
         .history(history)
         .queryable_prefix(prefix)
         .res()

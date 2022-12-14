@@ -30,7 +30,7 @@ async fn main() {
 
     println!("Declaring NBFTReliablePublisher on {}", &key_expr);
     let publ = session
-        .declare_reliable_publisher(&key_expr)
+        .declare_nbftreliable_publisher(&key_expr)
         .with_cache(cache)
         .history(history)
         .res()

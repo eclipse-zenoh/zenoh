@@ -115,7 +115,7 @@ impl<'a> NBFTReliablePublisher<'a> {
             let prefix = id.into_keyexpr();
             let mut builder = conf
                 .session
-                .declare_reliability_cache(key_expr.into_owned())
+                .declare_nbftreliability_cache(key_expr.into_owned())
                 .subscriber_allowed_origin(Locality::SessionLocal)
                 .history(conf.history)
                 .queryable_prefix(&prefix);

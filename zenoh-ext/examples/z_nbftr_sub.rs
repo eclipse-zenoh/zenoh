@@ -33,7 +33,7 @@ async fn main() {
 
     println!("Declaring NBFTReliableSubscriber on {}", key_expr);
     let subscriber = session
-        .declare_reliable_subscriber(key_expr)
+        .declare_nbftreliable_subscriber(key_expr)
         .history(history)
         .periodic_queries(period)
         .res()
