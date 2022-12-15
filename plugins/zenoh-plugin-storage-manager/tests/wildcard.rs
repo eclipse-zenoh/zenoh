@@ -16,8 +16,8 @@
 // 1. normal case, just some wild card puts and deletes on existing keys and ensure it works
 // 2. check for dealing with out of order updates
 
-use std::thread::sleep;
 use std::str::FromStr;
+use std::thread::sleep;
 
 // use std::collections::HashMap;
 use async_std::task;
@@ -99,7 +99,6 @@ async fn test_wild_card_in_order() {
     let data = get_data(&session, "demo/example/*").await;
     assert_eq!(data.len(), 0);
 
-
     put_data(
         &session,
         "demo/example/a",
@@ -113,7 +112,6 @@ async fn test_wild_card_in_order() {
     assert_eq!(data.len(), 1);
     assert_eq!(data[0].key_expr.as_str(), "demo/example/a");
     assert_eq!(format!("{}", data[0].value), "2");
-
 
     put_data(
         &session,
@@ -130,7 +128,6 @@ async fn test_wild_card_in_order() {
     assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[1].key_expr.as_str()));
     assert!(vec!["2", "3"].contains(&format!("{}", data[0].value).as_str()));
     assert!(vec!["2", "3"].contains(&format!("{}", data[1].value).as_str()));
-
 
     put_data(
         &session,
@@ -149,8 +146,13 @@ async fn test_wild_card_in_order() {
     assert_eq!(format!("{}", data[0].value).as_str(), "4");
     assert_eq!(format!("{}", data[1].value).as_str(), "4");
 
-    delete_data(&session, "demo/example/*", Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-    .unwrap()).await;
+    delete_data(
+        &session,
+        "demo/example/*",
+        Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+            .unwrap(),
+    )
+    .await;
 
     //expected no entry
     let data = get_data(&session, "demo/example/*").await;

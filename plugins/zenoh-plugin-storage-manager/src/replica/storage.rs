@@ -344,10 +344,7 @@ impl StorageService {
                         )
                     }
                 }
-                Err(e) => warn!(
-                    "Storage {} raised an error on query: {}",
-                    self.name, e
-                ),
+                Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),
             };
         }
         drop(storage);
