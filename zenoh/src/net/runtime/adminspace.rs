@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::face::Face;
 use super::Runtime;
-use crate::key_expr::keyexpr;
 use crate::plugins::sealed as plugins;
 use crate::prelude::KeyExpr;
 use crate::prelude::SampleKind;
@@ -45,7 +44,7 @@ pub struct AdminContext {
 }
 
 type Handler = Box<
-    dyn for<'a> Fn(&'a AdminContext, &'a WireExpr<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
+    dyn for<'a> Fn(&'a AdminContext, &'a KeyExpr<'a>, &'a str) -> BoxFuture<'a, (ZBuf, Encoding)>
         + Send
         + Sync,
 >;
@@ -395,27 +394,30 @@ impl Primitives for AdminSpace {
             }
         }
 
+        let key_expr = match self.key_expr_to_string(key_expr) {
+            Ok(key_expr) => key_expr.into_owned(),
+            Err(e) => {
+                log::error!("Unknown KeyExpr!! ({})", e);
+                // router is not re-entrant
+                task::spawn(async move {
+                    primitives.send_reply_final(qid);
+                });
+                return;
+            }
+        };
+
         let zid = self.zid;
         let plugin_key: OwnedKeyExpr = format!("@/router/{}/status/plugins/**", &zid)
             .try_into()
             .unwrap();
-        let mut ask_plugins = false;
         let context = self.context.clone();
-
         let mut matching_handlers = vec![];
-        match self.key_expr_to_string(key_expr) {
-            Ok(name) => {
-                ask_plugins = plugin_key.intersects(&name);
-                for (key, handler) in &self.handlers {
-                    if name.intersects(key) {
-                        matching_handlers.push((key.clone(), handler.clone()));
-                    }
-                }
+        let ask_plugins = plugin_key.intersects(&key_expr);
+        for (key, handler) in &self.handlers {
+            if key_expr.intersects(key) {
+                matching_handlers.push((key.clone(), handler.clone()));
             }
-            Err(e) => log::error!("Unknown KeyExpr!! ({})", e),
-        };
-
-        let key_expr = key_expr.to_owned();
+        }
         let parameters = parameters.to_owned();
 
         // router is not re-entrant
@@ -438,11 +440,6 @@ impl Primitives for AdminSpace {
             ));
             if ask_plugins {
                 futures::join!(handler_tasks, async {
-                    let key_expr = if key_expr.scope == 0 {
-                        KeyExpr::from(unsafe { keyexpr::from_str_unchecked(&key_expr.suffix) })
-                    } else {
-                        unreachable!("An unresolved WireExpr ({:?}) reached the plugins, this shouldn't have happened, please contact us via GitHub or Discord.", key_expr)
-                    };
                     let plugin_status = plugins_status(&context, &key_expr, &parameters).await;
                     for status in plugin_status {
                         let plugins::Response { key, mut value } = status;
@@ -513,7 +510,7 @@ impl Primitives for AdminSpace {
 
 pub async fn router_data(
     context: &AdminContext,
-    _key: &WireExpr<'_>,
+    _key: &KeyExpr<'_>,
     #[allow(unused_variables)] selector: &str,
 ) -> (ZBuf, Encoding) {
     let transport_mgr = context.runtime.manager().clone();
@@ -582,7 +579,7 @@ pub async fn router_data(
 
 pub async fn linkstate_routers_data(
     context: &AdminContext,
-    _key: &WireExpr<'_>,
+    _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
@@ -603,7 +600,7 @@ pub async fn linkstate_routers_data(
 
 pub async fn linkstate_peers_data(
     context: &AdminContext,
-    _key: &WireExpr<'_>,
+    _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
     let data: Vec<u8> = context

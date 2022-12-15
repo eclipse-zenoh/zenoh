@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::time::Duration;
@@ -34,10 +33,9 @@ async fn main() {
         None => session.get(&selector),
     }
     .target(target)
-    .res()
     .timeout(timeout)
+    .res()
     .await
-    .unwrap_or_else(|_| panic!("Query has timed out after {:?}", timeout))
     .unwrap();
     while let Ok(reply) = replies.recv_async().await {
         match reply.sample {
