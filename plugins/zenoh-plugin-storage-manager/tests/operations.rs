@@ -84,7 +84,7 @@ async fn test_updates_in_order() {
 
     let session = zenoh::init(runtime).res().await.unwrap();
 
-    sleep(std::time::Duration::from_secs(2));
+    sleep(std::time::Duration::from_secs(1));
 
     put_data(
         &session,

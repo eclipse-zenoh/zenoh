@@ -17,22 +17,26 @@
 // 2. check for dealing with out of order updates
 
 use std::thread::sleep;
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
 // use std::collections::HashMap;
 use async_std::task;
-use std::convert::TryFrom;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
 use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
-async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, timestamp: Timestamp) {
+async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
     println!("Putting Data ('{}': '{}')...", key_expr, value);
-    // let key_expr = OwnedKeyExpr::new(key_expr);
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
     session.put(key_expr, value).res().await.unwrap();
+}
+
+async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
+    println!("Deleting Data '{}'...", key_expr);
+    //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
+    session.delete(key_expr).res().await.unwrap();
 }
 
 async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
@@ -85,32 +89,73 @@ async fn test_wild_card_in_order() {
     // put *, ts: 1
     put_data(
         &session,
-        "demo/example/a",
+        "demo/example/*",
         "1",
         Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
     // expected no data
-    let data = get_data(&session, "demo/example/a").await;
+    let data = get_data(&session, "demo/example/*").await;
+    assert_eq!(data.len(), 0);
+
+
+    put_data(
+        &session,
+        "demo/example/a",
+        "2",
+        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+            .unwrap(),
+    )
+    .await;
+    // expected single entry
+    let data = get_data(&session, "demo/example/*").await;
     assert_eq!(data.len(), 1);
+    assert_eq!(data[0].key_expr.as_str(), "demo/example/a");
+    assert_eq!(format!("{}", data[0].value), "2");
 
-    // let data = get_data(&session, "demo/example/*").await;
-    // assert_eq!(data.len(), 1);
 
-    // put_data(
-    //     &session,
-    //     "demo/example/b",
-    //     "1",
-    //     Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
-    //         .unwrap(),
-    // )
-    // .await;
+    put_data(
+        &session,
+        "demo/example/b",
+        "3",
+        Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+            .unwrap(),
+    )
+    .await;
+    // expected two entries
+    let data = get_data(&session, "demo/example/*").await;
+    assert_eq!(data.len(), 2);
+    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[0].key_expr.as_str()));
+    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[1].key_expr.as_str()));
+    assert!(vec!["2", "3"].contains(&format!("{}", data[0].value).as_str()));
+    assert!(vec!["2", "3"].contains(&format!("{}", data[1].value).as_str()));
 
-    // let data = get_data(&session, "demo/example/*").await;
-    // assert_eq!(data.len(), 2);
 
-    println!("received: {:?}", data);
+    put_data(
+        &session,
+        "demo/example/*",
+        "4",
+        Timestamp::from_str("2022-01-17T10:43:12.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+            .unwrap(),
+    )
+    .await;
+
+    // expected two entries
+    let data = get_data(&session, "demo/example/*").await;
+    assert_eq!(data.len(), 2);
+    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[0].key_expr.as_str()));
+    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[1].key_expr.as_str()));
+    assert_eq!(format!("{}", data[0].value).as_str(), "4");
+    assert_eq!(format!("{}", data[1].value).as_str(), "4");
+
+    delete_data(&session, "demo/example/*", Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
+    .unwrap()).await;
+
+    //expected no entry
+    let data = get_data(&session, "demo/example/*").await;
+    assert_eq!(data.len(), 0);
+
     drop(storage);
 }
 
