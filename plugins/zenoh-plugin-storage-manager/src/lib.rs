@@ -144,8 +144,8 @@ impl StorageRuntimeInner {
         if let Some(storages) = self.storages.remove(&volume.name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
-                    .into_iter()
-                    .map(|(_, s)| async move { s.send(StorageMessage::Stop) }),
+                    .into_values()
+                    .map(|s| async move { s.send(StorageMessage::Stop) }),
             ));
         }
         std::mem::drop(self.volumes.remove(&volume.name));
