@@ -24,8 +24,7 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
-// use zenoh_backend_traits::{Capability, Persistence, StorageInsertionResult};
-use zenoh_backend_traits::StorageInsertionResult;
+use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -39,7 +38,7 @@ pub struct StorageService {
     complete: bool,
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
-    // capability: Capability,
+    capability: Capability,
     tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
     wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
     // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
@@ -68,7 +67,7 @@ impl StorageService {
             complete,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
-            // capability: store_intercept.capability,
+            capability: store_intercept.capability,
             tombstones: RwLock::new(HashMap::new()),
             wildcard_updates: RwLock::new(HashMap::new()),
             // latest_timestamp_cache,
@@ -223,23 +222,42 @@ impl StorageService {
 
         for k in matching_keys {
             if !self
-                .is_outdated(&k.clone(), sample.get_timestamp().unwrap())
+                .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
                 .await
+                && (self.capability.history.eq(&History::All)
+                    || (self.capability.history.eq(&History::Latest)
+                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
+                // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
+                // get the relevant wild card entry and use that value and timestamp to update the storage
+                let sample_to_store = match self
+                    .ovderriding_wild_update(&k, sample.get_timestamp().unwrap())
+                    .await
+                {
+                    Some(overriding_sample) => {
+                        let mut sample_to_store =
+                            Sample::new(KeyExpr::from(k.clone()), overriding_sample.value)
+                                .with_timestamp(overriding_sample.timestamp.unwrap());
+                        sample_to_store.kind = overriding_sample.kind;
+                        sample_to_store
+                    }
+                    None => {
+                        let mut sample_to_store =
+                            Sample::new(KeyExpr::from(k.clone()), sample.value.clone())
+                                .with_timestamp(sample.timestamp.unwrap());
+                        sample_to_store.kind = sample.kind;
+                        sample_to_store
+                    }
+                };
+
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
-                    storage
-                        .put(
-                            k.clone(),
-                            Sample::new(KeyExpr::from(k), sample.value.clone())
-                                .with_timestamp(sample.timestamp.unwrap()),
-                        )
-                        .await
+                    storage.put(k.clone(), sample_to_store.clone()).await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
-                    self.mark_tombstone(k.clone(), sample.timestamp.unwrap())
+                    self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
                         .await;
-                    storage.delete(k).await
+                    storage.delete(k.clone()).await
                 } else {
                     Err("sample kind not implemented".into())
                 };
@@ -247,10 +265,12 @@ impl StorageService {
                     && result.is_ok()
                     && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
                 {
-                    let sending = self.replication.as_ref().unwrap().log_propagation.send((
-                        OwnedKeyExpr::from(sample.key_expr.clone()),
-                        *sample.get_timestamp().unwrap(),
-                    ));
+                    let sending = self
+                        .replication
+                        .as_ref()
+                        .unwrap()
+                        .log_propagation
+                        .send((k.clone(), *sample_to_store.get_timestamp().unwrap()));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
@@ -287,30 +307,53 @@ impl StorageService {
         drop(wildcards);
     }
 
-    async fn is_outdated(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
+    async fn is_deleted(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
+        // check tombstones to see if it is deleted in the future
         let tombstones = self.tombstones.read().await;
-        if tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp {
-            // check wild card store
-            let wildcards = self.wildcard_updates.read().await;
-            for (key, sample) in wildcards.iter() {
-                if key_expr.intersects(key) && sample.timestamp.unwrap() > *timestamp {
-                    return true;
+        tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp
+    }
+
+    async fn ovderriding_wild_update(
+        &self,
+        key_expr: &OwnedKeyExpr,
+        timestamp: &Timestamp,
+    ) -> Option<Sample> {
+        // check wild card store for any futuristic update
+        let wildcards = self.wildcard_updates.read().await;
+        for (key, sample) in wildcards.iter() {
+            if key_expr.intersects(key) && sample.timestamp.unwrap() > *timestamp {
+                // if the key matches a wild card update, check whether it was saved in storage
+                // remember that wild card updates change only existing keys
+                let mut storage = self.storage.lock().await;
+                match storage.get(key_expr.clone(), "").await {
+                    Ok(stored_sample) => {
+                        if stored_sample.get_timestamp().is_some() {
+                            return None;
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Storage {} raised an error fetching a query on key {} : {}",
+                            self.name, key_expr, e
+                        );
+                        return Some(sample.clone());
+                    }
                 }
             }
         }
-        false
-        // @TODO: if storage deals with only the latest, check the last timestamp
-        // if self.capability.history.eq(&History::Latest) {
-        //     // @TODO: if cache exists, read from there
-        //     let mut storage = self.storage.lock().await;
-        //     if let Err(e) = storage.on_query(query).await {
-        //         warn!(
-        //             "Storage {} raised an error receiving a query: {}",
-        //             self.name, e
-        //         );
-        //     }
-        //     drop(storage);
-        // }
+        None
+    }
+
+    async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
+        // @TODO: if cache exists, read from there
+        let mut storage = self.storage.lock().await;
+        if let Ok(sample) = storage.get(key_expr.clone(), "").await {
+            if sample.get_timestamp().unwrap() > timestamp {
+                return false;
+            }
+        }
+        drop(storage);
+        true
     }
 
     async fn reply_query(&self, query: Result<zenoh::queryable::Query, flume::RecvError>) {
