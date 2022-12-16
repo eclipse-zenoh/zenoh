@@ -2,7 +2,7 @@ use std::{env, ffi::OsString, fs::OpenOptions, io::Write, process::Command};
 
 fn main() {
     let rustc = env::var_os("RUSTC").unwrap_or_else(|| OsString::from("rustc"));
-    let output = Command::new(&rustc)
+    let output = Command::new(rustc)
         .arg("-v")
         .arg("-V")
         .output()
