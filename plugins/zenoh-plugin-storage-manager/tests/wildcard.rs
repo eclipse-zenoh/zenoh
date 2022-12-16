@@ -79,7 +79,7 @@ async fn test_wild_card_in_order() {
         )
         .unwrap();
 
-    let runtime = zenoh::runtime::Runtime::new(config, true).await.unwrap();
+    let runtime = zenoh::runtime::Runtime::new(config).await.unwrap();
     let storage =
         zplugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
