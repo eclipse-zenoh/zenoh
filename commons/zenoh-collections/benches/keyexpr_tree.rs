@@ -5,7 +5,7 @@ use std::{
 
 use rand::SeedableRng;
 use zenoh_collections::keyexpr_tree::{
-    keyed_set_tree::{KeyedSetProvider, VecSetProvider},
+    impls::{KeyedSetProvider, VecSetProvider},
     IKeyExprTree, IKeyExprTreeExt, KeyExprTree,
 };
 use zenoh_protocol_core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};

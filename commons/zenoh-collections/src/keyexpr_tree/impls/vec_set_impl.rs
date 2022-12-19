@@ -31,6 +31,14 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
     fn child_at_mut(&mut self, chunk: &keyexpr) -> Option<&mut T> {
         self.iter_mut().find(|t| unlikely(t.chunk() == chunk))
     }
+    fn remove(&mut self, chunk: &keyexpr) -> Option<Self::Node> {
+        for (i, t) in self.iter().enumerate() {
+            if unlikely(t.chunk() == chunk) {
+                return Some(self.swap_remove(i));
+            }
+        }
+        None
+    }
     type Entry<'a, 'b> = Entry<'a, 'b, T> where Self: 'a + 'b, T: 'b;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where

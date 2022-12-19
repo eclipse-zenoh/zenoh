@@ -1,7 +1,7 @@
 use zenoh_protocol_core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
-    keyed_set_tree::{KeyedSetProvider, VecSetProvider},
+    impls::{KeyedSetProvider, VecSetProvider},
     *,
 };
 use std::{

@@ -29,6 +29,9 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkEx
     fn child_at_mut(&mut self, chunk: &keyexpr) -> Option<&mut T> {
         self.get_mut_unguarded(&chunk)
     }
+    fn remove(&mut self, chunk: &keyexpr) -> Option<T> {
+        self.remove(&chunk)
+    }
     type Entry<'a, 'b> = keyed_set::Entry<'a, T, ChunkExtractor, &'b keyexpr> where Self: 'a + 'b, T: 'b;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where

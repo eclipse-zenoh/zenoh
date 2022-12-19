@@ -1,7 +1,7 @@
-pub use keyed_set_tree::KeyExprTree;
+pub use impls::KeyExprTree;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 
-use self::keyed_set_tree::KeyExprTreeNode;
+use self::impls::KeyExprTreeNode;
 pub trait IKeTreeProvider<Weight>:
     ChunkMapType<Box<KeyExprTreeNode<Weight, Self>>> + Sized + 'static
 where
@@ -80,7 +80,7 @@ pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
         self.node_mut_or_create(at).insert_weight(weight)
     }
     fn intersecting_keys<'a>(
-        &'a mut self,
+        &'a self,
         key: &'a keyexpr,
     ) -> Keys<Self::Intersection<'a>, Self::IntersectionItem<'a>>
     where
@@ -91,7 +91,7 @@ pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
             .filter_map(filter_map_weighted_node_to_key)
     }
     fn included_keys<'a>(
-        &'a mut self,
+        &'a self,
         key: &'a keyexpr,
     ) -> Keys<Self::Inclusion<'a>, Self::InclusionItem<'a>>
     where
@@ -136,6 +136,7 @@ pub trait ChunkMap<T: ?Sized> {
     where
         Self: 'a + 'b,
         T: 'b;
+    fn remove(&mut self, chunk: &keyexpr) -> Option<Self::Node>;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where
         Self: 'a + 'b,
@@ -208,7 +209,7 @@ impl<T> AsNodeMut<T> for &mut T {
     }
 }
 
-pub mod keyed_set_tree;
+pub mod impls;
 
 #[cfg(test)]
 mod test;
