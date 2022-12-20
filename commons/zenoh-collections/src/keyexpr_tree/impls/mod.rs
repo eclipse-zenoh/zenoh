@@ -54,6 +54,21 @@ where
         Some(node.as_node_mut())
     }
 
+    fn remove(&mut self, at: &keyexpr) -> Option<Weight> {
+        let node = self.node_mut(at)?;
+        if !node.children.is_empty() {
+            node.weight.take()
+        } else {
+            let chunk = node.chunk();
+            match node.parent {
+                Parent::Root(root) => unsafe { &mut (*root.as_ptr()).children },
+                Parent::Node(parent) => unsafe { &mut (*parent.as_ptr()).children },
+            }
+            .remove(chunk)
+            .and_then(|node| node.weight)
+        }
+    }
+
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node {
         if at.is_wild() {
             self.has_wilds = true;
@@ -150,6 +165,10 @@ where
             let node = self.node_mut(ke);
             IterOrOption::Opt(node)
         }
+    }
+
+    fn prune<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
+        let root_iterator = self.children.children_mut();
     }
 }
 pub enum IterOrOption<Iter: Iterator, Item> {

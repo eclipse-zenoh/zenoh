@@ -18,6 +18,7 @@ pub trait IKeyExprTree<Weight> {
     type Node: IKeyExprTreeNode<Weight>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node>;
     fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node>;
+    fn remove(&mut self, at: &keyexpr) -> Option<Weight>;
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node;
     type TreeIterItem<'a>
     where
@@ -65,6 +66,7 @@ pub trait IKeyExprTree<Weight> {
         Self: 'a,
         Self::Node: 'a;
     fn included_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a>;
+    fn prune<F: FnMut(&mut Self::Node) -> bool>(&mut self, predicate: F);
 }
 type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
 pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
@@ -130,6 +132,10 @@ pub trait ChunkMapType<T> {
 
 pub trait ChunkMap<T: ?Sized> {
     type Node: HasChunk + AsNode<T> + AsNodeMut<T>;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
     fn child_at<'a, 'b>(&'a self, chunk: &'b keyexpr) -> Option<&'a Self::Node>;
     fn child_at_mut<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Option<&'a mut Self::Node>;
     type Entry<'a, 'b>: IEntry<'a, 'b, T>

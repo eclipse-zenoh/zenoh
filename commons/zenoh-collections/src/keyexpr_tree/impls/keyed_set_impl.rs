@@ -32,6 +32,12 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkEx
     fn remove(&mut self, chunk: &keyexpr) -> Option<T> {
         self.remove(&chunk)
     }
+    fn len(&self) -> usize {
+        self.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
     type Entry<'a, 'b> = keyed_set::Entry<'a, T, ChunkExtractor, &'b keyexpr> where Self: 'a + 'b, T: 'b;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where

@@ -39,6 +39,12 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
         }
         None
     }
+    fn len(&self) -> usize {
+        self.len()
+    }
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
     type Entry<'a, 'b> = Entry<'a, 'b, T> where Self: 'a + 'b, T: 'b;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where
