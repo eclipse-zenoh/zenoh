@@ -83,28 +83,27 @@ impl Aligner {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
         let missing_content = self.get_missing_content(other, from).await;
-        trace!("[REPLICA] Missing content is {:?}", missing_content);
+        trace!("[ALIGNER] Missing content is {:?}", missing_content);
 
         if !missing_content.is_empty() {
             let missing_data = self
                 .get_missing_data(&missing_content, timestamp, from)
                 .await;
 
-            trace!("[REPLICA] Missing data is {:?}", missing_data);
+            trace!("[ALIGNER] Missing data is {:?}", missing_data);
 
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
-                trace!("[REPLICA] Adding sample {:?} to storage", sample);
+                trace!("[ALIGNER] Adding sample {:?} to storage", sample);
                 match self.tx_sample.send_async(sample).await {
                     Ok(()) => continue,
-                    Err(e) => error!("Error adding sample to storage: {}", e),
+                    Err(e) => error!("[ALIGNER] Error adding sample to storage: {}", e),
                 }
             }
-
-            let mut processed = self.digests_processed.write().await;
-            (*processed).insert(checksum);
-            drop(processed);
         }
+        let mut processed = self.digests_processed.write().await;
+        (*processed).insert(checksum);
+        drop(processed);
     }
 
     async fn get_missing_data(
@@ -183,7 +182,7 @@ impl Aligner {
                 Ok((i, c)) => {
                     other_intervals.insert(i, c);
                 }
-                Err(e) => error!("Error decoding reply: {}", e),
+                Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
             };
         }
         // get era diff
@@ -207,7 +206,7 @@ impl Aligner {
                     Ok((i, c)) => {
                         other_subintervals.insert(i, c);
                     }
-                    Err(e) => error!("Error decoding reply: {}", e),
+                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                 };
             }
             // get intervals diff
@@ -235,7 +234,7 @@ impl Aligner {
                         Ok((i, c)) => {
                             other_content.insert(i, c);
                         }
-                        Err(e) => error!("Error decoding reply: {}", e),
+                        Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                     };
                 }
                 // get subintervals diff
@@ -272,7 +271,7 @@ impl Aligner {
                     );
                     return_val.push(sample);
                 }
-                Err(err) => error!("Query failed on selector '{}' ::{}", selector, err),
+                Err(err) => error!("[ALIGNER] Query failed on selector '{}' ::{}", selector, err),
             }
         }
         return_val
