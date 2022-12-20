@@ -284,6 +284,11 @@ impl Replica {
             // no values to align
             return false;
         }
+        let digests_published = self.digests_published.read().await;
+        if digests_published.contains(&checksum) {
+            trace!("[DIGEST_SUB] Dropping since matching digest already seen");
+            return false;
+        }
         // TODO: test this part
         if received.contains_key(from) && *received.get(from).unwrap() > ts {
             // not the latest from that replica

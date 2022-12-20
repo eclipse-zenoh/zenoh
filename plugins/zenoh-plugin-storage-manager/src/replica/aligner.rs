@@ -63,6 +63,9 @@ impl Aligner {
             if self.in_processed(incoming_digest.checksum).await {
                 trace!("[ALIGNER]Skipping already processed digest");
                 continue;
+            } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
+                trace!("[ALIGNER]Skipping matching digest");
+                continue;
             } else {
                 // process this digest
                 self.process_incoming_digest(incoming_digest, &from).await;
@@ -72,14 +75,7 @@ impl Aligner {
 
     async fn in_processed(&self, checksum: u64) -> bool {
         let processed_set = self.digests_processed.read().await;
-        let processed = processed_set.contains(&checksum);
-        drop(processed_set);
-        if processed {
-            trace!("[ALIGNER]Dropping {} since already processed", checksum);
-            true
-        } else {
-            false
-        }
+        processed_set.contains(&checksum)
     }
 
     //identify alignment requirements
