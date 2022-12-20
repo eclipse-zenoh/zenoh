@@ -238,14 +238,20 @@ impl Digest {
         // update and compute digest
         digest_hash.insert(curr_era, checksum);
         let mut digest_content = Vec::new();
-        if digest_hash.contains_key(&EraType::Cold) {
-            digest_content.push(digest_hash[&EraType::Cold]);
+        if let Some(checksum) = digest_hash.get(&EraType::Cold) {
+            digest_content.push(*checksum);
+        } else {
+            digest_content.push(0);
         }
-        if digest_hash.contains_key(&EraType::Warm) {
-            digest_content.push(digest_hash[&EraType::Warm]);
+        if let Some(checksum) = digest_hash.get(&EraType::Warm) {
+            digest_content.push(*checksum);
+        } else {
+            digest_content.push(0);
         }
-        if digest_hash.contains_key(&EraType::Hot) {
-            digest_content.push(digest_hash[&EraType::Hot]);
+        if let Some(checksum) = digest_hash.get(&EraType::Hot) {
+            digest_content.push(*checksum);
+        } else {
+            digest_content.push(0);
         }
         let checksum = Digest::get_content_hash(&digest_content);
 
@@ -385,11 +391,23 @@ impl Digest {
 
     // compute the checksum of the digest
     fn get_digest_checksum(content: &HashMap<EraType, Interval>) -> u64 {
-        let mut hashable_content = Vec::new();
-        for i_cont in content.values() {
-            hashable_content.push(i_cont.checksum);
+        let mut digest_content = Vec::new();
+        if let Some(interval) = content.get(&EraType::Cold) {
+            digest_content.push(interval.checksum);
+        } else {
+            digest_content.push(0);
         }
-        Digest::get_content_hash(&hashable_content)
+        if let Some(interval) = content.get(&EraType::Warm) {
+            digest_content.push(interval.checksum);
+        } else {
+            digest_content.push(0);
+        }
+        if let Some(interval) = content.get(&EraType::Hot) {
+            digest_content.push(interval.checksum);
+        } else {
+            digest_content.push(0);
+        }
+        Digest::get_content_hash(&digest_content)
     }
 
     // update the digest with new content
