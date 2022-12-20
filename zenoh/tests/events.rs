@@ -51,7 +51,7 @@ fn zenoh_events() {
     task::block_on(async {
         zasync_executor_init!();
 
-        let session = open_session(&["tcp/127.0.0.1:17447"], &[]).await;
+        let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
         let zid = session.zid();
         let sub1 = session
             .declare_subscriber(format!("@/session/{}/transport/unicast/*", zid))
@@ -64,7 +64,7 @@ fn zenoh_events() {
             .await
             .unwrap();
 
-        let session2 = open_session(&["tcp/127.0.0.1:17448"], &["tcp/127.0.0.1:17447"]).await;
+        let session2 = open_session(&["tcp/127.0.0.1:18448"], &["tcp/127.0.0.1:18447"]).await;
         let zid2 = session2.zid();
 
         let sample = ztimeout!(sub1.recv_async());

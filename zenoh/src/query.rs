@@ -15,16 +15,11 @@
 //! Query primitives.
 
 use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::net::runtime::Runtime;
 use crate::prelude::*;
 use crate::Session;
-use crate::SessionState;
-use async_trait::async_trait;
 use std::collections::HashMap;
 use std::future::Ready;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_collections::Timed;
 use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
@@ -87,33 +82,6 @@ pub struct Reply {
     pub sample: Result<Sample, Value>,
     /// The id of the zenoh instance that answered this Reply.
     pub replier_id: ZenohId,
-}
-
-#[derive(Clone)]
-pub(crate) struct QueryTimeout {
-    pub(crate) state: Arc<RwLock<SessionState>>,
-    pub(crate) runtime: Runtime,
-    pub(crate) qid: ZInt,
-}
-
-#[async_trait]
-impl Timed for QueryTimeout {
-    async fn run(&mut self) {
-        let mut state = zwrite!(self.state);
-        if let Some(query) = state.queries.remove(&self.qid) {
-            std::mem::drop(state);
-            log::debug!("Timout on query {}! Send error and close.", self.qid);
-            if query.reception_mode == ConsolidationMode::Latest {
-                for (_, reply) in query.replies.unwrap().into_iter() {
-                    let _ = (query.callback)(reply);
-                }
-            }
-            let _ = (query.callback)(Reply {
-                sample: Err("Timeout".into()),
-                replier_id: self.runtime.zid,
-            });
-        }
-    }
 }
 
 pub(crate) struct QueryState {
