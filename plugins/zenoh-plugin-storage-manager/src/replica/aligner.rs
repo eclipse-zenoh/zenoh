@@ -271,7 +271,7 @@ impl Aligner {
                     );
                     return_val.push(sample);
                 }
-                Err(err) => error!("[ALIGNER] Query failed on selector '{}' ::{}", selector, err),
+                Err(err) => error!("[ALIGNER] Query failed on selector {} :{}", selector, err),
             }
         }
         return_val
