@@ -971,3 +971,126 @@ fn test_create_digest_with_initial_cold() {
     };
     assert_eq!(created, expected);
 }
+
+#[test]
+fn test_update_digest_add_content() {
+    let created = async_std::task::block_on(Digest::update_digest(
+        Digest {
+            timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/01").unwrap(),
+            config: DigestConfig {
+                delta: Duration::from_millis(1000),
+                sub_intervals: 10,
+                hot: 6,
+                warm: 30,
+            },
+            checksum: 0,
+            eras: HashMap::new(),
+            intervals: HashMap::new(),
+            subintervals: HashMap::new(),
+        },
+        1671634910,
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        HashSet::from([LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+        }]),
+        HashSet::new(),
+    ));
+    let expected = Digest {
+        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        config: DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        checksum: 9981730533083018288,
+        eras: HashMap::from([(
+            EraType::Cold,
+            Interval {
+                checksum: 8238986480495191270,
+                content: BTreeSet::from([1671634800]),
+            },
+        )]),
+        intervals: HashMap::from([(
+            1671634800,
+            Interval {
+                checksum: 12344398372324783476,
+                content: BTreeSet::from([16716348000]),
+            },
+        )]),
+        subintervals: HashMap::from([(
+            16716348000,
+            SubInterval {
+                checksum: 10007212639402189432,
+                content: BTreeSet::from([LogEntry {
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+                    key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+                }]),
+            },
+        )]),
+    };
+    assert_eq!(created, expected);
+}
+
+#[test]
+fn test_update_digest_remove_content() {
+    let created = async_std::task::block_on(Digest::update_digest(
+        Digest {
+            timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/01").unwrap(),
+            config: DigestConfig {
+                delta: Duration::from_millis(1000),
+                sub_intervals: 10,
+                hot: 6,
+                warm: 30,
+            },
+            checksum: 9981730533083018288,
+            eras: HashMap::from([(
+                EraType::Cold,
+                Interval {
+                    checksum: 8238986480495191270,
+                    content: BTreeSet::from([1671634800]),
+                },
+            )]),
+            intervals: HashMap::from([(
+                1671634800,
+                Interval {
+                    checksum: 12344398372324783476,
+                    content: BTreeSet::from([16716348000]),
+                },
+            )]),
+            subintervals: HashMap::from([(
+                16716348000,
+                SubInterval {
+                    checksum: 10007212639402189432,
+                    content: BTreeSet::from([LogEntry {
+                        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01")
+                            .unwrap(),
+                        key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+                    }]),
+                },
+            )]),
+        },
+        1671634910,
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        HashSet::new(),
+        HashSet::from([LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+        }]),
+    ));
+    let expected = Digest {
+        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        config: DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        checksum: 0,
+        eras: HashMap::new(),
+        intervals: HashMap::new(),
+        subintervals: HashMap::new(),
+    };
+    assert_eq!(created, expected);
+}
