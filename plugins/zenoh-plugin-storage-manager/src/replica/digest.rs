@@ -420,10 +420,10 @@ impl Digest {
         let mut intervals_to_update = HashSet::new();
         let mut subintervals_to_update = HashSet::new();
 
-        for ts in content {
+        for log_entry in content {
             let subinterval = Digest::get_subinterval(
                 current.config.delta,
-                ts.timestamp,
+                log_entry.timestamp,
                 current.config.sub_intervals,
             );
             subintervals_to_update.insert(subinterval);
@@ -436,11 +436,11 @@ impl Digest {
                 .subintervals
                 .entry(subinterval)
                 .and_modify(|e| {
-                    e.content.insert(ts.clone());
+                    e.content.insert(log_entry.clone());
                 })
                 .or_insert(SubInterval {
                     checksum: 0,
-                    content: [ts].iter().cloned().collect(),
+                    content: [log_entry].iter().cloned().collect(),
                 });
             current
                 .intervals
@@ -782,4 +782,86 @@ impl Digest {
         }
         mis_content
     }
+}
+
+#[test]
+fn test_create_digest_empty_initial() {
+    let created = Digest::create_digest(
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        Vec::new(),
+        1671612730,
+    );
+    let expected = Digest {
+        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        config: DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        checksum: 0,
+        eras: HashMap::new(),
+        intervals: HashMap::new(),
+        subintervals: HashMap::new(),
+    };
+    assert_eq!(created, expected);
+}
+
+#[test]
+fn test_create_digest_with_initial() {
+    let created = Digest::create_digest(
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        vec![LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+        }],
+        1671612730,
+    );
+    let expected = Digest {
+        timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        config: DigestConfig {
+            delta: Duration::from_millis(1000),
+            sub_intervals: 10,
+            hot: 6,
+            warm: 30,
+        },
+        checksum: 7304841855083503815,
+        eras: HashMap::from([(
+            EraType::Hot,
+            Interval {
+                checksum: 8238986480495191270,
+                content: BTreeSet::from([1671634800]),
+            },
+        )]),
+        intervals: HashMap::from([(
+            1671634800,
+            Interval {
+                checksum: 12344398372324783476,
+                content: BTreeSet::from([16716348000]),
+            },
+        )]),
+        subintervals: HashMap::from([(
+            16716348000,
+            SubInterval {
+                checksum: 10007212639402189432,
+                content: BTreeSet::from([LogEntry {
+                    timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+                    key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
+                }]),
+            },
+        )]),
+    };
+    assert_eq!(created, expected);
 }
