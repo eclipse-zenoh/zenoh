@@ -35,6 +35,7 @@ async-std = { version = "=1.12.0", default-features = false, features = [
     "attributes",
     "unstable",
 ] }
+async-trait = "0.1.57"
 bincode = "1.3.3"
 env_logger = "0.10.0"
 flume = "0.10.14"
@@ -42,6 +43,7 @@ futures = "0.3.25"
 log = "0.4.17"
 serde = "1.0.149"
 zenoh = { version = "0.7.0-rc", path = "../zenoh", default-features = false, features = ["unstable"] }
+zenoh-collections = { version = "0.7.0-rc", path = "../commons/zenoh-collections/" }
 zenoh-core = { version = "0.7.0-rc", path = "../commons/zenoh-core/" }
 zenoh-sync = { version = "0.7.0-rc", path = "../commons/zenoh-sync" }
 zenoh-util = { version = "0.7.0-rc", path = "../commons/zenoh-util" }
@@ -64,3 +66,18 @@ path = "examples/z_member.rs"
 [[example]]
 name = "z_view_size"
 path = "examples/z_view_size.rs"
+
+[[example]]
+name = "z_nbftr_sub"
+path = "examples/z_nbftr_sub.rs"
+required-features = ["unstable"]
+
+[[example]]
+name = "z_nbftr_pub"
+path = "examples/z_nbftr_pub.rs"
+required-features = ["unstable"]
+
+[[example]]
+name = "z_nbftr_cache"
+path = "examples/z_nbftr_cache.rs"
+required-features = ["unstable"]

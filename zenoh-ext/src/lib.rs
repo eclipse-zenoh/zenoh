@@ -12,11 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod group;
+mod nbftreliability_cache;
+mod nbftreliable_publisher;
+mod nbftreliable_subscriber;
 mod publication_cache;
 mod querying_subscriber;
 mod session_ext;
 mod subscriber_ext;
+#[zenoh_core::unstable]
+pub use nbftreliability_cache::{NBFTReliabilityCache, NBFTReliabilityCacheBuilder};
+#[zenoh_core::unstable]
+pub use nbftreliable_publisher::{NBFTReliablePublisher, NBFTReliablePublisherBuilder};
+#[zenoh_core::unstable]
+pub use nbftreliable_subscriber::{NBFTReliableSubscriber, NBFTReliableSubscriberBuilder};
 pub use publication_cache::{PublicationCache, PublicationCacheBuilder};
 pub use querying_subscriber::{QueryingSubscriber, QueryingSubscriberBuilder};
-pub use session_ext::SessionExt;
+pub use session_ext::{ArcSessionExt, SessionExt};
 pub use subscriber_ext::SubscriberForward;
