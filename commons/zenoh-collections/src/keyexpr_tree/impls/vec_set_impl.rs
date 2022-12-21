@@ -76,4 +76,12 @@ where
     {
         self.iter_mut()
     }
+
+    fn filter_out<F: FnMut(&mut T) -> bool>(&mut self, predicate: &mut F) {
+        for i in (0..self.len()).rev() {
+            if predicate(&mut self[i]) {
+                self.swap_remove(i);
+            }
+        }
+    }
 }

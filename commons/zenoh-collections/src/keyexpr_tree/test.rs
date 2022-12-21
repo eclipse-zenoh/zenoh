@@ -1,11 +1,12 @@
+use rand::Rng;
 use zenoh_protocol_core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
-    impls::{KeyedSetProvider, VecSetProvider},
+    impls::{DefaultChunkMapProvider, KeyedSetProvider, VecSetProvider},
     *,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt::Debug,
     ops::Deref,
@@ -228,4 +229,35 @@ fn fuzz() {
     let keys = fuzzer.take(1000).collect::<Vec<_>>();
     test_keyset(&keys);
     test_keyset_vec(&keys);
+}
+
+#[test]
+fn pruning() {
+    let mut rng = rand::thread_rng();
+    let mut fuzzer = KeyExprFuzzer(rand::thread_rng());
+    let mut set = KeyExprTree::<i32, DefaultChunkMapProvider>::new();
+    let dist = rand::distributions::Uniform::new(0, 3);
+    while !set
+        .tree_iter()
+        .any(|node| node.weight().is_none() && node.children().is_empty())
+    {
+        for key in fuzzer.by_ref().take(100) {
+            let node = set.node_mut_or_create(&key);
+            let sample = rng.sample(dist);
+            if sample != 0 {
+                node.insert_weight(sample);
+            }
+        }
+    }
+    let expected = set
+        .tree_iter()
+        .filter_map(|node| node.weight().map(|w| (node.keyexpr(), *w)))
+        .collect::<HashMap<_, _>>();
+    set.prune();
+    for node in set.tree_iter() {
+        assert!(node.weight().is_some() || !node.children().is_empty())
+    }
+    for (k, v) in expected {
+        assert_eq!(*set.weight_at(&k).unwrap(), v)
+    }
 }

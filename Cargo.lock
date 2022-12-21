@@ -1569,9 +1569,9 @@ dependencies = [
 
 [[package]]
 name = "keyed-set"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76bccabc7be314e8fd27fa3e30207baaf01aa7b1637b527319003ca4f7b06d5d"
+checksum = "5e4be799ab6c1006138054745f5043b726d8bbb526ebaa7f15d44ff4d399d71c"
 dependencies = [
  "hashbrown 0.13.1",
 ]

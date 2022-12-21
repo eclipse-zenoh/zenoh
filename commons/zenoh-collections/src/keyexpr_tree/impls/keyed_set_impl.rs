@@ -65,4 +65,8 @@ where
     {
         self.iter_mut()
     }
+
+    fn filter_out<F: FnMut(&mut T) -> bool>(&mut self, predicate: &mut F) {
+        self.drain_where(predicate);
+    }
 }

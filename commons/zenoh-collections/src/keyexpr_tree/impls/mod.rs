@@ -167,8 +167,9 @@ where
         }
     }
 
-    fn prune<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
-        let root_iterator = self.children.children_mut();
+    fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
+        self.children
+            .filter_out(&mut |child| child._prune(&mut predicate))
     }
 }
 pub enum IterOrOption<Iter: Iterator, Item> {
@@ -299,6 +300,11 @@ where
             None => String::with_capacity(capacity + self.chunk.len()),
         };
         s + self.chunk.as_str()
+    }
+    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> bool {
+        self.children
+            .filter_out(&mut |child| child.as_node_mut()._prune(predicate));
+        predicate(self) && self.children.is_empty()
     }
 }
 
