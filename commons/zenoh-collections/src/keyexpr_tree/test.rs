@@ -6,7 +6,7 @@ use super::{
     *,
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     convert::{TryFrom, TryInto},
     fmt::Debug,
     ops::Deref,
