@@ -168,8 +168,17 @@ where
     }
 
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
+        let mut wild = false;
         self.children
-            .filter_out(&mut |child| child._prune(&mut predicate))
+            .filter_out(&mut |child| match child._prune(&mut predicate) {
+                PruneResult::Delete => true,
+                PruneResult::NonWild => false,
+                PruneResult::Wild => {
+                    wild = true;
+                    false
+                }
+            });
+        self.has_wilds = wild;
     }
 }
 pub enum IterOrOption<Iter: Iterator, Item> {
@@ -290,6 +299,7 @@ where
         &mut self.children
     }
 }
+
 impl<Weight, Children: ChunkMapType<Box<Self>>> KeyExprTreeNode<Weight, Children>
 where
     Children::Assoc: ChunkMap<Box<Self>>,
@@ -301,11 +311,29 @@ where
         };
         s + self.chunk.as_str()
     }
-    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> bool {
+    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
+        let mut result = PruneResult::NonWild;
         self.children
-            .filter_out(&mut |child| child.as_node_mut()._prune(predicate));
-        predicate(self) && self.children.is_empty()
+            .filter_out(&mut |child| match child.as_node_mut()._prune(predicate) {
+                PruneResult::Delete => true,
+                PruneResult::NonWild => false,
+                PruneResult::Wild => {
+                    result = PruneResult::Wild;
+                    false
+                }
+            });
+        if predicate(self) && self.children.is_empty() {
+            result = PruneResult::Delete
+        } else if self.chunk.is_wild() {
+            result = PruneResult::Wild
+        }
+        result
     }
+}
+enum PruneResult {
+    Delete,
+    NonWild,
+    Wild,
 }
 
 impl<Weight, Children: ChunkMapType<Box<Self>>> HasChunk for KeyExprTreeNode<Weight, Children> {

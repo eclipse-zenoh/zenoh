@@ -1,19 +1,6 @@
 pub use impls::KeyExprTree;
 use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 
-use self::impls::KeyExprTreeNode;
-pub trait IKeTreeProvider<Weight>:
-    ChunkMapType<Box<KeyExprTreeNode<Weight, Self>>> + Sized + 'static
-where
-    Self::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Self>>> + 'static,
-{
-}
-impl<Weight, T: ChunkMapType<Box<KeyExprTreeNode<Weight, Self>>> + Sized + 'static>
-    IKeTreeProvider<Weight> for T
-where
-    Self::Assoc: ChunkMap<Box<KeyExprTreeNode<Weight, Self>>> + 'static,
-{
-}
 pub trait IKeyExprTree<Weight> {
     type Node: IKeyExprTreeNode<Weight>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node>;
