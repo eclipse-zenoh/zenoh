@@ -211,8 +211,9 @@ impl Digest {
         }
         if !sub_content.is_empty() {
             // close subinterval
-            let checksum =
-                Digest::get_content_hash(&sub_content.clone().into_iter().collect::<Vec<LogEntry>>());
+            let checksum = Digest::get_content_hash(
+                &sub_content.clone().into_iter().collect::<Vec<LogEntry>>(),
+            );
             let s = SubInterval {
                 checksum,
                 content: sub_content,
@@ -242,13 +243,13 @@ impl Digest {
         let mut digest_content = Vec::new();
         if let Some(checksum) = digest_hash.get(&EraType::Cold) {
             digest_content.push(*checksum);
-        } 
+        }
         if let Some(checksum) = digest_hash.get(&EraType::Warm) {
             digest_content.push(*checksum);
-        } 
+        }
         if let Some(checksum) = digest_hash.get(&EraType::Hot) {
             digest_content.push(*checksum);
-        } 
+        }
         let checksum = Digest::get_content_hash(&digest_content);
 
         Digest {
@@ -292,17 +293,11 @@ impl Digest {
 
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
-            let content = &subintervals
-                .get(&sub)
-                .unwrap()
-                .content;
+            let content = &subintervals.get(&sub).unwrap().content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_subinterval_checksum(
-                    &content
-                        .clone()
-                        .into_iter()
-                        .collect::<Vec<LogEntry>>(),
+                    &content.clone().into_iter().collect::<Vec<LogEntry>>(),
                 );
 
                 subintervals.get_mut(&sub).unwrap().checksum = checksum;
@@ -312,10 +307,7 @@ impl Digest {
         }
 
         for int in intervals_to_update {
-            let content = &intervals
-                .get(&int)
-                .unwrap()
-                .content;
+            let content = &intervals.get(&int).unwrap().content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_interval_checksum(
@@ -336,10 +328,7 @@ impl Digest {
         }
 
         for era in eras_to_update {
-            let content = &eras
-                .get(&era)
-                .unwrap()
-                .content;
+            let content = &eras.get(&era).unwrap().content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_era_checksum(
@@ -411,13 +400,13 @@ impl Digest {
         let mut digest_content = Vec::new();
         if let Some(interval) = content.get(&EraType::Cold) {
             digest_content.push(interval.checksum);
-        } 
+        }
         if let Some(interval) = content.get(&EraType::Warm) {
             digest_content.push(interval.checksum);
-        } 
+        }
         if let Some(interval) = content.get(&EraType::Hot) {
             digest_content.push(interval.checksum);
-        } 
+        }
         Digest::get_content_hash(&digest_content)
     }
 
@@ -1119,12 +1108,39 @@ fn test_update_remove_digest() {
         Vec::new(),
         1671612730,
     );
-    let added = async_std::task::block_on(Digest::update_digest(created.clone(), 1671612730, Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(), HashSet::from([LogEntry{ timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(), key: OwnedKeyExpr::from_str("a/b/c").unwrap()}]), HashSet::new()));
+    let added = async_std::task::block_on(Digest::update_digest(
+        created.clone(),
+        1671612730,
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        HashSet::from([LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
+        }]),
+        HashSet::new(),
+    ));
     assert_ne!(created, added);
 
-    let removed = async_std::task::block_on(Digest::update_digest(added.clone(), 1671612730, Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(), HashSet::new(), HashSet::from([LogEntry{ timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(), key: OwnedKeyExpr::from_str("a/b/c").unwrap()}])));
+    let removed = async_std::task::block_on(Digest::update_digest(
+        added.clone(),
+        1671612730,
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        HashSet::new(),
+        HashSet::from([LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
+        }]),
+    ));
     assert_eq!(created, removed);
 
-    let added_again = async_std::task::block_on(Digest::update_digest(removed, 1671612730, Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(), HashSet::from([LogEntry{ timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(), key: OwnedKeyExpr::from_str("a/b/c").unwrap()}]), HashSet::new()));
+    let added_again = async_std::task::block_on(Digest::update_digest(
+        removed,
+        1671612730,
+        Timestamp::from_str("2022-12-21T15:00:00.000000000Z/01").unwrap(),
+        HashSet::from([LogEntry {
+            timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/01").unwrap(),
+            key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
+        }]),
+        HashSet::new(),
+    ));
     assert_eq!(added, added_again);
 }
