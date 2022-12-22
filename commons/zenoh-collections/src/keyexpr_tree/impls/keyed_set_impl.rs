@@ -1,8 +1,8 @@
-use super::*;
+use crate::keyexpr_tree::*;
 use keyed_set::{KeyExtractor, KeyedSet};
 
 pub struct KeyedSetProvider;
-impl<T: 'static> ChunkMapType<T> for KeyedSetProvider {
+impl<T: 'static> IChildrenProvider<T> for KeyedSetProvider {
     type Assoc = KeyedSet<T, ChunkExtractor>;
 }
 #[derive(Debug, Default, Clone, Copy)]
@@ -21,7 +21,7 @@ impl<'a, 'b, T: HasChunk> IEntry<'a, 'b, T>
     }
 }
 
-impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> ChunkMap<T> for KeyedSet<T, ChunkExtractor> {
+impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> IChildren<T> for KeyedSet<T, ChunkExtractor> {
     type Node = T;
     fn child_at(&self, chunk: &keyexpr) -> Option<&T> {
         self.get(&chunk)

@@ -1,29 +1,29 @@
+use crate::keyexpr_tree::*;
 use zenoh_core::unlikely;
 
-use super::*;
-struct StackFrame<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
-    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
-    iterator: <Children::Assoc as ChunkMap<Node>>::Iter<'a>,
+    iterator: <Children::Assoc as IChildren<Node>>::Iter<'a>,
     start: usize,
     end: usize,
     _marker: std::marker::PhantomData<Weight>,
 }
-pub struct Inclusion<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+pub struct Inclusion<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
     key: &'a keyexpr,
     ke_indices: Vec<usize>,
     iterators: Vec<StackFrame<'a, Children, Node, Weight>>,
 }
 
-impl<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
     Inclusion<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a Children::Assoc, key: &'a keyexpr) -> Self {
         Self {
@@ -41,14 +41,14 @@ where
 
 impl<
         'a,
-        Children: ChunkMapType<Node>,
+        Children: IChildrenProvider<Node>,
         Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for Inclusion<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a <Children::Assoc as ChunkMap<Node>>::Node;
+    type Item = &'a <Children::Assoc as IChildren<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let StackFrame {
@@ -154,30 +154,34 @@ where
         }
     }
 }
-struct StackFrameMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+struct StackFrameMut<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
-    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
-    iterator: <Children::Assoc as ChunkMap<Node>>::IterMut<'a>,
+    iterator: <Children::Assoc as IChildren<Node>>::IterMut<'a>,
     start: usize,
     end: usize,
     _marker: std::marker::PhantomData<Weight>,
 }
 
-pub struct InclusionMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
-where
-    Children::Assoc: ChunkMap<Node> + 'a,
+pub struct InclusionMut<
+    'a,
+    Children: IChildrenProvider<Node>,
+    Node: IKeyExprTreeNode<Weight>,
+    Weight,
+> where
+    Children::Assoc: IChildren<Node> + 'a,
 {
     key: &'a keyexpr,
     ke_indices: Vec<usize>,
     iterators: Vec<StackFrameMut<'a, Children, Node, Weight>>,
 }
 
-impl<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
     InclusionMut<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a mut Children::Assoc, key: &'a keyexpr) -> Self {
         Self {
@@ -195,14 +199,14 @@ where
 
 impl<
         'a,
-        Children: ChunkMapType<Node>,
+        Children: IChildrenProvider<Node>,
         Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for InclusionMut<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a mut <Children::Assoc as ChunkMap<Node>>::Node;
+    type Item = &'a mut <Children::Assoc as IChildren<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let StackFrameMut {

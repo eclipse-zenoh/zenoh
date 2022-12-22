@@ -2,7 +2,7 @@ use rand::Rng;
 use zenoh_protocol_core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
-    impls::{DefaultChunkMapProvider, KeyedSetProvider, VecSetProvider},
+    impls::{DefaultChildrenProvider, KeyedSetProvider, VecSetProvider},
     *,
 };
 use std::{
@@ -235,7 +235,7 @@ fn fuzz() {
 fn pruning() {
     let mut rng = rand::thread_rng();
     let mut fuzzer = KeyExprFuzzer(rand::thread_rng());
-    let mut set = KeyExprTree::<i32, DefaultChunkMapProvider>::new();
+    let mut set = KeyExprTree::<i32, DefaultChildrenProvider>::new();
     let dist = rand::distributions::Uniform::new(0, 3);
     while !set
         .tree_iter()

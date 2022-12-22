@@ -1,19 +1,19 @@
 use std::num::NonZeroUsize;
 
-use super::*;
-pub struct TreeIter<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+use crate::keyexpr_tree::*;
+pub struct TreeIter<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
-    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
-    iterators: Vec<<Children::Assoc as ChunkMap<Node>>::Iter<'a>>,
+    iterators: Vec<<Children::Assoc as IChildren<Node>>::Iter<'a>>,
     _marker: std::marker::PhantomData<Weight>,
 }
 
-impl<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
     TreeIter<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a Children::Assoc) -> Self {
         Self {
@@ -28,14 +28,14 @@ where
 
 impl<
         'a,
-        Children: ChunkMapType<Node>,
+        Children: IChildrenProvider<Node>,
         Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for TreeIter<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a <Children::Assoc as ChunkMap<Node>>::Node;
+    type Item = &'a <Children::Assoc as IChildren<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iterators.last_mut()?.next() {
@@ -53,19 +53,23 @@ where
         }
     }
 }
-pub struct TreeIterMut<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
-where
-    Children::Assoc: ChunkMap<Node> + 'a,
-    <Children::Assoc as ChunkMap<Node>>::Node: 'a,
+pub struct TreeIterMut<
+    'a,
+    Children: IChildrenProvider<Node>,
+    Node: IKeyExprTreeNode<Weight>,
+    Weight,
+> where
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
-    iterators: Vec<<Children::Assoc as ChunkMap<Node>>::IterMut<'a>>,
+    iterators: Vec<<Children::Assoc as IChildren<Node>>::IterMut<'a>>,
     _marker: std::marker::PhantomData<Weight>,
 }
 
-impl<'a, Children: ChunkMapType<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
     TreeIterMut<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a mut Children::Assoc) -> Self {
         Self {
@@ -77,14 +81,14 @@ where
 
 impl<
         'a,
-        Children: ChunkMapType<Node>,
+        Children: IChildrenProvider<Node>,
         Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for TreeIterMut<'a, Children, Node, Weight>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a mut <Children::Assoc as ChunkMap<Node>>::Node;
+    type Item = &'a mut <Children::Assoc as IChildren<Node>>::Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iterators.last_mut()?.next() {
@@ -106,14 +110,14 @@ where
 pub struct DepthInstrumented<T>(T);
 impl<
         'a,
-        Children: ChunkMapType<Node>,
+        Children: IChildrenProvider<Node>,
         Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for DepthInstrumented<TreeIter<'a, Children, Node, Weight>>
 where
-    Children::Assoc: ChunkMap<Node> + 'a,
+    Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = (NonZeroUsize, &'a <Children::Assoc as ChunkMap<Node>>::Node);
+    type Item = (NonZeroUsize, &'a <Children::Assoc as IChildren<Node>>::Node);
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let depth = self.0.iterators.len();

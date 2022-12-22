@@ -1,9 +1,9 @@
 use zenoh_core::unlikely;
 
-use super::*;
+use crate::keyexpr_tree::*;
 
 pub struct VecSetProvider;
-impl<T: 'static> ChunkMapType<T> for VecSetProvider {
+impl<T: 'static> IChildrenProvider<T> for VecSetProvider {
     type Assoc = Vec<T>;
 }
 
@@ -23,7 +23,7 @@ pub enum Entry<'a, 'b, T> {
     Vacant(&'a mut Vec<T>, &'b keyexpr),
     Occupied(&'a mut T),
 }
-impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> ChunkMap<T> for Vec<T> {
+impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> IChildren<T> for Vec<T> {
     type Node = T;
     fn child_at(&self, chunk: &keyexpr) -> Option<&T> {
         self.iter().find(|t| unlikely(t.chunk() == chunk))
