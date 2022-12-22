@@ -55,19 +55,19 @@ impl Aligner {
 
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
-            trace!(
-                "[ALIGNER]Processing digest: {:?} from {}",
-                incoming_digest,
-                from
-            );
             if self.in_processed(incoming_digest.checksum).await {
-                trace!("[ALIGNER]Skipping already processed digest");
+                trace!("[ALIGNER]Skipping already processed digest: {}", incoming_digest.checksum);
                 continue;
             } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
-                trace!("[ALIGNER]Skipping matching digest");
+                trace!("[ALIGNER]Skipping matching digest: {}", incoming_digest.checksum);
                 continue;
             } else {
                 // process this digest
+                trace!(
+                    "[ALIGNER]Processing digest: {:?} from {}",
+                    incoming_digest,
+                    from
+                );
                 self.process_incoming_digest(incoming_digest, &from).await;
             }
         }
@@ -239,7 +239,6 @@ impl Aligner {
                 }
                 // get subintervals diff
                 let result = this.get_full_content_diff(other_content);
-                trace!("[ALIGNER] The missing content is {:?}", result);
                 return result;
             }
         }
