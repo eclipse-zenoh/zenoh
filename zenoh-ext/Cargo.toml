@@ -64,3 +64,6 @@ path = "examples/z_member.rs"
 [[example]]
 name = "z_view_size"
 path = "examples/z_view_size.rs"
+
+[package.metadata.docs.rs]
+features = ["unstable"]
