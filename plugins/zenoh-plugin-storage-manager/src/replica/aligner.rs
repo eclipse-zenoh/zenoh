@@ -16,7 +16,7 @@ use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use log::{error, debug, trace};
+use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
@@ -71,8 +71,7 @@ impl Aligner {
                 // process this digest
                 debug!(
                     "[ALIGNER]Processing digest: {:?} from {}",
-                    incoming_digest,
-                    from
+                    incoming_digest, from
                 );
                 self.process_incoming_digest(incoming_digest, &from).await;
             }
