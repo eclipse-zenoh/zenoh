@@ -16,7 +16,7 @@ use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use log::{error, trace};
+use log::{error, debug, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
@@ -69,7 +69,7 @@ impl Aligner {
                 continue;
             } else {
                 // process this digest
-                trace!(
+                debug!(
                     "[ALIGNER]Processing digest: {:?} from {}",
                     incoming_digest,
                     from
@@ -103,7 +103,7 @@ impl Aligner {
 
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
-                trace!("[ALIGNER] Adding sample {:?} to storage", sample);
+                debug!("[ALIGNER] Adding sample {:?} to storage", sample);
                 match self.tx_sample.send_async(sample).await {
                     Ok(()) => continue,
                     Err(e) => error!("[ALIGNER] Error adding sample to storage: {}", e),
@@ -317,7 +317,7 @@ impl Aligner {
             .join(&from)
             .unwrap()
             .with_parameters(&properties);
-        trace!("[ALIGNER]Sending Query '{}'...", selector);
+        trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         let replies = self
             .session
