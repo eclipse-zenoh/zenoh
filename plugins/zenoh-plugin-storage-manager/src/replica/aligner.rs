@@ -88,7 +88,7 @@ impl Aligner {
     async fn process_incoming_digest(&self, other: super::Digest, from: &str) {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
-        let missing_content = self.get_missing_content(other, from).await;
+        let missing_content = self.get_missing_content(&other, from).await;
         trace!("[ALIGNER] Missing content is {:?}", missing_content);
 
         // If missing content is not identified, it showcases some problem
@@ -141,35 +141,17 @@ impl Aligner {
         result
     }
 
-    async fn get_missing_content(&self, other: super::Digest, from: &str) -> Vec<LogEntry> {
+    async fn get_missing_content(&self, other: &super::Digest, from: &str) -> Vec<LogEntry> {
         // get my digest
         let this = &self.snapshotter.get_digest().await;
 
-        // get first level diff of digest wrt other - subintervals, of HOT, intervals of WARM and COLD if misaligned
-        let mis_eras = this.get_era_diff(other.eras.clone());
-        let mut missing_content = Vec::new();
-        if mis_eras.contains(&super::EraType::Cold) {
-            // perform cold alignment
-            let mut cold_data = self
-                .perform_cold_alignment(this, from.to_string(), other.timestamp)
-                .await;
-            missing_content.append(&mut cold_data);
-        }
-        if mis_eras.contains(&super::EraType::Warm) {
-            // perform warm alignment
-            let mut warm_data = self
-                .perform_warm_alignment(this, from.to_string(), other.clone())
-                .await;
-            missing_content.append(&mut warm_data);
-        }
-        if mis_eras.contains(&super::EraType::Hot) {
-            // perform hot alignment
-            let mut hot_data = self
-                .perform_hot_alignment(this, from.to_string(), other)
-                .await;
-            missing_content.append(&mut hot_data);
-        }
-        missing_content.into_iter().collect()
+        let cold_alignment = self.perform_cold_alignment(this, from.to_string(), other);
+        let warm_alignment = self.perform_warm_alignment(this, from.to_string(), other);
+        let hot_alignment = self.perform_hot_alignment(this, from.to_string(), other);
+
+        let (cold_data, warm_data, hot_data) =
+            futures::join!(cold_alignment, warm_alignment, hot_alignment);
+        [cold_data, warm_data, hot_data].concat()
     }
 
     //perform cold alignment
@@ -180,9 +162,12 @@ impl Aligner {
         &self,
         this: &super::Digest,
         other_rep: String,
-        timestamp: Timestamp,
+        other: &super::Digest,
     ) -> Vec<LogEntry> {
-        let properties = format!("timestamp={}&{}=cold", timestamp, super::ERA);
+        if !this.era_has_diff(&super::EraType::Cold, &other.eras) {
+            return Vec::new();
+        }
+        let properties = format!("timestamp={}&{}=cold", other.timestamp, super::ERA);
         // expecting sample.value to be a vec of intervals with their checksum
         let reply_content = self.perform_query(other_rep.to_string(), properties).await;
         let mut other_intervals: HashMap<u64, u64> = HashMap::new();
@@ -203,7 +188,7 @@ impl Aligner {
             }
             let properties = format!(
                 "timestamp={}&{}=[{}]",
-                timestamp,
+                other.timestamp,
                 super::INTERVALS,
                 diff_string.join(",")
             );
@@ -231,7 +216,7 @@ impl Aligner {
                 }
                 let properties = format!(
                     "timestamp={}&{}=[{}]",
-                    timestamp,
+                    other.timestamp,
                     super::SUBINTERVALS,
                     diff_string.join(",")
                 );
@@ -292,8 +277,11 @@ impl Aligner {
         &self,
         this: &super::Digest,
         other_rep: String,
-        other: super::Digest,
+        other: &super::Digest,
     ) -> Vec<LogEntry> {
+        if !this.era_has_diff(&super::EraType::Warm, &other.eras) {
+            return Vec::new();
+        }
         // get interval hashes for WARM intervals from other
         let other_intervals = other.get_era_content(super::EraType::Warm);
         // get era diff
@@ -360,8 +348,11 @@ impl Aligner {
         &self,
         this: &super::Digest,
         other_rep: String,
-        other: super::Digest,
+        other: &super::Digest,
     ) -> Vec<LogEntry> {
+        if !this.era_has_diff(&super::EraType::Hot, &other.eras) {
+            return Vec::new();
+        }
         // get interval hashes for HOT intervals from other
         let other_intervals = other.get_era_content(super::EraType::Hot);
         // get era diff

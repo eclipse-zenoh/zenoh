@@ -701,21 +701,18 @@ impl Digest {
 
 // functions for alignment
 impl Digest {
-    // return mismatching eras
-    pub fn get_era_diff(&self, other: HashMap<EraType, Interval>) -> HashSet<EraType> {
-        let mut result = HashSet::new();
-        for era in vec![EraType::Hot, EraType::Warm, EraType::Cold] {
-            if other.contains_key(&era) && other.get(&era).unwrap().checksum != 0 {
-                if self.eras.contains_key(&era) {
-                    if self.eras.get(&era).unwrap().checksum != other.get(&era).unwrap().checksum {
-                        result.insert(era);
-                    }
-                } else {
-                    result.insert(era);
+    // check of the other era has more content
+    pub fn era_has_diff(&self, era: &EraType, other: &HashMap<EraType, Interval>) -> bool {
+        if other.contains_key(era) {
+            if self.eras.contains_key(era) {
+                if self.eras.get(era).unwrap().checksum != other.get(era).unwrap().checksum {
+                    return true;
                 }
-            } // else no need to check
+            } else {
+                return true;
+            }
         }
-        result
+        false
     }
 
     // return mismatching intervals in an era
