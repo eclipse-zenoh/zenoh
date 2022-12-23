@@ -666,9 +666,9 @@ impl Digest {
     }
 
     // get the intervals of a given era
-    pub fn get_era_content(&self, era: EraType) -> HashMap<u64, u64> {
+    pub fn get_era_content(&self, era: &EraType) -> HashMap<u64, u64> {
         let mut result = HashMap::new();
-        for int in self.eras.get(&era).unwrap().content.clone() {
+        for int in self.eras.get(era).unwrap().content.clone() {
             result.insert(int, self.intervals.get(&int).unwrap().checksum);
         }
         result

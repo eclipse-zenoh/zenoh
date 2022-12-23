@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use super::{Digest, EraType};
 use super::{LogEntry, Snapshotter};
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
@@ -145,9 +146,12 @@ impl Aligner {
         // get my digest
         let this = &self.snapshotter.get_digest().await;
 
-        let cold_alignment = self.perform_cold_alignment(this, from.to_string(), other);
-        let warm_alignment = self.perform_warm_alignment(this, from.to_string(), other);
-        let hot_alignment = self.perform_hot_alignment(this, from.to_string(), other);
+        let cold_alignment =
+            self.perform_era_alignment(&EraType::Cold, this, from.to_string(), other);
+        let warm_alignment =
+            self.perform_era_alignment(&EraType::Warm, this, from.to_string(), other);
+        let hot_alignment =
+            self.perform_era_alignment(&EraType::Hot, this, from.to_string(), other);
 
         let (cold_data, warm_data, hot_data) =
             futures::join!(cold_alignment, warm_alignment, hot_alignment);
@@ -158,83 +162,133 @@ impl Aligner {
     // if COLD misaligned, ask for interval hashes for cold for the other digest timestamp and replica
     // for misaligned intervals, ask subinterval hashes
     // for misaligned subintervals, ask content
-    async fn perform_cold_alignment(
+    async fn perform_era_alignment(
         &self,
+        era: &EraType,
         this: &super::Digest,
         other_rep: String,
         other: &super::Digest,
     ) -> Vec<LogEntry> {
-        if !this.era_has_diff(&super::EraType::Cold, &other.eras) {
+        if !this.era_has_diff(era, &other.eras) {
             return Vec::new();
         }
-        let properties = format!("timestamp={}&{}=cold", other.timestamp, super::ERA);
-        // expecting sample.value to be a vec of intervals with their checksum
-        let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-        let mut other_intervals: HashMap<u64, u64> = HashMap::new();
-        for each in reply_content {
-            match serde_json::from_str(&each.value.to_string()) {
-                Ok((i, c)) => {
-                    other_intervals.insert(i, c);
-                }
-                Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
-            };
-        }
         // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals.clone());
-        if !diff_intervals.is_empty() {
-            let mut diff_string = Vec::new();
-            for each_int in diff_intervals {
-                diff_string.push(each_int.to_string());
-            }
-            let properties = format!(
-                "timestamp={}&{}=[{}]",
-                other.timestamp,
-                super::INTERVALS,
-                diff_string.join(",")
-            );
-            // expecting sample.value to be a vec of subintervals with their checksum
+        let diff_intervals = self.get_interval_diff(era, this, other, &other_rep).await;
+        // get interval diff
+        let diff_subintervals = self
+            .get_subinterval_diff(era, diff_intervals, this, other, &other_rep)
+            .await;
+        // get subinterval diff
+        self.get_content_diff(diff_subintervals, this, other, &other_rep)
+            .await
+    }
+
+    async fn get_interval_diff(
+        &self,
+        era: &EraType,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> HashSet<u64> {
+        let other_intervals = if era.eq(&EraType::Cold) {
+            let properties = format!("timestamp={}&{}=cold", other.timestamp, super::ERA);
+            // expecting sample.value to be a vec of intervals with their checksum
             let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
+            let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             for each in reply_content {
                 match serde_json::from_str(&each.value.to_string()) {
                     Ok((i, c)) => {
-                        other_subintervals.insert(i, c);
+                        other_intervals.insert(i, c);
                     }
                     Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                 };
             }
-            // get intervals diff
-            let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-            trace!(
-                "[ALIGNER] The subintervals that need alignment are : {:?}",
-                diff_subintervals
-            );
-            if !diff_subintervals.is_empty() {
+            // get era diff
+            other_intervals
+        } else {
+            // get the diff of intervals from the digest itself
+            // get interval hashes for WARM intervals from other
+            other.get_era_content(era)
+        };
+        // get era diff
+        this.get_interval_diff(other_intervals)
+    }
+
+    async fn get_subinterval_diff(
+        &self,
+        era: &EraType,
+        diff_intervals: HashSet<u64>,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> HashSet<u64> {
+        if !diff_intervals.is_empty() {
+            let other_subintervals = if era.eq(&EraType::Hot) {
+                // get subintervals for mismatching intervals from other
+                other.get_interval_content(diff_intervals)
+            } else {
                 let mut diff_string = Vec::new();
-                for each_sub in diff_subintervals {
-                    diff_string.push(each_sub.to_string());
+                for each_int in diff_intervals {
+                    diff_string.push(each_int.to_string());
                 }
                 let properties = format!(
                     "timestamp={}&{}=[{}]",
                     other.timestamp,
-                    super::SUBINTERVALS,
+                    super::INTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of log entries with their checksum
+                // expecting sample.value to be a vec of subintervals with their checksum
                 let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
+                let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
                     match serde_json::from_str(&each.value.to_string()) {
                         Ok((i, c)) => {
-                            other_content.insert(i, c);
+                            other_subintervals.insert(i, c);
                         }
                         Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                     };
                 }
-                // get subintervals diff
-                let result = this.get_full_content_diff(other_content);
-                return result;
+                other_subintervals
+            };
+            // get intervals diff
+            this.get_subinterval_diff(other_subintervals)
+        } else {
+            HashSet::new()
+        }
+    }
+
+    async fn get_content_diff(
+        &self,
+        diff_subintervals: HashSet<u64>,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> Vec<LogEntry> {
+        if !diff_subintervals.is_empty() {
+            let mut diff_string = Vec::new();
+            for each_sub in diff_subintervals {
+                diff_string.push(each_sub.to_string());
             }
+            let properties = format!(
+                "timestamp={}&{}=[{}]",
+                other.timestamp,
+                super::SUBINTERVALS,
+                diff_string.join(",")
+            );
+            // expecting sample.value to be a vec of log entries with their checksum
+            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
+            let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
+            for each in reply_content {
+                match serde_json::from_str(&each.value.to_string()) {
+                    Ok((i, c)) => {
+                        other_content.insert(i, c);
+                    }
+                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
+                };
+            }
+            // get subintervals diff
+            let result = this.get_full_content_diff(other_content);
+            return result;
         }
         Vec::new()
     }
@@ -268,127 +322,5 @@ impl Aligner {
             }
         }
         return_val
-    }
-
-    //peform warm alignment
-    // if WARM misaligned, ask for subinterval hashes of misaligned intervals
-    // for misaligned subintervals, ask content
-    async fn perform_warm_alignment(
-        &self,
-        this: &super::Digest,
-        other_rep: String,
-        other: &super::Digest,
-    ) -> Vec<LogEntry> {
-        if !this.era_has_diff(&super::EraType::Warm, &other.eras) {
-            return Vec::new();
-        }
-        // get interval hashes for WARM intervals from other
-        let other_intervals = other.get_era_content(super::EraType::Warm);
-        // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals);
-
-        // properties = timestamp=xxx,intervals=[www,ee,rr]
-        if !diff_intervals.is_empty() {
-            let mut diff_string = Vec::new();
-            for each_int in diff_intervals {
-                diff_string.push(each_int.to_string());
-            }
-            let properties = format!(
-                "timestamp={}&{}=[{}]",
-                other.timestamp,
-                super::INTERVALS,
-                diff_string.join(",")
-            );
-            // expecting sample.value to be a vec of subintervals with their checksum
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
-            for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
-                    Ok((i, c)) => {
-                        other_subintervals.insert(i, c);
-                    }
-                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
-                };
-            }
-            // get intervals diff
-            let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-            if !diff_subintervals.is_empty() {
-                let mut diff_string = Vec::new();
-                // properties = timestamp=xxx,subintervals=[www,ee,rr]
-                for each_sub in diff_subintervals {
-                    diff_string.push(each_sub.to_string());
-                }
-                let properties = format!(
-                    "timestamp={}&{}=[{}]",
-                    other.timestamp,
-                    super::SUBINTERVALS,
-                    diff_string.join(",")
-                );
-                // expecting sample.value to be a vec of log entries with their checksum
-                let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
-                for each in reply_content {
-                    match serde_json::from_str(&each.value.to_string()) {
-                        Ok((i, c)) => {
-                            other_content.insert(i, c);
-                        }
-                        Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
-                    };
-                }
-                // get subintervals diff
-                return this.get_full_content_diff(other_content);
-            }
-        }
-        Vec::new()
-    }
-
-    //perform hot alignment
-    // if HOT misaligned, ask for content(timestamps) of misaligned subintervals
-    async fn perform_hot_alignment(
-        &self,
-        this: &super::Digest,
-        other_rep: String,
-        other: &super::Digest,
-    ) -> Vec<LogEntry> {
-        if !this.era_has_diff(&super::EraType::Hot, &other.eras) {
-            return Vec::new();
-        }
-        // get interval hashes for HOT intervals from other
-        let other_intervals = other.get_era_content(super::EraType::Hot);
-        // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals);
-
-        // get subintervals for mismatching intervals from other
-        let other_subintervals = other.get_interval_content(diff_intervals);
-        // get intervals diff
-        let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-
-        if !diff_subintervals.is_empty() {
-            let mut diff_string = Vec::new();
-            // properties = timestamp=xxx,subintervals=[www,ee,rr]
-            for each_sub in diff_subintervals {
-                diff_string.push(each_sub.to_string());
-            }
-            let properties = format!(
-                "timestamp={}&{}=[{}]",
-                other.timestamp,
-                super::SUBINTERVALS,
-                diff_string.join(",")
-            );
-            // expecting sample.value to be a vec of log entries with their checksum
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
-            for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
-                    Ok((i, c)) => {
-                        other_content.insert(i, c);
-                    }
-                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
-                };
-            }
-            // get subintervals diff
-            return this.get_full_content_diff(other_content);
-        }
-        Vec::new()
     }
 }
