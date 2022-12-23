@@ -56,10 +56,16 @@ impl Aligner {
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
             if self.in_processed(incoming_digest.checksum).await {
-                trace!("[ALIGNER]Skipping already processed digest: {}", incoming_digest.checksum);
+                trace!(
+                    "[ALIGNER]Skipping already processed digest: {}",
+                    incoming_digest.checksum
+                );
                 continue;
             } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
-                trace!("[ALIGNER]Skipping matching digest: {}", incoming_digest.checksum);
+                trace!(
+                    "[ALIGNER]Skipping matching digest: {}",
+                    incoming_digest.checksum
+                );
                 continue;
             } else {
                 // process this digest
@@ -85,11 +91,14 @@ impl Aligner {
         let missing_content = self.get_missing_content(other, from).await;
         trace!("[ALIGNER] Missing content is {:?}", missing_content);
 
+        // If missing content is not identified, it showcases some problem
+        // The problem will be addressed in the future rounds, hence will not count as processed
         if !missing_content.is_empty() {
             let missing_data = self
                 .get_missing_data(&missing_content, timestamp, from)
                 .await;
 
+            // Missing data might be empty since some samples in digest might be outdated
             trace!("[ALIGNER] Missing data is {:?}", missing_data);
 
             for (key, (ts, value)) in missing_data {
@@ -100,10 +109,10 @@ impl Aligner {
                     Err(e) => error!("[ALIGNER] Error adding sample to storage: {}", e),
                 }
             }
+            let mut processed = self.digests_processed.write().await;
+            (*processed).insert(checksum);
+            drop(processed);
         }
-        let mut processed = self.digests_processed.write().await;
-        (*processed).insert(checksum);
-        drop(processed);
     }
 
     async fn get_missing_data(
@@ -310,7 +319,7 @@ impl Aligner {
                     Ok((i, c)) => {
                         other_subintervals.insert(i, c);
                     }
-                    Err(e) => error!("Error decoding reply: {}", e),
+                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                 };
             }
             // get intervals diff
@@ -335,7 +344,7 @@ impl Aligner {
                         Ok((i, c)) => {
                             other_content.insert(i, c);
                         }
-                        Err(e) => error!("Error decoding reply: {}", e),
+                        Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                     };
                 }
                 // get subintervals diff
@@ -383,7 +392,7 @@ impl Aligner {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
-                    Err(e) => error!("Error decoding reply: {}", e),
+                    Err(e) => error!("[ALIGNER] Error decoding reply: {}", e),
                 };
             }
             // get subintervals diff
