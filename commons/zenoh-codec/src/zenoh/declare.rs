@@ -127,7 +127,7 @@ where
         }
 
         let len: usize = self.codec.read(&mut *reader)?;
-        let mut declarations = Vec::with_capacity(len as usize);
+        let mut declarations = Vec::with_capacity(len);
         for _ in 0..len {
             let d: Declaration = self.codec.read(&mut *reader)?;
             declarations.push(d);

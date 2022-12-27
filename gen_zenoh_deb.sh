@@ -21,7 +21,7 @@ if [ -z "$1" -o -z "$2" ]; then
     exit 1
 fi
 
-VERSION=`echo $1 | sed s/-/~/g`
+VERSION=`echo $1`
 ARCH=$2
 
 PACKAGE_NAME="zenoh_${VERSION}_${ARCH}"
@@ -40,7 +40,7 @@ echo "Section: net " >> ${CONTROL_FILE}
 echo "Priority: optional" >> ${CONTROL_FILE}
 echo "Essential: no" >> ${CONTROL_FILE}
 echo "Installed-Size: 1024 " >> ${CONTROL_FILE}
-echo "Depends: zenohd, zenoh-plugin-rest, zenoh-plugin-storage-manager " >> ${CONTROL_FILE}
+echo "Depends: zenohd (=${VERSION}), zenoh-plugin-rest (=${VERSION}), zenoh-plugin-storage-manager (=${VERSION}) " >> ${CONTROL_FILE}
 echo "Maintainer: zenoh-dev@eclipse.org " >> ${CONTROL_FILE}
 echo "Description: The zenoh top-level package" >> ${CONTROL_FILE}
 echo "" >> ${CONTROL_FILE}

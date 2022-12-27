@@ -55,7 +55,6 @@ unstable = []
 default = [
     "auth_pubkey",
     "auth_usrpwd",
-    "shared-memory",
     "transport_quic",
     "transport_tcp",
     "transport_tls",
@@ -110,3 +109,6 @@ rustc_version = "0.4.0"
 
 [lib]
 name = "zenoh"
+
+[package.metadata.docs.rs]
+features = ["unstable"]

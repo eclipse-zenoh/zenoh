@@ -239,6 +239,7 @@ impl TransportMulticastInner {
     /*        SCHEDULE AND SEND TX       */
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
+    #[allow(unused_mut)] // Required with "shared-memory" feature
     pub(crate) fn schedule(&self, mut message: ZenohMessage) {
         // Multicast transports do not support SHM for the time being
         #[cfg(feature = "shared-memory")]

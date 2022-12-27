@@ -46,12 +46,9 @@ use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
-use std::time::Instant;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
-use zenoh_collections::TimedEvent;
-use zenoh_collections::Timer;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
@@ -87,7 +84,6 @@ pub(crate) struct SessionState {
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
-    pub(crate) timer: Timer,
 }
 
 impl SessionState {
@@ -108,7 +104,6 @@ impl SessionState {
             queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
-            timer: Timer::new(true),
         }
     }
 }
@@ -1318,15 +1313,28 @@ impl Session {
             Locality::Any => 2,
             _ => 1,
         };
-        let timeout = TimedEvent::once(
-            Instant::now() + timeout,
-            QueryTimeout {
-                state: self.state.clone(),
-                runtime: self.runtime.clone(),
-                qid,
-            },
-        );
-        state.timer.add(timeout);
+        task::spawn({
+            let state = self.state.clone();
+            let zid = self.runtime.zid;
+            async move {
+                task::sleep(timeout).await;
+                let mut state = zwrite!(state);
+                if let Some(query) = state.queries.remove(&qid) {
+                    std::mem::drop(state);
+                    log::debug!("Timout on query {}! Send error and close.", qid);
+                    if query.reception_mode == ConsolidationMode::Latest {
+                        for (_, reply) in query.replies.unwrap().into_iter() {
+                            (query.callback)(reply);
+                        }
+                    }
+                    (query.callback)(Reply {
+                        sample: Err("Timeout".into()),
+                        replier_id: zid,
+                    });
+                }
+            }
+        });
+
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(

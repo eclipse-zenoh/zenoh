@@ -20,9 +20,50 @@ Check the website [zenoh.io](http://zenoh.io) and the [roadmap](https://github.c
 Zenoh is extremely easy to learn, the best place to master the fundamentals is our [getting started guide](https://zenoh.io/docs/getting-started/first-app/).
 
 -------------------------------
+## How to install it
+
+To install the latest release of the Zenoh router (`zenohd`) and its default plugins (REST API plugin and Storages Manager plugin) you can do as follows:
+
+### Manual installation (all platforms)
+
+All release packages can be downloaded from:  
+ - https://download.eclipse.org/zenoh/zenoh/latest/   
+
+Each subdirectory has the name of the Rust target. See the platforms each target corresponds to on https://doc.rust-lang.org/stable/rustc/platform-support.html
+
+Choose your platform and download the `.zip` file.  
+Unzip it where you want, and run the extracted `zenohd` binary.
+
+### Linux Debian
+
+Add Eclipse Zenoh private repository to the sources list, and install the `zenoh` package:
+
+```bash
+echo "deb [trusted=yes] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee -a /etc/apt/sources.list > /dev/null
+sudo apt update
+sudo apt install zenoh
+```
+Then you can start run `zenohd`.
+
+### MacOS
+
+Tap our brew package repository and install the `zenoh` formula:
+
+```bash
+brew tap eclipse-zenoh/homebrew-zenoh
+brew install zenoh
+```
+Then you can start run `zenohd`.
+
+
+### Rust API
+
+-------------------------------
 ## How to build it
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.5.1), so no special configuration is required from your side.  
+> :warning: **WARNING** :warning: : Zenoh and its ecosystem are under active development. When you build from git, make sure you also build from git any other Zenoh repository you plan to use (e.g. binding, plugin, backend, etc.). It may happen that some changes in git are not compatible with the most recent packaged Zenoh release (e.g. deb, docker, pip). We put particular effort in mantaining compatibility between the various git repositories in the Zenoh project.
+
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.62.1), so no special configuration is required from your side.  
 To build Zenoh, just type the following command after having followed the previous instructions:
 
 ```bash
