@@ -183,6 +183,10 @@ impl<'a> SiphonableReader for &'a [u8] {
     where
         W: Writer,
     {
-        writer.write(self).map_err(|_| DidntSiphon)
+        let res = writer.write(self).map_err(|_| DidntSiphon);
+        if let Ok(len) = res {
+            *self = &self[len.get()..];
+        }
+        res
     }
 }

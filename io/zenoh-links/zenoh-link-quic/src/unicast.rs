@@ -221,18 +221,20 @@ impl LinkManagerUnicastQuic {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let domain = get_quic_dns(endpoint.address()).await?;
-        let addr = get_quic_addr(endpoint.address()).await?;
-        let host: &str = domain.as_ref().into();
-        let config = endpoint.config();
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
+
+        let domain = get_quic_dns(&epaddr).await?;
+        let addr = get_quic_addr(&epaddr).await?;
+        let host: &str = domain.into();
 
         // Initialize the QUIC connection
         let mut root_cert_store = rustls::RootCertStore::empty();
 
         // Read the certificates
-        let f = if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+        let f = if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
             value.as_bytes().to_vec()
-        } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+        } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
             async_std::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
@@ -299,16 +301,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let config = endpoint.config();
-        if config.as_str().is_empty() {
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
+
+        if epconf.is_empty() {
             bail!("No QUIC configuration provided");
         };
 
-        let addr = get_quic_addr(endpoint.address()).await?;
+        let addr = get_quic_addr(&epaddr).await?;
 
-        let f = if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+        let f = if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_RAW) {
             value.as_bytes().to_vec()
-        } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+        } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
             async_std::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
@@ -322,9 +326,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .collect();
 
         // Private keys
-        let f = if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+        let f = if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_RAW) {
             value.as_bytes().to_vec()
-        } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+        } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
             async_std::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
@@ -405,7 +409,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_quic_addr(endpoint.address()).await?;
+        let epaddr = endpoint.address();
+
+        let addr = get_quic_addr(&epaddr).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {

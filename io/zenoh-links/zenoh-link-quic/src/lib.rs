@@ -23,7 +23,7 @@ use config::{
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use std::net::SocketAddr;
-use webpki::{DnsName, DnsNameRef};
+use webpki::DnsNameRef;
 use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, Locator};
 use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
@@ -113,15 +113,15 @@ pub mod config {
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
 }
 
-async fn get_quic_addr(address: Address<'_>) -> ZResult<SocketAddr> {
+async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
     match address.as_str().to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve QUIC locator address: {}", address),
     }
 }
 
-async fn get_quic_dns(address: Address<'_>) -> ZResult<DnsName> {
+async fn get_quic_dns<'a>(address: &'a Address<'a>) -> ZResult<DnsNameRef<'a>> {
     let addr = address.as_str().split(':').next().unwrap();
     let domain = DnsNameRef::try_from_ascii(addr.as_bytes()).map_err(|e| zerror!(e))?;
-    Ok(domain.to_owned())
+    Ok(domain)
 }

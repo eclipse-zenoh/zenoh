@@ -96,7 +96,7 @@ where
 
 pub(super) fn remove_properties<'s, I>(iter: I, k: &'s str) -> String
 where
-    I: Iterator<Item = (&'s str, &'s str)> + DoubleEndedIterator,
+    I: Iterator<Item = (&'s str, &'s str)>,
 {
     let iter = iter.filter(|x| x.0 != k);
 
@@ -442,7 +442,7 @@ impl EndPoint {
             ),
         };
 
-        s.parse()
+        Self::try_from(s)
     }
 
     pub fn as_str(&self) -> &str {

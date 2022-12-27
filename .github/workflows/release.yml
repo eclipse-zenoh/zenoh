@@ -329,7 +329,6 @@ jobs:
         shell: bash
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
-<<<<<<< HEAD
           cd commons/zenoh-macros && cargo publish && cd - && sleep 20
           cd commons/zenoh-core && cargo publish && cd - && sleep 20
           cd commons/zenoh-cfg-properties && cargo publish && cd - && sleep 20
@@ -358,36 +357,6 @@ jobs:
           cd plugins/zenoh-plugin-rest && cargo publish && cd - && sleep 20
           cd plugins/zenoh-backend-traits && cargo publish && cd - && sleep 20
           cd plugins/zenoh-plugin-storage-manager && cargo publish && cd - && sleep 20
-=======
-          cd commons/zenoh-macros && cargo publish && cd -
-          cd commons/zenoh-core && cargo publish && cd -
-          cd commons/zenoh-cfg-properties && cargo publish && cd -
-          cd commons/zenoh-sync && cargo publish && cd -
-          cd commons/zenoh-collections && cargo publish && cd -
-          cd commons/zenoh-crypto && cargo publish && cd -
-          cd commons/zenoh-util && cargo publish && cd -
-          cd commons/zenoh-protocol-core && cargo publish && cd -
-          cd commons/zenoh-config && cargo publish && cd -
-          cd commons/zenoh-buffers && cargo publish && cd -
-          cd commons/zenoh-protocol && cargo publish && cd -
-          cd io/zenoh-link-commons && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-udp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tls && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-quic && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-serial && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-ws && cargo publish && cd -
-          cd io/zenoh-link && cargo publish && cd -
-          cd io/zenoh-transport && cargo publish && cd -
-          cd plugins/zenoh-plugin-trait && cargo publish && cd -
-          cd zenoh && cargo publish && cd -
-          cd zenoh-ext && cargo publish && cd -
-          cd zenohd && cargo publish && cd -
-          cd plugins/zenoh-plugin-rest && cargo publish && cd -
-          cd plugins/zenoh-backend-traits && cargo publish && cd -
-          cd plugins/zenoh-plugin-storage-manager && cargo publish && cd -
->>>>>>> master
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2

@@ -26,7 +26,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &EndPoint) -> Self::Output {
-        self.write(writer, x.to_string().as_str())
+        self.write(writer, x.as_str())
     }
 }
 

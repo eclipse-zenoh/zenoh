@@ -234,7 +234,6 @@ async fn tx_task(
                 let bytes = batch.as_bytes();
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
-                // unimplemented!();
                 // if let Some(sn) = batch.sn.reliable {
                 //     next_sns[priority].reliable = sn.next;
                 // }

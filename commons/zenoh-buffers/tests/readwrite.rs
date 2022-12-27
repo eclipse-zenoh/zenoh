@@ -122,17 +122,24 @@ macro_rules! run_siphon {
 
         println!(">>> Read siphon");
         let mut reader = $from.reader();
-        let writer = $into.writer();
 
-        let written = reader.siphon(writer).unwrap();
-        assert_eq!($icap, written.get());
+        let mut read = 0;
+        while read < $fcap {
+            $into.clear();
 
-        let mut reader = $into.reader();
-        for i in 0..$icap {
-            let j = reader.read_u8().unwrap();
-            assert_eq!(i as u8, j);
+            let writer = $into.writer();
+            let written = reader.siphon(writer).unwrap();
+
+            let mut reader = $into.reader();
+            for i in read..read + written.get() {
+                let j = reader.read_u8().unwrap();
+                assert_eq!(i as u8, j);
+            }
+            assert!(reader.read_u8().is_err());
+
+            read += written.get();
         }
-        assert!(reader.read_u8().is_err());
+        assert_eq!(read, $fcap);
     };
 }
 
@@ -202,13 +209,14 @@ fn buffer_siphon() {
     let mut bbuf1 = BBuf::with_capacity(capacity);
     run_siphon!(zbuf1, capacity, bbuf1, capacity);
 
-    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity / 2);
+    let capacity2 = 1 + capacity / 2;
+    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity2);
     let mut bbuf1 = BBuf::with_capacity(capacity);
-    let mut bbuf2 = BBuf::with_capacity(capacity / 2);
-    run_siphon!(bbuf1, capacity, bbuf2, capacity / 2);
+    let mut bbuf2 = BBuf::with_capacity(capacity2);
+    run_siphon!(bbuf1, capacity, bbuf2, capacity2);
 
-    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity / 2);
+    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity2);
     let mut zbuf1 = ZBuf::default();
-    let mut bbuf1 = BBuf::with_capacity(capacity / 2);
-    run_siphon!(zbuf1, capacity, bbuf1, capacity / 2);
+    let mut bbuf1 = BBuf::with_capacity(capacity2);
+    run_siphon!(zbuf1, capacity, bbuf1, capacity2);
 }

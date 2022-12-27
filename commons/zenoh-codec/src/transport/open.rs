@@ -105,7 +105,8 @@ where
         // Header
         let mut header = tmsg::id::OPEN;
         header |= tmsg::flag::A;
-        if x.lease.as_millis() % 1_000 == 0 {
+        // Verify that the timeout is expressed in seconds, i.e. subsec part is 0.
+        if x.lease.subsec_nanos() == 0 {
             header |= tmsg::flag::T2;
         }
         self.write(&mut *writer, header)?;

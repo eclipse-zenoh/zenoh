@@ -332,26 +332,26 @@ impl Primitives for AdminSpace {
                     key
                 );
                 if let Err(e) = self.context.runtime.config.remove(key) {
-                    log::error!("Error deleting conf value {}: {}", key_expr, e)
+                    log::error!("Error deleting conf value {} : {}", key_expr, e)
                 }
             } else {
                 match std::str::from_utf8(&payload.contiguous()) {
                     Ok(json) => {
                         log::trace!(
-                            "Insert conf value /@/router/{}/config/{}:{}",
+                            "Insert conf value /@/router/{}/config/{} : {}",
                             &self.context.zid_str,
                             key,
                             json
                         );
                         if let Err(e) = (&self.context.runtime.config).insert_json5(key, json) {
                             error!(
-                                "Error inserting conf value /@/router/{}/config/{}:{} - {}",
+                                "Error inserting conf value /@/router/{}/config/{} : {} - {}",
                                 &self.context.zid_str, key, json, e
                             );
                         }
                     }
                     Err(e) => error!(
-                        "Received non utf8 conf value on /@/router/{}/config/{}: {}",
+                        "Received non utf8 conf value on /@/router/{}/config/{} : {}",
                         &self.context.zid_str, key, e
                     ),
                 }
@@ -396,7 +396,7 @@ impl Primitives for AdminSpace {
         let key_expr = match self.key_expr_to_string(key_expr) {
             Ok(key_expr) => key_expr.into_owned(),
             Err(e) => {
-                log::error!("Unknown KeyExpr!! ({})", e);
+                log::error!("Unknown KeyExpr: {}", e);
                 // router is not re-entrant
                 task::spawn(async move {
                     primitives.send_reply_final(qid);

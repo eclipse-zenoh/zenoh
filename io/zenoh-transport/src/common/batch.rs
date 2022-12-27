@@ -1,5 +1,3 @@
-use std::num::NonZeroUsize;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,6 +11,7 @@ use std::num::NonZeroUsize;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::num::NonZeroUsize;
 use zenoh_buffers::{
     reader::{Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},

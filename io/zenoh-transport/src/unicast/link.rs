@@ -279,7 +279,9 @@ async fn rx_task_stream(
         match action {
             Action::Read(n) => {
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
+                {
+                    transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
+                }
 
                 // Deserialize all the messages from the current ZBuf
                 let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
@@ -290,7 +292,9 @@ async fn rx_task_stream(
                         .map_err(|_| zerror!("{}: decoding error", link))?;
 
                     #[cfg(feature = "stats")]
-                    transport.stats.inc_rx_t_msgs(1);
+                    {
+                        transport.stats.inc_rx_t_msgs(1);
+                    }
 
                     transport.receive_message(msg, &link)?
                 }
@@ -349,7 +353,9 @@ async fn rx_task_dgram(
                 }
 
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(n);
+                {
+                    transport.stats.inc_rx_bytes(n);
+                }
 
                 // Deserialize all the messages from the current ZBuf
                 let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
@@ -360,7 +366,9 @@ async fn rx_task_dgram(
                         .map_err(|_| zerror!("{}: decoding error", link))?;
 
                     #[cfg(feature = "stats")]
-                    transport.stats.inc_rx_t_msgs(1);
+                    {
+                        transport.stats.inc_rx_t_msgs(1);
+                    }
 
                     transport.receive_message(msg, &link)?
                 }
