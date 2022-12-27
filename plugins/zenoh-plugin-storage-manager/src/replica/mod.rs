@@ -82,11 +82,11 @@ impl Replica {
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
-        trace!("[REPLICA]Opening session...");
+        trace!("[REPLICA] Opening session...");
         let startup_entries = match store_intercept.storage.get_all_entries().await {
             Ok(entries) => entries,
             Err(e) => {
-                error!("Error fetching entries from storage: {}", e);
+                error!("[REPLICA] Error fetching entries from storage: {}", e);
                 return;
             }
         };
@@ -164,12 +164,12 @@ impl Replica {
         );
 
         select!(
-            () = digest_sub => trace!("[Replica] Exiting digest subscriber"),
-            () = align_q => trace!("[Replica] Exiting align queryable"),
-            () = aligner => trace!("[Replica] Exiting aligner"),
-            () = digest_pub => trace!("[Replica] Exiting digest publisher"),
-            () = snapshot_task => trace!("[Replica] Exiting snapshot task"),
-            () = storage_task => trace!("[Replica] Exiting storage task"),
+            () = digest_sub => trace!("[REPLICA] Exiting digest subscriber"),
+            () = align_q => trace!("[REPLICA] Exiting align queryable"),
+            () = aligner => trace!("[REPLICA] Exiting aligner"),
+            () = digest_pub => trace!("[REPLICA] Exiting digest publisher"),
+            () = snapshot_task => trace!("[REPLICA] Exiting snapshot task"),
+            () = storage_task => trace!("[REPLICA] Exiting storage task"),
         )
     }
 
@@ -197,7 +197,7 @@ impl Replica {
             let sample = match subscriber.recv_async().await {
                 Ok(sample) => sample,
                 Err(e) => {
-                    error!("Error receiving sample: {}", e);
+                    error!("[DIGEST_SUB] Error receiving sample: {}", e);
                     continue;
                 }
             };
@@ -213,7 +213,7 @@ impl Replica {
             let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
                 Ok(digest) => digest,
                 Err(e) => {
-                    error!("Error in decoding the digest: {}", e);
+                    error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
@@ -231,7 +231,7 @@ impl Replica {
                 trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
                 match tx.send_async((from.to_string(), digest)).await {
                     Ok(()) => {}
-                    Err(e) => error!("Error sending digest to aligner: {}", e),
+                    Err(e) => error!("[DIGEST_SUB] Error sending digest to aligner: {}", e),
                 }
             };
             received.insert(from.to_string(), ts);
@@ -267,7 +267,7 @@ impl Replica {
             trace!("[DIGEST_PUB] Putting Digest : {} ...", digest_json);
             match publisher.put(digest_json).res().await {
                 Ok(()) => {}
-                Err(e) => error!("Digest publication failed: {}", e),
+                Err(e) => error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }
         }
     }
@@ -284,6 +284,11 @@ impl Replica {
             // no values to align
             return false;
         }
+        let digests_published = self.digests_published.read().await;
+        if digests_published.contains(&checksum) {
+            trace!("[DIGEST_SUB] Dropping since matching digest already seen");
+            return false;
+        }
         // TODO: test this part
         if received.contains_key(from) && *received.get(from).unwrap() > ts {
             // not the latest from that replica
@@ -298,7 +303,7 @@ impl Replica {
                     self.replica_config.delta,
                 )
         {
-            error!("[DIGEST_SUB] mismatching digest configs, cannot be aligned");
+            error!("[DIGEST_SUB] Mismatching digest configs, cannot be aligned");
             return false;
         }
         true
