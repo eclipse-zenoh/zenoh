@@ -339,8 +339,8 @@ impl Aligner {
                         }
                     }
                 }
-            },
-            Err(err) =>   {
+            }
+            Err(err) => {
                 error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
                 no_err = false;
             }
