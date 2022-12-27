@@ -38,10 +38,23 @@ pub(crate) trait Decode<Message> {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
-enum CurrentFrame {
+pub(crate) enum CurrentFrame {
     Reliable,
     BestEffort,
     None,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LatestSn {
+    pub(crate) reliable: Option<ZInt>,
+    pub(crate) best_effort: Option<ZInt>,
+}
+
+impl LatestSn {
+    fn clear(&mut self) {
+        self.reliable = None;
+        self.best_effort = None;
+    }
 }
 
 #[cfg(feature = "stats")]
@@ -84,6 +97,8 @@ pub(crate) struct WBatch {
     is_streamed: bool,
     // The current frame being serialized: BestEffort/Reliable
     current_frame: CurrentFrame,
+    // The latest SN
+    pub(crate) latest_sn: LatestSn,
     // Statistics related to this batch
     #[cfg(feature = "stats")]
     pub(crate) stats: SerializationBatchStats,
@@ -95,6 +110,10 @@ impl WBatch {
             buffer: BBuf::with_capacity(size as usize),
             is_streamed,
             current_frame: CurrentFrame::None,
+            latest_sn: LatestSn {
+                reliable: None,
+                best_effort: None,
+            },
             #[cfg(feature = "stats")]
             stats: SerializationBatchStats::default(),
         };
@@ -132,14 +151,17 @@ impl WBatch {
     /// Clear the [`SerializationBatch`][SerializationBatch] memory buffer and related internal state.
     #[inline(always)]
     pub(crate) fn clear(&mut self) {
-        self.current_frame = CurrentFrame::None;
         self.buffer.clear();
+        self.current_frame = CurrentFrame::None;
+        self.latest_sn.clear();
+        #[cfg(feature = "stats")]
+        {
+            self.stats.clear();
+        }
         if self.is_streamed() {
             let mut writer = self.buffer.writer();
             let _ = writer.write_exact(&LENGTH_BYTES[..]);
         }
-        #[cfg(feature = "stats")]
-        self.stats.clear();
     }
 
     /// In case the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, use the first 2 bytes
@@ -261,8 +283,14 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
         })?;
         // Update the frame
         self.current_frame = match frame.channel.reliability {
-            Reliability::Reliable => CurrentFrame::Reliable,
-            Reliability::BestEffort => CurrentFrame::BestEffort,
+            Reliability::Reliable => {
+                self.latest_sn.reliable = Some(sn);
+                CurrentFrame::Reliable
+            }
+            Reliability::BestEffort => {
+                self.latest_sn.best_effort = Some(sn);
+                CurrentFrame::BestEffort
+            }
         };
         Ok(())
     }

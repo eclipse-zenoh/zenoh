@@ -192,7 +192,7 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
-    next_sns: Vec<ConduitSn>,
+    mut next_sns: Vec<ConduitSn>,
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
@@ -234,12 +234,12 @@ async fn tx_task(
                 let bytes = batch.as_bytes();
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
-                // if let Some(sn) = batch.sn.reliable {
-                //     next_sns[priority].reliable = sn.next;
-                // }
-                // if let Some(sn) = batch.sn.best_effort {
-                //     next_sns[priority].best_effort = sn.next;
-                // }
+                if let Some(sn) = batch.latest_sn.reliable {
+                    next_sns[priority].reliable = (sn + 1) % config.sn_resolution;
+                }
+                if let Some(sn) = batch.latest_sn.best_effort {
+                    next_sns[priority].best_effort = (sn + 1) % config.sn_resolution;
+                }
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(batch.stats.t_msgs);
