@@ -311,7 +311,7 @@ impl Aligner {
             .with_parameters(&properties);
         trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
-        if let Ok(replies) = self
+        match self
             .session
             .get(&selector)
             .consolidation(QueryConsolidation::AUTO)
@@ -319,28 +319,32 @@ impl Aligner {
             .res()
             .await
         {
-            while let Ok(reply) = replies.recv_async().await {
-                match reply.sample {
-                    Ok(sample) => {
-                        trace!(
-                            "[ALIGNER] Received ('{}': '{}')",
-                            sample.key_expr.as_str(),
-                            sample.value
-                        );
-                        return_val.push(sample);
-                    }
-                    Err(err) => {
-                        error!(
-                            "[ALIGNER] Received error for query on selector {} :{}",
-                            selector, err
-                        );
-                        no_err = false;
+            Ok(replies) => {
+                while let Ok(reply) = replies.recv_async().await {
+                    match reply.sample {
+                        Ok(sample) => {
+                            trace!(
+                                "[ALIGNER] Received ('{}': '{}')",
+                                sample.key_expr.as_str(),
+                                sample.value
+                            );
+                            return_val.push(sample);
+                        }
+                        Err(err) => {
+                            error!(
+                                "[ALIGNER] Received error for query on selector {} :{}",
+                                selector, err
+                            );
+                            no_err = false;
+                        }
                     }
                 }
+            },
+            Err(err) =>   {
+                error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                no_err = false;
             }
-        } else {
-            error!("[ALIGNER] Query failed on selector `{}`", selector);
-        }
+        };
         (return_val, no_err)
     }
 }
