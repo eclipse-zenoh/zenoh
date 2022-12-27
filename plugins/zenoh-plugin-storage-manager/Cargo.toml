@@ -37,7 +37,6 @@ name = "zplugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-async-global-executor = "2.3.1"
 async-std = "=1.12.0"
 async-trait = "0.1.59"
 clap = "3.2.23"
@@ -59,6 +58,9 @@ zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
 zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
 zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
+
+[dev-dependencies]
+async-global-executor = "2.3.1"
 
 [build-dependencies]
 rustc_version = "0.4.0"

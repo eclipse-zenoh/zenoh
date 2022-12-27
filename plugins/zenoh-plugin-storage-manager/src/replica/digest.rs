@@ -293,58 +293,49 @@ impl Digest {
 
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
-            let content = &subintervals.get(&sub).unwrap().content;
+            let mut subinterval = subintervals.get_mut(&sub).unwrap();
+            let content = &subinterval.content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_subinterval_checksum(
                     &content.clone().into_iter().collect::<Vec<LogEntry>>(),
                 );
 
-                subintervals.get_mut(&sub).unwrap().checksum = checksum;
+                subinterval.checksum = checksum;
             } else {
                 subintervals.remove(&sub);
             }
         }
 
         for int in intervals_to_update {
-            let content = &intervals.get(&int).unwrap().content;
+            let mut interval = intervals.get_mut(&int).unwrap();
+            let content = &interval.content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_interval_checksum(
-                    &intervals
-                        .get(&int)
-                        .unwrap()
-                        .content
-                        .clone()
-                        .into_iter()
-                        .collect::<Vec<u64>>(),
+                    &content.clone().into_iter().collect::<Vec<u64>>(),
                     &subintervals,
                 );
 
-                intervals.get_mut(&int).unwrap().checksum = checksum;
+                interval.checksum = checksum;
             } else {
                 intervals.remove(&int);
             }
         }
 
-        for era in eras_to_update {
-            let content = &eras.get(&era).unwrap().content;
+        for era_type in eras_to_update {
+            let mut era = eras.get_mut(&era_type).unwrap();
+            let content = &era.content;
             if !content.is_empty() {
                 // order the content, hash them
                 let checksum = Digest::get_era_checksum(
-                    &eras
-                        .get(&era)
-                        .unwrap()
-                        .content
-                        .iter()
-                        .copied()
-                        .collect::<Vec<u64>>(),
+                    &content.iter().copied().collect::<Vec<u64>>(),
                     &intervals,
                 );
 
-                eras.get_mut(&era).unwrap().checksum = checksum;
+                era.checksum = checksum;
             } else {
-                eras.remove(&era);
+                eras.remove(&era_type);
             }
         }
 
@@ -440,7 +431,7 @@ impl Digest {
                 })
                 .or_insert(SubInterval {
                     checksum: 0,
-                    content: [log_entry].iter().cloned().collect(),
+                    content: [log_entry].into(),
                 });
             current
                 .intervals
@@ -450,7 +441,7 @@ impl Digest {
                 })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: [subinterval].iter().cloned().collect(),
+                    content: [subinterval].into(),
                 });
             current
                 .eras
@@ -460,7 +451,7 @@ impl Digest {
                 })
                 .or_insert(Interval {
                     checksum: 0,
-                    content: [interval].iter().cloned().collect(),
+                    content: [interval].into(),
                 });
         }
 
@@ -701,18 +692,13 @@ impl Digest {
 
 // functions for alignment
 impl Digest {
-    // check of the other era has more content
+    // check if the other era has more content
     pub fn era_has_diff(&self, era: &EraType, other: &HashMap<EraType, Interval>) -> bool {
-        if other.contains_key(era) {
-            if self.eras.contains_key(era) {
-                if self.eras.get(era).unwrap().checksum != other.get(era).unwrap().checksum {
-                    return true;
-                }
-            } else {
-                return true;
-            }
+        match (other.get(era), self.eras.get(era)) {
+            (Some(other_era), Some(my_era)) => other_era.checksum != my_era.checksum,
+            (Some(_), None) => true,
+            _ => false,
         }
-        false
     }
 
     // return mismatching intervals in an era

@@ -103,16 +103,15 @@ impl Aligner {
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
                 debug!("[ALIGNER] Adding sample {:?} to storage", sample);
-                match self.tx_sample.send_async(sample).await {
-                    Ok(()) => continue,
-                    Err(e) => error!("[ALIGNER] Error adding sample to storage: {}", e),
-                }
+                self.tx_sample
+                    .send_async(sample)
+                    .await
+                    .unwrap_or_else(|e| error!("[ALIGNER] Error adding sample to storage: {}", e));
             }
 
             if no_content_err && no_data_err {
                 let mut processed = self.digests_processed.write().await;
                 (*processed).insert(checksum);
-                drop(processed);
             }
         }
     }
@@ -130,9 +129,7 @@ impl Aligner {
             CONTENTS,
             serde_json::to_string(missing_content).unwrap()
         );
-        let (replies, no_err) = self
-            .perform_query(from.to_string(), properties.clone())
-            .await;
+        let (replies, no_err) = self.perform_query(from, properties.clone()).await;
 
         for sample in replies {
             result.insert(
@@ -162,10 +159,8 @@ impl Aligner {
         )
     }
 
-    //perform cold alignment
-    // if COLD misaligned, ask for interval hashes for cold for the other digest timestamp and replica
-    // for misaligned intervals, ask subinterval hashes
-    // for misaligned subintervals, ask content
+    // perform era alignment
+    // for a misaligned era, get missing intervals, then subintervals and then log entry
     async fn perform_era_alignment(
         &self,
         era: &EraType,
@@ -199,8 +194,7 @@ impl Aligner {
     ) -> (HashSet<u64>, bool) {
         let (other_intervals, no_err) = if era.eq(&EraType::Cold) {
             let properties = format!("timestamp={}&{}=cold", other.timestamp, ERA);
-            let (reply_content, mut no_err) =
-                self.perform_query(other_rep.to_string(), properties).await;
+            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_intervals: HashMap<u64, u64> = HashMap::new();
             // expecting sample.value to be a vec of intervals with their checksum
             for each in reply_content {
@@ -247,8 +241,7 @@ impl Aligner {
                     diff_string.join(",")
                 );
                 // expecting sample.value to be a vec of subintervals with their checksum
-                let (reply_content, mut no_err) =
-                    self.perform_query(other_rep.to_string(), properties).await;
+                let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
                 let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
                     match serde_json::from_str(&each.value.to_string()) {
@@ -289,8 +282,7 @@ impl Aligner {
                 diff_string.join(",")
             );
             // expecting sample.value to be a vec of log entries with their checksum
-            let (reply_content, mut no_err) =
-                self.perform_query(other_rep.to_string(), properties).await;
+            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
                 match serde_json::from_str(&each.value.to_string()) {
@@ -305,12 +297,13 @@ impl Aligner {
             }
             // get subintervals diff
             let result = this.get_full_content_diff(other_content);
-            return (result, no_err);
+            (result, no_err)
+        } else {
+            (Vec::new(), true)
         }
-        (Vec::new(), true)
     }
 
-    async fn perform_query(&self, from: String, properties: String) -> (Vec<Sample>, bool) {
+    async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
         let mut no_err = true;
         let selector = KeyExpr::from(&self.digest_key)
             .join(&from)
@@ -318,29 +311,35 @@ impl Aligner {
             .with_parameters(&properties);
         trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
-        let replies = self
+        if let Ok(replies) = self
             .session
             .get(&selector)
             .consolidation(QueryConsolidation::AUTO)
             .accept_replies(zenoh::query::ReplyKeyExpr::Any)
             .res()
             .await
-            .unwrap();
-        while let Ok(reply) = replies.recv_async().await {
-            match reply.sample {
-                Ok(sample) => {
-                    trace!(
-                        "[ALIGNER] Received ('{}': '{}')",
-                        sample.key_expr.as_str(),
-                        sample.value
-                    );
-                    return_val.push(sample);
-                }
-                Err(err) => {
-                    error!("[ALIGNER] Query failed on selector {} :{}", selector, err);
-                    no_err = false;
+        {
+            while let Ok(reply) = replies.recv_async().await {
+                match reply.sample {
+                    Ok(sample) => {
+                        trace!(
+                            "[ALIGNER] Received ('{}': '{}')",
+                            sample.key_expr.as_str(),
+                            sample.value
+                        );
+                        return_val.push(sample);
+                    }
+                    Err(err) => {
+                        error!(
+                            "[ALIGNER] Received error for query on selector {} :{}",
+                            selector, err
+                        );
+                        no_err = false;
+                    }
                 }
             }
+        } else {
+            error!("[ALIGNER] Query failed on selector `{}`", selector);
         }
         (return_val, no_err)
     }
