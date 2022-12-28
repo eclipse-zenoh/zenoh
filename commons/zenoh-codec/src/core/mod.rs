@@ -27,7 +27,6 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_core::zuninitbuff;
 
 // u8
 impl<W> WCodec<u8, &mut W> for Zenoh060
@@ -89,7 +88,7 @@ where
     #[allow(clippy::uninit_vec)]
     fn read(self, reader: &mut R) -> Result<Vec<u8>, Self::Error> {
         let len: usize = self.read(&mut *reader)?;
-        let mut buff = zuninitbuff!(len);
+        let mut buff = zenoh_buffers::vec::uninit(len);
         if len != 0 {
             reader.read_exact(&mut buff[..])?;
         }

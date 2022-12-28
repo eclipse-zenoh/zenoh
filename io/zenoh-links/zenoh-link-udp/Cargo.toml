@@ -35,6 +35,7 @@ async-std = { version = "=1.12.0", default-features = false }
 async-trait = "0.1.59"
 log = "0.4.17"
 socket2 = "0.4.7"
+zenoh-buffers = { version = "0.7.0-rc", path = "../../../commons/zenoh-buffers/" }
 zenoh-collections = { version = "0.7.0-rc", path = "../../../commons/zenoh-collections/" }
 zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }

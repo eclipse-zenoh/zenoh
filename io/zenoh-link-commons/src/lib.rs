@@ -34,7 +34,7 @@ use zenoh_buffers::{
 };
 use zenoh_cfg_properties::Properties;
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
-use zenoh_core::{zerror, zuninitbuff, Result as ZResult};
+use zenoh_core::{zerror, Result as ZResult};
 use zenoh_protocol::{
     core::{EndPoint, Locator},
     transport::TransportMessage,
@@ -189,12 +189,12 @@ impl LinkUnicast {
             self.read_exact(&mut length_bytes).await?;
             let to_read = u16::from_le_bytes(length_bytes) as usize;
             // Read the message
-            let mut buffer = zuninitbuff!(to_read);
+            let mut buffer = zenoh_buffers::vec::uninit(to_read);
             self.read_exact(&mut buffer).await?;
             buffer
         } else {
             // Read the message
-            let mut buffer = zuninitbuff!(self.get_mtu() as usize);
+            let mut buffer = zenoh_buffers::vec::uninit(self.get_mtu() as usize);
             let n = self.read(&mut buffer).await?;
             buffer.truncate(n);
             buffer
@@ -306,7 +306,7 @@ impl LinkMulticast {
 
     pub async fn read_transport_message(&self) -> ZResult<(Vec<TransportMessage>, Locator)> {
         // Read the message
-        let mut buffer = zuninitbuff!(self.get_mtu() as usize);
+        let mut buffer = zenoh_buffers::vec::uninit(self.get_mtu() as usize);
         let (n, locator) = self.read(&mut buffer).await?;
         buffer.truncate(n);
 

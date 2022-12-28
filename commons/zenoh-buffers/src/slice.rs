@@ -1,5 +1,3 @@
-use zenoh_core::zuninitbuff;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -151,7 +149,7 @@ impl Reader for &[u8] {
         // Safety: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
         // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
         // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
-        let mut buffer = zuninitbuff!(len);
+        let mut buffer = crate::vec::uninit(len);
         self.read_exact(&mut buffer)?;
         Ok(buffer.into())
     }

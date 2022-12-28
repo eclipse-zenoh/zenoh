@@ -18,6 +18,16 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
 
+/// Allocate a vector with a given capacity and sets the length to that capacity.
+pub fn uninit(capacity: usize) -> Vec<u8> {
+    let mut vbuf = Vec::with_capacity(capacity);
+    #[allow(clippy::uninit_vec)]
+    unsafe {
+        vbuf.set_len(capacity);
+    }
+    vbuf
+}
+
 // Writer
 impl<'a> HasWriter for &'a mut Vec<u8> {
     type Writer = Self;

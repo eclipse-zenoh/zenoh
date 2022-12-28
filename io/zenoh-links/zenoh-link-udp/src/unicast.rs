@@ -27,8 +27,9 @@ use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
-use zenoh_core::{bail, zasynclock, zerror, zlock, zread, zwrite, Error as ZError};
-use zenoh_core::{zuninitbuff, Result as ZResult};
+use zenoh_core::{
+    bail, zasynclock, zerror, zlock, zread, zwrite, Error as ZError, Result as ZResult,
+};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
@@ -565,7 +566,7 @@ async fn accept_read_task(
     log::trace!("Ready to accept UDP connections on: {:?}", src_addr);
     // Buffers for deserialization
     while active.load(Ordering::Acquire) {
-        let mut buff = zuninitbuff!(UDP_MAX_MTU as usize);
+        let mut buff = zenoh_buffers::vec::uninit(UDP_MAX_MTU as usize);
         // Wait for incoming connections
         let (n, dst_addr) = match receive(socket.clone(), &mut buff)
             .race(stop(signal.clone()))
