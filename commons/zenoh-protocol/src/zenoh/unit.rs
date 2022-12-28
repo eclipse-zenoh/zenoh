@@ -29,7 +29,6 @@ pub struct Unit {
     pub reply_context: Option<ReplyContext>,
 }
 
-// Functions mainly used for testing
 impl Unit {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {

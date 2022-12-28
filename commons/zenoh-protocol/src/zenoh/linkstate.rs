@@ -93,7 +93,6 @@ pub struct LinkStateList {
     pub link_states: Vec<LinkState>,
 }
 
-// Functions mainly used for testing
 impl LinkStateList {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
