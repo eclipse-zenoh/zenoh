@@ -501,7 +501,7 @@ impl<'a> KeyExpr<'a> {
                 prefix_len,
                 session_id,
             } if session.id == *session_id => zenoh_protocol_core::WireExpr {
-                scope: *expr_id as u64,
+                scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
             },
             KeyExprInner::BorrowedWire {
@@ -510,7 +510,7 @@ impl<'a> KeyExpr<'a> {
                 prefix_len,
                 session_id,
             } if session.id == *session_id => zenoh_protocol_core::WireExpr {
-                scope: *expr_id as u64,
+                scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
             },
             KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => {
@@ -570,7 +570,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 session_id
             } if *prefix_len as usize == key_expr.len() => {
                 if *session_id == session.id {
-                    *expr_id as u64
+                    *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
                 }
@@ -582,7 +582,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 session_id
             } if *prefix_len as usize == key_expr.len() => {
                 if *session_id == session.id {
-                    *expr_id as u64
+                    *expr_id
                 } else {
                     return Err(zerror!("Failed to undeclare {}, as it was declared by an other Session", expr).into())
                 }

@@ -293,7 +293,7 @@ validated_struct::validator! {
                 UserConf {
                     user: Option<String>,
                     password: Option<String>,
-                    /// The path to a file containing the user password dictionary, a file containing "<user>:<password>"
+                    /// The path to a file containing the user password dictionary, a file containing `<user>:<password>`
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
                 pub pubkey: #[derive(Default)]

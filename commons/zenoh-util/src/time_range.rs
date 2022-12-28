@@ -342,15 +342,15 @@ fn parse_duration(s: &str) -> Result<f64, ZError> {
     }
     let mut it = s.bytes().enumerate().rev();
     match it.next().unwrap() {
-        (i, b'u') => s[..i].parse::<f64>().map(|u| U_TO_SECS * u as f64),
+        (i, b'u') => s[..i].parse::<f64>().map(|u| U_TO_SECS * u),
         (_, b's') => match it.next().unwrap() {
-            (i, b'm') => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms as f64),
-            (i, _) => s[..i + 1].parse::<f64>().map(|sec| sec as f64),
+            (i, b'm') => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms),
+            (i, _) => s[..i + 1].parse::<f64>(),
         },
-        (i, b'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m as f64),
-        (i, b'h') => s[..i].parse::<f64>().map(|h| H_TO_SECS * h as f64),
-        (i, b'd') => s[..i].parse::<f64>().map(|d| D_TO_SECS * d as f64),
-        (i, b'w') => s[..i].parse::<f64>().map(|w| W_TO_SECS * w as f64),
+        (i, b'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m),
+        (i, b'h') => s[..i].parse::<f64>().map(|h| H_TO_SECS * h),
+        (i, b'd') => s[..i].parse::<f64>().map(|d| D_TO_SECS * d),
+        (i, b'w') => s[..i].parse::<f64>().map(|w| W_TO_SECS * w),
         _ => s.parse::<f64>(),
     }
     .map_err(|e| zerror!(r#"Invalid duration "{}" ({})"#, s, e))
