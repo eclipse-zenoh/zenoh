@@ -27,6 +27,9 @@ pub use lifo_queue::*;
 pub mod object_pool;
 pub use object_pool::*;
 
+pub mod mvar;
+pub use mvar::*;
+
 pub(crate) mod ring_buffer;
 pub(crate) use ring_buffer::*;
 

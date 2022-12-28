@@ -27,6 +27,7 @@ use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
+use zenoh_collections::Mvar;
 use zenoh_core::{
     bail, zasynclock, zerror, zlock, zread, zwrite, Error as ZError, Result as ZResult,
 };
@@ -35,7 +36,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_sync::{Mvar, Signal};
+use zenoh_sync::Signal;
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
 type LinkInput = (Vec<u8>, usize);

@@ -22,12 +22,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub mod backoff;
-pub use backoff::*;
 pub mod condition;
 pub use condition::*;
-pub mod mvar;
-pub use mvar::*;
 pub mod signal;
 pub use signal::*;
 
