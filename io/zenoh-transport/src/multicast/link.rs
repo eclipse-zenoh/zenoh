@@ -192,7 +192,7 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
-    mut next_sns: Vec<ConduitSn>,
+    mut last_sns: Vec<ConduitSn>,
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
@@ -235,10 +235,10 @@ async fn tx_task(
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
                 if let Some(sn) = batch.latest_sn.reliable {
-                    next_sns[priority].reliable = (sn + 1) % config.sn_resolution;
+                    last_sns[priority].reliable = sn;
                 }
                 if let Some(sn) = batch.latest_sn.best_effort {
-                    next_sns[priority].best_effort = (sn + 1) % config.sn_resolution;
+                    last_sns[priority].best_effort = sn;
                 }
                 #[cfg(feature = "stats")]
                 {
@@ -250,8 +250,15 @@ async fn tx_task(
             }
             Action::Join => {
                 let attachment = None;
-                let initial_sns = if next_sns.len() == Priority::NUM {
-                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                let next_sns = last_sns
+                    .iter()
+                    .map(|c| ConduitSn {
+                        reliable: (1 + c.reliable) % config.sn_resolution,
+                        best_effort: (1 + c.best_effort) % config.sn_resolution,
+                    })
+                    .collect::<Vec<ConduitSn>>();
+                let next_sns = if next_sns.len() == Priority::NUM {
+                    let tmp: [ConduitSn; Priority::NUM] = next_sns.try_into().unwrap();
                     ConduitSnList::QoS(tmp.into())
                 } else {
                     assert_eq!(next_sns.len(), 1);
@@ -263,7 +270,7 @@ async fn tx_task(
                     config.zid,
                     config.lease,
                     config.sn_resolution,
-                    initial_sns,
+                    next_sns,
                     attachment,
                 );
 
