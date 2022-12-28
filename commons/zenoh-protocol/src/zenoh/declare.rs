@@ -28,9 +28,8 @@ pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
 
-// Functions mainly used for testing
 impl Declare {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -57,9 +56,8 @@ pub enum Declaration {
     ForgetQueryable(ForgetQueryable),
 }
 
-// Functions mainly used for testing
 impl Declaration {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -95,9 +93,8 @@ pub struct Resource {
     pub key: WireExpr<'static>,
 }
 
-// Functions mainly used for testing
 impl Resource {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -123,9 +120,8 @@ pub struct ForgetResource {
     pub expr_id: ZInt,
 }
 
-// Functions mainly used for testing
 impl ForgetResource {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -150,9 +146,8 @@ pub struct Publisher {
     pub key: WireExpr<'static>,
 }
 
-// Functions mainly used for testing
 impl Publisher {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         let key = WireExpr::rand();
 
@@ -173,9 +168,8 @@ pub struct ForgetPublisher {
     pub key: WireExpr<'static>,
 }
 
-// Functions mainly used for testing
 impl ForgetPublisher {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         let key = WireExpr::rand();
 
@@ -199,9 +193,8 @@ pub struct Subscriber {
     pub info: SubInfo,
 }
 
-// Functions mainly used for testing
 impl Subscriber {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -237,9 +230,8 @@ pub struct ForgetSubscriber {
     pub key: WireExpr<'static>,
 }
 
-// Functions mainly used for testing
 impl ForgetSubscriber {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         let key = WireExpr::rand();
 
@@ -263,9 +255,8 @@ pub struct Queryable {
     pub info: QueryableInfo,
 }
 
-// Functions mainly used for testing
 impl Queryable {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -293,9 +284,8 @@ pub struct ForgetQueryable {
     pub key: WireExpr<'static>,
 }
 
-// Functions mainly used for testing
 impl ForgetQueryable {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         let key = WireExpr::rand();
 

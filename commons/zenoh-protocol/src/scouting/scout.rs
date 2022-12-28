@@ -37,9 +37,8 @@ pub struct Scout {
     pub zid_request: bool,
 }
 
-// Functions mainly used for testing
 impl Scout {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

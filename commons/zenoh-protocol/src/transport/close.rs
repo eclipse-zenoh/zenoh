@@ -47,9 +47,8 @@ pub struct Close {
     pub link_only: bool,
 }
 
-// Functions mainly used for testing
 impl Close {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

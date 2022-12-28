@@ -279,7 +279,7 @@ impl Default for Encoding {
 }
 
 impl Encoding {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

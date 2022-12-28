@@ -25,6 +25,9 @@ use zenoh_collections::SingleOrVec;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
+fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
+    unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
+}
 #[derive(Debug, Clone, Default, Eq)]
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
@@ -419,7 +422,7 @@ impl Writer for ZBufWriter<'_> {
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
-        let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
+        let cache = get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.extend_from_slice(bytes);
         let cache_len = cache.len();
@@ -455,7 +458,7 @@ impl Writer for ZBufWriter<'_> {
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
-        let cache = zenoh_sync::get_mut_unchecked(&mut self.cache);
+        let cache = get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.reserve(len);
         unsafe {
@@ -504,9 +507,8 @@ impl BacktrackableWriter for ZBufWriter<'_> {
     }
 }
 
-// Functions mainly used for testing
+#[cfg(feature = "test")]
 impl ZBuf {
-    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         let mut zbuf = ZBuf::default();
         zbuf.push_zslice(ZSlice::rand(len));

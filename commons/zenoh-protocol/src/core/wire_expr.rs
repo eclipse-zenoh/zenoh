@@ -199,9 +199,8 @@ impl<'a> From<&'a String> for WireExpr<'a> {
     }
 }
 
-// Functions mainly used for testing
 impl WireExpr<'_> {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},

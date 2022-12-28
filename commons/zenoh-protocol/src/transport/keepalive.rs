@@ -37,9 +37,8 @@ pub struct KeepAlive {
     pub zid: Option<ZenohId>,
 }
 
-// Functions mainly used for testing
 impl KeepAlive {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

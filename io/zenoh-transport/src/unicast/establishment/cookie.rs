@@ -126,8 +126,7 @@ where
 }
 
 impl Cookie {
-    // Functions mainly used for testing
-    #[doc(hidden)]
+    #[cfg(test)]
     pub fn rand() -> Self {
         use rand::Rng;
 

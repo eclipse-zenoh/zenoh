@@ -31,7 +31,7 @@ pub struct Unit {
 
 // Functions mainly used for testing
 impl Unit {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

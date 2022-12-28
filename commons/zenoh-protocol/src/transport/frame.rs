@@ -87,8 +87,7 @@ pub enum FramePayload {
 }
 
 impl Frame {
-    // Functions mainly used for testing
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
         use std::convert::TryInto;
@@ -154,8 +153,7 @@ pub struct FrameHeader {
 }
 
 impl FrameHeader {
-    // Functions mainly used for testing
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
         use std::convert::TryInto;

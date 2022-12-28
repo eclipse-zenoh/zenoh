@@ -1,5 +1,3 @@
-use rand::seq::SliceRandom;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -37,9 +35,8 @@ pub struct QueryBody {
     pub payload: ZBuf,
 }
 
-// Functions mainly used for testing
 impl QueryBody {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -84,12 +81,12 @@ pub struct Query {
     pub body: Option<QueryBody>,
 }
 
-// Functions mainly used for testing
 impl Query {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::{
             distributions::{Alphanumeric, DistString},
+            seq::SliceRandom,
             Rng,
         };
 

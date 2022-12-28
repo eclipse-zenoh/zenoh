@@ -3776,7 +3776,6 @@ dependencies = [
  "shared_memory",
  "zenoh-collections",
  "zenoh-core",
- "zenoh-sync",
 ]
 
 [[package]]

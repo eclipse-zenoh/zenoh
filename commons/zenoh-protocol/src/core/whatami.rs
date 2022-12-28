@@ -36,7 +36,7 @@ impl std::str::FromStr for WhatAmI {
 }
 
 impl WhatAmI {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
 
@@ -132,7 +132,7 @@ use std::{num::NonZeroU8, ops::BitOr};
 pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

@@ -112,7 +112,7 @@ impl fmt::Display for Locator {
 pub type LocatorProtocol = str;
 
 impl Locator {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         EndPoint::rand().into()
     }

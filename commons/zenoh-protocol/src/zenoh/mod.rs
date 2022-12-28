@@ -384,9 +384,8 @@ impl fmt::Display for ZenohMessage {
     }
 }
 
-// Functions mainly used for testing
 impl ZenohMessage {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::Priority;
         use rand::Rng;

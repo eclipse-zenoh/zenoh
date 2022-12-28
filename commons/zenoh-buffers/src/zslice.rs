@@ -560,9 +560,8 @@ impl BacktrackableReader for &mut ZSlice {
     }
 }
 
-// Functions mainly used for testing
+#[cfg(feature = "test")]
 impl ZSlice {
-    #[doc(hidden)]
     pub fn rand(len: usize) -> Self {
         use rand::Rng;
 

@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{Locator, WhatAmI, ZenohId};
-use rand::Rng;
-use std::{fmt, iter::FromIterator};
+use std::fmt;
 
 /// # Hello message
 ///
@@ -64,10 +63,12 @@ impl fmt::Display for Hello {
     }
 }
 
-// Functions mainly used for testing
 impl Hello {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use rand::Rng;
+        use std::iter::FromIterator;
+
         let mut rng = rand::thread_rng();
 
         let zid = if rng.gen_bool(0.5) {

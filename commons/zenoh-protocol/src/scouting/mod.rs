@@ -36,7 +36,6 @@ pub struct ScoutingMessage {
     pub size: Option<std::num::NonZeroUsize>,
 }
 
-// Functions mainly used for testing
 impl ScoutingMessage {
     pub fn make_scout(
         what: Option<WhatAmIMatcher>,
@@ -72,7 +71,7 @@ impl ScoutingMessage {
         }
     }
 
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

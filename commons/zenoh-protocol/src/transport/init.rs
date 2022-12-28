@@ -62,9 +62,8 @@ pub struct InitSyn {
     pub is_qos: bool,
 }
 
-// Functions mainly used for testing
 impl InitSyn {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -99,9 +98,8 @@ pub struct InitAck {
     pub cookie: ZSlice,
 }
 
-// Functions mainly used for testing
 impl InitAck {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

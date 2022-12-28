@@ -298,8 +298,7 @@ impl TransportMessage {
         }
     }
 
-    // Functions mainly used for testing
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

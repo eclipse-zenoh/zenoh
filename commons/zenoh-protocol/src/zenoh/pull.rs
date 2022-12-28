@@ -35,9 +35,8 @@ pub struct Pull {
     pub is_final: bool,
 }
 
-// Functions mainly used for testing
 impl Pull {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

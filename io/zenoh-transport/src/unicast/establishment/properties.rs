@@ -107,9 +107,8 @@ impl TryFrom<&Attachment> for EstablishmentProperties {
     }
 }
 
-// Functions mainly used for testing
 impl EstablishmentProperties {
-    #[doc(hidden)]
+    #[cfg(test)]
     pub fn rand() -> Self {
         use rand::Rng;
 

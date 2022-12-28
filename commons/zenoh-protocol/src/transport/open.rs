@@ -49,9 +49,8 @@ pub struct OpenSyn {
     pub cookie: ZSlice,
 }
 
-// Functions mainly used for testing
 impl OpenSyn {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -82,9 +81,8 @@ pub struct OpenAck {
     pub initial_sn: ZInt,
 }
 
-// Functions mainly used for testing
 impl OpenAck {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

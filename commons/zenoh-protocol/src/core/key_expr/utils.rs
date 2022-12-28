@@ -42,42 +42,51 @@ impl<'a, S: ?Sized, D: ?Sized> Clone for Splitter<'a, S, D> {
     }
 }
 
-impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
-    pub fn inner(&self) -> Option<&'a S> {
-        self.s
-    }
-    pub fn unwrap(self) -> &'a S {
-        self.s.unwrap()
-    }
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.s.is_none()
-    }
-    pub fn left(&mut self) -> Option<&'a S> {
-        match self.s {
-            Some(s) => match s.try_split_once(self.d) {
-                (l, Some(r)) => {
-                    self.s = Some(r);
-                    Some(l)
-                }
-                _ => None,
-            },
-            None => None,
-        }
-    }
-    pub fn right(&mut self) -> Option<&'a S> {
-        match self.s {
-            Some(s) => match s.try_rsplit_once(self.d) {
-                (Some(l), r) => {
-                    self.s = Some(l);
-                    Some(r)
-                }
-                _ => None,
-            },
-            None => None,
-        }
-    }
-}
+// impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
+//     pub fn inner(&self) -> Option<&'a S> {
+//         self.s
+//     }
+//     pub fn unwrap(self) -> &'a S {
+//         self.s.unwrap()
+//     }
+//     #[allow(dead_code)]
+//     pub fn is_empty(&self) -> bool {
+//         self.s.is_none()
+//     }
+//     pub fn left(&mut self) -> Option<&'a S> {
+//         match self.s {
+//             Some(s) => match s.try_split_once(self.d) {
+//                 (l, Some(r)) => {
+//                     self.s = Some(r);
+//                     Some(l)
+//                 }
+//                 _ => None,
+//             },
+//             None => None,
+//         }
+//     }
+//     pub fn right(&mut self) -> Option<&'a S> {
+//         match self.s {
+//             Some(s) => match s.try_rsplit_once(self.d) {
+//                 (Some(l), r) => {
+//                     self.s = Some(l);
+//                     Some(r)
+//                 }
+//                 _ => None,
+//             },
+//             None => None,
+//         }
+//     }
+// }
+//
+// #[test]
+// fn splits() {
+//     assert_eq!(
+//         b"hello**".splitter(b"**".as_ref()).right(),
+//         Some(b"".as_ref())
+//     );
+// }
+
 impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Splitter<'a, S, D> {
     type Item = &'a S;
     fn next(&mut self) -> Option<Self::Item> {
@@ -91,13 +100,7 @@ impl<'a, S: Split<D> + ?Sized, D: ?Sized> Iterator for Splitter<'a, S, D> {
         }
     }
 }
-#[test]
-fn splits() {
-    assert_eq!(
-        b"hello**".splitter(b"**".as_ref()).right(),
-        Some(b"".as_ref())
-    );
-}
+
 impl<'a, S: Split<D> + ?Sized, D: ?Sized> DoubleEndedIterator for Splitter<'a, S, D> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self.s {

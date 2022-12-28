@@ -11,16 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
 use crate::zenoh::*;
-#[cfg(feature = "shared-memory")]
 use std::sync::{Arc, RwLock};
-#[cfg(feature = "shared-memory")]
 use zenoh_buffers::SharedMemoryReader;
-#[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
-#[cfg(feature = "shared-memory")]
 macro_rules! unset_sliced {
     ($msg:expr, $data_info:expr) => {
         // Set the right data info SHM parameters
@@ -33,7 +28,6 @@ macro_rules! unset_sliced {
     };
 }
 
-#[cfg(feature = "shared-memory")]
 macro_rules! set_sliced {
     ($msg:expr, $data_info:expr) => {
         match $data_info {
@@ -53,7 +47,6 @@ macro_rules! set_sliced {
     };
 }
 
-#[cfg(feature = "shared-memory")]
 impl ZenohMessage {
     pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
         let mut res = false;

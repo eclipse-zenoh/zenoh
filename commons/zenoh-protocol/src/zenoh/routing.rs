@@ -37,9 +37,8 @@ impl RoutingContext {
     }
 }
 
-// Functions mainly used for testing
 impl RoutingContext {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

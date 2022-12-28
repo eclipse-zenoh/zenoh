@@ -16,12 +16,12 @@ use super::keyexpr;
 
 mod classical;
 pub use classical::ClassicIntersector;
-#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
-pub(crate) mod ltr;
-#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
-pub(crate) mod ltr_chunk;
-#[deprecated = "This module hasn't been updated to support the $* DSL yet"]
-pub(crate) mod middle_out;
+// #[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+// pub(crate) mod ltr;
+// #[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+// pub(crate) mod ltr_chunk;
+// #[deprecated = "This module hasn't been updated to support the $* DSL yet"]
+// pub(crate) mod middle_out;
 // pub use ltr::LeftToRightIntersector;
 // pub use ltr_chunk::LTRChunkIntersector;
 // pub use middle_out::MiddleOutIntersector;

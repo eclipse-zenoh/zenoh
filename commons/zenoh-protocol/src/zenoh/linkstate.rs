@@ -39,9 +39,8 @@ pub struct LinkState {
     pub links: Vec<ZInt>,
 }
 
-// Functions mainly used for testing
 impl LinkState {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -96,7 +95,7 @@ pub struct LinkStateList {
 
 // Functions mainly used for testing
 impl LinkStateList {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

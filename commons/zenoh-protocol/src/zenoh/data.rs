@@ -56,9 +56,8 @@ impl ReplyContext {
     }
 }
 
-// Functions mainly used for testing
 impl ReplyContext {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -126,9 +125,8 @@ pub struct DataInfo {
     pub source_sn: Option<ZInt>,
 }
 
-// Functions mainly used for testing
 impl DataInfo {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -182,9 +180,8 @@ pub struct Data {
     pub reply_context: Option<ReplyContext>,
 }
 
-// Functions mainly used for testing
 impl Data {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 

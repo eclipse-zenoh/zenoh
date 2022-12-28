@@ -71,9 +71,8 @@ impl Join {
     }
 }
 
-// Functions mainly used for testing
 impl Join {
-    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::{ConduitSn, Priority};
         use rand::Rng;

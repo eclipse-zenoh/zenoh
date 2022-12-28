@@ -30,7 +30,8 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [features]
-shared-memory = ["zenoh-buffers/shared-memory"]
+test = [ "zenoh-buffers/test" ]
+shared-memory = [ "zenoh-buffers/shared-memory" ]
 complete_n = []
 
 [dependencies]

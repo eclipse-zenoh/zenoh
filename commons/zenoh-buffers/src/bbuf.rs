@@ -123,3 +123,19 @@ impl<'a> HasReader for &'a BBuf {
         self.as_slice()
     }
 }
+
+#[cfg(feature = "test")]
+impl BBuf {
+    pub fn rand(len: usize) -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let buffer = (0..len)
+            .into_iter()
+            .map(|_| rng.gen())
+            .collect::<Vec<u8>>()
+            .into_boxed_slice();
+
+        Self { buffer, len }
+    }
+}

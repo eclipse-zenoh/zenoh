@@ -68,11 +68,13 @@ impl keyexpr {
         t.canonize();
         Self::new(t)
     }
+
     /// Returns `true` if the `keyexpr`s intersect, i.e. there exists at least one key which is contained in both of the sets defined by `self` and `other`.
     pub fn intersects(&self, other: &Self) -> bool {
         use super::intersect::Intersector;
         super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
     }
+
     /// Returns `true` if `self` includes `other`, i.e. the set defined by `self` contains every key belonging to the set defined by `other`.
     pub fn includes(&self, other: &Self) -> bool {
         use super::include::Includer;
@@ -331,6 +333,7 @@ enum KeyExprConstructionError {
 
 impl<'a> TryFrom<&'a str> for &'a keyexpr {
     type Error = ZError;
+
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         let mut in_big_wild = false;
         for chunk in value.split('/') {
@@ -372,6 +375,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 }
             }
         }
+
         for (index, forbidden) in value.bytes().enumerate().filter_map(|(i, c)| {
             if FORBIDDEN_CHARS.contains(&c) {
                 Some((i, c))
