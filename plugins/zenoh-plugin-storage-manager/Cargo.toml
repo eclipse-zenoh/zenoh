@@ -59,6 +59,9 @@ zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", def
 zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
 zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
 
+[dev-dependencies]
+async-global-executor = "2.3.1"
+
 [build-dependencies]
 rustc_version = "0.4.0"
 
